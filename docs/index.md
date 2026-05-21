@@ -1,0 +1,84 @@
+# Atom Neo — Documentation Index
+
+> **用途**: 开发文档导航。AI Agent 开发时按需查阅对应文档。
+
+---
+
+## 先导（必读）
+
+| 文档 | 说明 | 何时 |
+|------|------|------|
+| [architecture.md](./architecture.md) | 系统架构总览 + v1→v2 变化 | 开始前必读 |
+| [architecture.html](./architecture.html) | 架构可视化（Mermaid 图表） | 理解流转关系 |
+| [project-structure.md](./project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
+| [environment-setup.md](./environment-setup.md) | clone → 安装 → 启动 → 验证 | 第一天 |
+| [bootstrap.md](./bootstrap.md) | 启动序列、初始化顺序、依赖图 | 实现 server.ts |
+
+## 开发规范（编码时必查）
+
+| 文档 | 说明 | 何时 |
+|------|------|------|
+| [coding-conventions.md](./coding-conventions.md) | 代码风格、TS 规范、模式 | 写任何代码 |
+| [naming-conventions.md](./naming-conventions.md) | 命名规则表（create/build/parse/...） | 命名时 |
+| [type-system.md](./type-system.md) | 类型约定、判别联合体模式 | 定义新类型 |
+| [testing.md](./testing.md) | 测试规范、覆盖率要求 | 写测试 |
+| [dependency-injection.md](./dependency-injection.md) | 对象如何构造和注入 | 实现新类 |
+
+## 子系统设计（实现功能时查）
+
+| 文档 | 说明 | 何时 |
+|------|------|------|
+| [element-design.md](./element-design.md) | Element 接口 + 完整模板 | 创建 Element |
+| [pipeline-builder.md](./pipeline-builder.md) | Pipeline Builder DSL | 创建 Pipeline |
+| [event-bus.md](./event-bus.md) | Event Bus 内部实现、自定义事件 | 扩展事件 |
+| [tool-plugin.md](./tool-plugin.md) | Tool 插件接口 + MCP 适配 | 创建 Tool |
+| [session-context.md](./session-context.md) | Per-Session 上下文 | 操作会话 |
+| [memory-service.md](./memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
+| [configuration.md](./configuration.md) | 配置加载优先级、格式 | 添加配置项 |
+
+## 通信与错误（跨模块边界时查）
+
+| 文档 | 说明 | 何时 |
+|------|------|------|
+| [protocol.md](./protocol.md) | WebSocket 事件协议、JWT 认证 | 通信层 |
+| [error-handling.md](./error-handling.md) | 错误跨层传播模型 | 写 try/catch |
+
+---
+
+## 开发流程（Agent 执行顺序）
+
+```text
+第一轮：建立骨架
+  1. architecture.md       → 理解系统全貌
+  2. project-structure.md  → 创建目录和 package.json
+  3. environment-setup.md  → 搭建开发环境
+
+第二轮：基础设施
+  4. bootstrap.md          → 实现启动序列
+  5. configuration.md      → 实现配置加载
+  6. dependency-injection.md → 确定构造链
+
+第三轮：核心抽象
+  7. type-system.md        → 定义所有类型
+  8. element-design.md     → 实现 BaseElement
+  9. event-bus.md          → 实现 PipelineEventBus
+  10. testing.md           → 写基础设施测试
+
+第四轮：子系统
+  11. session-context.md   → 实现 Session 管理
+  12. tool-plugin.md       → 实现 Tool Registry + 内置工具
+  13. memory-service.md    → 实现 Memory Service
+  14. pipeline-builder.md  → 实现 Pipeline Builder
+
+第五轮：管线
+  15. element-design.md    → 实现所有 Element
+  16. pipeline-builder.md  → 组装 Pipeline
+
+第六轮：通信
+  17. protocol.md          → 实现 HTTP + WebSocket
+  18. error-handling.md    → 实现错误处理
+
+第七轮：Gateway + TUI
+  19. architecture.md      → Gateway + TUI 模块
+  20. protocol.md          → Gateway JWT 验证
+```
