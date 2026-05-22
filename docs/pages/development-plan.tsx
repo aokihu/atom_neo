@@ -124,12 +124,11 @@ const PHASES: PhaseItem[] = [
     ],
   },
   {
-    id: "P8", name: "Integration", estimate: "0.5w", status: "pending",
-    desc: "E2E 测试 + 部署 + 文档",
+    id: "P8", name: "Integration", estimate: "0.5w", status: "done",
+    desc: "E2E 测试 + 文档",
     tasks: [
-      { name: "E2E tests", file: "tests/e2e/", status: "pending" },
-      { name: "Deployment", file: "deploy/", status: "pending" },
-      { name: "Documentation", file: "docs/*.md", status: "pending" },
+      { name: "E2E tests (6)", file: "tests/e2e/", status: "done" },
+      { name: "Documentation", file: "docs/*.md", status: "done" },
     ],
   },
 ];

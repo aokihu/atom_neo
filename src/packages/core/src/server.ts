@@ -23,7 +23,7 @@ export type CoreDeps = {
   apiKey: string;
 };
 
-export async function startCore(deps: CoreDeps): Promise<void> {
+export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   const { port, host, sandbox, logger, apiKey } = deps;
 
   const sessionStore = new SessionStore();
@@ -104,4 +104,5 @@ export async function startCore(deps: CoreDeps): Promise<void> {
   });
 
   logger.info("core ready", { port: server.port, address: host });
+  return { stop: () => { taskEngine.stop(); server.stop(); } };
 }

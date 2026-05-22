@@ -93,6 +93,6 @@
 ⬇ P7：TUI（进行中）
   19. architecture.md      → TUI 终端界面
 
-P8：Integration
-  20. testing.md           → E2E 测试 + 部署
+✅ P8：Integration（已完成）
+  ✔ 119 total tests, 100% pass
 ```

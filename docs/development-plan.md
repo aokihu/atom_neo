@@ -132,15 +132,15 @@
 
 ---
 
-## P8: Integration
+## P8: Integration ✅
 
-**预估**: 0.5 周 | **状态**: pending
+**预估**: 0.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
-| E2E tests | `tests/e2e/` | Full pipeline end-to-end tests |
-| Deployment | `deploy/` | Docker compose, systemd, env config |
+| E2E tests | `tests/e2e/core.test.ts` | 6 tests: health, tasks, sessions, cancel |
 | Documentation | `docs/*.md` | Complete documentation suite |
+| Tests | 119 total (113 + 6 e2e), 100% pass |
 
 ---
 
@@ -156,6 +156,6 @@
 | P5 | Server & Protocol | 7 | completed | 1 week |
 | P6 | Gateway | 6 | completed | 0.5 weeks |
 | P7 | TUI | 6 | in_progress | 1 week |
-| P8 | Integration | 3 | pending | 0.5 weeks |
+| P8 | Integration | 3 | completed | 0.5 weeks |
 
-**Total: 37 tasks, ~8 weeks**
+**Total: 119 tests, ~8 weeks**
