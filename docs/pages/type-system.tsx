@@ -101,7 +101,7 @@ export type { PipelineResult, PipelineEventMap } from "./pipeline";           //
           rows={[
             [<code>PipelineResult</code>, <code>type</code>, <>"Complete | Enqueue | SuspendAndEnqueueChild | ResumeParentAndEnqueue"</>],
             [<code>TaskPayload</code>, <code>type</code>, <>"text | image | audio | tool_report | memory_search_request"</>],
-            [<code>IntentRequest</code>, <code>request</code>, <>"SEARCH_MEMORY | EXECUTE_TOOL | FOLLOW_UP | COMPLETE"</>],
+            [<code>IntentRequest</code>, <code>request</code>, <>"FOLLOW_UP"</>],
             [<><code>FlowState</code> (conceptual)</>, <code>mode</code>, <>"initial | streaming | readyToFinalize"</>],
           ]}
         />

@@ -329,7 +329,58 @@ export class MyElement extends BaseElement<MyFlowState, MyFlowState> {
 }
 ```
 
-## 7. Testing Elements
+## 7. StreamLLM — streamText + Tool Calling Pattern
+
+```typescript
+/**
+ * StreamLLM — 流式 LLM 调用 + 工具执行。
+ *
+ * Gates on "streaming" mode.
+ * streamText 输出 deltas 到 bus，工具调用通过 AI SDK tools 参数自动处理。
+ *
+ * kind: transform
+ */
+export class StreamLLMElement extends BaseElement<MyFlowState, MyFlowState> {
+  #tools: ToolDefinition[];
+  #serviceManager: ServiceManager;
+
+  constructor(params: {
+    bus: PipelineEventBus<FullEventMap>;
+    tools: ToolDefinition[];
+    serviceManager: ServiceManager;
+  }) {
+    super({ name: "StreamLLM", kind: "transform", bus: params.bus });
+    this.#tools = params.tools;
+    this.#serviceManager = params.serviceManager;
+  }
+
+  async doProcess(input: MyFlowState): Promise<MyFlowState> {
+    if (input.mode !== "streaming") return input;
+
+    const result = await streamText({
+      model: this.#serviceManager.getModel(),
+      messages: input.prompts,
+      tools: convertToAISDKTools(this.#tools),
+      onChunk({ chunk }) {
+        if (chunk.type === "text-delta") {
+          this.bus.emit("transport.delta", { textDelta: chunk.textDelta });
+        }
+      },
+      onFinish({ response }) {
+        this.bus.emit("transport.tool.finished", { /* ... */ });
+      },
+    });
+
+    return {
+      ...input,
+      mode: "executing",
+      responseText: result.text,
+    } as MyFlowState;
+  }
+}
+```
+
+## 8. Testing Elements
 
 ```typescript
 // Tests MUST verify:

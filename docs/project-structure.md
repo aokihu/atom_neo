@@ -155,12 +155,10 @@ packages/core/
         │   ├── index.ts      # Pipeline builder definition
         │   ├── types.ts      # FlowState + Mode enum
         │   └── elements/
-        │       ├── export-prompts.element.ts
-        │       ├── transform-prompts.element.ts
-        │       ├── transform-output.element.ts
-        │       ├── parse-intents.element.ts
-        │       ├── execute-intents.element.ts
-        │       ├── apply-execution.element.ts
+        │       ├── collect-prompts.element.ts
+        │       ├── format-messages.element.ts
+        │       ├── stream-llm.element.ts  # streamText + tool calling
+        │       ├── check-follow-up.element.ts   # follow_up IntentRequest
         │       └── finalize.element.ts
         ├── prediction/
         │   ├── index.ts

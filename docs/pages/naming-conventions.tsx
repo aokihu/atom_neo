@@ -21,7 +21,7 @@ pipelines/
 │   ├── index.ts
 │   ├── types.ts
 │   └── elements/
-│       ├── export-prompts.element.ts
+│       ├── collect-prompts.element.ts
 │       └── finalize.element.ts
 └── prediction/
     └── ...`} />
@@ -85,7 +85,7 @@ pipelines/
           rows={[
             ["普通类", "PascalCase", <code>PipelineRunner</code>, <code>TaskEngine</code>, <code>SessionContext</code>],
             ["抽象基类", "Base 前缀", <code>BaseElement&lt;I, O&gt;</code>, <code>BaseService</code>],
-            ["Element 类", "描述名 + Element 后缀", <code>ExportPromptsElement</code>, <code>FinalizeConversationElement</code>],
+            ["Element 类", "描述名 + Element 后缀", <code>CollectPromptsElement</code>, <code>FinalizeConversationElement</code>],
             ["Service 类", "描述名 + Service 后缀", <code>MemoryService</code>, <code>ToolService</code>],
           ]}
         />
@@ -182,7 +182,7 @@ constructor(params: { ctx: PipelineContext; runtime: Runtime }) {
 ├── core/src/pipelines/conversation/index.ts  # NOT: formal-conversation/
 └── shared/src/types/task.ts       # NOT: TaskItem.ts, task-types.ts`} />
         <Callout type="info">
-          文件路径使用 <strong>lowercase single-word</strong>，不要用 kebab-case 文件名（kebab-case 仅用于 Element 文件如 <code>export-prompts.element.ts</code>）。
+          文件路径使用 <strong>lowercase single-word</strong>，不要用 kebab-case 文件名（kebab-case 仅用于 Element 文件如 <code>collect-prompts.element.ts</code>）。
         </Callout>
       </Section>
 

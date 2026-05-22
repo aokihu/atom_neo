@@ -61,13 +61,15 @@
   17. protocol.md          → WebSocket 事件协议
   ✔ 28 tests, 100% pass
 
-⬇ P2：Core Engine（进行中）
+✅ P2：Core Engine（已完成）
   4. bootstrap.md          → 实现启动序列
   5. configuration.md      → 实现配置加载
-  6. dependency-injection.md → 确定构造链
-  11. session-context.md   → 实现 Per-Session 上下文
+  6. dependency-injection.md → DI 构造链
+  11. session-context.md   → Per-Session 上下文
+  ✔ TaskEngine, TaskQueue, TaskFactory, SessionStore, SessionContext
+  ✔ 21 tests, 100% pass
 
-P3：Tools & Pipelines
+⬇ P3：Tools & Pipelines（进行中）
   12. tool-plugin.md       → 实现 Tool Registry + 内置工具
   13. memory-service.md    → 实现 Memory Service
 

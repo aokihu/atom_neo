@@ -42,13 +42,10 @@ import { pipeline } from "../pipeline/builder";
 import { registerElement } from "../pipeline/registry";
 
 // During startup, register all elements:
-registerElement("export-prompts", ExportPromptsElement);
-registerElement("transform-prompts", TransformPromptsToTransportPayloadElement);
-registerElement("transport-stream", TransportForStreamElement);
-registerElement("transform-output", TransformTransportOutputElement);
-registerElement("parse-intents", ParseIntentRequestsElement);
-registerElement("execute-intents", ExecuteIntentRequestsElement);
-registerElement("apply-execution", ApplyIntentRequestExecutionElement);
+registerElement("collect-prompts", CollectPromptsElement);
+registerElement("format-messages", FormatMessagesElement);
+registerElement("stream-llm", StreamLLMElement);  // streamText + tool calling
+registerElement("check-follow-up", CheckFollowUpElement);       // parse follow_up IntentRequest
 registerElement("finalize", FinalizeConversationElement);
 
 // Define the pipeline:
@@ -56,19 +53,17 @@ export const conversationPipeline = (
   deps: ConversationPipelineDeps,
 ) =>
   pipeline("conversation")
-    .source("export-prompts", { runtime: deps.runtime })
-    .transform("transform-prompts", {
+    .source("collect-prompts", { runtime: deps.runtime })
+    .transform("format-messages", {
       runtime: deps.runtime,
       transportConfig: deps.transportConfig,
     })
-    .transform("transport-stream", { serviceManager: deps.serviceManager })
-    .transform("transform-output", { runtime: deps.runtime })
-    .boundary("parse-intents", { runtime: deps.runtime })
-    .transform("execute-intents", {
-      runtime: deps.runtime,
+    .transform("stream-llm", {
+      serviceManager: deps.serviceManager,
       tools: deps.toolRegistry,
+      bus: deps.bus,
     })
-    .boundary("apply-execution")
+    .boundary("check-follow-up")
     .sink("finalize", { runtime: deps.runtime })
     .build();
 ```

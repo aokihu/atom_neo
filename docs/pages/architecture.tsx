@@ -15,7 +15,7 @@ export default function ArchitecturePage({ content, title, description, category
             [<strong>任务调度</strong>, <><code>Core.runloop()</code> + sleep(500)</>, <><Badge color="green">NEW</Badge> <strong>事件驱动</strong> — task 入队触发 pipeline</>, "零空转延迟"],
             [<strong>上下文管理</strong>, <>全局 <code>ContextManager</code> <span className="muted">(1299 行)</span></>, <><Badge color="green">NEW</Badge> <strong>Per-Session</strong> 隔离</>, "多 session 并发安全"],
             [<strong>Memory 操作</strong>, <>独立 <code>memory-search</code> pipeline</>, <><Badge color="green">NEW</Badge> <strong>Tool Plugin</strong> — search_memory</>, "统一工具路径"],
-            [<strong>LLM 输出</strong>, <><code>&lt;&lt;&lt;REQUEST&gt;&gt;&gt;</code> 标签 + regex</>, <><Badge color="green">NEW</Badge> <strong>Structured Output</strong> — AI SDK Output.object()</>, "零解析错误"],
+            [<strong>LLM 输出</strong>, <><code>&lt;&lt;&lt;REQUEST&gt;&gt;&gt;</code> 标签 + regex</>, <><Badge color="green">NEW</Badge> <strong>streamText + tool calling</strong> — 流式输出 + 工具调用 + follow_up 尾部解析</>, "流式体验 + 零解析错误"],
             [<strong>Pipeline 组装</strong>, <>硬编码 <code>new Element()</code></>, <><Badge color="green">NEW</Badge> <strong>PipelineBuilder</strong> DSL</>, "热重载、运行时注册"],
             [<strong>通信</strong>, <>进程内 <code>EventEmitter</code></>, <><Badge color="green">NEW</Badge> <strong>WebSocket</strong> 事件流</>, "可观测、可录制"],
             [<strong>调试</strong>, <>日志文件 + debug listeners</>, <><Badge color="green">NEW</Badge> <strong>Pipeline Replay</strong></>, "问题复现成本为零"],
@@ -121,9 +121,9 @@ ctx.setInferenceFacts(facts);`} />
             <h4>v1 — 硬编码</h4>
             <CodeBlock lang="typescript" code={`return {
   elements: [
-    new ExportPrompts({ ctx, runtime }),
-    new TransformToPayload({ ctx, runtime, transportConfig }),
-    new TransportForStream(ctx, serviceManager),
+    new CollectPrompts({ ctx, runtime }),
+    new FormatMessages({ ctx, runtime, transportConfig }),
+    new StreamLLM(ctx, serviceManager),
     // ... 7 more
   ],
 };`} />
@@ -131,15 +131,12 @@ ctx.setInferenceFacts(facts);`} />
           <div>
             <h4>v2 — 声明式 Builder <Badge color="green">NEW</Badge></h4>
             <CodeBlock lang="typescript" code={`pipeline("conversation")
-  .source("export-prompts", { runtime })
-  .transform("transform-prompts", { runtime, config })
-  .transform("transport-stream", { serviceManager })
-  .transform("transform-output", { runtime })
-  .boundary("parse-intents", { runtime })
-  .transform("execute-intents", { runtime, tools })
-  .boundary("apply-execution")
-  .sink("finalize", { runtime })
-  .build();`} />
+   .source("collect-prompts", { runtime })
+   .transform("format-messages", { runtime, config })
+   .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
+   .boundary("check-follow-up")  // parse follow_up IntentRequest
+   .sink("finalize", { runtime })
+   .build();`} />
           </div>
         </div>
         <Callout type="tip" title="Element 注册表">
@@ -147,28 +144,27 @@ ctx.setInferenceFacts(facts);`} />
         </Callout>
       </Section>
 
-      {/* ── Section 6: Structured Output ── */}
-      <Section title="Structured Output（替代标签解析）">
+      {/* ── Section 6: Streaming + Tool Calling ── */}
+      <Section title="Streaming + Tool Calling + IntentRequest">
         <ComparisonTable
-          headers={["方式", "v1", "v2"]}
+          headers={["机制", "工具", "用户感知", "时机"]}
           rows={[
-            ["解析方式", <code>text.match(/&lt;&lt;&lt;REQUEST&gt;&gt;&gt;([\s\S]*?)$/)</code>, <code>Output.object(schema)</code>],
-            ["可靠性", <>"依赖正则，易出错"</>, <>"Schema 层面保证格式"</>],
+            [<><Badge color="green">streamText</Badge> tool calling</>, "read, write, bash, search_memory", "✅ 可见，正常反馈", "流式输出中"],
+            [<><Badge color="orange">IntentRequest</Badge> 解析</>, "仅 follow_up", "❌ 无感，隐蔽执行", "流结束后"],
           ]}
         />
-        <CodeBlock lang="typescript" code={`// v2: 结构化输出
-const result = await generateText({
+        <CodeBlock lang="typescript" code={`const result = streamText({
   model,
-  prompt,
-  output: Output.object({
-    schema: z.object({
-      visibleText: z.string(),
-      intent: z.object({
-        requests: z.array(IntentRequestSchema),
-        conversationState: z.enum(["active", "complete", "follow_up"]),
-      }),
-    }),
-  }),
+  messages: buildMessages(task),
+  tools: convertToAISDKTools(toolRegistry.getTools()),
+  onChunk({ chunk }) {
+    if (chunk.type === "text-delta") {
+      bus.emit("transport.delta", { taskId, textDelta: chunk.textDelta });
+    }
+  },
+  onFinish({ response }) {
+    const intents = parseIntentRequests(response.text);  // only FOLLOW_UP
+  },
 });`} />
       </Section>
 
@@ -200,7 +196,7 @@ const result = await generateText({
             [<><code>Runtime</code> <span className="muted">(1210 行)</span></>, "4 个拆分模块", "单职责"],
             [<><code>memory-search</code> pipeline</>, <><code>memory.ts</code> Tool</>, "去 pipeline 化"],
             [<><code>tool-execution</code> pipeline</>, "inline 工具调用", "不跳转管线"],
-            [<code>Output.object()</code>, <code>Output.object()</code>, "零解析错误"],
+            [<><code>&lt;&lt;&lt;REQUEST&gt;&gt;&gt;</code></>, <><code>streamText</code> + tool calling</>, "流式体验 + 结构化工具"],
             [<>硬编码 <code>new Element()</code></>, <><code>PipelineBuilder</code> DSL</>, "可热加载"],
             [<code>EventEmitter</code>, "WebSocket 事件协议", "可录制重放"],
             [<>单包</>, "Monorepo (4 packages)", "模块隔离"],
@@ -214,7 +210,7 @@ const result = await generateText({
           headers={["v1 Pipeline", "v2 对应", "说明"]}
           rows={[
             [<code>formal-conversation</code>, <code>conversation</code>, "保留，Element 链用 Builder 组装"],
-            [<code>user-intent-prediction</code>, <code>prediction</code>, "保留，改用 structured output"],
+            [<code>user-intent-prediction</code>, <code>prediction</code>, "保留，改为 tool calling 流式输出"],
             [<code>post-follow-up</code>, <code>follow-up</code>, "保留"],
             [<code>memory-search</code>, <Badge color="green">Tool Plugin</Badge>, "改为 Tool: search_memory"],
             [<code>tool-execution</code>, <Badge color="green">Inline</Badge>, "工具调用在 pipeline 内完成"],

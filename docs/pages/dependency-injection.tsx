@@ -28,7 +28,7 @@ export default function DocPage({ content, title, description, category }: DocPa
               "  ├── sessionStore = new SessionStore({ maxSessions })",
               "  ├── toolRegistry = new ToolRegistry() → register(readTool, writeTool, searchMemoryTool)",
               "  ├── bus = new PipelineEventBus<PipelineEventMap>()",
-              "  ├── elementRegistry = new Map() → register(ExportPrompts, TransportForStream, ...)",
+              "  ├── elementRegistry = new Map() → register(CollectPrompts, StreamLLM, ...)",
               "  ├── pipelineManager = new PipelineManager(elementRegistry) → registerPipelines(...)",
               "  ├── taskQueue = new TaskQueue()",
               "  ├── taskEngine = new TaskEngine({ bus, taskQueue, pipelineManager, sessionStore }) → start()",
@@ -75,8 +75,8 @@ export function getRuntime() { return globalRuntime; }`} />
             <div>
               <h4><Badge color="red">BAD</Badge> Factory Hiding Dependencies</h4>
               <CodeBlock lang="typescript" code={`class ElementFactory {
-  static createExportPrompts() {
-    return new ExportPromptsElement({
+  static createCollectPrompts() {
+    return new CollectPromptsElement({
       runtime: getGlobalRuntime(), // hidden!
       bus: getGlobalBus(),
     });

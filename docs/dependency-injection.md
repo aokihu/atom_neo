@@ -35,8 +35,8 @@ bootstrap()
   ├── bus = new PipelineEventBus<PipelineEventMap>()
   │
   ├── elementRegistry = new Map()
-  │     ├── elementRegistry.set("export-prompts", ExportPromptsElement)
-  │     └── elementRegistry.set("transport-stream", TransportForStreamElement)
+  │     ├── elementRegistry.set("collect-prompts", CollectPromptsElement)
+  │     └── elementRegistry.set("stream-llm", StreamLLMElement)
   │
   ├── pipelineManager = new PipelineManager(elementRegistry)
   │     └── registerPipelines(pipelineManager, { toolRegistry, bus })
@@ -90,8 +90,8 @@ export function getRuntime() { return globalRuntime; }
 
 // BAD: Factory pattern hiding dependencies
 class ElementFactory {
-  static createExportPrompts() {
-    return new ExportPromptsElement({
+  static createCollectPrompts() {
+    return new CollectPromptsElement({
       runtime: getGlobalRuntime(),  // hidden dependency!
       bus: getGlobalBus(),
     });

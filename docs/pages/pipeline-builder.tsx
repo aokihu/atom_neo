@@ -12,9 +12,9 @@ export default function DocPage({ content, title, description, category }: DocPa
         <ComparisonTable
           headers={["方法", "描述", "示例"]}
           rows={[
-            [<Badge color="blue">source</Badge>, "PipelineInput → 首个 FlowState", <code>{`.source("export-prompts", { runtime })`}</code>],
-            [<Badge color="green">transform</Badge>, "FlowState → FlowState 转换", <code>{`.transform("transport-stream", { sm })`}</code>],
-            [<Badge color="orange">boundary</Badge>, "任意 FlowState → 可能转为 ReadyToFinalize", <code>{`.boundary("parse-intents", { runtime })`}</code>],
+            [<Badge color="blue">source</Badge>, "PipelineInput → 首个 FlowState", <code>{`.source("collect-prompts", { runtime })`}</code>],
+            [<Badge color="green">transform</Badge>, "FlowState → FlowState 转换", <code>{`.transform("stream-llm", { sm })`}</code>],
+            [<Badge color="orange">boundary</Badge>, "任意 FlowState → 可能转为 ReadyToFinalize", <code>{`.boundary("check-follow-up")`}</code>],
             [<Badge color="red">sink</Badge>, "ReadyToFinalize → PipelineResult", <code>{`.sink("finalize", { runtime })`}</code>],
             [<Badge color="purple">build</Badge>, "构建 Pipeline；校验并解析 Element", <code>{`.build()`}</code>],
           ]}
@@ -52,11 +52,11 @@ type ElementDeps = Record<string, unknown>;`} />
             <h4 style={{ marginBottom: "8px" }}>v1 — 硬编码</h4>
             <CodeBlock lang="typescript" code={`return {
   elements: [
-    new ExportPrompts({ ctx, runtime }),
-    new TransformToPayload({
+    new CollectPrompts({ ctx, runtime }),
+    new FormatMessages({
       ctx, runtime, transportConfig,
     }),
-    new TransportForStream(ctx, serviceManager),
+    new StreamLLM(ctx, serviceManager),
     // ... 7 more hardcoded elements
   ],
 };`} />
@@ -64,23 +64,10 @@ type ElementDeps = Record<string, unknown>;`} />
           <div style={{ flex: "1 1 300px" }}>
             <h4 style={{ marginBottom: "8px" }}>v2 — 声明式 Builder <Badge color="green">NEW</Badge></h4>
             <CodeBlock lang="typescript" code={`pipeline("conversation")
-  .source("export-prompts", { runtime })
-  .transform("transform-prompts", {
-    runtime, config,
-  })
-  .transform("transport-stream", {
-    serviceManager,
-  })
-  .transform("transform-output", {
-    runtime,
-  })
-  .boundary("parse-intents", {
-    runtime,
-  })
-  .transform("execute-intents", {
-    runtime, tools,
-  })
-  .boundary("apply-execution")
+  .source("collect-prompts", { runtime })
+  .transform("format-messages", { runtime, config })
+  .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
+  .boundary("check-follow-up")  // parse follow_up IntentRequest
   .sink("finalize", { runtime })
   .build();`} />
           </div>
@@ -138,8 +125,8 @@ export function getRegisteredElementNames(): string[] {
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {[
             { step: "1", title: "定义 Element 类", desc: "扩展 BaseElement，实现 doProcess()", color: "blue" },
-            { step: "2", title: "注册 Element", desc: <code>registerElement("export-prompts", ExportPromptsElement)</code>, color: "purple" },
-            { step: "3", title: "在 PipelineBuilder 中引用", desc: <code>.source("export-prompts", {"{"}runtime{"}"})</code>, color: "green" },
+            { step: "2", title: "注册 Element", desc: <code>registerElement("collect-prompts", CollectPromptsElement)</code>, color: "purple" },
+            { step: "3", title: "在 PipelineBuilder 中引用", desc: <code>.source("collect-prompts", {"{"}runtime{"}"})</code>, color: "green" },
             { step: "4", title: "build() 时解析", desc: "按名称查找构造函数 → 实例化 → 加入 Element 链", color: "orange" },
           ].map((s, idx, arr) => (
             <div key={s.step} style={{ display: "flex", alignItems: "stretch", gap: "0" }}>
@@ -310,44 +297,28 @@ import { pipeline } from "../pipeline/builder";
 import { registerElement } from "../pipeline/registry";
 
 // During startup, register all elements:
-registerElement("export-prompts", ExportPromptsElement);
-registerElement("transform-prompts",
-  TransformPromptsToTransportPayloadElement);
-registerElement("transport-stream",
-  TransportForStreamElement);
-registerElement("transform-output",
-  TransformTransportOutputElement);
-registerElement("parse-intents",
-  ParseIntentRequestsElement);
-registerElement("execute-intents",
-  ExecuteIntentRequestsElement);
-registerElement("apply-execution",
-  ApplyIntentRequestExecutionElement);
-registerElement("finalize",
-  FinalizeConversationElement);
+registerElement("collect-prompts", CollectPromptsElement);
+registerElement("format-messages", FormatMessagesElement);
+registerElement("stream-llm", StreamLLMElement);
+registerElement("check-follow-up", CheckFollowUpElement);
+registerElement("finalize", FinalizeConversationElement);
 
 // Define the pipeline:
 export const conversationPipeline = (
   deps: ConversationPipelineDeps,
 ) =>
   pipeline("conversation")
-    .source("export-prompts", { runtime: deps.runtime })
-    .transform("transform-prompts", {
+    .source("collect-prompts", { runtime: deps.runtime })
+    .transform("format-messages", {
       runtime: deps.runtime,
       transportConfig: deps.transportConfig,
     })
-    .transform("transport-stream", {
+    .transform("stream-llm", {
       serviceManager: deps.serviceManager,
-    })
-    .transform("transform-output", {
-      runtime: deps.runtime,
-    })
-    .boundary("parse-intents", { runtime: deps.runtime })
-    .transform("execute-intents", {
-      runtime: deps.runtime,
       tools: deps.toolRegistry,
+      bus: deps.bus,
     })
-    .boundary("apply-execution")
+    .boundary("check-follow-up")
     .sink("finalize", { runtime: deps.runtime })
     .build();`} />
       </Section>

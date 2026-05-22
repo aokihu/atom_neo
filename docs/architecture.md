@@ -11,7 +11,7 @@
 | **任务调度** | `Core.runloop()` 轮询队列，sleep(500) | 事件驱动：task 入队 → 立即触发 pipeline | 无空转延迟，响应时间 O(1) |
 | **上下文管理** | 全局 `ContextManager` (1299 行单体) | Per-Session 隔离，每个 session 独立实例 | 多 session 并发安全，无需全局锁 |
 | **Memory 操作** | 独立 `memory-search` pipeline，4 个 Element | `search_memory` / `save_memory` 注册为 Tool | 统一工具调用路径，减少 2 条 pipeline |
-| **LLM 输出解析** | 字符串 `<<<REQUEST>>>` 标签 + 正则提取 JSON | `structured_output` — LLM 直接输出 JSON | 零解析错误，格式严格 |
+| **LLM 输出解析** | 字符串 `<<<REQUEST>>>` 标签 + 正则提取 JSON | `streamText` + tool calling（流式输出 + 结构化工具调用）；IntentRequest 仅保留 `follow_up`（尾部隐蔽解析） | 流式体验 + 零解析错误 |
 | **Pipeline 组装** | 硬编码 5 条 pipeline 定义 | 声明式 `PipelineBuilder`，Element 通过名称引用 | 热重载，运行时注册新 pipeline |
 | **通信** | 进程中 `EventEmitter` | WebSocket 事件流（Core → Client 单向广播） | 可观测，可录制，可重放 |
 | **调试** | 日志写入文件 + `registerDebugListeners` | Pipeline Replay — 完整执行记录，可回溯 | 问题复现成本降为 0 |
@@ -170,49 +170,54 @@ ctx.setInferenceFacts(facts);
 
 ```typescript
 // v1: 硬编码
-new ExportPromptsElement({ ctx, runtime }),
-new TransformPromptsToTransportPayloadElement({ ctx, runtime, transportConfig }),
-new TransportForStreamElement(ctx, serviceManager),
+new CollectPromptsElement({ ctx, runtime }),
+new FormatMessagesElement({ ctx, runtime, transportConfig }),
+new StreamLLMElement(ctx, serviceManager),
 
 // v2: 声明式
-const conversationPipeline = pipeline("formal-conversation")
-  .source("export-prompts", { runtime })
-  .transform("transform-prompts", { runtime, config: transportConfig })
-  .transform("transport-stream", { serviceManager })
-  .transform("transform-output", { runtime })
-  .boundary("parse-intents", { runtime })
-  .transform("execute-intents", { runtime, tools })
-  .boundary("apply-execution")
+const conversationPipeline = pipeline("conversation")
+  .source("collect-prompts", { runtime })
+  .transform("format-messages", { runtime, config: transportConfig })
+  .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
+  .boundary("check-follow-up")  // 解析 follow_up IntentRequest
   .sink("finalize", { runtime })
   .build();
 ```
 
 **优势：** 运行时注册新 pipeline，支持热重载，Element 按名称查找而非硬编码 import。
 
-### 3.4 Structured Output（替代 REQUEST 标签）
+### 3.4 Streaming + Tool Calling + IntentRequest
 
 ```typescript
-// v1: 字符串标签解析
-const match = text.match(/<<<REQUEST>>>([\s\S]*?)$/);
-const intentRequests = parseIntentFromJSON(match[1]);
-
-// v2: 结构化输出
-const result = await generateText({
+// 核心：streamText 提供流式输出 + 结构化工具调用
+const result = streamText({
   model,
-  prompt,
-  output: Output.object({
-    schema: z.object({
-      visibleText: z.string(),
-      intent: z.object({
-        requests: z.array(IntentRequestSchema),
-        conversationState: z.enum(["active", "complete", "follow_up"]),
-      }),
-    }),
-  }),
+  messages: buildMessages(task),
+  tools: convertToAISDKTools(toolRegistry.getTools()),  // read, write, bash, search_memory 等
+  onChunk({ chunk }) {
+    if (chunk.type === "text-delta") {
+      bus.emit("transport.delta", { taskId: task.id, textDelta: chunk.textDelta });
+    }
+  },
+  onFinish({ response }) {
+    // 工具调用已完成（融入对话）
+    // 流结束后，从完整响应文本解析 follow_up IntentRequest
+    const fullText = response.text;
+    const intents = parseIntentRequests(fullText);  // 仅解析 FOLLOW_UP
+    if (intents.some(i => i.request === IntentRequestType.FOLLOW_UP)) {
+      ctx.setContinuationContext({ ... });
+    }
+  },
 });
 ```
 
-**优势：** 零解析错误，格式在 schema 层面保证，LLM provider 原生支持。
+**两条路径分工：**
+| 机制 | 工具 | 用户感知 | 时机 |
+|------|------|----------|------|
+| `streamText` tool calling | read, write, bash, search_memory 等 | ✅ 可见，正常反馈 | 流式输出中 |
+| IntentRequest 解析 | 仅 `follow_up` | ❌ 无感，隐蔽调度 | 流结束后 |
+
+**优势：** 流式逐字输出 + 工具调用不打断阅读 + follow_up 隐蔽执行，用户无感知。
 
 ### 3.5 Pipeline Replay（录制与重放）
 
@@ -242,7 +247,7 @@ class PipelinePlayer {
 | v1 Pipeline | v2 对应 | 说明 |
 |-------------|---------|------|
 | `formal-conversation` | `conversation` | 保留，Element 链用 Builder 组装 |
-| `user-intent-prediction` | `prediction` | 保留，改为 structured output 解析 |
+| `user-intent-prediction` | `prediction` | 保留，改为 tool calling 流式输出 |
 | `post-follow-up` | `follow-up` | 保留 |
 | `memory-search` | **不存在** | 改为 Tool Plugin: `search_memory` |
 | `tool-execution` | **不存在** | 工具调用在 pipeline 内完成，不跳转管线 |
@@ -301,20 +306,18 @@ class PipelineBuilder {
 // Element 注册表
 const elementRegistry = new Map<string, ElementConstructor>();
 
-elementRegistry.set("export-prompts", ExportPromptsElement);
-elementRegistry.set("transform-prompts", TransformPromptsToTransportPayloadElement);
-elementRegistry.set("transport-stream", TransportForStreamElement);
-// ... more elements
+elementRegistry.set("collect-prompts", CollectPromptsElement);
+elementRegistry.set("format-messages", FormatMessagesElement);
+elementRegistry.set("stream-llm", StreamLLMElement);
+elementRegistry.set("check-follow-up", CheckFollowUpElement);
+elementRegistry.set("finalize", FinalizeConversationElement);
 
 // 使用
 const pipeline = pipeline("conversation")
-  .source("export-prompts", { runtime })
-  .transform("transform-prompts", { runtime, config })
-  .transform("transport-stream", { serviceManager })
-  .transform("transform-output", { runtime })
-  .boundary("parse-intents", { runtime })
-  .transform("execute-intents", { runtime, tools })
-  .boundary("apply-execution")
+  .source("collect-prompts", { runtime })
+  .transform("format-messages", { runtime, config })
+  .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
+  .boundary("check-follow-up")  // 解析 follow_up IntentRequest
   .sink("finalize", { runtime })
   .build();
 ```
@@ -404,7 +407,7 @@ enum PermissionLevel {
 | `Runtime` (1210 行) | 4 个拆分类 | 单职责 |
 | `memory-search` pipeline | `memory.ts` Tool 插件 | 去 pipeline 化 |
 | `tool-execution` pipeline | pipeline 内工具调用 | 不跳转管线 |
-| `<<<REQUEST>>>` 标签解析 | AI SDK `Output.object()` | 零解析错误 |
+| `<<<REQUEST>>>` 标签解析 | AI SDK `streamText` + tool calling | 流式体验 + 结构化工具 |
 | 硬编码 `new Element()` | `PipelineBuilder` DSL | 可热加载 |
 | 进程内 `EventEmitter` | WebSocket 事件协议 | 可录制重放 |
 | `registerDebugListeners` 日志 | + Pipeline Replay | 可回溯 |

@@ -94,7 +94,7 @@
   <tr>
     <td>LLM Output</td>
     <td><code>&lt;&lt;&lt;REQUEST&gt;&gt;&gt;</code> tag + regex</td>
-    <td><span class="badge b-new">NEW</span> <b>Structured Output</b> — AI SDK <code>Output.object()</code></td>
+    <td><span class="badge b-new">NEW</span> <b>streamText + tool calling</b> — 流式输出 + 结构化工具</td>
     <td>Zero parse errors</td>
   </tr>
   <tr>
@@ -210,9 +210,9 @@ sequenceDiagram
     <h4>v1 — Hardcoded</h4>
     <pre style="font-size:11px; line-height:1.5;">return {
   elements: [
-    new ExportPrompts({ ctx, runtime }),
-    new TransformToPayload({ ctx, runtime, transportConfig }),
-    new TransportForStream(ctx, serviceManager),
+    new CollectPrompts({ ctx, runtime }),
+    new FormatMessages({ ctx, runtime, transportConfig }),
+    new StreamLLM(ctx, serviceManager),
     // ... 7 more
   ],
 };</pre>
@@ -220,13 +220,10 @@ sequenceDiagram
   <div class="card">
     <h4>v2 — Declarative Builder <span class="badge b-new">NEW</span></h4>
     <pre style="font-size:11px; line-height:1.5;">pipeline("conversation")
-  .source("export-prompts", { runtime })
-  .transform("transform-prompts", { runtime, config })
-  .transform("transport-stream", { serviceManager })
-  .transform("transform-output", { runtime })
-  .boundary("parse-intents", { runtime })
-  .transform("execute-intents", { runtime, tools })
-  .boundary("apply-execution")
+  .source("collect-prompts", { runtime })
+  .transform("format-messages", { runtime, config })
+  .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
+  .boundary("check-follow-up")  // parse follow_up IntentRequest
   .sink("finalize", { runtime })
   .build();</pre>
   </div>
@@ -235,9 +232,10 @@ sequenceDiagram
 <h3>Element Registry</h3>
 <pre>
 const elements = new Map();
-elements.set("export-prompts", ExportPromptsElement);
-elements.set("transport-stream", TransportForStreamElement);
-// ... builder looks up by name at runtime
+elements.set("collect-prompts", CollectPromptsElement);
+elements.set("stream-llm", StreamLLMElement);
+elements.set("check-follow-up", CheckFollowUpElement);
+elements.set("finalize", FinalizeConversationElement);
 </pre>
 
 <h3>Pipeline Chain Diagram</h3>
@@ -248,21 +246,14 @@ flowchart LR
         direction LR
         A["Export<br/>Prompts"] --> B["Transform<br/>Prompts"]
     end
-    subgraph P2["Phase 2"]
-        C["Transport<br/>ForStream"]
+    subgraph P2["Phase 2: streamText + tools"]
+        C["Transport<br/>ForStream<br/>(deltas + tool calls)"]
     end
     subgraph P3["Phase 3"]
         direction LR
-        D["Transform<br/>Output"] --> E["Parse<br/>Intents"]
+        D["Apply<br/>Execution<br/>(follow_up)"] --> E["Finalize"]
     end
-    subgraph P4["Phase 4"]
-        F["Execute<br/>Intents"]
-    end
-    subgraph P5["Phase 5"]
-        direction LR
-        G["Apply<br/>Execution"] --> H["Finalize"]
-    end
-    A --> B --> C --> D --> E --> F --> G --> H
+    A --> B --> C --> D --> E
 </div>
 
 <!-- ======================================================== -->
@@ -318,7 +309,7 @@ sequenceDiagram
 
     T->>WS: {"type":"task.submit"}
     WS-->>T: {"type":"task.created","taskId":"t1"}
-    WS-->>T: {"type":"pipeline.element.started","name":"ExportPrompts"}
+    WS-->>T: {"type":"pipeline.element.started","name":"CollectPrompts"}
     PIPE-->>WS: transport.delta
     WS-->>T: {"type":"transport.delta","text":"Let me check..."}
     PIPE-->>WS: transport.tool.started
@@ -340,7 +331,7 @@ sequenceDiagram
   <tr><td><code>Runtime</code> (1210 lines, monolith)</td><td>4 classes: Orchestrator + IntentPolicy + ToolCoordinator + MemoryManager</td></tr>
   <tr><td><code>memory-search</code> pipeline</td><td><code>memory.ts</code> Tool plugin</td></tr>
   <tr><td><code>tool-execution</code> pipeline</td><td>Inline tool calls in conversation pipeline</td></tr>
-  <tr><td><code>&lt;&lt;&lt;REQUEST&gt;&gt;&gt;</code> tag parsing</td><td>AI SDK <code>Output.object(schema)</code></td></tr>
+  <tr><td><code>&lt;&lt;&lt;REQUEST&gt;&gt;&gt;</code> tag parsing</td><td>AI SDK <code>streamText</code> + tool calling</td></tr>
   <tr><td>5 pipeline definitions</td><td>3 pipeline definitions + Tool Plugin system</td></tr>
   <tr><td>Hardcoded <code>new Element()</code></td><td><code>PipelineBuilder</code> DSL + element registry</td></tr>
   <tr><td>In-process <code>EventEmitter</code></td><td>WebSocket event stream</td></tr>

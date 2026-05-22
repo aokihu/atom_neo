@@ -184,7 +184,7 @@ REPLAY_ENABLED=true`} />
 
 # Expected streaming events:
 # {"type":"task.created","seq":1,"ts":...,"payload":{"taskId":"...","state":"pending"}}
-# {"type":"pipeline.element.started","seq":2,"ts":...,"payload":{"elementName":"ExportPrompts",...}}
+# {"type":"pipeline.element.started","seq":2,"ts":...,"payload":{"elementName":"CollectPrompts",...}}
 # {"type":"transport.delta","seq":3,"ts":...,"payload":{"taskId":"...","textDelta":"Hello"}}
 # {"type":"task.completed","seq":...,"ts":...,"payload":{"taskId":"...","result":{...}}}`} />
       </Section>

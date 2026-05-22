@@ -20,7 +20,7 @@ pipelines/
 │   ├── index.ts
 │   ├── types.ts
 │   └── elements/
-│       ├── export-prompts.element.ts
+│       ├── collect-prompts.element.ts
 │       └── finalize.element.ts
 └── prediction/
     └── ...
@@ -56,8 +56,8 @@ abstract class BaseElement<I, O> { }
 abstract class BaseService { }
 
 // Elements: descriptive name + Element suffix
-class ExportPromptsElement extends BaseElement { }
-class TransportForStreamElement extends BaseElement { }
+class CollectPromptsElement extends BaseElement { }
+class StreamLLMElement extends BaseElement { }
 class FinalizeConversationElement extends BaseElement { }
 
 // Services: descriptive name + Service suffix (if providing system-level capability)

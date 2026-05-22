@@ -36,17 +36,19 @@
 
 ---
 
-## P2: Core Engine
+## P2: Core Engine ✅
 
-**预估**: 1.5 周 | **状态**: pending
+**预估**: 1.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
+| Config | `packages/core/src/config.ts` | Zod schema, env/CLI loading |
 | TaskEngine | `packages/core/src/task-engine.ts` | 事件驱动调度器，替代 runloop |
 | TaskQueue | `packages/core/src/task-queue.ts` | Priority task queue |
 | TaskFactory | `packages/core/src/task-factory.ts` | createTaskItem, createContinuationTask |
 | SessionStore | `packages/core/src/session/store.ts` | Map-based in-memory session store |
-| SessionContext | `packages/core/src/session/context.ts` | Per-session context (messages, facts, tool/memory state) |
+| SessionContext | `packages/core/src/session/context.ts` | Per-session context |
+| Tests | `packages/core/src/**/*.test.ts` | 21 tests, 100% pass |
 
 ---
 
@@ -72,7 +74,7 @@
 |------|------|------|
 | PipelineBuilder DSL | `packages/core/src/pipeline/builder.ts` | source().transform().boundary().sink().build() |
 | Element Registry | `packages/core/src/pipeline/registry.ts` | registerElement / resolveElement |
-| Conversation pipeline | `packages/core/src/pipelines/conversation/` | 主对话管线 + 7 Element |
+| Conversation pipeline | `packages/core/src/pipelines/conversation/` | 主对话管线 + 5 Element（streamText + tool calling） |
 | Prediction pipeline | `packages/core/src/pipelines/prediction/` | 意图预测管线 |
 | Follow-up pipeline | `packages/core/src/pipelines/follow-up/` | 追问管线 |
 
@@ -139,8 +141,8 @@
 |-------|------|-------|--------|----------|
 | P0 | Scaffolding | 8 | completed | - |
 | P1 | Foundation | 6 | completed | 1 week |
-| P2 | Core Engine | 5 | in_progress | 1.5 weeks |
-| P3 | Tools & Pipelines | 5 | pending | 1 week |
+| P2 | Core Engine | 7 | completed | 1.5 weeks |
+| P3 | Tools & Pipelines | 5 | in_progress | 1 week |
 | P4 | Pipeline Builder | 5 | pending | 1.5 weeks |
 | P5 | Server & Protocol | 5 | pending | 1 week |
 | P6 | Gateway | 5 | pending | 0.5 weeks |

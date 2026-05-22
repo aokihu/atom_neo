@@ -24,8 +24,8 @@ START
   │     // level=1: essential only, level=2: +debug, level=3: +trace
   │
   ├── 3. Register Builtin Elements
-  │     elementRegistry.set("export-prompts", ExportPromptsElement)
-  │     elementRegistry.set("transport-stream", TransportForStreamElement)
+  │     elementRegistry.set("collect-prompts", CollectPromptsElement)
+  │     elementRegistry.set("stream-llm", StreamLLMElement)
   │     ... (all pipeline elements)
   │
   ├── 4. Register Builtin Tools
@@ -223,7 +223,7 @@ config ──→ log ──→ services ──→ tools ──→ elements ─�
 # Everything depends on config and log.
 # Services depend on nothing else.
 # Tools depend on services (memory tool depends on memory service).
-# Elements depend on tools (execute-intents needs tool registry).
+# Elements depend on tools (stream-llm needs tool registry for tool calling).
 # Pipelines depend on elements.
 # Session store depends only on config.
 # Task engine depends on bus, queue, pipelines, session store.

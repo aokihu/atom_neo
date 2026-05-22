@@ -217,7 +217,7 @@ module-name/
       <Section title="导入约定">
         <CodeBlock lang="typescript" code={`// External packages first
 import { z } from "zod";
-import { generateText } from "ai";
+import { streamText } from "ai";
 
 // Internal packages (shared)
 import { BaseElement, PipelineRunner } from "@atom-neo/shared";

@@ -88,9 +88,9 @@ export abstract class BaseElement<TIn = FlowState, TOut = FlowState> {
           per-element — only inject what the element actually needs. No global registry, no service locator.
         </p>
         <CodeBlock lang="typescript" code={`// Source: receives pipeline input (not FlowState)
-export class ExportPrompts extends BaseElement<TaskInput, FlowState> {
+export class CollectPrompts extends BaseElement<TaskInput, FlowState> {
   readonly kind = "source";
-  readonly name = "export-prompts";
+  readonly name = "collect-prompts";
 
   constructor(deps: { runtime: Runtime; config: PipelineConfig }) {
     super(deps);
@@ -102,7 +102,7 @@ export class ExportPrompts extends BaseElement<TaskInput, FlowState> {
 }
 
 // Transform: FlowState → FlowState
-export class TransformToPayload extends BaseElement<FlowState, FlowState> {
+export class FormatMessages extends BaseElement<FlowState, FlowState> {
   readonly kind = "transform";
   readonly name = "transform-to-payload";
 
@@ -116,10 +116,10 @@ export class TransformToPayload extends BaseElement<FlowState, FlowState> {
   }
 }
 
-// Boundary: decides finalization
-export class ParseIntents extends BaseElement<FlowState, FlowState> {
+// Boundary: decides finalization (follow_up IntentRequest)
+export class CheckFollowUp extends BaseElement<FlowState, FlowState> {
   readonly kind = "boundary";
-  readonly name = "parse-intents";
+  readonly name = "check-follow-up";
 
   constructor(deps: { runtime: Runtime }) {
     super(deps);
@@ -208,9 +208,9 @@ protected assertMode(state: FlowState, expected: string): void {
           (e.g., <code>TaskInput</code>) into the first <code>FlowState</code> with{" "}
           <code>mode = "initial"</code>.
         </p>
-        <CodeBlock lang="typescript" code={`export class ExportPrompts extends BaseElement<TaskInput, FlowState> {
+        <CodeBlock lang="typescript" code={`export class CollectPrompts extends BaseElement<TaskInput, FlowState> {
   readonly kind = "source";
-  readonly name = "export-prompts";
+  readonly name = "collect-prompts";
 
   constructor(deps: { runtime: Runtime }) {
     super(deps);
@@ -238,7 +238,7 @@ protected assertMode(state: FlowState, expected: string): void {
           A <strong>transform</strong> reads and mutates a <code>FlowState</code>. It must not produce
           a <code>PipelineResult</code> — it only advances the FlowState through intermediate modes.
         </p>
-        <CodeBlock lang="typescript" code={`export class TransformToPayload extends BaseElement<FlowState, FlowState> {
+        <CodeBlock lang="typescript" code={`export class FormatMessages extends BaseElement<FlowState, FlowState> {
   readonly kind = "transform";
   readonly name = "transform-to-payload";
 
@@ -271,21 +271,20 @@ protected assertMode(state: FlowState, expected: string): void {
           advances it toward finalization (<code>mode = "readyToFinalize"</code>) or loops back for
           further processing.
         </p>
-        <CodeBlock lang="typescript" code={`export class ParseIntents extends BaseElement<FlowState, FlowState> {
+        <CodeBlock lang="typescript" code={`export class CheckFollowUp extends BaseElement<FlowState, FlowState> {
   readonly kind = "boundary";
-  readonly name = "parse-intents";
+  readonly name = "check-follow-up";
 
   constructor(deps: { runtime: Runtime }) {
     super(deps);
   }
 
   async doProcess(state: FlowState): Promise<FlowState> {
-    this.assertMode(state, "streaming");
+    this.assertMode(state, "executing");
 
-    const intents = state.rawOutput?.intent?.requests ?? [];
+    const intents = parseIntentRequests(state.responseText);
 
     if (intents.length === 0) {
-      // No more intents — advance toward finalization
       state.mode = "readyToFinalize";
       return state;
     }
@@ -338,18 +337,15 @@ protected assertMode(state: FlowState, expected: string): void {
 const registry = new ElementRegistry();
 
 // Register all elements at startup
-registry.set("export-prompts", (deps) => new ExportPrompts(deps));
-registry.set("transform-to-payload", (deps) => new TransformToPayload(deps));
-registry.set("transport-stream", (deps) => new TransportForStream(deps));
-registry.set("transform-output", (deps) => new TransformOutput(deps));
-registry.set("parse-intents", (deps) => new ParseIntents(deps));
-registry.set("execute-intents", (deps) => new ExecuteIntents(deps));
-registry.set("apply-execution", (deps) => new ApplyExecution(deps));
+registry.set("collect-prompts", (deps) => new CollectPrompts(deps));
+registry.set("transform-to-payload", (deps) => new FormatMessages(deps));
+registry.set("stream-llm", (deps) => new StreamLLM(deps));  // streamText + tool calling
+registry.set("check-follow-up", (deps) => new CheckFollowUp(deps));       // follow_up IntentRequest
 registry.set("finalize", (deps) => new Finalize(deps));
 
 // PipelineBuilder usage:
 //   pipeline("conversation")
-//     .source("export-prompts", { runtime })
+//     .source("collect-prompts", { runtime })
 //     .sink("finalize", { runtime })
 //     .build();`} />
       </Section>
@@ -404,14 +400,14 @@ export class MyElement extends BaseElement</* TIn */ FlowState, /* TOut */ FlowS
           and assert on the returned state.
         </p>
         <CodeBlock lang="typescript" code={`import { describe, it, expect } from "vitest";
-import { ExportPrompts } from "../ExportPrompts";
-import { TransformToPayload } from "../TransformToPayload";
+import { CollectPrompts } from "../CollectPrompts";
+import { FormatMessages } from "../FormatMessages";
 import { Finalize } from "../Finalize";
 
-describe("ExportPrompts (source)", () => {
+describe("CollectPrompts (source)", () => {
   it("converts TaskInput into FlowState with mode=initial", async () => {
     const runtime = { pipelines: {}, config: {} } as Runtime;
-    const element = new ExportPrompts({ runtime });
+    const element = new CollectPrompts({ runtime });
 
     const result = await element.doProcess({
       sessionId: "s1",
@@ -424,9 +420,9 @@ describe("ExportPrompts (source)", () => {
   });
 });
 
-describe("TransformToPayload (transform)", () => {
+describe("FormatMessages (transform)", () => {
   it("mutates FlowState and advances mode", async () => {
-    const element = new TransformToPayload({
+    const element = new FormatMessages({
       runtime: {} as Runtime,
       transportConfig: { model: "gpt-4" } as TransportConfig,
     });
@@ -446,7 +442,7 @@ describe("TransformToPayload (transform)", () => {
   });
 
   it("throws on wrong mode", async () => {
-    const element = new TransformToPayload({
+    const element = new FormatMessages({
       runtime: {} as Runtime,
       transportConfig: { model: "gpt-4" } as TransportConfig,
     });

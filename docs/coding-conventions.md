@@ -50,7 +50,7 @@ module-name/
 ```typescript
 // External packages first
 import { z } from "zod";
-import { generateText } from "ai";
+import { streamText } from "ai";
 
 // Internal packages (shared)
 import { BaseElement, PipelineRunner } from "@atom-neo/shared";

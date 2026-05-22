@@ -47,18 +47,20 @@ const PHASES: PhaseItem[] = [
     ],
   },
   {
-    id: "P2", name: "Core Engine", estimate: "1.5w", status: "pending",
+    id: "P2", name: "Core Engine", estimate: "1.5w", status: "done",
     desc: "事件驱动调度器 + Per-Session 上下文",
     tasks: [
-      { name: "TaskEngine", file: "core/src/task-engine.ts", status: "pending" },
-      { name: "TaskQueue", file: "core/src/task-queue.ts", status: "pending" },
-      { name: "TaskFactory", file: "core/src/task-factory.ts", status: "pending" },
-      { name: "SessionStore", file: "core/src/session/store.ts", status: "pending" },
-      { name: "SessionContext", file: "core/src/session/context.ts", status: "pending" },
+      { name: "Config", file: "core/src/config.ts", status: "done" },
+      { name: "TaskEngine", file: "core/src/task-engine.ts", status: "done" },
+      { name: "TaskQueue", file: "core/src/task-queue.ts", status: "done" },
+      { name: "TaskFactory", file: "core/src/task-factory.ts", status: "done" },
+      { name: "SessionStore", file: "core/src/session/store.ts", status: "done" },
+      { name: "SessionContext", file: "core/src/session/context.ts", status: "done" },
+      { name: "Tests (21)", file: "core/src/**/*.test.ts", status: "done" },
     ],
   },
   {
-    id: "P3", name: "Tools & Pipelines", estimate: "1w", status: "pending",
+    id: "P3", name: "Tools & Pipelines", estimate: "1w", status: "in_progress",
     desc: "文件系统 + Memory + Bash 工具",
     tasks: [
       { name: "ToolRegistry", file: "core/src/tools/registry.ts", status: "pending" },
@@ -74,7 +76,7 @@ const PHASES: PhaseItem[] = [
     tasks: [
       { name: "PipelineBuilder DSL", file: "core/src/pipeline/builder.ts", status: "pending" },
       { name: "Element Registry", file: "core/src/pipeline/registry.ts", status: "pending" },
-      { name: "Conversation pipeline", file: "core/src/pipelines/conversation/", status: "pending" },
+      { name: "Conversation pipeline (5 elements)", file: "core/src/pipelines/conversation/", status: "pending" },
       { name: "Prediction pipeline", file: "core/src/pipelines/prediction/", status: "pending" },
       { name: "Follow-up pipeline", file: "core/src/pipelines/follow-up/", status: "pending" },
     ],

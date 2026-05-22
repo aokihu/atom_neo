@@ -71,9 +71,8 @@ test("should work")          # Should → does
 ```typescript
 // External module mocking:
 mock.module("ai", () => ({
-  generateText: mockGenerateText,
   streamText: mockStreamText,
-  Output: { object: () => ({}) },
+  generateText: mockGenerateText,
 }));
 
 // Local function mocking:

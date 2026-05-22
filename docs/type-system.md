@@ -96,10 +96,7 @@ export type ToolReportFact = {
 // packages/shared/src/types/intent.ts
 
 export enum IntentRequestType {
-  SEARCH_MEMORY = "search_memory",
-  EXECUTE_TOOL = "execute_tool",
-  FOLLOW_UP = "follow_up",
-  COMPLETE = "complete",
+  FOLLOW_UP = "follow_up",   // 仅 follow_up 走 IntentRequest 解析（隐蔽调度）
 }
 
 export enum IntentRequestSource {
@@ -114,21 +111,17 @@ export type IntentRequest = {
   params: Record<string, unknown>;   // Type-specific parameters
 };
 
-export type SearchMemoryIntentRequest = IntentRequest & {
-  request: IntentRequestType.SEARCH_MEMORY;
+export type FollowUpIntentRequest = IntentRequest & {
+  request: IntentRequestType.FOLLOW_UP;
   params: {
-    words: string;
-    scope?: string;
-    limit?: number;
+    summary: string;
+    nextPrompt: string;
+    avoidRepeat: string;
   };
 };
 
-export type ExecuteToolIntentRequest = IntentRequest & {
-  request: IntentRequestType.EXECUTE_TOOL;
-  params: {
-    toolRequests: TaskToolCall[];
-  };
-};
+// NOTE: SEARCH_MEMORY and EXECUTE_TOOL 走 AI SDK streamText tool calling 路径
+// 不在 IntentRequest 中；仅 FOLLOW_UP 走尾部文本解析
 ```
 
 ## 4. Pipeline Types
