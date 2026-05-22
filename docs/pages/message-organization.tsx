@@ -58,7 +58,7 @@ export default function MessageOrganizationPage({ content, title, description, c
         </Callout>
 
         <CodeBlock lang="typescript" code={`// Static import — Bun natively supports .md as text
-import baseSystemPrompt from "./assets/prompts/base_system_prompt.md";
+import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
 
 class LoadSystemPromptElement extends BaseElement {
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {

@@ -4,7 +4,7 @@ import type { PipelineEventBus } from "@atom-neo/shared";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
-import baseSystemPrompt from "../../../../../../assets/prompts/base_system_prompt.md";
+import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
 
 export type ConversationMode =
   | "initial"

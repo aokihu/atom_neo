@@ -334,7 +334,7 @@ export class MyElement extends BaseElement<MyFlowState, MyFlowState> {
 ### 7.1 `load-system-prompt` — 安全提示词
 
 ```typescript
-import baseSystemPrompt from "../assets/prompts/base_system_prompt.md";
+import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
 
 class LoadSystemPromptElement extends BaseElement<MyFlowState, MyFlowState> {
   async doProcess(input: MyFlowState): Promise<MyFlowState> {

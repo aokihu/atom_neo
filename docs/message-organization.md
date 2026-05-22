@@ -50,7 +50,7 @@ collect-prompts    (source:    初始→streaming)
 
 ```typescript
 // Static import — Bun 原生支持 .md 作为文本，打包时内联
-import baseSystemPrompt from "../assets/prompts/base_system_prompt.md";
+import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
 
 class LoadSystemPromptElement extends BaseElement {
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
