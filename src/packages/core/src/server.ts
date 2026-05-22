@@ -42,6 +42,13 @@ export async function startCore(deps: CoreDeps): Promise<void> {
       taskId: p.task?.id,
       output: (p.result as any)?.output?.slice(0, 200),
     });
+    // Store assistant response in session
+    const sid = (p.task as any)?.sessionId;
+    const output = (p.result as any)?.responseText || (p.result as any)?.output || "";
+    if (sid && output) {
+      const s = sessionStore.get(sid);
+      s.addMessage({ role: "assistant", content: output, timestamp: Date.now() });
+    }
   });
   bus.on("task.failed" as any, (p: any) => {
     logger.error("task failed", {
@@ -82,6 +89,11 @@ export async function startCore(deps: CoreDeps): Promise<void> {
         }).build(bus);
 
         return createTaskHandler(taskQueue, body, bus, pipeline);
+      }
+      if (url.pathname.startsWith("/api/sessions/") && method === "GET") {
+        const sid = url.pathname.split("/").pop()!;
+        const session = sessionStore.has(sid) ? sessionStore.get(sid) : null;
+        return Response.json(session?.messages ?? []);
       }
       if (url.pathname.startsWith("/api/tasks/") && method === "DELETE") {
         return taskCancelHandler(taskQueue, req, url.pathname.split("/").pop()!);

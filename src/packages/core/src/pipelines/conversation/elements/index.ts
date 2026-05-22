@@ -1,10 +1,9 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
-import { streamText } from "ai";
+import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
-import { z } from "zod";
 
 export type ConversationMode =
   | "initial"
@@ -117,9 +116,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     // Convert ToolDefinition to AI SDK tool format
     const aiTools: Record<string, any> = {};
     for (const tool of this.#tools) {
+      const schema: any = tool.inputSchema;
       aiTools[tool.name] = {
         description: tool.description,
-        parameters: zodToJSONSchema(tool.inputSchema as z.ZodType<any>),
+        parameters: schema._def ? schema : { type: "object", properties: {} },
         execute: async (args: any) => {
           const result = await tool.execute(args);
           return result.output;
@@ -128,26 +128,19 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
 
     try {
-      const self = this;
-      const result = streamText({
+      const result = await generateText({
         model,
         messages,
-        tools: aiTools,
-        onChunk({ chunk }) {
-          if (chunk.type === "text-delta") {
-            self.bus.emit("transport.delta" as any, { textDelta: chunk.textDelta } as any);
-          }
-        },
+        // tools: aiTools,  // TODO: fix schema conversion for AI SDK
+        maxTokens: 1024,
       });
 
-      const fullText = await result.text;
-
-      this.report("element.data", { event: "stream-complete" });
+      this.report("element.data", { event: "llm-complete" });
 
       return {
         ...input,
         mode: "executing",
-        responseText: fullText,
+        responseText: result.text,
       };
     } catch (err: any) {
       const msg = err?.message ?? String(err);
@@ -192,33 +185,4 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     }
     return { type: "complete" as const, task: input.task, output: input.responseText };
   }
-}
-
-function zodToJSONSchema(schema: z.ZodType<any>): Record<string, unknown> {
-  const def = (schema as any)._def ?? (schema as any).def;
-  if (!def) return { type: "object", properties: {} };
-
-  const typeMap: Record<string, string> = {
-    ZodString: "string",
-    ZodNumber: "number",
-    ZodBoolean: "boolean",
-    ZodArray: "array",
-    ZodEnum: "string",
-  };
-  const type = typeMap[def.typeName] ?? "string";
-
-  if (def.typeName === "ZodObject") {
-    const props: Record<string, any> = {};
-    const shape = def.shape?.() ?? {};
-    for (const [key, value] of Object.entries(shape)) {
-      props[key] = zodToJSONSchema(value as z.ZodType<any>);
-    }
-    return { type: "object", properties: props, required: Object.keys(props) };
-  }
-
-  if (def.typeName === "ZodEnum") {
-    return { type: "string", enum: def.values };
-  }
-
-  return { type, description: def.description };
 }
