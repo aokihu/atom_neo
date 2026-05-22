@@ -17,20 +17,15 @@ function shouldLog(level: LogLevel, minLevel: LogLevel, ignores: LogLevel[]): bo
 function createLogger(args: BootArguments) {
   const hub = new LogHub();
 
-  switch (args.logOutput) {
-    case "console":
-      hub.addSink(new StdoutSink());
-      break;
-    case "file":
-      hub.addSink(new FileSink(`${args.sandbox}/logs/app.log`));
-      break;
-    case "pipe":
-      if (args.logPipe) {
-        hub.addSink(new PipeSink());
-      } else {
-        hub.addSink(new StdoutSink());
-      }
-      break;
+  if (args.mode === "core") {
+    hub.addSink(new StdoutSink());
+  } else {
+    if (args.logPipePath) {
+      hub.addSink(new PipeSink());
+    }
+    if (args.logFile) {
+      hub.addSink(new FileSink(args.logFile));
+    }
   }
 
   return new Logger(args.logLevel, (entry) => {

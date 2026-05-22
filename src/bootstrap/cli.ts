@@ -2,7 +2,6 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 
 export type Mode = "core" | "tui" | "full";
-export type LogOutput = "pipe" | "file" | "console";
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export type BootArguments = {
@@ -10,10 +9,10 @@ export type BootArguments = {
   port: number;
   host: string;
   sandbox: string;
-  logOutput: LogOutput;
   logLevel: LogLevel;
   logIgnore: LogLevel[];
-  logPipe?: string;
+  logFile?: string;
+  logPipePath?: string;
 };
 
 export function parseArguments(rawArgs: string[]): BootArguments {
@@ -24,10 +23,10 @@ export function parseArguments(rawArgs: string[]): BootArguments {
       port: { type: "string", default: "0" },
       host: { type: "string", default: "127.0.0.1" },
       sandbox: { type: "string" },
-      "log-output": { type: "string", default: "console" },
       "log-level": { type: "string", default: "debug" },
       "log-ignore": { type: "string", multiple: true, default: [] },
-      "log-pipe": { type: "string" },
+      "log-file": { type: "string" },
+      "log-pipepath": { type: "string" },
     },
     allowPositionals: true,
     strict: false,
@@ -42,21 +41,16 @@ export function parseArguments(rawArgs: string[]): BootArguments {
     port: parseInt(values.port as string) || 0,
     host: values.host as string,
     sandbox,
-    logOutput: validateLogOutput(values["log-output"] as string),
     logLevel: validateLogLevel(values["log-level"] as string),
     logIgnore: (values["log-ignore"] as string[]).map(validateLogLevel),
-    logPipe: values["log-pipe"] as string | undefined,
+    logFile: values["log-file"] as string | undefined,
+    logPipePath: values["log-pipepath"] as string | undefined,
   };
 }
 
 function validateMode(v: string): Mode {
   if (["core", "tui", "full"].includes(v)) return v as Mode;
   throw new Error(`Invalid mode: ${v}. Expected core | tui | full`);
-}
-
-function validateLogOutput(v: string): LogOutput {
-  if (["pipe", "file", "console"].includes(v)) return v as LogOutput;
-  throw new Error(`Invalid --log-output: ${v}. Expected pipe | file | console`);
 }
 
 function validateLogLevel(v: string): LogLevel {
