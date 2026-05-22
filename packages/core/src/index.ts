@@ -16,3 +16,25 @@ export type {
 } from "./session/context";
 
 export { SessionStore } from "./session/store";
+
+// Tools
+export { ToolRegistry } from "./tools/registry";
+export { executeTool } from "./tools/executor";
+export { filterToolsByPermission } from "./tools/permissions";
+export { registerBuiltinTools } from "./tools/bootstrap";
+export {
+  readTool,
+  writeTool,
+  lsTool,
+  treeTool,
+  grepTool,
+  cpTool,
+  mvTool,
+} from "./tools/builtin/fs";
+export { bashTool } from "./tools/builtin/bash";
+export {
+  searchMemoryTool,
+  saveMemoryTool,
+  traverseMemoryTool,
+  linkMemoryTool,
+} from "./tools/builtin/memory";

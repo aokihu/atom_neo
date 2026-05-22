@@ -9,17 +9,20 @@ export enum PermissionLevel {
 export type ToolDefinition = {
   name: string;
   description: string;
-  inputSchema: z.ZodSchema;
+  source: "builtin" | "plugin" | "mcp";
+  inputSchema: z.ZodType<Record<string, unknown>>;
   execute(args: unknown): Promise<ToolResult>;
+  permission?: PermissionLevel;
+  requiresApproval?: boolean;
 };
 
 export type ToolResult = {
   ok: boolean;
   output: string;
-  data: unknown;
+  error?: string;
+  data?: unknown;
   metadata?: {
     tokensUsed?: number;
     durationMs?: number;
-    permission: PermissionLevel;
   };
 };

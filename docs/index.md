@@ -69,9 +69,12 @@
   ✔ TaskEngine, TaskQueue, TaskFactory, SessionStore, SessionContext
   ✔ 21 tests, 100% pass
 
-⬇ P3：Tools & Pipelines（进行中）
-  12. tool-plugin.md       → 实现 Tool Registry + 内置工具
-  13. memory-service.md    → 实现 Memory Service
+✅ P3：Tools & Pipelines（已完成）
+  12. tool-plugin.md       → ToolRegistry + ToolExecutor + 12 builtin tools
+  ✔ read, write, ls, tree, grep, cp, mv, bash, memory tools
+  ✔ 59 total tests, 100% pass
+
+⬇ P4：Pipeline Builder（进行中）
 
 P4：Pipeline Builder
   14. pipeline-builder.md  → 实现 Builder DSL + 注册表

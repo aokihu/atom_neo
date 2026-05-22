@@ -52,17 +52,20 @@
 
 ---
 
-## P3: Tools & Pipelines
+## P3: Tools & Pipelines ✅
 
-**预估**: 1 周 | **状态**: pending
+**预估**: 1 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
 | ToolRegistry | `packages/core/src/tools/registry.ts` | 动态注册/卸载 Tool |
 | ToolExecutor | `packages/core/src/tools/executor.ts` | Tool 执行，权限校验 |
-| FS tools | `packages/core/src/tools/builtin/fs.ts` | read, write, ls, grep, tree, cp, mv |
+| Permissions | `packages/core/src/tools/permissions.ts` | filterToolsByPermission |
+| FS tools | `packages/core/src/tools/builtin/fs.ts` | read, write, ls, tree, grep, cp, mv |
 | Bash tool | `packages/core/src/tools/builtin/bash.ts` | 受控 shell 执行 |
-| Memory tools | `packages/core/src/tools/builtin/memory.ts` | search, save, traverse, link, recall |
+| Memory tools | `packages/core/src/tools/builtin/memory.ts` | search, save, traverse, link |
+| Bootstrap | `packages/core/src/tools/bootstrap.ts` | registerBuiltinTools (12 tools) |
+| Tests | `packages/core/src/tools/*.test.ts` | 10 tests, 100% pass |
 
 ---
 
@@ -142,8 +145,8 @@
 | P0 | Scaffolding | 8 | completed | - |
 | P1 | Foundation | 6 | completed | 1 week |
 | P2 | Core Engine | 7 | completed | 1.5 weeks |
-| P3 | Tools & Pipelines | 5 | in_progress | 1 week |
-| P4 | Pipeline Builder | 5 | pending | 1.5 weeks |
+| P3 | Tools & Pipelines | 8 | completed | 1 week |
+| P4 | Pipeline Builder | 5 | in_progress | 1.5 weeks |
 | P5 | Server & Protocol | 5 | pending | 1 week |
 | P6 | Gateway | 5 | pending | 0.5 weeks |
 | P7 | TUI | 6 | pending | 1 week |
