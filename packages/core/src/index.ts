@@ -1,6 +1,8 @@
 // @atom-neo/core - Barrel exports
-export { loadCoreConfig } from "./config";
-export type { CoreConfig } from "./config";
+export { loadConfig, loadEnv } from "./config";
+export type { AppConfig } from "./config";
+export { parseArguments } from "./cli";
+export type { BootArguments, Mode, LogLevel, LogOutput } from "./cli";
 
 export { TaskQueue } from "./task-queue";
 export { TaskEngine } from "./task-engine";

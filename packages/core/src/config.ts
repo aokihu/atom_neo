@@ -1,58 +1,45 @@
 import { z } from "zod";
+import { readFileSync } from "node:fs";
 
-const CoreConfigSchema = z.object({
-  port: z.number().int().default(3100),
-  host: z.string().default("0.0.0.0"),
-  logLevel: z.number().int().min(1).max(3).default(1),
-  logFile: z.string().optional(),
-  memoryDbPath: z.string().default("./data/memory.db"),
-  maxSessions: z.number().int().default(1000),
-  taskTimeoutMs: z.number().int().default(120_000),
-  replayEnabled: z.boolean().default(false),
-  replayMaxEvents: z.number().int().default(10_000),
-  transportModel: z.string().default("deepseek/deepseek-chat"),
-  transportMaxOutputTokens: z.number().int().default(4096),
-  deepseekApiKey: z.string().optional(),
-  openaiApiKey: z.string().optional(),
-  sandboxPath: z.string().default("./sandbox"),
+const ConfigSchema = z.object({
+  transport: z.object({
+    maxOutputTokens: z.number().int().default(4096),
+  }).default({ maxOutputTokens: 4096 }),
+  gateway: z.object({
+    jwtSecret: z.string().default("change-me-minimum-16-chars"),
+    port: z.number().int().default(3000),
+  }).default({ jwtSecret: "change-me-minimum-16-chars", port: 3000 }),
+  tui: z.object({
+    theme: z.enum(["dark", "light"]).default("dark"),
+  }).default({ theme: "dark" }),
 });
 
-export type CoreConfig = z.infer<typeof CoreConfigSchema>;
+export type AppConfig = z.infer<typeof ConfigSchema>;
 
-export function loadCoreConfig(): CoreConfig {
-  const envConfig: Partial<Record<string, unknown>> = {};
-
-  if (process.env.CORE_PORT) envConfig.port = parseInt(process.env.CORE_PORT);
-  if (process.env.CORE_HOST) envConfig.host = process.env.CORE_HOST;
-  if (process.env.LOG_LEVEL) envConfig.logLevel = parseInt(process.env.LOG_LEVEL);
-  if (process.env.TRANSPORT_MODEL) envConfig.transportModel = process.env.TRANSPORT_MODEL;
-  if (process.env.MEMORY_DB_PATH) envConfig.memoryDbPath = process.env.MEMORY_DB_PATH;
-  if (process.env.DEEPSEEK_API_KEY) envConfig.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
-  if (process.env.OPENAI_API_KEY) envConfig.openaiApiKey = process.env.OPENAI_API_KEY;
-  if (process.env.SANDBOX_PATH) envConfig.sandboxPath = process.env.SANDBOX_PATH;
-
-  const cliConfig = parseCliArgs();
-
-  return CoreConfigSchema.parse({ ...envConfig, ...cliConfig });
+export function loadConfig(sandboxPath: string): AppConfig {
+  const configPath = `${sandboxPath}/config.json`;
+  try {
+    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
+    return ConfigSchema.parse(raw);
+  } catch {
+    return ConfigSchema.parse({});
+  }
 }
 
-function parseCliArgs(): Partial<Record<string, unknown>> {
-  const args = Bun.argv.slice(2);
-  const config: Record<string, unknown> = {};
-
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case "--port":
-        config.port = parseInt(args[++i]);
-        break;
-      case "--host":
-        config.host = args[++i];
-        break;
-      case "--log-level":
-        config.logLevel = parseInt(args[++i]);
-        break;
+export function loadEnv(sandboxPath: string): void {
+  const envPath = `${sandboxPath}/.env`;
+  try {
+    const content = readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) process.env[key] = value;
     }
+  } catch {
+    // .env not found, proceed without
   }
-
-  return config;
 }

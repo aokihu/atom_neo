@@ -11,7 +11,50 @@
 
 ---
 
-## 2. Core Package — Startup Order
+## 2. CLI Arguments
+
+```bash
+bun run packages/core/src/server.ts [options]
+
+Options:
+  --mode core|tui|full    启动模式（默认 core）
+  --port <number>         HTTP 端口（默认自动分配）
+  --host <ip>             绑定地址（默认 127.0.0.1）
+  --sandbox <path>        沙箱工作目录（默认 CWD）
+  --log-output console|file|pipe  日志输出方式（默认 console）
+  --log-level debug|info|warn|error  最小日志级别（默认 debug）
+  --log-ignore <level>    忽略指定级别的日志（可重复）
+  --log-pipe <path>       Named pipe 路径（--log-output pipe 时必选）
+```
+
+---
+
+## 3. Config File (`$SANDBOX/config.json`)
+
+```json
+{
+  "transport": { "maxOutputTokens": 4096 },
+  "gateway": { "port": 3000, "jwtSecret": "..." },
+  "tui": { "theme": "dark" }
+}
+```
+
+不含 server 配置（port/host 走 CLI）。文件缺失时使用默认值。
+
+---
+
+## 4. Environment (`$SANDBOX/.env`)
+
+```bash
+DEEPSEEK_API_KEY=sk-...
+OPENAI_API_KEY=sk-...
+```
+
+API key 不在 config.json 中，通过 env 变量名引用。
+
+---
+
+## 5. Core Package — Startup Order
 
 ```text
 START
