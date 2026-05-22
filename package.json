@@ -8,8 +8,10 @@
     "src/packages/tui"
   ],
   "scripts": {
-    "dev": "bun run --watch src/main.ts",
+    "dev": "bun run src/main.ts --port 3100 --sandbox ./sandbox & sleep 2 && bun run src/packages/tui/src/app.tsx -u http://127.0.0.1:3100; kill %1 2>/dev/null",
+    "dev:core": "bun run --filter @atom-neo/core dev",
     "dev:all": "bun run --workspaces dev",
+    "dev:tui": "bun run src/main.ts --port 3100 --sandbox ./sandbox & sleep 2 && bun run src/packages/tui/src/app.tsx -u http://127.0.0.1:3100; kill %1 2>/dev/null",
     "docs": "bun run --watch docs/server.tsx",
     "docs:dev": "bun run docs/server.tsx",
     "test": "bun test",
