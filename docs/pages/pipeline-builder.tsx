@@ -64,12 +64,14 @@ type ElementDeps = Record<string, unknown>;`} />
           <div style={{ flex: "1 1 300px" }}>
             <h4 style={{ marginBottom: "8px" }}>v2 — 声明式 Builder <Badge color="green">NEW</Badge></h4>
             <CodeBlock lang="typescript" code={`pipeline("conversation")
-  .source("collect-prompts", { runtime })
-  .transform("format-messages", { runtime, config })
-  .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
-  .boundary("check-follow-up")  // parse follow_up IntentRequest
-  .sink("finalize", { runtime })
-  .build();`} />
+   .source("collect-prompts", { session })
+   .transform("load-system-prompt", {})
+   .transform("collect-context", {})
+   .transform("format-messages", {})
+   .transform("stream-llm", { apiKey, model, tools })
+   .boundary("check-follow-up")
+   .sink("finalize", {})
+   .build();`} />
           </div>
         </div>
         <Callout type="tip" title="v2 优势">
@@ -298,6 +300,8 @@ import { registerElement } from "../pipeline/registry";
 
 // During startup, register all elements:
 registerElement("collect-prompts", CollectPromptsElement);
+registerElement("load-system-prompt", LoadSystemPromptElement);
+registerElement("collect-context", CollectContextElement);
 registerElement("format-messages", FormatMessagesElement);
 registerElement("stream-llm", StreamLLMElement);
 registerElement("check-follow-up", CheckFollowUpElement);
@@ -308,18 +312,17 @@ export const conversationPipeline = (
   deps: ConversationPipelineDeps,
 ) =>
   pipeline("conversation")
-    .source("collect-prompts", { runtime: deps.runtime })
-    .transform("format-messages", {
-      runtime: deps.runtime,
-      transportConfig: deps.transportConfig,
-    })
+    .source("collect-prompts", { session: deps.session })
+    .transform("load-system-prompt", {})
+    .transform("collect-context", {})
+    .transform("format-messages", {})
     .transform("stream-llm", {
-      serviceManager: deps.serviceManager,
-      tools: deps.toolRegistry,
-      bus: deps.bus,
+      apiKey: deps.apiKey,
+      model: deps.model,
+      tools: deps.tools,
     })
     .boundary("check-follow-up")
-    .sink("finalize", { runtime: deps.runtime })
+    .sink("finalize", {})
     .build();`} />
       </Section>
     </div>

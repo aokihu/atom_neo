@@ -329,7 +329,56 @@ export class MyElement extends BaseElement<MyFlowState, MyFlowState> {
 }
 ```
 
-## 7. StreamLLM — streamText + Tool Calling Pattern
+## 7. Conversation Pipeline — 新增 Element
+
+### 7.1 `load-system-prompt` — 安全提示词
+
+```typescript
+import baseSystemPrompt from "../assets/prompts/base_system_prompt.md";
+
+class LoadSystemPromptElement extends BaseElement<MyFlowState, MyFlowState> {
+  async doProcess(input: MyFlowState): Promise<MyFlowState> {
+    if (input.mode !== "streaming") return input;
+    return { ...input, systemPrompt: baseSystemPrompt };
+  }
+}
+```
+
+**关键**: Bun 原生支持 `import ... from "*.md"`，打包为二进制时内联为字符串。
+
+### 7.2 `collect-context` — 上下文元数据
+
+```typescript
+class CollectContextElement extends BaseElement<MyFlowState, MyFlowState> {
+  async doProcess(input: MyFlowState): Promise<MyFlowState> {
+    if (input.mode !== "streaming") return input;
+    const ctx = [
+      `Current Time: ${new Date().toISOString()}`,
+      `Working Directory: ${process.cwd()}`,
+    ].join("\n");
+    return { ...input, contextData: ctx };
+  }
+}
+```
+
+### 7.3 `format-messages` — 消息组装
+
+```typescript
+class FormatMessagesElement extends BaseElement<MyFlowState, MyFlowState> {
+  async doProcess(input: MyFlowState): Promise<MyFlowState> {
+    if (input.mode !== "streaming") return input;
+
+    const messages: Message[] = [];
+    if (input.systemPrompt) messages.push({ role: "system", content: input.systemPrompt });
+    if (input.contextData) messages.push({ role: "system", content: input.contextData });
+    for (const m of input.prompts ?? []) messages.push({ role: m.role, content: m.content });
+
+    return { ...input, mode: "formatted", messages };
+  }
+}
+```
+
+## 8. StreamLLM — streamText + Tool Calling Pattern
 
 ```typescript
 /**

@@ -15,11 +15,11 @@ atom_neo/
 ├── .env.example               # Template for sandbox/.env
 │
 ├── src/                       # All source code
-│   ├── main.ts               # Application entry point (CLI + bootstrap)
+│   ├── main.ts               # Application entry point
 │   ├── bootstrap/            # App startup layer
-│   │   ├── cli.ts           # CLI argument parsing
-│   │   ├── config.ts        # config.json loader
-│   │   └── env.ts           # .env loader
+│   ├── assets/               # Static assets (bundled with app)
+│   │   └── prompts/
+│   │       └── base_system_prompt.md  # System safety prompt
 │   └── packages/
 │       ├── shared/           # Shared types, pipeline core, log system
 │       ├── core/             # Core HTTP + WebSocket server, task engine
@@ -126,7 +126,16 @@ src/packages/core/
     ├── conversation/
     │   ├── index.ts
     │   ├── types.ts
-    │   └── elements/index.ts
+        │   └── elements/index.ts
+        │       /* 7 elements:
+        │        * collect-prompts (source)
+        │        * load-system-prompt (transform)
+        │        * collect-context (transform)
+        │        * format-messages (transform)
+        │        * stream-llm (transform)
+        │        * check-follow-up (boundary)
+        │        * finalize (sink)
+        │        */
     ├── prediction/
     │   └── index.ts
     └── follow-up/

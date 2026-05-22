@@ -37,6 +37,7 @@ import EnvironmentSetupPage from "./pages/environment-setup";
 import ErrorHandlingPage from "./pages/error-handling";
 import EventBusPage from "./pages/event-bus";
 import MemoryServicePage from "./pages/memory-service";
+import MessageOrganizationPage from "./pages/message-organization";
 import NamingConventionsPage from "./pages/naming-conventions";
 import PipelineBuilderPage from "./pages/pipeline-builder";
 import ProjectStructurePage from "./pages/project-structure";
@@ -67,6 +68,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   "error-handling": ErrorHandlingPage,
   "event-bus": EventBusPage,
   "memory-service": MemoryServicePage,
+  "message-organization": MessageOrganizationPage,
   "naming-conventions": NamingConventionsPage,
   "pipeline-builder": PipelineBuilderPage,
   "project-structure": ProjectStructurePage,

@@ -43,9 +43,11 @@ import { registerElement } from "../pipeline/registry";
 
 // During startup, register all elements:
 registerElement("collect-prompts", CollectPromptsElement);
-registerElement("format-messages", FormatMessagesElement);
-registerElement("stream-llm", StreamLLMElement);  // streamText + tool calling
-registerElement("check-follow-up", CheckFollowUpElement);       // parse follow_up IntentRequest
+registerElement("load-system-prompt", LoadSystemPromptElement);    // 【新】加载安全提示词
+registerElement("collect-context", CollectContextElement);         // 【新】收集上下文元数据
+registerElement("format-messages", FormatMessagesElement);         // 组装 messages
+registerElement("stream-llm", StreamLLMElement);                  // streamText + tool calling
+registerElement("check-follow-up", CheckFollowUpElement);         // follow_up IntentRequest
 registerElement("finalize", FinalizeConversationElement);
 
 // Define the pipeline:
@@ -53,18 +55,17 @@ export const conversationPipeline = (
   deps: ConversationPipelineDeps,
 ) =>
   pipeline("conversation")
-    .source("collect-prompts", { runtime: deps.runtime })
-    .transform("format-messages", {
-      runtime: deps.runtime,
-      transportConfig: deps.transportConfig,
-    })
+    .source("collect-prompts", { session: deps.session })
+    .transform("load-system-prompt", {})
+    .transform("collect-context", {})
+    .transform("format-messages", {})
     .transform("stream-llm", {
-      serviceManager: deps.serviceManager,
-      tools: deps.toolRegistry,
-      bus: deps.bus,
+      apiKey: deps.apiKey,
+      model: deps.model,
+      tools: deps.tools,
     })
     .boundary("check-follow-up")
-    .sink("finalize", { runtime: deps.runtime })
+    .sink("finalize", {})
     .build();
 ```
 

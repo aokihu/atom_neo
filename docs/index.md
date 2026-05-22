@@ -28,6 +28,7 @@
 
 | 文档 | 说明 | 何时 |
 |------|------|------|
+| [message-organization.md](./message-organization.md) | Message 组装架构（system prompt + context + 会话） | 实现 LLM 提交 |
 | [element-design.md](./element-design.md) | Element 接口 + 完整模板 | 创建 Element |
 | [pipeline-builder.md](./pipeline-builder.md) | Pipeline Builder DSL | 创建 Pipeline |
 | [event-bus.md](./event-bus.md) | Event Bus 内部实现、自定义事件 | 扩展事件 |

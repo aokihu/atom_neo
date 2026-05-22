@@ -147,11 +147,13 @@ new StreamLLMElement(ctx, serviceManager),
 
 // v2: 声明式
 const conversationPipeline = pipeline("conversation")
-  .source("collect-prompts", { runtime })
-  .transform("format-messages", { runtime, config: transportConfig })
-  .transform("stream-llm", { serviceManager, tools, bus })  // streamText + tool calling
-  .boundary("check-follow-up")  // 解析 follow_up IntentRequest
-  .sink("finalize", { runtime })
+  .source("collect-prompts", { session })
+  .transform("load-system-prompt", {})
+  .transform("collect-context", {})
+  .transform("format-messages", {})
+  .transform("stream-llm", { apiKey, model, tools })
+  .boundary("check-follow-up")
+  .sink("finalize", {})
   .build();
 ```
 
@@ -278,6 +280,8 @@ class PipelineBuilder {
 const elementRegistry = new Map<string, ElementConstructor>();
 
 elementRegistry.set("collect-prompts", CollectPromptsElement);
+elementRegistry.set("load-system-prompt", LoadSystemPromptElement);
+elementRegistry.set("collect-context", CollectContextElement);
 elementRegistry.set("format-messages", FormatMessagesElement);
 elementRegistry.set("stream-llm", StreamLLMElement);
 elementRegistry.set("check-follow-up", CheckFollowUpElement);
