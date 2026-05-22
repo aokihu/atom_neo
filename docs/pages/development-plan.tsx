@@ -21,12 +21,29 @@ interface PhaseItem {
 
 const PHASES: PhaseItem[] = [
   {
-    id: "P1", name: "Foundation", estimate: "1w", status: "pending",
+    id: "P0", name: "Scaffolding", estimate: "done", status: "done",
+    desc: "Monorepo 骨架搭建 + 依赖安装 + typecheck 通过",
+    tasks: [
+      { name: "Workspace root config", file: "package.json", status: "done" },
+      { name: "shared package", file: "shared/", status: "done" },
+      { name: "core package", file: "core/", status: "done" },
+      { name: "gateway package", file: "gateway/", status: "done" },
+      { name: "tui package", file: "tui/", status: "done" },
+      { name: ".env.example", file: ".env.example", status: "done" },
+      { name: "tsconfig base", file: "tsconfig.json", status: "done" },
+      { name: "bun install", file: "", status: "done" },
+    ],
+  },
+  {
+    id: "P1", name: "Foundation", estimate: "1w", status: "done",
     desc: "Shared types, pipeline core, log system",
     tasks: [
-      { name: "Shared types", file: "shared/src/types/*.ts", status: "pending" },
-      { name: "Pipeline core", file: "shared/src/pipeline/*.ts", status: "pending" },
-      { name: "Log system", file: "shared/src/log/*.ts", status: "pending" },
+      { name: "Shared types", file: "shared/src/types/*.ts", status: "done" },
+      { name: "Pipeline core", file: "shared/src/pipeline/*.ts", status: "done" },
+      { name: "Log system", file: "shared/src/log/*.ts", status: "done" },
+      { name: "Utils", file: "shared/src/utils/*.ts", status: "done" },
+      { name: "Protocol", file: "shared/src/protocol.ts", status: "done" },
+      { name: "Tests (28)", file: "shared/src/**/*.test.ts", status: "done" },
     ],
   },
   {

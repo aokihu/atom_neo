@@ -1,9 +1,20 @@
 {
-  "name": "atom_neo",
+  "name": "atom-neo",
   "private": true,
+  "workspaces": [
+    "packages/shared",
+    "packages/core",
+    "packages/gateway",
+    "packages/tui"
+  ],
   "scripts": {
+    "dev": "bun run --filter @atom-neo/core dev",
+    "dev:all": "bun run --workspaces dev",
     "docs": "bun run --watch docs/server.tsx",
-    "docs:dev": "bun run docs/server.tsx"
+    "docs:dev": "bun run docs/server.tsx",
+    "test": "bun test",
+    "typecheck": "bun run --workspaces typecheck",
+    "build": "bun run --workspaces build"
   },
   "dependencies": {
     "@heroui/react": "^3.0.5",
@@ -11,5 +22,8 @@
     "highlight.js": "^11.11.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }

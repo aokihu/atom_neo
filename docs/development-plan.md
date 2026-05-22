@@ -4,15 +4,35 @@
 
 ---
 
-## P1: Foundation
+## P0: Monorepo Scaffolding ✅
 
-**预估**: 1 周 | **状态**: pending
+**状态**: completed
+
+| 任务 | 状态 |
+|------|------|
+| Workspace root `package.json` (4 packages) | ✔ |
+| Root `tsconfig.json` base config | ✔ |
+| `packages/shared` package skeleton | ✔ |
+| `packages/core` package skeleton | ✔ |
+| `packages/gateway` package skeleton | ✔ |
+| `packages/tui` package skeleton | ✔ |
+| `.env.example` template | ✔ |
+| Dependencies installed, typecheck passes | ✔ |
+
+---
+
+## P1: Foundation ✅
+
+**预估**: 1 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
 | Shared types | `packages/shared/src/types/*.ts` | TaskItem, TaskState, FlowState, ToolDefinition 等全部类型定义 |
 | Pipeline core | `packages/shared/src/pipeline/*.ts` | BaseElement, PipelineRunner, PipelineEventBus, 类型常量 |
 | Log system | `packages/shared/src/log/*.ts` | Hub-and-Sink log, stdout/file/pipe sinks |
+| Utils | `packages/shared/src/utils/*.ts` | normalizeError, truncate, slugify, sleep, debounce |
+| Protocol | `packages/shared/src/protocol.ts` | WebSocket 事件类型定义 |
+| Tests | `packages/shared/src/**/*.test.ts` | 28 tests, 100% pass |
 
 ---
 
@@ -117,8 +137,9 @@
 
 | Phase | Name | Tasks | Status | Estimate |
 |-------|------|-------|--------|----------|
-| P1 | Foundation | 3 | pending | 1 week |
-| P2 | Core Engine | 5 | pending | 1.5 weeks |
+| P0 | Scaffolding | 8 | completed | - |
+| P1 | Foundation | 6 | completed | 1 week |
+| P2 | Core Engine | 5 | in_progress | 1.5 weeks |
 | P3 | Tools & Pipelines | 5 | pending | 1 week |
 | P4 | Pipeline Builder | 5 | pending | 1.5 weeks |
 | P5 | Server & Protocol | 5 | pending | 1 week |

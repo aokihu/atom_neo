@@ -48,37 +48,44 @@
 ## 开发流程（Agent 执行顺序）
 
 ```text
-第一轮：建立骨架
+✅ 第一轮：建立骨架 P0（已完成）
   1. architecture.md       → 理解系统全貌
   2. project-structure.md  → 创建目录和 package.json
   3. environment-setup.md  → 搭建开发环境
+  ✔ monorepo 4 packages (shared/core/gateway/tui) 创建完成
 
-第二轮：基础设施
-  4. bootstrap.md          → 实现启动序列
-  5. configuration.md      → 实现配置加载
-  6. dependency-injection.md → 确定构造链
-
-第三轮：核心抽象
+✅ P1：Foundation（已完成）
   7. type-system.md        → 定义所有类型
   8. element-design.md     → 实现 BaseElement
   9. event-bus.md          → 实现 PipelineEventBus
-  10. testing.md           → 写基础设施测试
+  17. protocol.md          → WebSocket 事件协议
+  ✔ 28 tests, 100% pass
 
-第四轮：子系统
-  11. session-context.md   → 实现 Session 管理
+⬇ P2：Core Engine（进行中）
+  4. bootstrap.md          → 实现启动序列
+  5. configuration.md      → 实现配置加载
+  6. dependency-injection.md → 确定构造链
+  11. session-context.md   → 实现 Per-Session 上下文
+
+P3：Tools & Pipelines
   12. tool-plugin.md       → 实现 Tool Registry + 内置工具
   13. memory-service.md    → 实现 Memory Service
-  14. pipeline-builder.md  → 实现 Pipeline Builder
 
-第五轮：管线
+P4：Pipeline Builder
+  14. pipeline-builder.md  → 实现 Builder DSL + 注册表
   15. element-design.md    → 实现所有 Element
-  16. pipeline-builder.md  → 组装 Pipeline
+  16. pipeline-builder.md  → 组装 3 条 Pipeline
 
-第六轮：通信
-  17. protocol.md          → 实现 HTTP + WebSocket
+P5：Server & Protocol
+  17. protocol.md          → 实现 HTTP + WebSocket Server
   18. error-handling.md    → 实现错误处理
 
-第七轮：Gateway + TUI
-  19. architecture.md      → Gateway + TUI 模块
-  20. protocol.md          → Gateway JWT 验证
+P6：Gateway
+  19. architecture.md      → Gateway 认证/代理模块
+
+P7：TUI
+  19. architecture.md      → TUI 终端界面
+
+P8：Integration
+  20. testing.md           → E2E 测试 + 部署
 ```

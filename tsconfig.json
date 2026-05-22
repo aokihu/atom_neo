@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
-    "jsx": "react-jsx",
     "lib": ["ESNext"],
     "module": "ESNext",
-    "moduleResolution": "bundler",
     "target": "ESNext",
+    "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsxImportSource": "react"
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   }
 }
