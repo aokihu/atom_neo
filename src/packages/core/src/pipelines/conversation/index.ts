@@ -2,6 +2,8 @@ import { pipeline } from "../../pipeline/builder";
 import { registerElement } from "../../pipeline/registry";
 import {
   CollectPromptsElement,
+  LoadSystemPromptElement,
+  CollectContextElement,
   FormatMessagesElement,
   StreamLLMElement,
   CheckFollowUpElement,
@@ -10,6 +12,8 @@ import {
 
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement as any);
+  registerElement("load-system-prompt", LoadSystemPromptElement as any);
+  registerElement("collect-context", CollectContextElement as any);
   registerElement("format-messages", FormatMessagesElement as any);
   registerElement("stream-llm", StreamLLMElement as any);
   registerElement("check-follow-up", CheckFollowUpElement as any);
@@ -27,6 +31,8 @@ export type ConversationPipelineDeps = {
 export function conversationPipeline(deps: ConversationPipelineDeps) {
   return pipeline("conversation")
     .source("collect-prompts", { session: deps.session, task: deps.task })
+    .transform("load-system-prompt", {})
+    .transform("collect-context", {})
     .transform("format-messages", {})
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
