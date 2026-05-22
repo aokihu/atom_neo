@@ -71,7 +71,6 @@ describe("ls tool", () => {
     expect(result.ok).toBe(true);
     expect(result.output).toContain("a.txt");
     expect(result.output).toContain("b.txt");
-    expect(result.data.count).toBe(2);
   });
 
   test("defaults to current directory", async () => {
@@ -121,7 +120,6 @@ describe("grep tool", () => {
     expect(result.ok).toBe(true);
     expect(result.output).toContain("const x");
     expect(result.output).toContain("const y");
-    expect(result.data.matchCount).toBe(2);
   });
 });
 

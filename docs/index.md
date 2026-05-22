@@ -74,12 +74,13 @@
   ✔ read, write, ls, tree, grep, cp, mv, bash, memory tools
   ✔ 59 total tests, 100% pass
 
-⬇ P4：Pipeline Builder（进行中）
+⬇ P4：Pipeline Builder（已完成）
+  14. pipeline-builder.md  → PipelineBuilder DSL + Element Registry
+  15. element-design.md    → 5 Element (collect-prompts→...→finalize)
+  16. pipeline-builder.md  → 3 Pipeline 定义（conversation/prediction/follow-up）
+  ✔ 96 total tests, 100% pass
 
-P4：Pipeline Builder
-  14. pipeline-builder.md  → 实现 Builder DSL + 注册表
-  15. element-design.md    → 实现所有 Element
-  16. pipeline-builder.md  → 组装 3 条 Pipeline
+⬇ P5：Server & Protocol（进行中）
 
 P5：Server & Protocol
   17. protocol.md          → 实现 HTTP + WebSocket Server

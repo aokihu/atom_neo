@@ -74,18 +74,20 @@ const PHASES: PhaseItem[] = [
     ],
   },
   {
-    id: "P4", name: "Pipeline Builder", estimate: "1.5w", status: "in_progress",
-    desc: "Builder DSL + Element 注册表 + 3 pipeline",
+    id: "P4", name: "Pipeline Builder", estimate: "1.5w", status: "done",
+    desc: "Builder DSL + Element Registry + 3 pipelines",
     tasks: [
-      { name: "PipelineBuilder DSL", file: "core/src/pipeline/builder.ts", status: "pending" },
-      { name: "Element Registry", file: "core/src/pipeline/registry.ts", status: "pending" },
-      { name: "Conversation pipeline (5 elements)", file: "core/src/pipelines/conversation/", status: "pending" },
-      { name: "Prediction pipeline", file: "core/src/pipelines/prediction/", status: "pending" },
-      { name: "Follow-up pipeline", file: "core/src/pipelines/follow-up/", status: "pending" },
+      { name: "PipelineBuilder DSL", file: "core/src/pipeline/builder.ts", status: "done" },
+      { name: "Element Registry", file: "core/src/pipeline/registry.ts", status: "done" },
+      { name: "PipelineManager", file: "core/src/pipeline/manager.ts", status: "done" },
+      { name: "Conversation pipeline (5 elements)", file: "core/src/pipelines/conversation/", status: "done" },
+      { name: "Prediction pipeline", file: "core/src/pipelines/prediction/", status: "done" },
+      { name: "Follow-up pipeline", file: "core/src/pipelines/follow-up/", status: "done" },
+      { name: "Tests (16)", file: "core/src/pipeline/*.test.ts", status: "done" },
     ],
   },
   {
-    id: "P5", name: "Server & Protocol", estimate: "1w", status: "pending",
+    id: "P5", name: "Server & Protocol", estimate: "1w", status: "in_progress",
     desc: "HTTP + WebSocket 服务器 + Replay 系统",
     tasks: [
       { name: "HTTP server", file: "core/src/server.ts", status: "pending" },

@@ -69,17 +69,19 @@
 
 ---
 
-## P4: Pipeline Builder
+## P4: Pipeline Builder ✅
 
-**预估**: 1.5 周 | **状态**: pending
+**预估**: 1.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
-| PipelineBuilder DSL | `packages/core/src/pipeline/builder.ts` | source().transform().boundary().sink().build() |
-| Element Registry | `packages/core/src/pipeline/registry.ts` | registerElement / resolveElement |
-| Conversation pipeline | `packages/core/src/pipelines/conversation/` | 主对话管线 + 5 Element（streamText + tool calling） |
-| Prediction pipeline | `packages/core/src/pipelines/prediction/` | 意图预测管线 |
-| Follow-up pipeline | `packages/core/src/pipelines/follow-up/` | 追问管线 |
+| PipelineBuilder DSL | `packages/core/src/pipeline/builder.ts` | source/transform/boundary/sink/build |
+| Element Registry | `packages/core/src/pipeline/registry.ts` | registerElement/resolveElement/clearRegistry |
+| PipelineManager | `packages/core/src/pipeline/manager.ts` | register/get/reload (带缓存) |
+| Conversation pipeline | `packages/core/src/pipelines/conversation/` | 5 Element + builder 定义 |
+| Prediction pipeline | `packages/core/src/pipelines/prediction/` | stub |
+| Follow-up pipeline | `packages/core/src/pipelines/follow-up/` | stub |
+| Tests | `packages/core/src/pipeline/*.test.ts` | 16 tests, 100% pass |
 
 ---
 
@@ -146,8 +148,8 @@
 | P1 | Foundation | 6 | completed | 1 week |
 | P2 | Core Engine | 7 | completed | 1.5 weeks |
 | P3 | Tools & Pipelines | 8 | completed | 1 week |
-| P4 | Pipeline Builder | 5 | in_progress | 1.5 weeks |
-| P5 | Server & Protocol | 5 | pending | 1 week |
+| P4 | Pipeline Builder | 7 | completed | 1.5 weeks |
+| P5 | Server & Protocol | 5 | in_progress | 1 week |
 | P6 | Gateway | 5 | pending | 0.5 weeks |
 | P7 | TUI | 6 | pending | 1 week |
 | P8 | Integration | 3 | pending | 0.5 weeks |

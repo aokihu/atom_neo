@@ -1,0 +1,34 @@
+import { pipeline } from "../../pipeline/builder";
+import { registerElement } from "../../pipeline/registry";
+import { BaseElement, PipelineEventBus } from "@atom-neo/shared";
+import type { PipelineEventMap } from "@atom-neo/shared";
+
+class FollowUpSourceElement extends BaseElement<any, any> {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
+    super({ name: params.name, kind: "source", bus: params.bus });
+  }
+  async doProcess(input: any) {
+    if (input.mode !== "initial") return input;
+    return { mode: "asking", ...input };
+  }
+}
+
+class FollowUpSinkElement extends BaseElement<any, any> {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
+    super({ name: params.name, kind: "sink", bus: params.bus });
+  }
+  async doProcess(input: any) {
+    return { type: "complete", ...input };
+  }
+}
+
+export function registerFollowUpElements(): void {
+  registerElement("follow-up-source", FollowUpSourceElement as any);
+  registerElement("follow-up-sink", FollowUpSinkElement as any);
+}
+
+export function followUpPipeline() {
+  return pipeline("follow-up")
+    .source("follow-up-source", {})
+    .sink("follow-up-sink", {});
+}

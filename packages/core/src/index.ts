@@ -38,3 +38,20 @@ export {
   traverseMemoryTool,
   linkMemoryTool,
 } from "./tools/builtin/memory";
+
+// Pipeline Builder
+export { registerElement, resolveElement, getRegisteredNames, clearRegistry } from "./pipeline/registry";
+export { pipeline, PipelineBuilder } from "./pipeline/builder";
+export type { Pipeline } from "./pipeline/builder";
+export { PipelineManager } from "./pipeline/manager";
+
+// Pipelines
+export {
+  registerConversationElements,
+  conversationPipeline,
+  registerPredictionElements,
+  predictionPipeline,
+  registerFollowUpElements,
+  followUpPipeline,
+} from "./pipelines";
+export type { ConversationPipelineDeps } from "./pipelines";
