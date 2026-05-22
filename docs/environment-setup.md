@@ -197,7 +197,7 @@ bun run typecheck
 
 # 4. Run tests
 bun test                          # All tests
-bun test packages/core            # Core only
+bun test src/packages/core            # Core only
 bun test --watch                  # Watch mode
 
 # 5. Commit

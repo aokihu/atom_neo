@@ -1,5 +1,5 @@
 import { PipelineEventBus } from "@atom-neo/shared";
-import type { FullEventMap, LogLevel } from "@atom-neo/shared";
+import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import { TaskQueue } from "./task-queue";
 import { TaskEngine } from "./task-engine";
@@ -8,7 +8,6 @@ import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler } from "./api/tasks";
-import { PipelineRecorder } from "./replay/recorder";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools } from "./tools/bootstrap";
 import { registerConversationElements } from "./pipelines/conversation";

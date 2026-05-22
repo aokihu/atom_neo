@@ -20,7 +20,7 @@ export default function DocPage({ content, title, description, category }: DocPa
           ]}
         />
 
-        <CodeBlock lang="typescript" code={`// packages/core/src/pipeline/builder.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/pipeline/builder.ts
 
 export function pipeline(name: string): PipelineBuilder;
 
@@ -84,7 +84,7 @@ type ElementDeps = Record<string, unknown>;`} />
 
       {/* ── Element Registry ── */}
       <Section title="Element 注册表">
-        <CodeBlock lang="typescript" code={`// packages/core/src/pipeline/registry.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/pipeline/registry.ts
 
 import type { BaseElement } from "@atom-neo/shared/pipeline";
 
@@ -145,7 +145,7 @@ export function getRegisteredElementNames(): string[] {
 
       {/* ── Pipeline Result Type ── */}
       <Section title="Pipeline 类型定义">
-        <CodeBlock lang="typescript" code={`// packages/shared/src/pipeline/types.ts
+        <CodeBlock lang="typescript" code={`// src/src/packages/shared/src/pipeline/types.ts
 
 export type Pipeline<I = any, O = any> = {
   /** Human-readable name for debugging */
@@ -172,7 +172,7 @@ export type PipelineDefinition<TInput, TOutput> = {
 
       {/* ── PipelineManager ── */}
       <Section title="PipelineManager">
-        <CodeBlock lang="typescript" code={`// packages/core/src/pipeline/manager.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/pipeline/manager.ts
 
 export class PipelineManager {
   #pipelines = new Map<string, Pipeline>();
@@ -267,7 +267,7 @@ export class PipelineManager {
       <Section title="添加新 Pipeline（七步法）">
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {[
-            { step: "1", title: "创建目录", desc: <code>packages/core/src/pipelines/{"<name>"}/</code>, color: "blue" },
+            { step: "1", title: "创建目录", desc: <code>src/packages/core/src/pipelines/{"<name>"}/</code>, color: "blue" },
             { step: "2", title: "定义 types.ts", desc: "Mode enum + FlowState 判别联合", color: "purple" },
             { step: "3", title: "定义 elements/", desc: "每个 Element 一个文件", color: "purple" },
             { step: "4", title: "注册所有 Element", desc: "在 bootstrap 函数中注册", color: "green" },
@@ -291,7 +291,7 @@ export class PipelineManager {
 
       {/* ── Full Pipeline Example ── */}
       <Section title="完整 Pipeline 示例">
-        <CodeBlock lang="typescript" code={`// packages/core/src/pipelines/conversation.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/pipelines/conversation.ts
 
 import { pipeline } from "../pipeline/builder";
 import { registerElement } from "../pipeline/registry";

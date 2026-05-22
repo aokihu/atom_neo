@@ -290,7 +290,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 ## 6. Event Type Registry (Do Not Edit Manually)
 
 ```typescript
-// packages/shared/src/protocol.ts
+// src/src/packages/shared/src/protocol.ts
 
 export const ClientEventTypes = [
   "task.submit",

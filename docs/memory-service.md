@@ -8,7 +8,7 @@
 ## 1. Database Schema
 
 ```sql
--- packages/core/src/memory/schema.sql
+-- src/packages/core/src/memory/schema.sql
 
 CREATE TABLE IF NOT EXISTS memory_nodes (
   id TEXT PRIMARY KEY,
@@ -73,7 +73,7 @@ END;
 ## 2. Memory Service API
 
 ```typescript
-// packages/core/src/memory/service.ts
+// src/packages/core/src/memory/service.ts
 
 export interface MemoryNode {
   id: string;

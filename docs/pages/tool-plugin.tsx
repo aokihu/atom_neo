@@ -9,7 +9,7 @@ export default function DocPage({ content, title, description, category }: DocPa
 
       {/* ── ToolDefinition Interface ── */}
       <Section title="ToolDefinition 接口">
-        <CodeBlock lang="typescript" code={`// packages/shared/src/types/tool.ts
+        <CodeBlock lang="typescript" code={`// src/src/packages/shared/src/types/tool.ts
 
 import type { z } from "zod";
 
@@ -143,7 +143,7 @@ export const myTool: ToolDefinition = {
             [<code>buildTransportTools</code>, <code>{`() => Record<string, unknown>`}</code>, "构建 AI SDK transport 工具集"],
           ]}
         />
-        <CodeBlock lang="typescript" code={`// packages/core/src/tools/registry.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/tools/registry.ts
 
 export class ToolRegistry {
   #tools = new Map<string, ToolDefinition>();
@@ -182,7 +182,7 @@ export class ToolRegistry {
 
       {/* ── MCP Tool Adapter ── */}
       <Section title="MCP 工具适配器">
-        <CodeBlock lang="typescript" code={`// packages/core/src/tools/adapters/mcp-tool.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/tools/adapters/mcp-tool.ts
 
 export class MCPToolAdapter implements ToolDefinition {
   name: string;
@@ -210,7 +210,7 @@ export class MCPToolAdapter implements ToolDefinition {
 
       {/* ── Permission Filtering ── */}
       <Section title="权限过滤">
-        <CodeBlock lang="typescript" code={`// packages/core/src/tools/permissions.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/tools/permissions.ts
 
 export function filterToolsByPermission(
   tools: ToolDefinition[],
@@ -265,7 +265,7 @@ export function filterToolsByPermission(
       <Section title="工具注册流程">
         <div className="cmp" style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
           {[
-            { step: "1", title: "创建文件", desc: <code>packages/core/src/tools/builtin/{'<name>'}.ts</code>, color: "blue" },
+            { step: "1", title: "创建文件", desc: <code>src/packages/core/src/tools/builtin/{'<name>'}.ts</code>, color: "blue" },
             { step: "2", title: "实现 ToolDefinition", desc: "name, description, inputSchema, execute, permission", color: "purple" },
             { step: "3", title: "命名导出", desc: "export const myTool: ToolDefinition = {...}", color: "purple" },
             { step: "4", title: "注册引导", desc: "在 tools/bootstrap.ts 中调用 registry.register(myTool)", color: "green" },
@@ -287,7 +287,7 @@ export function filterToolsByPermission(
 
       {/* ── File System Tools ── */}
       <Section title="文件系统工具示例">
-        <CodeBlock lang="typescript" code={`// packages/core/src/tools/builtin/fs.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/tools/builtin/fs.ts
 
 import { readFile } from "node:fs/promises";
 import { PermissionLevel } from "@atom-neo/shared/types";

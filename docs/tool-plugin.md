@@ -8,7 +8,7 @@
 ## 1. Tool Definition Interface
 
 ```typescript
-// packages/shared/src/types/tool.ts
+// src/src/packages/shared/src/types/tool.ts
 
 import type { z } from "zod";
 
@@ -112,7 +112,7 @@ export const myTool: ToolDefinition = {
 ## 3. File System Tools
 
 ```typescript
-// packages/core/src/tools/builtin/fs.ts
+// src/packages/core/src/tools/builtin/fs.ts
 
 // All file operations are sandboxed to config.sandboxPath.
 // Paths that escape the sandbox are rejected.
@@ -159,7 +159,7 @@ export const readTool: ToolDefinition = {
 ## 4. Memory Tools
 
 ```typescript
-// packages/core/src/tools/builtin/memory.ts
+// src/packages/core/src/tools/builtin/memory.ts
 
 export const searchMemoryTool: ToolDefinition = {
   name: "search_memory",
@@ -184,7 +184,7 @@ export const linkMemoryTool: ToolDefinition = { /* ... */ };
 ## 5. Tool Registry
 
 ```typescript
-// packages/core/src/tools/registry.ts
+// src/packages/core/src/tools/registry.ts
 
 export class ToolRegistry {
   #tools = new Map<string, ToolDefinition>();
@@ -224,7 +224,7 @@ export class ToolRegistry {
 ## 6. MCP Tool Adapter (Future)
 
 ```typescript
-// packages/core/src/tools/adapters/mcp-tool.ts
+// src/packages/core/src/tools/adapters/mcp-tool.ts
 
 export class MCPToolAdapter implements ToolDefinition {
   name: string;
@@ -250,7 +250,7 @@ export class MCPToolAdapter implements ToolDefinition {
 ## 7. Permission Filtering
 
 ```typescript
-// packages/core/src/tools/permissions.ts
+// src/packages/core/src/tools/permissions.ts
 
 export function filterToolsByPermission(
   tools: ToolDefinition[],
@@ -273,7 +273,7 @@ export function filterToolsByPermission(
 ## 8. Adding a New Tool
 
 ```text
-1. Create file: packages/core/src/tools/builtin/<name>.ts
+1. Create file: src/packages/core/src/tools/builtin/<name>.ts
 2. Implement ToolDefinition interface
 3. Export as named export
 4. Register in tools/bootstrap.ts

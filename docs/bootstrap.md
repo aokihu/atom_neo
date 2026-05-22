@@ -14,7 +14,7 @@
 ## 2. CLI Arguments
 
 ```bash
-bun run packages/core/src/server.ts [options]
+bun run src/main.ts [options]
 
 Options:
   --mode core|tui|full    启动模式（默认 core）
@@ -57,54 +57,33 @@ API key 不在 config.json 中，通过 env 变量名引用。
 ## 5. Core Package — Startup Order
 
 ```text
-START
+src/main.ts (入口)
   │
-  ├── 1. Load Configuration
-  │     config.load() — reads .env, CLI args, config file
+  ├── 1. Parse CLI arguments (src/bootstrap/cli.ts)
+  │     parseArguments(Bun.argv.slice(2)) → BootArguments
   │
-  ├── 2. Initialize Log System
-  │     LogHub.create({ level: config.logLevel }) → register sinks (stdout, file)
-  │     // level=1: essential only, level=2: +debug, level=3: +trace
+  ├── 2. Load .env from sandbox (src/bootstrap/env.ts)
+  │     loadEnv(args.sandbox) → process.env
   │
-  ├── 3. Register Builtin Elements
-  │     elementRegistry.set("collect-prompts", CollectPromptsElement)
-  │     elementRegistry.set("stream-llm", StreamLLMElement)
-  │     ... (all pipeline elements)
+  ├── 3. Load config.json from sandbox (src/bootstrap/config.ts)
+  │     loadConfig(args.sandbox) → AppConfig
   │
-  ├── 4. Register Builtin Tools
-  │     toolRegistry.register(readTool)
-  │     toolRegistry.register(writeTool)
-  │     ... (all tools)
+  ├── 4. Initialize Log System
+  │     createLogger(args) → Logger
   │
-  ├── 5. Initialize Services
-  │     serviceManager.register(memoryService)
-  │     serviceManager.startAll()
+  ├── 5. Set sandbox directory
+  │     setSandbox(args.sandbox)
   │
-  ├── 6. Initialize Session Store
-  │     new SessionStore(config.maxSessions)
-  │
-  ├── 7. Initialize Task Engine
-  │     new TaskEngine(bus, taskQueue, pipelineManager, sessionStore)
-  │     taskEngine.start()
-  │
-  ├── 8. Build Pipeline Instances
-  │     pipelineManager.register("conversation", () => conversationPipeline(deps))
-  │     pipelineManager.register("prediction", () => predictionPipeline(deps))
-  │     pipelineManager.register("follow-up", () => followUpPipeline(deps))
-  │
-  ├── 9. Initialize Replay System
-  │     if (config.replay.enabled) { recorder.start() }
-  │
-  ├── 10. Start HTTP + WebSocket Server
-  │      Bun.serve({ port: config.port, fetch: router, websocket: wsHandler })
-  │
-  └── READY — log "Core ready on :port"
+  └── 6. Mode dispatch
+        ├── "core" → startCore(deps)     → src/packages/core/server.ts
+        ├── "tui"  → startTui(deps)      → src/packages/tui/app.tsx
+        └── "full" → startCore + startGateway + startTui
 ```
 
 ### Startup Code Template
 
 ```typescript
-// packages/core/src/server.ts
+// src/packages/core/src/server.ts
 
 export async function startCore(): Promise<void> {
   const config = loadCoreConfig();
@@ -275,22 +254,18 @@ config ──→ log ──→ services ──→ tools ──→ elements ─�
 
 ---
 
-## 7. Entry Points
+## 6. Entry Points
 
 ```text
-# Each package has its own entry point:
-packages/core/src/server.ts    → startCore()
-packages/gateway/src/server.ts  → startGateway()
-packages/tui/src/app.tsx        → startTUI()
+src/main.ts                 → 入口：CLI 解析 → config/env 加载 → mode 分发
+├── bootstrap/
+│   ├── cli.ts             → parseArguments()
+│   ├── config.ts          → loadConfig()
+│   └── env.ts             → loadEnv()
 
-# Package.json scripts (in each package):
-"start": "bun run src/server.ts"
-
-# Root scripts (development):
-"dev:core":    "bun run --filter @atom-neo/core dev"
-"dev:gateway": "bun run --filter @atom-neo/gateway dev"
-"dev:tui":     "bun run --filter @atom-neo/tui dev"
-"dev:all":     "bun run --workspaces dev"
+├── core → src/packages/core/server.ts    → startCore()
+├── gateway → src/packages/gateway/src/server.ts  → startGateway()
+└── tui → src/packages/tui/src/app.tsx        → startTUI()
 ```
 
 ---

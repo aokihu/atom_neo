@@ -2,13 +2,13 @@
   "name": "atom-neo",
   "private": true,
   "workspaces": [
-    "packages/shared",
-    "packages/core",
-    "packages/gateway",
-    "packages/tui"
+    "src/packages/shared",
+    "src/packages/core",
+    "src/packages/gateway",
+    "src/packages/tui"
   ],
   "scripts": {
-    "dev": "bun run --filter @atom-neo/core dev",
+    "dev": "bun run --watch src/main.ts",
     "dev:all": "bun run --workspaces dev",
     "docs": "bun run --watch docs/server.tsx",
     "docs:dev": "bun run docs/server.tsx",
@@ -17,6 +17,8 @@
     "build": "bun run --workspaces build"
   },
   "dependencies": {
+    "@atom-neo/shared": "workspace:*",
+    "@atom-neo/core": "workspace:*",
     "@heroui/react": "^3.0.5",
     "@heroui/styles": "^3.0.5",
     "highlight.js": "^11.11.1",
@@ -24,6 +26,7 @@
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "zod": "^3.24"
   }
 }

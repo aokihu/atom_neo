@@ -11,8 +11,8 @@ export default function DocPage({ content, title, description, category }: DocPa
 
       {/* ═══ Section 1: Type File Layout ═══ */}
       <Section title="1. Type File Layout">
-        <p>All types live in <code>packages/shared/src/types/</code>. Each domain gets its own file with a barrel export.</p>
-        <CodeBlock lang="text" code={`packages/shared/src/types/
+        <p>All types live in <code>src/src/packages/shared/src/types/</code>. Each domain gets its own file with a barrel export.</p>
+        <CodeBlock lang="text" code={`src/src/packages/shared/src/types/
 ├── index.ts          # Barrel exports
 ├── task.ts           # TaskItem, TaskState, TaskPayload, TaskPipeline
 ├── intent.ts         # IntentRequest, IntentRequestType
@@ -112,7 +112,7 @@ export type { PipelineResult, PipelineEventMap } from "./pipeline";           //
         <ComparisonTable
           headers={["Category", "Rule"]}
           rows={[
-            ["Location", <>"All shared types in <code>packages/shared/src/types/</code>"</>],
+            ["Location", <>"All shared types in <code>src/src/packages/shared/src/types/</code>"</>],
             ["Barrel Exports", "Every types/ file has a corresponding index.ts barrel export"],
             ["Discriminant Field", <>"Named <code>type</code> for results, <code>mode</code> for FlowState"</>],
             ["Discriminant Literal", <>"Use <code>typeof MyEnum.X</code> for type-safe discriminant literals"</>],

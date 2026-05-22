@@ -1,11 +1,11 @@
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
-import { parseArguments } from "./cli";
-import type { BootArguments } from "./cli";
-import { loadConfig, loadEnv } from "./config";
-import { startCore } from "./server";
-import { setSandbox } from "./tools/builtin/fs";
-import { setBashSandbox } from "./tools/builtin/bash";
+import { parseArguments } from "./bootstrap/cli";
+import type { BootArguments } from "./bootstrap/cli";
+import { loadConfig } from "./bootstrap/config";
+import { loadEnv } from "./bootstrap/env";
+import { startCore } from "@atom-neo/core";
+import { setSandbox, setBashSandbox } from "@atom-neo/core";
 
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 

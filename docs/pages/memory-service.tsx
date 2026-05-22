@@ -18,7 +18,7 @@ export default function DocPage({ content, title, description, category }: DocPa
             [<><strong>memory_fts</strong> <Badge color="blue">FTS5</Badge></>, <code>key, type, content, category</code>, "虚拟表全文搜索；触发器自动同步"],
           ]}
         />
-        <CodeBlock lang="sql" code={`-- packages/core/src/memory/schema.sql
+        <CodeBlock lang="sql" code={`-- src/packages/core/src/memory/schema.sql
 
 CREATE TABLE IF NOT EXISTS memory_nodes (
   id TEXT PRIMARY KEY,
@@ -127,7 +127,7 @@ export interface MemorySearchResult {
           ]}
         />
 
-        <CodeBlock lang="typescript" code={`// packages/core/src/memory/service.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/memory/service.ts
 
 export class MemoryService implements Startable, Stoppable {
   constructor(params: { dbPath: string }) { }

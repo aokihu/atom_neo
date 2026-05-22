@@ -144,9 +144,9 @@ export default function DocPage({ content, title, description, category }: DocPa
       {/* ═══ Section 7: Entry Points ═══ */}
       <Section title="7. Entry Points">
         <CodeBlock lang="text" code={`# Each package has its own entry point:
-packages/core/src/server.ts    → startCore()
-packages/gateway/src/server.ts  → startGateway()
-packages/tui/src/app.tsx        → startTUI()
+src/packages/core/src/server.ts    → startCore()
+src/packages/gateway/src/server.ts  → startGateway()
+src/packages/tui/src/app.tsx        → startTUI()
 
 # Package.json scripts (in each package):
 "start": "bun run src/server.ts"

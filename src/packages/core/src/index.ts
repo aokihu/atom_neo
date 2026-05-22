@@ -1,8 +1,6 @@
 // @atom-neo/core - Barrel exports
-export { loadConfig, loadEnv } from "./config";
-export type { AppConfig } from "./config";
-export { parseArguments } from "./cli";
-export type { BootArguments, Mode, LogLevel, LogOutput } from "./cli";
+export { startCore } from "./server";
+export type { CoreDeps } from "./server";
 
 export { TaskQueue } from "./task-queue";
 export { TaskEngine } from "./task-engine";
@@ -40,6 +38,8 @@ export {
   traverseMemoryTool,
   linkMemoryTool,
 } from "./tools/builtin/memory";
+export { setSandbox } from "./tools/builtin/fs";
+export { setBashSandbox } from "./tools/builtin/bash";
 
 // Pipeline Builder
 export { registerElement, resolveElement, getRegisteredNames, clearRegistry } from "./pipeline/registry";
@@ -59,7 +59,6 @@ export {
 export type { ConversationPipelineDeps } from "./pipelines";
 
 // Server
-export { startCore } from "./server";
 export { Broadcaster } from "./ws/broadcaster";
 export { PipelineRecorder } from "./replay/recorder";
 export { PipelinePlayer } from "./replay/player";

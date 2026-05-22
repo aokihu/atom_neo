@@ -1,7 +1,7 @@
 # Project Structure
 
 > **Purpose**: Complete directory layout and module responsibility map.
-> This is the blueprint for creating the monorepo from scratch.
+> All source code lives under `src/` — package directly from this directory.
 
 ---
 
@@ -9,208 +9,168 @@
 
 ```text
 atom_neo/
-├── package.json              # Workspace root (npm workspaces)
+├── package.json              # Workspace root
 ├── tsconfig.json              # Base TypeScript config
-├── bunfig.toml               # Bun configuration
 ├── .gitignore
-├── .env.example
+├── .env.example               # Template for sandbox/.env
 │
-├── packages/
-│   ├── shared/               # Shared types, pipeline core, log system
-│   ├── core/                 # Core HTTP + WebSocket server, task engine
-│   ├── gateway/              # External gateway (auth, permission, proxy)
-│   └── tui/                  # Terminal UI application
+├── src/                       # All source code
+│   ├── main.ts               # Application entry point (CLI + bootstrap)
+│   ├── bootstrap/            # App startup layer
+│   │   ├── cli.ts           # CLI argument parsing
+│   │   ├── config.ts        # config.json loader
+│   │   └── env.ts           # .env loader
+│   └── packages/
+│       ├── shared/           # Shared types, pipeline core, log system
+│       ├── core/             # Core HTTP + WebSocket server, task engine
+│       ├── gateway/          # External gateway (auth, permission, proxy)
+│       └── tui/              # Terminal UI application
 │
-├── docs/                     # Development documentation
-│   ├── architecture.md
-│   ├── architecture.html
-│   ├── coding-conventions.md
-│   ├── naming-conventions.md
-│   ├── element-design.md
-│   ├── protocol.md
-│   ├── pipeline-builder.md
-│   ├── tool-plugin.md
-│   ├── session-context.md
-│   ├── type-system.md
-│   ├── testing.md
-│   └── project-structure.md
+├── sandbox/                   # Runtime workspace directory (gitignored)
+│   ├── config.json           # Model/TUI/Gateway config
+│   ├── .env                  # API keys (gitignored)
+│   └── logs/                 # Log output
 │
-└── scripts/                  # Build, deploy, CI scripts
-    └── bootstrap.ts
+└── docs/                      # Development documentation
 ```
 
 ## 2. Package: `shared`
 
 ```text
-packages/shared/
+src/packages/shared/
 ├── package.json
 ├── tsconfig.json
-└── src/
-    ├── index.ts              # Barrel exports
-    ├── types/
-    │   ├── index.ts
-    │   ├── task.ts           # TaskItem, TaskState, TaskPayload
-    │   ├── intent.ts         # IntentRequest types
-    │   ├── memory.ts         # Memory types
-    │   ├── tool.ts           # ToolDefinition, ToolResult
-    │   ├── pipeline.ts       # PipelineResult, PipelineEventMap, FlowState base
-    │   ├── session.ts        # SessionContext types
-    │   ├── config.ts         # Configuration types
-    │   └── primitive.ts      # UUID, ISOTimeString
-    ├── pipeline/
-    │   ├── index.ts
-    │   ├── base-element.ts   # Abstract BaseElement
-    │   ├── runner.ts         # PipelineRunner
-    │   ├── event-bus.ts      # PipelineEventBus
-    │   ├── types.ts          # Pipeline, PipelineDefinition, PipelineElementKind
-    │   └── constants.ts      # READY_TO_FINALIZE, etc.
-    ├── protocol.ts           # WebSocket event type definitions
-    ├── log/                  # Log system (Hub-and-Sink)
-    │   ├── index.ts
-    │   ├── logger.ts
-    │   ├── log-hub.ts
-    │   ├── types.ts
-    │   └── sinks/
-    │       ├── stdout.ts
-    │       ├── file.ts
-    │       └── pipe.ts
-    └── utils/
-        ├── index.ts
-        ├── error.ts          # Error normalization
-        ├── string.ts         # String utilities
-        └── timing.ts         # sleep, debounce, etc.
+├── index.ts              # Barrel exports
+├── types/
+│   ├── index.ts
+│   ├── task.ts
+│   ├── intent.ts
+│   ├── memory.ts
+│   ├── tool.ts
+│   ├── pipeline.ts
+│   ├── session.ts
+│   ├── config.ts
+│   └── primitive.ts
+├── pipeline/
+│   ├── index.ts
+│   ├── base-element.ts
+│   ├── runner.ts
+│   ├── event-bus.ts
+│   ├── types.ts
+│   └── constants.ts
+├── protocol.ts
+├── log/
+│   ├── index.ts
+│   ├── logger.ts
+│   ├── log-hub.ts
+│   ├── types.ts
+│   └── sinks/
+│       ├── stdout.ts
+│       ├── file.ts
+│       └── pipe.ts
+└── utils/
+    ├── index.ts
+    ├── error.ts
+    ├── string.ts
+    └── timing.ts
 ```
 
 ## 3. Package: `core`
 
 ```text
-packages/core/
+src/packages/core/
 ├── package.json
 ├── tsconfig.json
-└── src/
-    ├── index.ts              # Barrel exports
-    ├── server.ts             # HTTP + WebSocket server (Bun.serve)
-    │
-    ├── api/
-    │   ├── tasks.ts          # POST /api/tasks, GET /api/tasks/:id, DELETE /api/tasks/:id
-    │   ├── health.ts         # GET /api/health, GET /api/metrics
-    │   └── middleware/
-    │       ├── logger.ts
-    │       └── error.ts
-    │
-    ├── ws/
-    │   ├── handler.ts        # WebSocket upgrade + message routing
-    │   └── broadcaster.ts    # Fan-out events to connected clients
-    │
-    ├── task-engine.ts        # Event-driven task activation (replaces runloop)
-    ├── task-queue.ts         # Priority task queue
-    ├── task-factory.ts       # createTaskItem, createContinuationTask, etc.
-    │
-    ├── pipeline/
-    │   ├── registry.ts       # ElementRegistry
-    │   ├── builder.ts        # PipelineBuilder DSL
-    │   ├── manager.ts        # PipelineManager (runtime pipeline instances)
-    │   └── runner.ts         # Re-exports PipelineRunner from shared
-    │
-    ├── session/
-    │   ├── context.ts        # SessionContext class
-    │   ├── store.ts          # SessionStore (Map-based, in-memory)
-    │   └── mcp-connections.ts # Per-session MCP connection management
-    │
-    ├── runtime/              # Runtime subsystems (split from v1 Runtime)
-    │   ├── orchestrator.ts   # Conversation orchestrator
-    │   ├── intent-policy.ts  # Intent policy resolution
-    │   ├── tool-coordinator.ts # Tool execution coordinator
-    │   ├── memory-coordinator.ts # Memory management
-    │   └── prompt/
-    │       ├── system.ts     # System prompt export
-    │       └── user.ts       # User prompt export
-    │
-    ├── tools/
-    │   ├── registry.ts       # ToolRegistry
-    │   ├── executor.ts       # Tool execution (delegates to ToolDefinition.execute)
-    │   ├── permissions.ts    # Permission filtering
-    │   ├── bootstrap.ts      # Register all builtin tools at startup
-    │   ├── builtin/
-    │   │   ├── fs.ts         # read, write, ls, grep, tree, cp, mv
-    │   │   ├── bash.ts       # Shell command execution
-    │   │   └── memory.ts     # search_memory, save_memory, traverse_memory, etc.
-    │   └── adapters/
-    │       ├── mcp-tool.ts       # MCP tool → ToolDefinition adapter
-    │       ├── mcp-resource.ts   # MCP resource → ToolDefinition adapter
-    │       └── mcp-transport.ts  # MCP stdio/SSE transport
-    │
-    ├── memory/
-    │   ├── service.ts        # MemoryService (graph + FTS5)
-    │   ├── storage.ts        # Bun SQLite persistence
-    │   └── traversal.ts      # Graph traversal algorithms
-    │
-    ├── replay/
-    │   ├── recorder.ts       # Pipeline event recorder
-    │   └── player.ts         # Pipeline event player
-    │
-    └── pipelines/            # Pipeline definitions
-        ├── index.ts
-        ├── conversation/
-        │   ├── index.ts      # Pipeline builder definition
-        │   ├── types.ts      # FlowState + Mode enum
-        │   └── elements/
-        │       ├── collect-prompts.element.ts
-        │       ├── format-messages.element.ts
-        │       ├── stream-llm.element.ts  # streamText + tool calling
-        │       ├── check-follow-up.element.ts   # follow_up IntentRequest
-        │       └── finalize.element.ts
-        ├── prediction/
-        │   ├── index.ts
-        │   ├── types.ts
-        │   └── elements/
-        └── follow-up/
-            ├── index.ts
-            ├── types.ts
-            └── elements/
+├── index.ts              # Barrel exports
+├── server.ts             # startCore(): HTTP + WebSocket server
+│
+├── api/
+│   ├── tasks.ts
+│   ├── health.ts
+│   └── middleware/
+│
+├── ws/
+│   ├── handler.ts
+│   └── broadcaster.ts
+│
+├── task-engine.ts
+├── task-queue.ts
+├── task-factory.ts
+│
+├── pipeline/
+│   ├── registry.ts
+│   ├── builder.ts
+│   ├── manager.ts
+│   └── runner.ts
+│
+├── session/
+│   ├── context.ts
+│   └── store.ts
+│
+├── tools/
+│   ├── registry.ts
+│   ├── executor.ts
+│   ├── permissions.ts
+│   ├── bootstrap.ts
+│   └── builtin/
+│       ├── fs.ts
+│       ├── bash.ts
+│       └── memory.ts
+│
+├── replay/
+│   ├── recorder.ts
+│   └── player.ts
+│
+└── pipelines/
+    ├── index.ts
+    ├── conversation/
+    │   ├── index.ts
+    │   ├── types.ts
+    │   └── elements/index.ts
+    ├── prediction/
+    │   └── index.ts
+    └── follow-up/
+        └── index.ts
 ```
 
 ## 4. Package: `gateway`
 
 ```text
-packages/gateway/
+src/packages/gateway/
 ├── package.json
 ├── tsconfig.json
-└── src/
-    ├── index.ts
-    ├── server.ts            # HTTP server (Bun.serve)
-    ├── auth/
-    │   ├── jwt.ts           # JWT verification
-    │   └── middleware.ts    # Auth middleware
-    ├── permission/
-    │   ├── checker.ts       # Permission evaluation
-    │   └── roles.ts         # Role + permission level definitions
-    ├── ratelimit/
-    │   └── limiter.ts       # Token bucket rate limiter
-    └── proxy/
-        └── core-proxy.ts    # HTTP proxy to Core
+├── index.ts
+├── server.ts
+├── config.ts
+├── auth/
+│   └── jwt.ts
+├── permissions/
+│   └── checker.ts
+├── ratelimit/
+│   └── limiter.ts
+└── proxy/
+    └── core-proxy.ts
 ```
 
 ## 5. Package: `tui`
 
 ```text
-packages/tui/
+src/packages/tui/
 ├── package.json
 ├── tsconfig.json
-└── src/
-    ├── index.ts
-    ├── app.tsx              # TUI application entry
-    ├── session/
-    │   └── manager.ts       # Session lifecycle
-    ├── client/
-    │   └── ws-client.ts     # WebSocket client (connects to Core)
-    ├── renderer/
-    │   ├── stream.ts        # Streaming text renderer
-    │   └── tools.ts         # Tool call display
-    └── views/
-        ├── chat.tsx         # Chat view
-        ├── toolbar.tsx      # Tool execution toolbar
-        └── status.tsx       # Status bar
+├── index.ts
+├── app.tsx
+├── client/
+│   └── ws-client.ts
+├── session/
+│   └── manager.ts
+├── renderer/
+│   ├── stream.ts
+│   └── tools.ts
+└── views/
+    ├── chat.tsx
+    ├── toolbar.tsx
+    └── status.tsx
 ```
 
 ## 6. Workspace Root
@@ -221,10 +181,10 @@ packages/tui/
   "name": "atom-neo",
   "private": true,
   "workspaces": [
-    "packages/shared",
-    "packages/core",
-    "packages/gateway",
-    "packages/tui"
+    "src/packages/shared",
+    "src/packages/core",
+    "src/packages/gateway",
+    "src/packages/tui"
   ],
   "scripts": {
     "dev": "bun run --filter @atom-neo/core dev",
@@ -240,42 +200,28 @@ packages/tui/
 
 ```text
 shared/
-  Dependencies: zod, radashi
+  Dependencies: zod
   Depended on by: core, gateway, tui
 
 core/
   Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/openai
-  Depended on by: (none, standalone HTTP service)
+  Depended on by: (none, loaded by main.ts)
 
 gateway/
-  Dependencies: shared, jose (for JWT)
-  Depended on by: (none, standalone HTTP service)
+  Dependencies: shared
+  Depended on by: (none, standalone service)
 
 tui/
-  Dependencies: shared, @opentui/react, react
+  Dependencies: shared, react, react-dom
   Depended on by: (none, standalone application)
 ```
 
-## 8. Environment Variables
+## 8. Runtime Directories
 
-```bash
-# .env.example
-
-# Core
-CORE_PORT=3100
-CORE_HOST=0.0.0.0
-LOG_LEVEL=debug
-
-# Gateway
-GATEWAY_PORT=3000
-CORE_URL=http://localhost:3100
-JWT_SECRET=change-me
-
-# LLM
-DEEPSEEK_API_KEY=sk-...
-OPENAI_API_KEY=sk-...
-TRANSPORT_MODEL=deepseek/deepseek-chat
-
-# Memory
-MEMORY_DB_PATH=./data/memory.db
+```text
+sandbox/                     # Workspace directory (gitignored)
+├── config.json              # Model/TUI/Gateway config
+├── .env                     # API keys (DEEPSEEK_API_KEY, etc.)
+└── logs/                    # Log output directory
+    └── app.log
 ```

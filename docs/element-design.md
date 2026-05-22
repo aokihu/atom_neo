@@ -8,7 +8,7 @@
 ## 1. Element Interface
 
 ```typescript
-// packages/shared/src/pipeline/base-element.ts
+// src/src/packages/shared/src/pipeline/base-element.ts
 
 export abstract class BaseElement<I = any, O = any> {
   readonly name: string;
@@ -252,7 +252,7 @@ async doProcess(input: MyFlowState): Promise<PipelineResult> {
 ## 5. Element Registration
 
 ```typescript
-// packages/core/src/pipeline/registry.ts
+// src/packages/core/src/pipeline/registry.ts
 
 import type { BaseElement } from "@atom-neo/shared/pipeline";
 

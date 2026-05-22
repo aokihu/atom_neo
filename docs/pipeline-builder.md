@@ -8,7 +8,7 @@
 ## 1. API
 
 ```typescript
-// packages/core/src/pipeline/builder.ts
+// src/packages/core/src/pipeline/builder.ts
 
 export function pipeline(name: string): PipelineBuilder;
 
@@ -36,7 +36,7 @@ type ElementDeps = Record<string, unknown>;
 ## 2. Usage Example
 
 ```typescript
-// packages/core/src/pipelines/conversation.ts
+// src/packages/core/src/pipelines/conversation.ts
 
 import { pipeline } from "../pipeline/builder";
 import { registerElement } from "../pipeline/registry";
@@ -71,7 +71,7 @@ export const conversationPipeline = (
 ## 3. Element Registry
 
 ```typescript
-// packages/core/src/pipeline/registry.ts
+// src/packages/core/src/pipeline/registry.ts
 
 import type { BaseElement } from "@atom-neo/shared/pipeline";
 
@@ -104,7 +104,7 @@ export function getRegisteredElementNames(): string[] {
 ## 4. Pipeline Result Type
 
 ```typescript
-// packages/shared/src/pipeline/types.ts
+// src/src/packages/shared/src/pipeline/types.ts
 
 export type Pipeline<I = any, O = any> = {
   /** Human-readable name for debugging */
@@ -124,7 +124,7 @@ export type PipelineDefinition<TInput, TOutput> = {
 ## 5. Runtime Pipeline Registration
 
 ```typescript
-// packages/core/src/pipeline/manager.ts
+// src/packages/core/src/pipeline/manager.ts
 
 export class PipelineManager {
   #pipelines = new Map<string, Pipeline>();
@@ -206,7 +206,7 @@ class PipelineBuilder {
 ## 7. Adding a New Pipeline
 
 ```text
-1. Create packages/core/src/pipelines/<name>/
+1. Create src/packages/core/src/pipelines/<name>/
 2. Define types.ts (Mode enum + FlowState discriminated union)
 3. Define elements/ (one file per Element)
 4. Register all elements in a bootstrap function

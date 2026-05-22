@@ -8,7 +8,7 @@
 ## 1. SessionContext
 
 ```typescript
-// packages/core/src/session/context.ts
+// src/packages/core/src/session/context.ts
 
 export class SessionContext {
   readonly sessionId: string;
@@ -46,7 +46,7 @@ export class SessionContext {
 ## 2. Session Store
 
 ```typescript
-// packages/core/src/session/store.ts
+// src/packages/core/src/session/store.ts
 
 export class SessionStore {
   #sessions = new Map<string, SessionContext>();
@@ -122,7 +122,7 @@ type ContinuationContext = {
 ## 4. Orchestrator Integration
 
 ```typescript
-// packages/core/src/runtime/orchestrator.ts
+// src/packages/core/src/runtime/orchestrator.ts
 
 export class ConversationOrchestrator {
   #sessionStore: SessionStore;
@@ -147,7 +147,7 @@ export class ConversationOrchestrator {
 ## 5. MCP Connection Management (Per-Session)
 
 ```typescript
-// packages/core/src/session/mcp-connections.ts
+// src/packages/core/src/session/mcp-connections.ts
 
 export interface MCPConnection {
   serverName: string;

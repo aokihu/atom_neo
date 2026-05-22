@@ -24,7 +24,7 @@ Every package calls `loadConfig()` at startup. The function:
 ## 2. Core Config
 
 ```typescript
-// packages/core/src/config.ts
+// src/bootstrap/config.ts
 
 import { z } from "zod";
 
@@ -81,7 +81,7 @@ export function loadCoreConfig(): CoreConfig {
 ## 3. Gateway Config
 
 ```typescript
-// packages/gateway/src/config.ts
+// src/packages/gateway/src/config.ts
 
 const GatewayConfigSchema = z.object({
   port: z.number().int().default(3000),
@@ -102,7 +102,7 @@ const GatewayConfigSchema = z.object({
 ## 4. TUI Config
 
 ```typescript
-// packages/tui/src/config.ts
+// src/packages/tui/src/config.ts
 
 const TuiConfigSchema = z.object({
   coreUrl: z.string().default("ws://localhost:3100"),
@@ -119,7 +119,7 @@ const TuiConfigSchema = z.object({
 ## 5. CLI Argument Parsing
 
 ```typescript
-// packages/core/src/cli.ts
+// src/bootstrap/cli.ts
 
 export function parseCliArgs(): Partial<CoreConfig> {
   const args = Bun.argv.slice(2);

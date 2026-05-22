@@ -48,63 +48,34 @@
 ### 2.2 模块结构
 
 ```text
-atom_next_v2/
-├── packages/
-│   ├── core/
-│   │   ├── src/
-│   │   │   ├── server.ts           # HTTP + WebSocket 服务器
-│   │   │   ├── task-engine.ts      # 事件驱动任务引擎（替代 runloop）
-│   │   │   ├── pipeline/           # 移植自 v1，精简
-│   │   │   │   ├── runner.ts
-│   │   │   │   ├── event-bus.ts
-│   │   │   │   ├── base-element.ts
-│   │   │   │   ├── builder.ts      # 【新】声明式 PipelineBuilder
-│   │   │   │   └── elements/       # 共享 Element
-│   │   │   ├── session/            # 【新】Per-Session 上下文
-│   │   │   │   ├── context.ts      # SessionContext（替代 ContextManager）
-│   │   │   │   └── store.ts        # Session 存储
-│   │   │   ├── tools/              # 【新】Tool 插件系统
-│   │   │   │   ├── registry.ts     # 动态注册/卸载
-│   │   │   │   ├── definition.ts   # Tool 定义规范
-│   │   │   │   ├── builtin/
-│   │   │   │   │   ├── fs.ts       # read/ls/write/cp/mv
-│   │   │   │   │   ├── bash.ts     # 受控 shell
-│   │   │   │   │   └── memory.ts   # 【新】search/save/traverse/link
-│   │   │   │   └── executor.ts
-│   │   │   ├── replay/             # 【新】Pipeline 录制与重放
-│   │   │   │   ├── recorder.ts
-│   │   │   │   └── player.ts
-│   │   │   └── pipelines/          # Pipeline 定义（DSL 组装，非硬编码）
-│   │   │       ├── conversation.ts
-│   │   │       ├── prediction.ts
-│   │   │       └── follow-up.ts
-│   │   └── package.json
-│   │
-│   ├── gateway/
-│   │   ├── src/
-│   │   │   ├── server.ts
-│   │   │   ├── auth/jwt.ts
-│   │   │   ├── permission/checker.ts
-│   │   │   └── proxy/core-proxy.ts
-│   │   └── package.json
-│   │
-│   ├── tui/
-│   │   ├── src/
-│   │   │   ├── app.tsx
-│   │   │   ├── session.ts
-│   │   │   └── ws-client.ts
-│   │   └── package.json
-│   │
-│   └── shared/
-│       ├── src/
-│       │   ├── types/              # Task, Intent, Tool, Pipeline 类型
-│       │   ├── log/                # Hub-and-Sink 日志系统
-│       │   └── protocol.ts         # WebSocket 事件类型定义
-│       └── package.json
+atom_neo/
+├── src/
+│   ├── main.ts                   # 应用入口，CLI 解析 + 启动调度
+│   ├── bootstrap/                # 启动层
+│   │   ├── cli.ts               # CLI 参数解析
+│   │   ├── config.ts            # config.json 加载
+│   │   └── env.ts               # .env 加载
+│   └── packages/
+│       ├── core/
+│       │   ├── server.ts         # startCore(deps)
+│       │   ├── task-engine.ts
+│       │   ├── task-queue.ts / task-factory.ts
+│       │   ├── pipeline/         # builder / registry / manager
+│       │   ├── session/          # context / store
+│       │   ├── tools/            # registry / executor / builtin
+│       │   ├── replay/           # recorder / player
+│       │   ├── ws/               # handler / broadcaster
+│       │   ├── api/              # tasks / health
+│       │   └── pipelines/        # conversation / prediction / follow-up
+│       │
+│       ├── shared/               # types / pipeline-core / log / protocol / utils
+│       ├── gateway/              # auth / permissions / ratelimit / proxy
+│       └── tui/                  # ws-client / renderer / views
 │
+├── sandbox/                      # 运行时工作目录
+│   ├── config.json              # Model/TUI/Gateway 配置
+│   └── .env                     # API Keys
 └── docs/
-    ├── architecture.md
-    └── architecture.html
 ```
 
 ---
@@ -257,7 +228,7 @@ class PipelinePlayer {
 ### 4.2 Tool Plugin 接口
 
 ```typescript
-// packages/shared/src/types/tool.ts
+// src/src/packages/shared/src/types/tool.ts
 
 export interface ToolDefinition {
   name: string;
@@ -288,7 +259,7 @@ const builtinTools: ToolDefinition[] = [
 ### 4.3 Pipeline Builder DSL
 
 ```typescript
-// packages/core/src/pipeline/builder.ts
+// src/packages/core/src/pipeline/builder.ts
 
 export function pipeline(name: string): PipelineBuilder {
   return new PipelineBuilder(name);
@@ -327,7 +298,7 @@ const pipeline = pipeline("conversation")
 ## 5. WebSocket 事件协议
 
 ```typescript
-// packages/shared/src/protocol.ts
+// src/src/packages/shared/src/protocol.ts
 
 // Client → Core
 type ClientEvent =

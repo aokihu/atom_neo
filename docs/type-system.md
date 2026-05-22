@@ -1,14 +1,14 @@
 # Type System Conventions
 
 > **Purpose**: Define the shared type contracts used across all packages.
-> All types live in `packages/shared/src/types/`.
+> All types live in `src/src/packages/shared/src/types/`.
 
 ---
 
 ## 1. Type File Layout
 
 ```text
-packages/shared/src/types/
+src/src/packages/shared/src/types/
 ├── index.ts          # Barrel exports
 ├── task.ts           # TaskItem, TaskState, TaskPayload, TaskPipeline
 ├── intent.ts         # IntentRequest, IntentRequestType
@@ -23,7 +23,7 @@ packages/shared/src/types/
 ## 2. Task Types
 
 ```typescript
-// packages/shared/src/types/task.ts
+// src/src/packages/shared/src/types/task.ts
 
 export enum TaskSource {
   EXTERNAL = "external",
@@ -93,7 +93,7 @@ export type ToolReportFact = {
 ## 3. Intent Types
 
 ```typescript
-// packages/shared/src/types/intent.ts
+// src/src/packages/shared/src/types/intent.ts
 
 export enum IntentRequestType {
   FOLLOW_UP = "follow_up",   // 仅 follow_up 走 IntentRequest 解析（隐蔽调度）
@@ -127,7 +127,7 @@ export type FollowUpIntentRequest = IntentRequest & {
 ## 4. Pipeline Types
 
 ```typescript
-// packages/shared/src/types/pipeline.ts
+// src/src/packages/shared/src/types/pipeline.ts
 
 export enum PipelineResultType {
   Complete = "complete",
@@ -190,7 +190,7 @@ export type PipelineEventMap = {
 ## 6. Primitive Types
 
 ```typescript
-// packages/shared/src/types/primitive.ts
+// src/src/packages/shared/src/types/primitive.ts
 
 export type UUID = string & { readonly __brand: "UUID" };
 export type ISOTimeString = string & { readonly __brand: "ISOTimeString" };

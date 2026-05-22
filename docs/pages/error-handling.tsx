@@ -233,7 +233,7 @@ function handleWsMessage(ws: WebSocket, msg: string, ctx: AppContext): void {
 
       {/* ── Section 7: Error Types ── */}
       <Section title="Error Types">
-        <CodeBlock lang="typescript" code={`// packages/shared/src/types/error.ts
+        <CodeBlock lang="typescript" code={`// src/src/packages/shared/src/types/error.ts
 
 export type PipelineErrorCode =
   | "PIPELINE_ABORTED"

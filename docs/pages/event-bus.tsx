@@ -9,7 +9,7 @@ export default function DocPage({ content, title, description, category }: DocPa
 
       {/* ── Core Implementation ── */}
       <Section title="核心实现">
-        <CodeBlock lang="typescript" code={`// packages/shared/src/pipeline/event-bus.ts
+        <CodeBlock lang="typescript" code={`// src/src/packages/shared/src/pipeline/event-bus.ts
 
 export class PipelineEventBus<TEvents extends Record<string, any>> {
   #handlers = new Map<string, Set<(...args: any[]) => void>>();

@@ -256,7 +256,7 @@ REPLAY_ENABLED=true`} />
           <div className="step-card__body">
             <h4>Run tests</h4>
             <CodeBlock lang="bash" code={`bun test                 # All tests
-bun test packages/core   # Core only
+bun test src/packages/core   # Core only
 bun test --watch         # Watch mode`} />
           </div>
         </div>

@@ -8,7 +8,7 @@
 ## 1. Core Implementation
 
 ```typescript
-// packages/shared/src/pipeline/event-bus.ts
+// src/src/packages/shared/src/pipeline/event-bus.ts
 
 export class PipelineEventBus<TEvents extends Record<string, any>> {
   #handlers = new Map<string, Set<(...args: any[]) => void>>();
@@ -66,7 +66,7 @@ export class PipelineEventBus<TEvents extends Record<string, any>> {
 ## 2. Event Type Registration
 
 ```typescript
-// packages/shared/src/types/pipeline.ts
+// src/src/packages/shared/src/types/pipeline.ts
 
 // Base events (emitted by PipelineRunner and Elements):
 export type PipelineEventMap = {
@@ -130,7 +130,7 @@ export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;
 
 ```typescript
 // 1. Define the event type in your module's types.ts:
-// packages/core/src/session/types.ts
+// src/packages/core/src/session/types.ts
 
 export type SessionEventMap = {
   "session.created": { sessionId: string };
@@ -139,7 +139,7 @@ export type SessionEventMap = {
 };
 
 // 2. Extend the global event map:
-// packages/shared/src/types/pipeline.ts
+// src/src/packages/shared/src/types/pipeline.ts
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap & SessionEventMap;
 

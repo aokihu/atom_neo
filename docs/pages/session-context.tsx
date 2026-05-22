@@ -9,7 +9,7 @@ export default function DocPage({ content, title, description, category }: DocPa
 
       {/* ── SessionContext Class ── */}
       <Section title="SessionContext 类">
-        <CodeBlock lang="typescript" code={`// packages/core/src/session/context.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/session/context.ts
 
 export class SessionContext {
   readonly sessionId: string;
@@ -115,7 +115,7 @@ type ContinuationContext = {
             [<Badge color="orange">onEvict</Badge>, <code>{`(sessionId: string) => void`}</code>, "驱逐回调（用于清理 MCP 连接等）"],
           ]}
         />
-        <CodeBlock lang="typescript" code={`// packages/core/src/session/store.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/session/store.ts
 
 export class SessionStore {
   #sessions = new Map<string, SessionContext>();
@@ -155,7 +155,7 @@ export class SessionStore {
 
       {/* ── Orchestrator Integration ── */}
       <Section title="Orchestrator 集成">
-        <CodeBlock lang="typescript" code={`// packages/core/src/runtime/orchestrator.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/runtime/orchestrator.ts
 
 export class ConversationOrchestrator {
   #sessionStore: SessionStore;
@@ -179,7 +179,7 @@ export class ConversationOrchestrator {
 
       {/* ── MCP Connection Management ── */}
       <Section title="MCP 连接管理（Per-Session）">
-        <CodeBlock lang="typescript" code={`// packages/core/src/session/mcp-connections.ts
+        <CodeBlock lang="typescript" code={`// src/packages/core/src/session/mcp-connections.ts
 
 export interface MCPConnection {
   serverName: string;

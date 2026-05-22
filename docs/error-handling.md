@@ -188,7 +188,7 @@ function handleWsMessage(ws: WebSocket, msg: string, ctx: AppContext): void {
 ## 7. Error Types
 
 ```typescript
-// packages/shared/src/types/error.ts
+// src/src/packages/shared/src/types/error.ts
 
 export type PipelineErrorCode =
   | "PIPELINE_ABORTED"
