@@ -1,10 +1,5 @@
-import type { TaskToolCall } from "./task";
-
 export enum IntentRequestType {
-  SEARCH_MEMORY = "search_memory",
-  EXECUTE_TOOL = "execute_tool",
-  FOLLOW_UP = "follow_up",
-  COMPLETE = "complete",
+  FOLLOW_UP = "follow_up",   // 仅 follow_up 走 IntentRequest 解析（尾部隐蔽调度）
 }
 
 export enum IntentRequestSource {
@@ -19,18 +14,15 @@ export type IntentRequest = {
   params: Record<string, unknown>;
 };
 
-export type SearchMemoryIntentRequest = IntentRequest & {
-  request: IntentRequestType.SEARCH_MEMORY;
+export type FollowUpIntentRequest = IntentRequest & {
+  request: IntentRequestType.FOLLOW_UP;
   params: {
-    words: string;
-    scope?: string;
-    limit?: number;
+    summary: string;
+    nextPrompt: string;
+    avoidRepeat: string;
   };
 };
 
-export type ExecuteToolIntentRequest = IntentRequest & {
-  request: IntentRequestType.EXECUTE_TOOL;
-  params: {
-    toolRequests: TaskToolCall[];
-  };
-};
+// NOTE: SEARCH_MEMORY / EXECUTE_TOOL 已删除
+// 文件读写/搜索/工具调用走 AI SDK streamText tool calling 路径
+// 不在 IntentRequest 中定义

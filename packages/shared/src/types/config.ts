@@ -1,28 +1,7 @@
-export type CoreConfig = {
-  port: number;
-  host: string;
-  logLevel: "debug" | "info" | "warn" | "error";
-};
+// Config types are defined per-package with Zod validation.
+// Core: packages/core/src/config.ts — CoreConfig with full Zod schema
+// Gateway: packages/gateway/src/config.ts (future)
+// TUI: packages/tui/src/config.ts (future)
 
-export type GatewayConfig = {
-  port: number;
-  coreUrl: string;
-  jwtSecret: string;
-};
-
-export type LLMConfig = {
-  deepseekApiKey: string;
-  openaiApiKey: string;
-  transportModel: string;
-};
-
-export type MemoryConfig = {
-  dbPath: string;
-};
-
-export type AppConfig = {
-  core: CoreConfig;
-  gateway: GatewayConfig;
-  llm: LLMConfig;
-  memory: MemoryConfig;
-};
+// Placeholder: remove when per-package configs are implemented
+export type {};

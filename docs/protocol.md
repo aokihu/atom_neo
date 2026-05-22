@@ -34,7 +34,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "task.submit",
+  type: "event.task.submit",
   seq: 0,            // Client assigns, Core echoes in response
   ts: 1700000000000,
   payload: {
@@ -54,7 +54,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "task.cancel",
+  type: "event.task.cancel",
   seq: 0,
   ts: 1700000000000,
   payload: {
@@ -82,7 +82,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "task.created",
+  type: "event.task.created",
   seq: 1,
   ts: 1700000000001,
   payload: {
@@ -96,7 +96,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "task.state-changed",
+  type: "event.task.state-changed",
   seq: 2,
   ts: 1700000000002,
   payload: {
@@ -111,7 +111,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "pipeline.element.started",
+  type: "event.pipeline.element.started",
   seq: 3,
   ts: 1700000000003,
   payload: {
@@ -126,7 +126,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "pipeline.element.finished",
+  type: "event.pipeline.element.finished",
   seq: 4,
   ts: 1700000000004,
   payload: {
@@ -142,7 +142,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "transport.delta",
+  type: "event.transport.delta",
   seq: 5,
   ts: 1700000000005,
   payload: {
@@ -156,7 +156,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "transport.tool.started",
+  type: "event.transport.tool.started",
   seq: 6,
   ts: 1700000000006,
   payload: {
@@ -173,7 +173,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "transport.tool.finished",
+  type: "event.transport.tool.finished",
   seq: 7,
   ts: 1700000000007,
   payload: {
@@ -193,7 +193,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "task.completed",
+  type: "event.task.completed",
   seq: 8,
   ts: 1700000000008,
   payload: {
@@ -212,7 +212,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "task.failed",
+  type: "event.task.failed",
   seq: 9,
   ts: 1700000000009,
   payload: {
@@ -245,7 +245,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "replay.start",
+  type: "event.pipeline.replay-start",
   seq: 0,
   ts: 1700000000000,
   payload: {
@@ -274,7 +274,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 
 ```typescript
 {
-  type: "replay.end",
+  type: "event.pipeline.replay-end",
   seq: 999,
   ts: 1700000000100,
   payload: {

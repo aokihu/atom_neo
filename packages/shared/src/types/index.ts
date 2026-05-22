@@ -12,8 +12,7 @@ export type {
 export { IntentRequestType, IntentRequestSource } from "./intent";
 export type {
   IntentRequest,
-  SearchMemoryIntentRequest,
-  ExecuteToolIntentRequest,
+  FollowUpIntentRequest,
 } from "./intent";
 
 export type {
@@ -38,16 +37,10 @@ export type {
 } from "./pipeline";
 
 export type {
-  SessionContextData,
   SessionMessage,
-  ToolContextMode,
+  InferenceFact,
+  ToolContext,
+  ScopeState,
   MemoryScopeState,
+  ContinuationContext,
 } from "./session";
-
-export type {
-  CoreConfig,
-  GatewayConfig,
-  LLMConfig,
-  MemoryConfig,
-  AppConfig,
-} from "./config";

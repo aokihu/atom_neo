@@ -183,10 +183,10 @@ REPLAY_ENABLED=true`} />
 {"type":"task.submit","seq":0,"ts":1700000000,"payload":{...}}
 
 # Expected streaming events:
-# {"type":"task.created","seq":1,"ts":...,"payload":{"taskId":"...","state":"pending"}}
-# {"type":"pipeline.element.started","seq":2,"ts":...,"payload":{"elementName":"CollectPrompts",...}}
-# {"type":"transport.delta","seq":3,"ts":...,"payload":{"taskId":"...","textDelta":"Hello"}}
-# {"type":"task.completed","seq":...,"ts":...,"payload":{"taskId":"...","result":{...}}}`} />
+# {"type":"event.task.created","seq":1,"ts":...,"payload":{"taskId":"...","state":"pending"}}
+# {"type":"event.pipeline.element.started","seq":2,"ts":...,"payload":{"elementName":"CollectPrompts",...}}
+# {"type":"event.transport.delta","seq":3,"ts":...,"payload":{"taskId":"...","textDelta":"Hello"}}
+# {"type":"event.task.completed","seq":...,"ts":...,"payload":{"taskId":"...","result":{...}}}`} />
       </Section>
 
       {/* ═══ Section 8: Directory Structure ═══ */}
