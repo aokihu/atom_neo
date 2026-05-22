@@ -5,8 +5,19 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { readdir, stat, cp, rename } from "node:fs/promises";
 import { resolve, dirname, relative } from "node:path";
 
-function resolvePath(filepath: string): string {
-  return resolve(process.cwd(), filepath);
+let sandboxRoot = process.cwd();
+
+export function setSandbox(path: string): void {
+  sandboxRoot = resolve(path);
+  if (!existsSync(sandboxRoot)) mkdirSync(sandboxRoot, { recursive: true });
+}
+
+function sandboxPath(filepath: string): string {
+  const resolved = resolve(sandboxRoot, filepath);
+  if (!resolved.startsWith(sandboxRoot)) {
+    throw new Error(`Path "${filepath}" escapes sandbox`);
+  }
+  return resolved;
 }
 
 function parse<T>(schema: z.ZodType<T>, args: unknown): T | null {
@@ -29,7 +40,7 @@ export const readTool: ToolDefinition = {
     const p = parse(readSchema, args);
     if (!p) return { ok: false, output: "", error: "Invalid input" };
     try {
-      const content = readFileSync(resolvePath(p.filepath), "utf-8");
+      const content = readFileSync(sandboxPath(p.filepath), "utf-8");
       const lines = content.split("\n");
       const start = Math.max(0, (p.offset ?? 1) - 1);
       const end = p.limit ? start + p.limit : undefined;
@@ -56,7 +67,7 @@ export const writeTool: ToolDefinition = {
     const p = parse(writeSchema, args);
     if (!p) return { ok: false, output: "", error: "Invalid input" };
     try {
-      const resolved = resolvePath(p.filepath);
+      const resolved = sandboxPath(p.filepath);
       const dir = dirname(resolved);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       writeFileSync(resolved, p.content, "utf-8");
@@ -81,7 +92,7 @@ export const lsTool: ToolDefinition = {
     const p = parse(lsSchema, args);
     if (!p) return { ok: false, output: "", error: "Invalid input" };
     try {
-      const entries = await readdir(resolvePath(p.path), { withFileTypes: true });
+      const entries = await readdir(sandboxPath(p.path), { withFileTypes: true });
       const result = entries
         .map((e) => `${e.isDirectory() ? "d" : "-"} ${e.name}`)
         .join("\n");
@@ -122,7 +133,7 @@ export const treeTool: ToolDefinition = {
           }
         } catch { /* skip */ }
       }
-      await walk(resolvePath(p.path), "", 0);
+      await walk(sandboxPath(p.path), "", 0);
       return { ok: true, output: lines.join("\n") || p.path };
     } catch (err) {
       return { ok: false, output: "", error: String(err) };
@@ -146,7 +157,7 @@ export const grepTool: ToolDefinition = {
     const p = parse(grepSchema, args);
     if (!p) return { ok: false, output: "", error: "Invalid input" };
     try {
-      const target = resolvePath(p.path);
+      const target = sandboxPath(p.path);
       const results: string[] = [];
       const info = await stat(target);
 
@@ -205,7 +216,7 @@ export const cpTool: ToolDefinition = {
     const p = parse(cpSchema, args);
     if (!p) return { ok: false, output: "", error: "Invalid input" };
     try {
-      await cp(resolvePath(p.source), resolvePath(p.dest), { recursive: true });
+      await cp(sandboxPath(p.source), sandboxPath(p.dest), { recursive: true });
       return { ok: true, output: `Copied ${p.source} → ${p.dest}` };
     } catch (err) {
       return { ok: false, output: "", error: String(err) };
@@ -228,7 +239,7 @@ export const mvTool: ToolDefinition = {
     const p = parse(mvSchema, args);
     if (!p) return { ok: false, output: "", error: "Invalid input" };
     try {
-      await rename(resolvePath(p.source), resolvePath(p.dest));
+      await rename(sandboxPath(p.source), sandboxPath(p.dest));
       return { ok: true, output: `Moved ${p.source} → ${p.dest}` };
     } catch (err) {
       return { ok: false, output: "", error: String(err) };

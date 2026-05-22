@@ -114,6 +114,9 @@ export const myTool: ToolDefinition = {
 ```typescript
 // packages/core/src/tools/builtin/fs.ts
 
+// All file operations are sandboxed to config.sandboxPath.
+// Paths that escape the sandbox are rejected.
+
 import { readFile, writeFile, readdir, stat } from "node:fs/promises";
 import { PermissionLevel } from "@atom-neo/shared/types";
 

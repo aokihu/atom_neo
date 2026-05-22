@@ -101,17 +101,19 @@
 
 ---
 
-## P6: Gateway
+## P6: Gateway ✅
 
-**预估**: 0.5 周 | **状态**: pending
+**预估**: 0.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
-| Gateway server | `packages/gateway/src/server.ts` | HTTP server (Bun.serve) |
-| JWT auth | `packages/gateway/src/auth/jwt.ts` | JWT verification middleware |
-| Permission | `packages/gateway/src/permission/checker.ts` | PermissionLevel evaluation |
-| Rate limit | `packages/gateway/src/ratelimit/limiter.ts` | Token bucket rate limiter |
+| Gateway config | `packages/gateway/src/config.ts` | Zod schema, env loading |
+| JWT auth | `packages/gateway/src/auth/jwt.ts` | HMAC-SHA256 sign/verify |
+| Permission checker | `packages/gateway/src/permissions/checker.ts` | PermissionLevel evaluation |
+| Rate limiter | `packages/gateway/src/ratelimit/limiter.ts` | Token bucket with burst |
 | Core proxy | `packages/gateway/src/proxy/core-proxy.ts` | HTTP proxy to Core |
+| Gateway server | `packages/gateway/src/server.ts` | Bun.serve with auth + rate limit |
+| Tests | `packages/gateway/src/**/*.test.ts` | 9 tests, 100% pass |
 
 ---
 
@@ -152,8 +154,8 @@
 | P3 | Tools & Pipelines | 8 | completed | 1 week |
 | P4 | Pipeline Builder | 7 | completed | 1.5 weeks |
 | P5 | Server & Protocol | 7 | completed | 1 week |
-| P6 | Gateway | 5 | in_progress | 0.5 weeks |
-| P7 | TUI | 6 | pending | 1 week |
+| P6 | Gateway | 6 | completed | 0.5 weeks |
+| P7 | TUI | 6 | in_progress | 1 week |
 | P8 | Integration | 3 | pending | 0.5 weeks |
 
 **Total: 37 tasks, ~8 weeks**

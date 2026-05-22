@@ -100,18 +100,19 @@ const PHASES: PhaseItem[] = [
     ],
   },
   {
-    id: "P6", name: "Gateway", estimate: "0.5w", status: "in_progress",
+    id: "P6", name: "Gateway", estimate: "0.5w", status: "done",
     desc: "Auth + 权限 + 速率限制 + 代理",
     tasks: [
-      { name: "Gateway server", file: "gateway/src/server.ts", status: "pending" },
-      { name: "JWT auth", file: "gateway/src/auth/jwt.ts", status: "pending" },
-      { name: "Permission", file: "gateway/src/permission/checker.ts", status: "pending" },
-      { name: "Rate limit", file: "gateway/src/ratelimit/limiter.ts", status: "pending" },
-      { name: "Core proxy", file: "gateway/src/proxy/core-proxy.ts", status: "pending" },
+      { name: "Gateway config", file: "gateway/src/config.ts", status: "done" },
+      { name: "JWT auth", file: "gateway/src/auth/jwt.ts", status: "done" },
+      { name: "Permission", file: "gateway/src/permissions/checker.ts", status: "done" },
+      { name: "Rate limit", file: "gateway/src/ratelimit/limiter.ts", status: "done" },
+      { name: "Core proxy", file: "gateway/src/proxy/core-proxy.ts", status: "done" },
+      { name: "Tests (9)", file: "gateway/src/**/*.test.ts", status: "done" },
     ],
   },
   {
-    id: "P7", name: "TUI", estimate: "1w", status: "pending",
+    id: "P7", name: "TUI", estimate: "1w", status: "in_progress",
     desc: "WebSocket 客户端 + 流式渲染",
     tasks: [
       { name: "App entry", file: "tui/src/app.tsx", status: "pending" },

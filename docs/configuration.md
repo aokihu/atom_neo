@@ -41,6 +41,8 @@ const CoreConfigSchema = z.object({
   replayEnabled: z.boolean().default(false),
   replayMaxEvents: z.number().int().default(10_000),
 
+  sandboxPath: z.string().default("./sandbox"),
+
   transportModel: z.string().default("deepseek/deepseek-chat"),
   transportMaxOutputTokens: z.number().int().default(4096),
 });

@@ -1,4 +1,5 @@
-import type { FullEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { PipelineEventBus } from "@atom-neo/shared";
+import type { FullEventMap } from "@atom-neo/shared";
 import { Logger, StdoutSink, LogHub } from "@atom-neo/shared";
 import { loadCoreConfig } from "./config";
 import { TaskQueue } from "./task-queue";
@@ -9,56 +10,77 @@ import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler } from "./api/tasks";
 import { PipelineRecorder } from "./replay/recorder";
-import { PipelinePlayer } from "./replay/player";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools } from "./tools/bootstrap";
+import { setSandbox } from "./tools/builtin/fs";
+import { setBashSandbox } from "./tools/builtin/bash";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
 import { PipelineManager } from "./pipeline/manager";
 import { conversationPipeline } from "./pipelines/conversation";
 
-export async function startCore(bus?: PipelineEventBus<FullEventMap>): Promise<void> {
+export async function startCore(): Promise<void> {
   const config = loadCoreConfig();
 
-  // Log
   const hub = new LogHub();
   hub.addSink(new StdoutSink());
   const logger = new Logger(
-    ["debug", "info", "warn", "error"][config.logLevel - 1] as any,
+    (["debug", "info", "warn", "error"] as const)[config.logLevel - 1] ?? "info",
     (entry) => hub.write(entry),
   );
   logger.info("config loaded", { port: config.port });
 
-  // Session
   const sessionStore = new SessionStore(config.maxSessions);
 
-  // Tools
+  setSandbox(config.sandboxPath);
+  setBashSandbox(config.sandboxPath);
+  logger.info("sandbox ready", { path: config.sandboxPath });
+
   const toolRegistry = new ToolRegistry();
   registerBuiltinTools(toolRegistry);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
-  // Pipeline
   registerConversationElements();
   registerPredictionElements();
   registerFollowUpElements();
 
+  const bus = new PipelineEventBus<FullEventMap>();
+
+  // Wire bus events to logging
+  bus.on("task.completed" as any, (payload: any) => {
+    logger.info("task completed", {
+      taskId: payload.task?.id,
+      output: (payload.result as any)?.output?.slice(0, 200),
+    });
+  });
+  bus.on("task.failed" as any, (payload: any) => {
+    logger.error("task failed", {
+      taskId: payload.task?.id,
+      error: String(payload.error).slice(0, 200),
+    });
+  });
+
   const pipelineManager = new PipelineManager();
   pipelineManager.register("conversation", () =>
-    conversationPipeline({ session: null, task: null }).build(undefined as any),
+    conversationPipeline({
+      session: { messages: [] },
+      task: { id: "init", sessionId: "init", chatId: "init", payload: [] },
+      apiKey: config.deepseekApiKey,
+      model: config.transportModel.split("/").pop() ?? "deepseek-chat",
+      tools: toolRegistry.getAll(),
+    }).build(bus),
   );
   logger.info("pipelines registered", { count: pipelineManager.list().length });
 
-  // Task
   const taskQueue = new TaskQueue();
   const taskEngine = new TaskEngine({
-    bus: bus ?? ({} as PipelineEventBus<FullEventMap>),
+    bus,
     queue: taskQueue,
     timeoutMs: config.taskTimeoutMs,
   });
   taskEngine.start();
 
-  // Replay
   const recorder = new PipelineRecorder({
     enabled: config.replayEnabled,
     maxEvents: config.replayMaxEvents,
@@ -66,11 +88,7 @@ export async function startCore(bus?: PipelineEventBus<FullEventMap>): Promise<v
 
   // WS
   const broadcaster = new Broadcaster();
-  const wsHandlers = createWsHandlers({
-    broadcaster,
-    taskQueue,
-    bus: bus ?? ({} as PipelineEventBus<FullEventMap>),
-  });
+  const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus });
 
   // Server
   const server = Bun.serve({
@@ -80,13 +98,25 @@ export async function startCore(bus?: PipelineEventBus<FullEventMap>): Promise<v
       const url = new URL(req.url);
       const method = req.method;
 
-      // Health
       if (url.pathname === "/api/health") return healthHandler(taskQueue);
       if (url.pathname === "/api/metrics") return metricsHandler(taskQueue);
 
-      // Tasks
       if (url.pathname === "/api/tasks" && method === "POST") {
-        return createTaskHandler(taskQueue, req as any);
+        const body: any = await req.json().catch(() => ({}));
+        const session = sessionStore.get(body.sessionId ?? "default");
+        if (body.data?.text) {
+          session.addMessage({ role: "user", content: body.data.text, timestamp: Date.now() });
+        }
+
+        const pipeline = conversationPipeline({
+          session,
+          task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, payload: [{ type: "text", data: body.data?.text ?? "" }] },
+          apiKey: config.deepseekApiKey,
+          model: config.transportModel.split("/").pop() ?? "deepseek-chat",
+          tools: toolRegistry.getAll(),
+        }).build(bus);
+
+        return createTaskHandler(taskQueue, body, bus, pipeline);
       }
       if (url.pathname.startsWith("/api/tasks/") && method === "DELETE") {
         const id = url.pathname.split("/").pop()!;
@@ -108,7 +138,6 @@ export async function startCore(bus?: PipelineEventBus<FullEventMap>): Promise<v
   });
 }
 
-// Direct run
 if (import.meta.main) {
   startCore();
 }

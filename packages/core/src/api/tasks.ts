@@ -1,14 +1,27 @@
 import type { TaskQueue } from "../task-queue";
+import type { PipelineEventBus } from "@atom-neo/shared";
+import type { CoreEventMap } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
 import { TaskSource } from "@atom-neo/shared";
+import type { Pipeline } from "../pipeline/builder";
 
-export function taskSubmitHandler(taskQueue: TaskQueue, _req: Request): Response {
-  return new Response(null, { status: 201 });
+const pipelineMap = new Map<string, Pipeline>();
+
+export function getPipeline(taskId: string): Pipeline | undefined {
+  return pipelineMap.get(taskId);
 }
 
-export async function createTaskHandler(taskQueue: TaskQueue, req: Request): Promise<Response> {
+export function removePipeline(taskId: string): void {
+  pipelineMap.delete(taskId);
+}
+
+export async function createTaskHandler(
+  taskQueue: TaskQueue,
+  body: any,
+  bus?: PipelineEventBus<CoreEventMap>,
+  pipeline?: Pipeline,
+): Promise<Response> {
   try {
-    const body: any = await req.json();
     const task = createTaskItem({
       sessionId: body.sessionId,
       chatId: body.chatId,
@@ -17,17 +30,15 @@ export async function createTaskHandler(taskQueue: TaskQueue, req: Request): Pro
       payload: [{ type: "text", data: body.data?.text ?? "" }],
     });
 
+    if (pipeline) pipelineMap.set(task.id, pipeline);
+
     taskQueue.enqueue(task);
+    if (bus) bus.emit("task.enqueued" as any, { task });
+
     return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 400 });
   }
-}
-
-export function taskStatusHandler(taskQueue: TaskQueue, _req: Request, taskId: string): Response {
-  // Look through queue for task
-  const tasks = taskQueue as any;
-  return Response.json({ taskId, state: "not_found" }, { status: 404 });
 }
 
 export function taskCancelHandler(taskQueue: TaskQueue, _req: Request, taskId: string): Response {
@@ -36,3 +47,4 @@ export function taskCancelHandler(taskQueue: TaskQueue, _req: Request, taskId: s
   }
   return Response.json({ taskId, state: "not_found" }, { status: 404 });
 }
+

@@ -86,12 +86,11 @@
   ✔ Bun.serve + Broadcaster + PipelineRecorder/Player
   ✔ 107 total tests, 100% pass
 
-⬇ P6：Gateway（进行中）
+✅ P6：Gateway（已完成）
+  19. architecture.md      → JWT auth + RateLimit + CoreProxy
+  ✔ 116 total tests, 100% pass
 
-P6：Gateway
-  19. architecture.md      → Gateway 认证/代理模块
-
-P7：TUI
+⬇ P7：TUI（进行中）
   19. architecture.md      → TUI 终端界面
 
 P8：Integration

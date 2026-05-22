@@ -12,6 +12,9 @@ const CoreConfigSchema = z.object({
   replayMaxEvents: z.number().int().default(10_000),
   transportModel: z.string().default("deepseek/deepseek-chat"),
   transportMaxOutputTokens: z.number().int().default(4096),
+  deepseekApiKey: z.string().optional(),
+  openaiApiKey: z.string().optional(),
+  sandboxPath: z.string().default("./sandbox"),
 });
 
 export type CoreConfig = z.infer<typeof CoreConfigSchema>;
@@ -24,6 +27,9 @@ export function loadCoreConfig(): CoreConfig {
   if (process.env.LOG_LEVEL) envConfig.logLevel = parseInt(process.env.LOG_LEVEL);
   if (process.env.TRANSPORT_MODEL) envConfig.transportModel = process.env.TRANSPORT_MODEL;
   if (process.env.MEMORY_DB_PATH) envConfig.memoryDbPath = process.env.MEMORY_DB_PATH;
+  if (process.env.DEEPSEEK_API_KEY) envConfig.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+  if (process.env.OPENAI_API_KEY) envConfig.openaiApiKey = process.env.OPENAI_API_KEY;
+  if (process.env.SANDBOX_PATH) envConfig.sandboxPath = process.env.SANDBOX_PATH;
 
   const cliConfig = parseCliArgs();
 

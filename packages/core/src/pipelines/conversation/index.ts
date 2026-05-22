@@ -19,13 +19,20 @@ export function registerConversationElements(): void {
 export type ConversationPipelineDeps = {
   session: any;
   task: any;
+  apiKey?: string;
+  model?: string;
+  tools: any[];
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
   return pipeline("conversation")
     .source("collect-prompts", { session: deps.session, task: deps.task })
     .transform("format-messages", {})
-    .transform("stream-llm", {})
+    .transform("stream-llm", {
+      apiKey: deps.apiKey ?? "",
+      model: deps.model ?? "deepseek-chat",
+      tools: deps.tools ?? [],
+    })
     .boundary("check-follow-up", {})
     .sink("finalize", {});
 }

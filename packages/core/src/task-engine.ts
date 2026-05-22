@@ -2,6 +2,7 @@ import { TaskState } from "@atom-neo/shared";
 import type { TaskItem, CoreEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { TaskQueue } from "./task-queue";
+import { getPipeline, removePipeline } from "./api/tasks";
 
 export class TaskEngine {
   #bus: PipelineEventBus<CoreEventMap>;
@@ -70,16 +71,28 @@ export class TaskEngine {
       task.updatedAt = Date.now();
 
       this.#bus.emit("task.failed", { task, error });
+    } finally {
+      removePipeline(task.id);
     }
 
     this.#onTaskEnqueued();
   }
 
-  async #executeTask(_task: TaskItem): Promise<any> {
-    // Pipeline execution is delegated to PipelineManager at runtime.
-    // This method will be overridden or replaced with actual pipeline execution.
-    // For now, signal that external pipeline execution should happen.
-    await new Promise((r) => setTimeout(r, 0));
-    return { type: "complete", task: _task };
+  async #executeTask(task: TaskItem): Promise<any> {
+    const pipeline = getPipeline(task.id);
+    if (!pipeline) return { type: "complete", task };
+
+    let current: any = { mode: "initial", task };
+
+    for (const element of pipeline.elements) {
+      try {
+        current = await element.process(current);
+      } catch (err) {
+        this.#bus.emit("task.failed" as any, { task, error: err });
+        throw err;
+      }
+    }
+
+    return current;
   }
 }
