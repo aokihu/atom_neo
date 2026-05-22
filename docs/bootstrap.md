@@ -21,11 +21,15 @@ Options:
   --port <number>         HTTP 端口（默认自动分配）
   --host <ip>             绑定地址（默认 127.0.0.1）
   --sandbox <path>        沙箱工作目录（默认 CWD）
-  --log-output console|file|pipe  日志输出方式（默认 console）
   --log-level debug|info|warn|error  最小日志级别（默认 debug）
   --log-ignore <level>    忽略指定级别的日志（可重复）
-  --log-pipe <path>       Named pipe 路径（--log-output pipe 时必选）
+  --log-file <path>       日志输出到文件（mode≠core 时可用）
+  --log-pipepath <path>   Named pipe 路径（mode≠core 时可用）
 ```
+
+**日志规则：**
+- `--mode core` → 自动输出到 console，无需额外参数
+- `--mode tui|full` → 默认无日志输出；设置 `--log-pipepath` 启用 pipe 输出；设置 `--log-file` 启用文件输出；两者可共存
 
 ---
 
