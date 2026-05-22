@@ -80,11 +80,13 @@
   16. pipeline-builder.md  → 3 Pipeline 定义（conversation/prediction/follow-up）
   ✔ 96 total tests, 100% pass
 
-⬇ P5：Server & Protocol（进行中）
+⬇ P5：Server & Protocol（已完成）
+  17. protocol.md          → HTTP + WebSocket Server + Replay
+  18. error-handling.md    → API 错误处理
+  ✔ Bun.serve + Broadcaster + PipelineRecorder/Player
+  ✔ 107 total tests, 100% pass
 
-P5：Server & Protocol
-  17. protocol.md          → 实现 HTTP + WebSocket Server
-  18. error-handling.md    → 实现错误处理
+⬇ P6：Gateway（进行中）
 
 P6：Gateway
   19. architecture.md      → Gateway 认证/代理模块

@@ -87,18 +87,20 @@ const PHASES: PhaseItem[] = [
     ],
   },
   {
-    id: "P5", name: "Server & Protocol", estimate: "1w", status: "in_progress",
+    id: "P5", name: "Server & Protocol", estimate: "1w", status: "done",
     desc: "HTTP + WebSocket 服务器 + Replay 系统",
     tasks: [
-      { name: "HTTP server", file: "core/src/server.ts", status: "pending" },
-      { name: "WS handler", file: "core/src/ws/handler.ts", status: "pending" },
-      { name: "Broadcast", file: "core/src/ws/broadcaster.ts", status: "pending" },
-      { name: "Replay system", file: "core/src/replay/*.ts", status: "pending" },
-      { name: "API routes", file: "core/src/api/*.ts", status: "pending" },
+      { name: "HTTP server", file: "core/src/server.ts", status: "done" },
+      { name: "WS handler", file: "core/src/ws/handler.ts", status: "done" },
+      { name: "Broadcast", file: "core/src/ws/broadcaster.ts", status: "done" },
+      { name: "Replay recorder", file: "core/src/replay/recorder.ts", status: "done" },
+      { name: "Replay player", file: "core/src/replay/player.ts", status: "done" },
+      { name: "API routes", file: "core/src/api/*.ts", status: "done" },
+      { name: "Tests (11)", file: "core/src/{ws,api,replay}/*.test.ts", status: "done" },
     ],
   },
   {
-    id: "P6", name: "Gateway", estimate: "0.5w", status: "pending",
+    id: "P6", name: "Gateway", estimate: "0.5w", status: "in_progress",
     desc: "Auth + 权限 + 速率限制 + 代理",
     tasks: [
       { name: "Gateway server", file: "gateway/src/server.ts", status: "pending" },

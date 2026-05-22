@@ -85,17 +85,19 @@
 
 ---
 
-## P5: Server & Protocol
+## P5: Server & Protocol ✅
 
-**预估**: 1 周 | **状态**: pending
+**预估**: 1 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
 | HTTP server | `packages/core/src/server.ts` | Bun.serve HTTP + WebSocket |
-| WebSocket handler | `packages/core/src/ws/handler.ts` | WebSocket upgrade + message routing |
-| Broadcast | `packages/core/src/ws/broadcaster.ts` | Fan-out events to connected clients |
-| Replay system | `packages/core/src/replay/*.ts` | Pipeline 录制与重放 |
-| API routes | `packages/core/src/api/*.ts` | POST /api/tasks, GET /api/tasks/:id, health, metrics |
+| WebSocket handler | `packages/core/src/ws/handler.ts` | WS upgrade + message routing |
+| Broadcast | `packages/core/src/ws/broadcaster.ts` | Fan-out to session clients |
+| Replay system | `packages/core/src/replay/recorder.ts` | Pipeline 事件录制 |
+| Replay player | `packages/core/src/replay/player.ts` | Pipeline 事件重放 |
+| API routes | `packages/core/src/api/*.ts` | POST /api/tasks, health, metrics |
+| Tests | `packages/core/src/{ws,api,replay}/*.test.ts` | 11 tests, 100% pass |
 
 ---
 
@@ -149,8 +151,8 @@
 | P2 | Core Engine | 7 | completed | 1.5 weeks |
 | P3 | Tools & Pipelines | 8 | completed | 1 week |
 | P4 | Pipeline Builder | 7 | completed | 1.5 weeks |
-| P5 | Server & Protocol | 5 | in_progress | 1 week |
-| P6 | Gateway | 5 | pending | 0.5 weeks |
+| P5 | Server & Protocol | 7 | completed | 1 week |
+| P6 | Gateway | 5 | in_progress | 0.5 weeks |
 | P7 | TUI | 6 | pending | 1 week |
 | P8 | Integration | 3 | pending | 0.5 weeks |
 
