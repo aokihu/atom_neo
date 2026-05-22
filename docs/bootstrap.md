@@ -28,7 +28,8 @@ Options:
 ```
 
 **日志规则：**
-- `--mode core` → 自动输出到 console，无需额外参数
+- `--mode core` → 自动输出到 console
+- `--mode core` + `--log-file`/`--log-pipepath` → console 被抑制，仅输出到指定 sink
 - `--mode tui|full` → 默认无日志输出；设置 `--log-pipepath` 启用 pipe 输出；设置 `--log-file` 启用文件输出；两者可共存
 
 ---

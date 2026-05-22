@@ -18,14 +18,18 @@ function createLogger(args: BootArguments) {
   const hub = new LogHub();
 
   if (args.mode === "core") {
-    hub.addSink(new StdoutSink());
-  } else {
-    if (args.logPipePath) {
-      hub.addSink(new PipeSink());
+    if (args.logFile || args.logPipePath) {
+      // --log-file or --log-pipepath suppresses console
+    } else {
+      hub.addSink(new StdoutSink());
     }
-    if (args.logFile) {
-      hub.addSink(new FileSink(args.logFile));
-    }
+  }
+
+  if (args.logPipePath) {
+    hub.addSink(new PipeSink());
+  }
+  if (args.logFile) {
+    hub.addSink(new FileSink(args.logFile));
   }
 
   return new Logger(args.logLevel, (entry) => {
