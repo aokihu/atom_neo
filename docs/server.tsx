@@ -42,6 +42,7 @@ import NamingConventionsPage from "./pages/naming-conventions";
 import PipelineBuilderPage from "./pages/pipeline-builder";
 import ProjectStructurePage from "./pages/project-structure";
 import ProtocolPage from "./pages/protocol";
+import SandboxPage from "./pages/sandbox";
 import SessionContextPage from "./pages/session-context";
 import TestingPage from "./pages/testing";
 import ToolPluginPage from "./pages/tool-plugin";
@@ -73,6 +74,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   "pipeline-builder": PipelineBuilderPage,
   "project-structure": ProjectStructurePage,
   protocol: ProtocolPage,
+  sandbox: SandboxPage,
   "session-context": SessionContextPage,
   testing: TestingPage,
   "tool-plugin": ToolPluginPage,

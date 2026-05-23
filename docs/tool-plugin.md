@@ -2,6 +2,8 @@
 
 > **Purpose**: How to create, register, and execute Tool plugins.
 > Tools are the unified interface for File System, Memory, Bash, and MCP operations.
+> **所有 Tool 操作默认限定在 SANDBOX 目录内**，路径越界将被拒绝。
+> 详见 [sandbox.md](./sandbox.md)。
 
 ---
 

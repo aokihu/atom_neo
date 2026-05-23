@@ -228,9 +228,17 @@ tui/
 ## 8. Runtime Directories
 
 ```text
-sandbox/                     # Workspace directory (gitignored)
-├── config.json              # Model/TUI/Gateway config
-├── .env                     # API keys (DEEPSEEK_API_KEY, etc.)
-└── logs/                    # Log output directory
-    └── app.log
+sandbox/                        # 工作目录（--sandbox 或默认 CWD）
+├── config.json                # Model/TUI/Gateway 配置
+├── .env                       # API Keys（gitignored）
+├── AGENTS.md                  # 项目开发指引（Agent 行为规范）
+├── .atom/                     # Agent 运行时数据目录
+│   ├── memory.sqlite         # 长期记忆数据库
+│   └── compiled_prompts/     # 缓存编译后提示词
+├── logs/                      # 日志输出目录
+│   └── app.log
+└── ...                        # 用户项目文件
 ```
+
+**隔离规则**：Agent 所有操作默认限定在 SANDBOX 内。访问外部目录需用户授权。
+

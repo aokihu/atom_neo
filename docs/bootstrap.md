@@ -76,8 +76,10 @@ src/main.ts (入口)
   ├── 4. Initialize Log System
   │     createLogger(args) → Logger
   │
-  ├── 5. Set sandbox directory
-  │     setSandbox(args.sandbox)
+  ├── 5. Init sandbox workspace
+  │     setSandbox(args.sandbox) → 绑定路径校验
+  │     initAtomDir(args.sandbox) → 创建 .atom/ 目录
+  │     initAgentsMd(args.sandbox) → 检查/创建 AGENTS.md
   │
   └── 6. Mode dispatch
         ├── "core" → startCore(deps)     → src/packages/core/server.ts
