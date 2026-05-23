@@ -36,3 +36,6 @@ coverage/
 
 # Data
 data/
+
+# Sandbox (runtime workspace)
+sandbox/

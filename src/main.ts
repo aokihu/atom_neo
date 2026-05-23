@@ -6,6 +6,7 @@ import { loadConfig } from "./bootstrap/config";
 import { loadEnv } from "./bootstrap/env";
 import { startCore } from "@atom-neo/core";
 import { setSandbox, setBashSandbox } from "@atom-neo/core";
+import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
 
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 
@@ -51,6 +52,8 @@ export async function main(): Promise<void> {
 
   setSandbox(args.sandbox);
   setBashSandbox(args.sandbox);
+  initAtomDir(args.sandbox);
+  initAgentsMd(args.sandbox);
 
   const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 
