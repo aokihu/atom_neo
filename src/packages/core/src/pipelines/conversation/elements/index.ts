@@ -1,7 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
-import { generateText, tool, jsonSchema } from "ai";
+import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
@@ -165,6 +165,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #apiKey: string;
   #model: string;
   #tools: ToolDefinition[];
+  #maxTokens: number;
 
   constructor(params: {
     name: string;
@@ -173,11 +174,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     apiKey: string;
     model: string;
     tools: ToolDefinition[];
+    maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#tools = params.tools;
+    this.#maxTokens = params.maxTokens ?? 4096;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -209,22 +212,22 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
 
     try {
-      const result = await generateText({
+      const streamResult = streamText({
         model,
         messages: messages as any,
         tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
-        maxTokens: 1024,
         maxSteps: 5,
+        maxTokens: this.#maxTokens,
       });
 
-      this.report("element.data", {
-        event: "llm-complete",
-        toolCalls: (result as any).toolCalls?.length ?? 0,
-        finishReason: (result as any).finishReason,
-      });
-
-      const text = result.text || "";
-      return { ...input, mode: "executing", responseText: text };
+      let fullText = "";
+      for await (const chunk of streamResult.fullStream) {
+        if (chunk.type === "text-delta") {
+          fullText += chunk.textDelta;
+          this.report("transport.delta", { textDelta: chunk.textDelta });
+        }
+      }
+      return { ...input, mode: "executing", responseText: fullText };
     } catch (err: any) {
       return {
         ...input,

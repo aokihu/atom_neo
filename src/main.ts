@@ -36,7 +36,7 @@ export async function main(): Promise<void> {
 
   // Bootstrap
   loadEnv(args.sandbox);
-  loadConfig(args.sandbox);
+  const appConfig = loadConfig(args.sandbox);
   const logger = createLogger(args);
   logger.info("booting", { mode: args.mode, sandbox: args.sandbox, port: args.port });
 
@@ -52,6 +52,7 @@ export async function main(): Promise<void> {
     host: args.host,
     sandbox: args.sandbox,
     apiKey,
+    appConfig,
   });
 
   // Services

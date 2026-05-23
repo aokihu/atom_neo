@@ -160,19 +160,30 @@ type ConversationFlowState = {
 ## 5. `stream-llm` 门控调整
 
 ```typescript
-// 原来
-if (input.mode !== "streaming") return input;
-
-// 改为
+// 门控
 if (input.mode !== "formatted") return input;
 
-// 直接使用组装好的 messages
-const result = await generateText({
+// 流式输出：streamText 逐字推送 deltas
+const streamResult = streamText({
   model,
-  messages: input.messages,  // 不再自行组装
-  maxTokens: 1024,
+  messages: input.messages,
+  tools: aiTools,
+  maxSteps: 5,
+  maxTokens: input.maxTokens ?? 4096,
 });
+
+let fullText = "";
+for await (const chunk of streamResult.fullStream) {
+  if (chunk.type === "text-delta") {
+    fullText += chunk.textDelta;
+    bus.emit("transport.delta", { textDelta: chunk.textDelta });
+  }
+}
+
+return { ...input, responseText: fullText };
 ```
+
+**maxTokens** 从 `input.maxTokens`（来源于 `RuntimeService.appConfig.transport.maxOutputTokens`）动态获取，不再硬编码。
 
 ---
 

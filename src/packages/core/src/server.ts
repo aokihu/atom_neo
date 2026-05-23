@@ -34,6 +34,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   const runtime: any = sm.get("runtime");
   const sandbox: string = runtime?.sandbox ?? "";
   const apiKey: string = runtime?.apiKey ?? "";
+  const maxTokens: number = runtime?.maxTokens ?? 4096;
   const getCompiledPrompt = () => {
     const compiler: any = sm.get("agents-compiler");
     return compiler?.getCompiledPrompt?.() ?? "";
@@ -79,7 +80,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         task: { id: task.id, sessionId: sid, chatId: (p.task as any)?.chatId, sandbox, payload: [] },
         apiKey, model: "deepseek-chat",
         tools: [...basic, ...advanced],
-        getCompiledPrompt,
+        getCompiledPrompt, maxTokens,
       }).build(bus);
 
       setPipeline(task.id, pipeline);
@@ -119,7 +120,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
           apiKey, model: "deepseek-chat",
           tools: basic,
-          getCompiledPrompt,
+          getCompiledPrompt, maxTokens,
         }).build(bus);
         return createTaskHandler(taskQueue, body, bus, pipeline);
       }

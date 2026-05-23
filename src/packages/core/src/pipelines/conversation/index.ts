@@ -30,6 +30,7 @@ export type ConversationPipelineDeps = {
   tools: any[];
   toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
+  maxTokens?: number;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -45,6 +46,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-chat",
       tools: deps.tools ?? [],
+      maxTokens: deps.maxTokens ?? 4096,
     })
     .boundary("check-follow-up", {})
     .sink("finalize", {});

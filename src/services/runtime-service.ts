@@ -7,6 +7,7 @@ export type RuntimeParams = {
   host: string;
   sandbox: string;
   apiKey: string;
+  appConfig?: Record<string, any>;
 };
 
 export class RuntimeService extends BaseService {
@@ -17,6 +18,7 @@ export class RuntimeService extends BaseService {
   readonly host: string;
   #sandbox: string;
   #apiKey: string;
+  #appConfig: Record<string, any> = {};
 
   constructor(params: RuntimeParams) {
     super();
@@ -25,6 +27,7 @@ export class RuntimeService extends BaseService {
     this.host = params.host;
     this.#sandbox = params.sandbox;
     this.#apiKey = params.apiKey;
+    this.#appConfig = params.appConfig ?? {};
   }
 
   get sandbox(): string              { return this.#sandbox; }
@@ -37,4 +40,9 @@ export class RuntimeService extends BaseService {
   get logsDir(): string              { return `${this.#sandbox}/logs`; }
   get metaPath(): string             { return `${this.atomDir}/agents_meta.json`; }
   get apiKey(): string               { return this.#apiKey; }
+
+  get appConfig(): Record<string, any> { return this.#appConfig; }
+  get maxTokens(): number {
+    return this.#appConfig?.transport?.maxOutputTokens ?? 4096;
+  }
 }
