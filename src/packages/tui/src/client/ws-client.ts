@@ -1,49 +1,72 @@
-const DEFAULT_URL = "http://127.0.0.1:3100";
+type StreamCallback = (delta: string) => void;
 
 export class TuiClient {
   #url: string;
   #sessionId: string;
   #chatId: string;
+  #ws: WebSocket | null = null;
+  #ready = false;
+  #onDelta?: StreamCallback;
+  #responseResolve?: (text: string) => void;
+  #responseText = "";
 
   constructor(params: { url?: string; sessionId?: string; chatId?: string } = {}) {
-    this.#url = params.url ?? DEFAULT_URL;
+    this.#url = (params.url ?? "http://127.0.0.1:3100").replace(/^http/, "ws");
     this.#sessionId = params.sessionId ?? `tui-${Date.now()}`;
     this.#chatId = params.chatId ?? "default";
   }
 
-  get sessionId(): string {
-    return this.#sessionId;
+  get sessionId(): string { return this.#sessionId; }
+
+  async connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.#ws = new WebSocket(`${this.#url}/ws/${this.#sessionId}`);
+
+      this.#ws.onopen = () => {};
+
+      this.#ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data as string);
+          if (msg.type === "session.ready") {
+            this.#ready = true;
+            resolve();
+          } else if (msg.type === "event.transport.delta") {
+            const delta = msg.payload?.textDelta ?? "";
+            if (delta) {
+              this.#responseText += delta;
+              this.#onDelta?.(delta);
+            }
+          } else if (msg.type === "event.task.completed") {
+            this.#responseResolve?.(this.#responseText);
+          }
+        } catch { /* ignore */ }
+      };
+
+      this.#ws.onerror = () => reject(new Error("WebSocket connection failed"));
+      this.#ws.onclose = () => { this.#ready = false; };
+    });
   }
 
   async send(text: string): Promise<string> {
-    const res = await fetch(`${this.#url}/api/tasks`, {
+    if (!this.#ws || !this.#ready) throw new Error("Not connected");
+
+    const httpUrl = this.#url.replace(/^ws/, "http");
+    const res = await fetch(`${httpUrl}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sessionId: this.#sessionId,
-        chatId: this.#chatId,
-        data: { text },
+        sessionId: this.#sessionId, chatId: this.#chatId, data: { text },
       }),
     });
 
-    const { taskId } = (await res.json()) as { taskId: string };
-
-    // Poll until task completes
-    for (let i = 0; i < 60; i++) {
-      await sleep(1000);
-      const hr = await fetch(`${this.#url}/api/health`);
-      const health: any = await hr.json();
-      if (health.queue.processing === 0 && health.queue.waiting === 0) break;
-    }
-
-    // Get messages
-    const mr = await fetch(`${this.#url}/api/sessions/${this.#sessionId}`);
-    const messages = (await mr.json()) as Array<{ role: string; content: string }>;
-    const last = messages.filter((m) => m.role === "assistant").pop();
-    return last?.content ?? "(no response)";
+    // Wait for task.completed WebSocket event
+    return new Promise<string>((resolve) => {
+      this.#responseResolve = resolve;
+      this.#responseText = "";
+    });
   }
-}
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  onDelta(cb: StreamCallback): void {
+    this.#onDelta = cb;
+  }
 }

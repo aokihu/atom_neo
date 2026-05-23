@@ -64,6 +64,13 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
       sessionStore.get(sid).addMessage({ role: "assistant", content: output, timestamp: Date.now() });
     }
 
+    // Broadcast task completion to WebSocket clients
+    broadcaster.broadcastToSession(sid ?? "", {
+      type: "event.task.completed",
+      ts: Date.now(), seq: 0,
+      payload: { taskId: p.task?.id, output: (p.result as any)?.output ?? "" },
+    });
+
     if ((p.result as any)?.needMoreTools) {
       const task = createTaskItem({
         sessionId: sid ?? "default",
@@ -99,11 +106,28 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   const broadcaster = new Broadcaster();
   const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus });
 
+  // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
+  bus.on("transport.delta" as any, (payload: any) => {
+    // payload from BaseElement.report(): { name: string, payload: { textDelta } }
+    const textDelta = payload?.payload?.textDelta ?? "";
+    if (textDelta) {
+      broadcaster.broadcast({ type: "event.transport.delta", ts: Date.now(), seq: 0, payload: { textDelta } });
+    }
+  });
+
   const server = Bun.serve({
     port: port || 3100,
     hostname: host,
-    async fetch(req) {
+    async fetch(req, srv) {
       const url = new URL(req.url);
+
+      // WebSocket upgrade for /ws/:sessionId
+      if (url.pathname.startsWith("/ws/")) {
+        const sid = url.pathname.split("/ws/").pop() || "default";
+        srv.upgrade(req, { data: { sessionId: sid } });
+        return; // handled by websocket handlers
+      }
+
       const method = req.method;
 
       if (url.pathname === "/api/health") return healthHandler(taskQueue);

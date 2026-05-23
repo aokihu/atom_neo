@@ -2,20 +2,6 @@ import { createInterface } from "node:readline";
 import { TuiClient } from "./client/ws-client";
 import { parseArgs } from "node:util";
 
-const c = {
-  reset: "\x1b[0m",
-  dim: "\x1b[2m",
-  green: "\x1b[32m",
-  cyan: "\x1b[36m",
-  yellow: "\x1b[33m",
-  red: "\x1b[31m",
-  bold: "\x1b[1m",
-  hide: "\x1b[?25l",
-  show: "\x1b[?25h",
-  up: (n: number) => `\x1b[${n}A`,
-  clearLine: "\x1b[2K",
-};
-
 function parseTuiArgs(rawArgs: string[]): { url?: string } {
   const { values } = parseArgs({
     args: rawArgs,
@@ -26,42 +12,42 @@ function parseTuiArgs(rawArgs: string[]): { url?: string } {
   return { url: values.url as string };
 }
 
-function spinner(): () => void {
-  const chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  let i = 0;
-  const timer = setInterval(() => {
-    process.stderr.write(`\r${c.cyan}${chars[i++ % chars.length]} thinking...${c.reset}`);
-  }, 80);
-  return () => {
-    clearInterval(timer);
-    process.stderr.write(`\r${c.clearLine}\r`);
-  };
-}
-
 async function main() {
   const args = parseTuiArgs(Bun.argv.slice(2));
   const client = new TuiClient({ url: args.url });
 
-  console.log(`${c.bold}${c.cyan}atom_neo${c.reset} ${c.dim}chat${c.reset}`);
-  console.log(`${c.dim}session:${c.reset} ${client.sessionId}`);
-  console.log(`${c.dim}core:${c.reset}   ${args.url}`);
-  console.log(`${c.dim}type /quit to exit${c.reset}\n`);
+  console.log(`\x1b[1m\x1b[36matom_neo\x1b[0m \x1b[2mchat\x1b[0m`);
+  console.log(`\x1b[2msession:\x1b[0m ${client.sessionId}`);
+  console.log(`\x1b[2mcore:\x1b[0m   ${args.url}`);
+  console.log(`\x1b[2mconnecting...\x1b[0m`);
+
+  await client.connect();
+
+  console.log(`\x1b[2A\x1b[K\x1b[32mconnected\x1b[0m\n\x1b[2mtype /quit to exit\x1b[0m\n`);
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   const ask = () => {
-    rl.question(`${c.green}▸ ${c.reset}`, async (input) => {
-      if (input === "/quit") { console.log(`${c.dim}Goodbye!${c.reset}`); rl.close(); process.exit(0); }
+    rl.question(`\x1b[32m▸ \x1b[0m`, async (input) => {
+      if (input === "/quit") { console.log(`\x1b[2mGoodbye!\x1b[0m`); rl.close(); process.exit(0); }
       if (!input.trim()) { ask(); return; }
 
-      const stop = spinner();
+      // Start incremental render
+      let started = false;
+      client.onDelta((delta) => {
+        if (!started) { process.stdout.write("\n"); started = true; }
+        process.stdout.write(delta);
+      });
+
       try {
-        const response = await client.send(input);
-        stop();
-        console.log(`\n${response}\n`);
+        const fullText = await client.send(input);
+        if (!started) {
+          console.log(`\n${fullText}\n`);
+        } else {
+          console.log("\n");
+        }
       } catch (err: any) {
-        stop();
-        console.log(`\n${c.red}Error: ${err.message}${c.reset}\n`);
+        console.log(`\n\x1b[31mError: ${err.message}\x1b[0m\n`);
       }
       ask();
     });

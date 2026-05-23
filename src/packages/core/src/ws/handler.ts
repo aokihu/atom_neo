@@ -20,22 +20,14 @@ function send(ws: ServerWebSocket<unknown>, type: string, payload: unknown) {
   } catch { /* ignore */ }
 }
 
-export function handleWsOpen(
-  ws: ServerWebSocket<unknown>,
-  ctx: ServerContext,
-): void {
-  // sessionId extracted from URL path: /ws/:sessionId
-  const url = new URL(ws.remoteAddress ?? "", "http://localhost");
-  // Actually in Bun, the path is available from the upgrade request
-  // For simplicity, use a header or query param
-}
-
 export function createWsHandlers(ctx: ServerContext) {
-  let sessionId = "";
-
   return {
     open(ws: ServerWebSocket<unknown>) {
-      if (sessionId) ctx.broadcaster.add(ws, sessionId);
+      const sid = (ws as any).data?.sessionId;
+      if (sid) {
+        ctx.broadcaster.add(ws, sid);
+        send(ws, "session.ready", { sessionId: sid });
+      }
     },
     message(ws: ServerWebSocket<unknown>, msg: string | Buffer) {
       try {
@@ -43,27 +35,23 @@ export function createWsHandlers(ctx: ServerContext) {
         const { type, payload } = data;
 
         if (type === "event.task.submit") {
-          sessionId = payload.sessionId;
-          ctx.broadcaster.add(ws, sessionId);
+          const sid = (ws as any).data?.sessionId;
+          if (sid) ctx.broadcaster.add(ws, sid);
 
           const task = createTaskItem({
             sessionId: payload.sessionId,
             chatId: payload.chatId,
-            pipeline: payload.pipeline,
+            pipeline: "conversation",
             source: TaskSource.EXTERNAL,
             payload: [{ type: "text", data: payload.data?.text ?? "" }],
           });
 
           ctx.taskQueue.enqueue(task);
           send(ws, "event.task.created", { taskId: task.id, state: task.state });
-
           ctx.bus?.emit("task.enqueued" as any, { task });
         } else if (type === "event.task.cancel") {
           ctx.taskQueue.remove(payload.taskId);
-          send(ws, "event.task.state-changed", {
-            taskId: payload.taskId,
-            currentState: "failed",
-          });
+          send(ws, "event.task.state-changed", { taskId: payload.taskId, currentState: "failed" });
         } else if (type === "ping") {
           send(ws, "pong", {});
         }
