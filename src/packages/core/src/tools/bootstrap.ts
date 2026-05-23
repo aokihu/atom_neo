@@ -17,17 +17,19 @@ import {
   linkMemoryTool,
 } from "./builtin/memory";
 
+import type { ToolDefinition } from "@atom-neo/shared";
+
+export const BASIC_TOOLS: ToolDefinition[] = [
+  readTool, writeTool, lsTool, grepTool, treeTool,
+  searchMemoryTool, traverseMemoryTool,
+];
+
+export const ADVANCED_TOOLS: ToolDefinition[] = [
+  cpTool, mvTool, bashTool, saveMemoryTool, linkMemoryTool,
+];
+
 export function registerBuiltinTools(registry: ToolRegistry): void {
-  registry.register(readTool);
-  registry.register(writeTool);
-  registry.register(lsTool);
-  registry.register(treeTool);
-  registry.register(grepTool);
-  registry.register(cpTool);
-  registry.register(mvTool);
-  registry.register(bashTool);
-  registry.register(searchMemoryTool);
-  registry.register(saveMemoryTool);
-  registry.register(traverseMemoryTool);
-  registry.register(linkMemoryTool);
+  for (const t of [...BASIC_TOOLS, ...ADVANCED_TOOLS]) {
+    registry.register(t);
+  }
 }

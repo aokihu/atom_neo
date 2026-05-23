@@ -1,7 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
-import { generateText } from "ai";
+import { generateText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
@@ -190,16 +190,37 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const provider = createDeepSeek({ apiKey: this.#apiKey });
     const model = provider(this.#model);
 
+    // Convert ToolDefinition to AI SDK v6 tool format
+    const aiTools: Record<string, any> = {};
+    for (const t of this.#tools) {
+      aiTools[t.name] = tool({
+        description: t.description,
+        parameters: jsonSchema(t.inputSchema as any),
+        execute: async (args: any) => {
+          const result = await t.execute(args);
+          if (!result.ok) return `Error: ${result.error}`;
+          return result.output || JSON.stringify(result.data);
+        },
+      });
+    }
+
     try {
       const result = await generateText({
         model,
         messages: messages as any,
+        tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
         maxTokens: 1024,
+        maxSteps: 5,
       });
 
-      this.report("element.data", { event: "llm-complete" });
+      this.report("element.data", {
+        event: "llm-complete",
+        toolCalls: (result as any).toolCalls?.length ?? 0,
+        finishReason: (result as any).finishReason,
+      });
 
-      return { ...input, mode: "executing", responseText: result.text };
+      const text = result.text || "";
+      return { ...input, mode: "executing", responseText: text };
     } catch (err: any) {
       return {
         ...input,

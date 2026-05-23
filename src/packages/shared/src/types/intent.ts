@@ -1,5 +1,6 @@
 export enum IntentRequestType {
-  FOLLOW_UP = "follow_up",   // 仅 follow_up 走 IntentRequest 解析（尾部隐蔽调度）
+  FOLLOW_UP = "follow_up",
+  REQUEST_MORE_TOOLS = "request_more_tools",
 }
 
 export enum IntentRequestSource {

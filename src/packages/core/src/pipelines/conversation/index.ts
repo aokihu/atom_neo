@@ -28,6 +28,7 @@ export type ConversationPipelineDeps = {
   apiKey?: string;
   model?: string;
   tools: any[];
+  toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
 };
 

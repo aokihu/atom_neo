@@ -9,7 +9,7 @@ import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler } from "./api/tasks";
 import { ToolRegistry } from "./tools/registry";
-import { registerBuiltinTools } from "./tools/bootstrap";
+import { registerBuiltinTools, BASIC_TOOLS, ADVANCED_TOOLS } from "./tools/bootstrap";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -86,7 +86,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, payload: [{ type: "text", data: body.data?.text ?? "" }] },
           apiKey,
           model: "deepseek-chat",
-          tools: toolRegistry.getAll(),
+          tools: BASIC_TOOLS,
           getCompiledPrompt,
         }).build(bus);
 
