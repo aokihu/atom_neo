@@ -7,7 +7,9 @@ import { SessionStore } from "./session/store";
 import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
-import { createTaskHandler, taskCancelHandler } from "./api/tasks";
+import { createTaskHandler, taskCancelHandler, setPipeline } from "./api/tasks";
+import { createTaskItem } from "./task-factory";
+import { TaskSource } from "@atom-neo/shared";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, BASIC_TOOLS, ADVANCED_TOOLS } from "./tools/bootstrap";
 import { registerConversationElements } from "./pipelines/conversation";
@@ -43,12 +45,37 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
       taskId: p.task?.id,
       output: (p.result as any)?.output?.slice(0, 200),
     });
-    // Store assistant response in session
     const sid = (p.task as any)?.sessionId;
     const output = (p.result as any)?.responseText || (p.result as any)?.output || "";
     if (sid && output) {
       const s = sessionStore.get(sid);
       s.addMessage({ role: "assistant", content: output, timestamp: Date.now() });
+    }
+
+    // Handle REQUEST_MORE_TOOLS: create continuation with advanced tools
+    if ((p.result as any)?.needMoreTools) {
+      const task = createTaskItem({
+        sessionId: sid ?? "default",
+        chatId: (p.task as any)?.chatId ?? "default",
+        pipeline: "conversation",
+        source: TaskSource.INTERNAL,
+        payload: [{ type: "text", data: "" }],
+        parentTaskId: p.task?.id,
+        chainId: (p.task as any)?.chainId,
+      });
+
+      const pipeline = conversationPipeline({
+        session: sessionStore.get(sid ?? "default"),
+        task,
+        apiKey,
+        model: "deepseek-chat",
+        tools: [...BASIC_TOOLS, ...ADVANCED_TOOLS],
+        getCompiledPrompt,
+      }).build(bus);
+
+      setPipeline(task.id, pipeline);
+      taskQueue.enqueue(task);
+      bus.emit("task.enqueued" as any, { task });
     }
   });
   bus.on("task.failed" as any, (p: any) => {

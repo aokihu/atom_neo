@@ -15,6 +15,10 @@ export function removePipeline(taskId: string): void {
   pipelineMap.delete(taskId);
 }
 
+export function setPipeline(taskId: string, pipeline: Pipeline): void {
+  pipelineMap.set(taskId, pipeline);
+}
+
 export async function createTaskHandler(
   taskQueue: TaskQueue,
   body: any,

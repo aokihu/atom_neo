@@ -29,6 +29,7 @@ export type ConversationFlowState = {
     nextPrompt: string;
     avoidRepeat: string;
   };
+  needMoreTools?: boolean;
 };
 
 // ── Source: collect-prompts ──
@@ -243,6 +244,26 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "executing") return input;
+
+    const text = input.responseText ?? "";
+
+    // Check for REQUEST_MORE_TOOLS intent in response
+    const hasMoreToolsRequest =
+      /request.more.tools|REQUEST_MORE_TOOLS|需要更多工具/i.test(text);
+
+    if (hasMoreToolsRequest) {
+      return {
+        ...input,
+        mode: "ready_to_finalize",
+        followUp: {
+          summary: "request_more_tools",
+          nextPrompt: "",
+          avoidRepeat: "",
+        },
+        needMoreTools: true,
+      };
+    }
+
     return { ...input, mode: "ready_to_finalize" };
   }
 }
@@ -261,6 +282,11 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     if (input.mode !== "ready_to_finalize") {
       throw new Error("FinalizeElement: expected ready_to_finalize");
     }
-    return { type: "complete" as const, task: input.task, output: input.responseText };
+    return {
+      type: "complete" as const,
+      task: input.task,
+      output: input.responseText,
+      needMoreTools: input.needMoreTools ?? false,
+    };
   }
 }
