@@ -1,35 +1,38 @@
 import { ToolRegistry } from "./registry";
-
+import type { ToolDefinition } from "@atom-neo/shared";
 import {
-  readTool,
-  writeTool,
-  lsTool,
-  treeTool,
-  grepTool,
-  cpTool,
-  mvTool,
+  createReadTool, createWriteTool, createLsTool, createTreeTool,
+  createGrepTool, createCpTool, createMvTool, createSandbox,
 } from "./builtin/fs";
-import { bashTool } from "./builtin/bash";
+import { createBashTool } from "./builtin/bash";
 import {
-  searchMemoryTool,
-  saveMemoryTool,
-  traverseMemoryTool,
-  linkMemoryTool,
+  createSearchMemoryTool, createSaveMemoryTool,
+  createTraverseMemoryTool, createLinkMemoryTool,
 } from "./builtin/memory";
 
-import type { ToolDefinition } from "@atom-neo/shared";
+export function createAllTools(sandbox: string): ToolDefinition[] {
+  const sb = createSandbox(sandbox);
+  return [
+    createReadTool(sb), createWriteTool(sb), createLsTool(sb),
+    createTreeTool(sb), createGrepTool(sb), createCpTool(sb), createMvTool(sb),
+    createBashTool(sandbox),
+    createSearchMemoryTool(), createSaveMemoryTool(),
+    createTraverseMemoryTool(), createLinkMemoryTool(),
+  ];
+}
 
-export const BASIC_TOOLS: ToolDefinition[] = [
-  readTool, writeTool, lsTool, grepTool, treeTool,
-  searchMemoryTool, traverseMemoryTool,
-];
+const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "traverse_memory"];
+const ADVANCED_NAMES = ["cp", "mv", "bash", "save_memory", "link_memory"];
 
-export const ADVANCED_TOOLS: ToolDefinition[] = [
-  cpTool, mvTool, bashTool, saveMemoryTool, linkMemoryTool,
-];
+export function partitionTools(all: ToolDefinition[]) {
+  return {
+    basic: all.filter(t => BASIC_NAMES.includes(t.name)),
+    advanced: all.filter(t => ADVANCED_NAMES.includes(t.name)),
+  };
+}
 
-export function registerBuiltinTools(registry: ToolRegistry): void {
-  for (const t of [...BASIC_TOOLS, ...ADVANCED_TOOLS]) {
+export function registerBuiltinTools(registry: ToolRegistry, sandbox: string): void {
+  for (const t of createAllTools(sandbox)) {
     registry.register(t);
   }
 }

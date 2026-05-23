@@ -11,28 +11,40 @@ import { createTaskHandler, taskCancelHandler, setPipeline } from "./api/tasks";
 import { createTaskItem } from "./task-factory";
 import { TaskSource } from "@atom-neo/shared";
 import { ToolRegistry } from "./tools/registry";
-import { registerBuiltinTools, BASIC_TOOLS, ADVANCED_TOOLS } from "./tools/bootstrap";
+import { registerBuiltinTools, createAllTools, partitionTools } from "./tools/bootstrap";
+import type { ToolDefinition } from "@atom-neo/shared";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
 import { conversationPipeline } from "./pipelines/conversation";
 
+interface ServiceProvider {
+  get<T>(name: string): T | undefined;
+}
+
 export type CoreDeps = {
   port: number;
   host: string;
-  sandbox: string;
   logger: Logger;
-  apiKey: string;
-  getCompiledPrompt?: () => string;
+  sm: ServiceProvider;
 };
 
 export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
-  const { port, host, sandbox, logger, apiKey, getCompiledPrompt } = deps;
+  const { port, host, logger, sm } = deps;
+  const runtime: any = sm.get("runtime");
+  const sandbox: string = runtime?.sandbox ?? "";
+  const apiKey: string = runtime?.apiKey ?? "";
+  const getCompiledPrompt = () => {
+    const compiler: any = sm.get("agents-compiler");
+    return compiler?.getCompiledPrompt?.() ?? "";
+  };
+
+  const allTools = createAllTools(sandbox);
+  const { basic, advanced } = partitionTools(allTools);
 
   const sessionStore = new SessionStore();
-
   const toolRegistry = new ToolRegistry();
-  registerBuiltinTools(toolRegistry);
+  registerBuiltinTools(toolRegistry, sandbox);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
   registerConversationElements();
@@ -48,11 +60,9 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     const sid = (p.task as any)?.sessionId;
     const output = (p.result as any)?.responseText || (p.result as any)?.output || "";
     if (sid && output) {
-      const s = sessionStore.get(sid);
-      s.addMessage({ role: "assistant", content: output, timestamp: Date.now() });
+      sessionStore.get(sid).addMessage({ role: "assistant", content: output, timestamp: Date.now() });
     }
 
-    // Handle REQUEST_MORE_TOOLS: create continuation with advanced tools
     if ((p.result as any)?.needMoreTools) {
       const task = createTaskItem({
         sessionId: sid ?? "default",
@@ -67,9 +77,8 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
       const pipeline = conversationPipeline({
         session: sessionStore.get(sid ?? "default"),
         task: { id: task.id, sessionId: sid, chatId: (p.task as any)?.chatId, sandbox, payload: [] },
-        apiKey,
-        model: "deepseek-chat",
-        tools: [...BASIC_TOOLS, ...ADVANCED_TOOLS],
+        apiKey, model: "deepseek-chat",
+        tools: [...basic, ...advanced],
         getCompiledPrompt,
       }).build(bus);
 
@@ -79,10 +88,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     }
   });
   bus.on("task.failed" as any, (p: any) => {
-    logger.error("task failed", {
-      taskId: p.task?.id,
-      error: String(p.error).slice(0, 200),
-    });
+    logger.error("task failed", { taskId: p.task?.id, error: String(p.error).slice(0, 200) });
   });
 
   const taskQueue = new TaskQueue();
@@ -111,18 +117,15 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         const pipeline = conversationPipeline({
           session,
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
-          apiKey,
-          model: "deepseek-chat",
-          tools: BASIC_TOOLS,
+          apiKey, model: "deepseek-chat",
+          tools: basic,
           getCompiledPrompt,
         }).build(bus);
-
         return createTaskHandler(taskQueue, body, bus, pipeline);
       }
       if (url.pathname.startsWith("/api/sessions/") && method === "GET") {
         const sid = url.pathname.split("/").pop()!;
-        const session = sessionStore.has(sid) ? sessionStore.get(sid) : null;
-        return Response.json(session?.messages ?? []);
+        return Response.json(sessionStore.has(sid) ? sessionStore.get(sid).messages : []);
       }
       if (url.pathname.startsWith("/api/tasks/") && method === "DELETE") {
         return taskCancelHandler(taskQueue, req, url.pathname.split("/").pop()!);

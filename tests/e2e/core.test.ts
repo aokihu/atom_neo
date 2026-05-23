@@ -5,6 +5,20 @@ import { Logger, StdoutSink, LogHub } from "@atom-neo/shared";
 let server: { stop: () => void };
 const BASE = "http://127.0.0.1:3200";
 
+const mockSm = {
+  get(name: string) {
+    if (name === "runtime") return {
+      sandbox: process.cwd() + "/sandbox",
+      apiKey: "",
+      mode: "core",
+      port: 3200,
+      host: "127.0.0.1",
+    };
+    if (name === "compiler") return { getCompiledPrompt: () => "" };
+    return undefined;
+  }
+};
+
 beforeAll(async () => {
   const hub = new LogHub();
   hub.addSink(new StdoutSink());
@@ -13,9 +27,8 @@ beforeAll(async () => {
   server = await startCore({
     port: 3200,
     host: "127.0.0.1",
-    sandbox: process.cwd() + "/sandbox",
     logger: logger as any,
-    apiKey: "",
+    sm: mockSm,
   });
 });
 

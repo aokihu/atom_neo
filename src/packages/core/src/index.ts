@@ -21,25 +21,16 @@ export { SessionStore } from "./session/store";
 export { ToolRegistry } from "./tools/registry";
 export { executeTool } from "./tools/executor";
 export { filterToolsByPermission } from "./tools/permissions";
-export { registerBuiltinTools } from "./tools/bootstrap";
+export { registerBuiltinTools, createAllTools, partitionTools } from "./tools/bootstrap";
 export {
-  readTool,
-  writeTool,
-  lsTool,
-  treeTool,
-  grepTool,
-  cpTool,
-  mvTool,
+  createReadTool, createWriteTool, createLsTool,
+  createTreeTool, createGrepTool, createCpTool, createMvTool,
 } from "./tools/builtin/fs";
-export { bashTool } from "./tools/builtin/bash";
+export { createBashTool } from "./tools/builtin/bash";
 export {
-  searchMemoryTool,
-  saveMemoryTool,
-  traverseMemoryTool,
-  linkMemoryTool,
+  createSearchMemoryTool, createSaveMemoryTool,
+  createTraverseMemoryTool, createLinkMemoryTool,
 } from "./tools/builtin/memory";
-export { setSandbox } from "./tools/builtin/fs";
-export { setBashSandbox } from "./tools/builtin/bash";
 
 // Pipeline Builder
 export { registerElement, resolveElement, getRegisteredNames, clearRegistry } from "./pipeline/registry";

@@ -1,10 +1,10 @@
 import { BaseService } from "./base-service";
 import { createHash } from "node:crypto";
 import { watch, readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
-import { resolve, join } from "node:path";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import compilerSystemPrompt from "@assets/prompts/agents_compiler_system_prompt.md";
+import type { RuntimeService } from "./runtime-service";
 
 const MAX_HISTORY = 5;
 
@@ -14,18 +14,14 @@ type Meta = { currentHash: string; updatedAt: number; entries: Record<string, Me
 export class AgentsCompilerService extends BaseService {
   readonly name = "agents-compiler";
 
-  #sandbox: string;
-  #apiKey: string;
-  #model: string;
+  #runtime: RuntimeService;
   #prompt = "";
   #watcher: ReturnType<typeof watch> | null = null;
   #syncChain: Promise<void> = Promise.resolve();
 
-  constructor(params: { sandbox: string; apiKey: string; model?: string }) {
+  constructor(params: { runtime: RuntimeService }) {
     super();
-    this.#sandbox = params.sandbox;
-    this.#apiKey = params.apiKey;
-    this.#model = params.model ?? "deepseek-chat";
+    this.#runtime = params.runtime;
   }
 
   getCompiledPrompt(): string {
@@ -47,11 +43,11 @@ export class AgentsCompilerService extends BaseService {
   // == internal ==
 
   #ensureDirs(): void {
-    mkdirSync(`${this.#sandbox}/.atom/compiled_prompts`, { recursive: true });
+    mkdirSync(`${this.#runtime.sandboxDir}/.atom/compiled_prompts`, { recursive: true });
   }
 
   #startWatch(): void {
-    const path = `${this.#sandbox}/AGENTS.md`;
+    const path = `${this.#runtime.sandboxDir}/AGENTS.md`;
     if (!existsSync(path)) return;
 
     this.#watcher = watch(path, { persistent: false }, () => {
@@ -60,7 +56,7 @@ export class AgentsCompilerService extends BaseService {
   }
 
   async #sync(): Promise<void> {
-    const agentsPath = `${this.#sandbox}/AGENTS.md`;
+    const agentsPath = `${this.#runtime.sandboxDir}/AGENTS.md`;
 
     if (!existsSync(agentsPath)) {
       this.#prompt = "";
@@ -79,7 +75,7 @@ export class AgentsCompilerService extends BaseService {
     // Cache hit
     const cached = meta.entries[hash];
     if (cached) {
-      const compiledFile = `${this.#sandbox}/.atom/${cached.compiledFile}`;
+      const compiledFile = `${this.#runtime.sandboxDir}/.atom/${cached.compiledFile}`;
       if (existsSync(compiledFile)) {
         this.#prompt = readFileSync(compiledFile, "utf-8");
         meta.currentHash = hash;
@@ -93,7 +89,7 @@ export class AgentsCompilerService extends BaseService {
     try {
       const compiled = await this.#compileWithLLM(raw);
       const compiledFile = `compiled_prompts/${hash}.md`;
-      writeFileSync(`${this.#sandbox}/.atom/${compiledFile}`, compiled, "utf-8");
+      writeFileSync(`${this.#runtime.sandboxDir}/.atom/${compiledFile}`, compiled, "utf-8");
 
       meta.entries[hash] = { compiledFile, compiledAt: Date.now() };
       meta.currentHash = hash;
@@ -113,7 +109,7 @@ export class AgentsCompilerService extends BaseService {
     return createHash("sha256").update(content).digest("hex");
   }
 
-  #metaPath(): string { return `${this.#sandbox}/.atom/agents_meta.json`; }
+  #metaPath(): string { return `${this.#runtime.sandboxDir}/.atom/agents_meta.json`; }
 
   #readMeta(): Meta {
     try {
@@ -142,7 +138,7 @@ export class AgentsCompilerService extends BaseService {
   }
 
   #reconcileFiles(meta: Meta): void {
-    const dir = `${this.#sandbox}/.atom/compiled_prompts`;
+    const dir = `${this.#runtime.sandboxDir}/.atom/compiled_prompts`;
     if (!existsSync(dir)) return;
 
     const validFiles = new Set(
@@ -156,8 +152,8 @@ export class AgentsCompilerService extends BaseService {
   }
 
   async #compileWithLLM(raw: string): Promise<string> {
-    const provider = createDeepSeek({ apiKey: this.#apiKey });
-    const model = provider(this.#model);
+    const provider = createDeepSeek({ apiKey: this.#runtime.apiKey });
+    const model = provider("deepseek-chat");
 
     const result = await generateText({
       model,
