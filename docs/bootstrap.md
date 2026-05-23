@@ -76,16 +76,30 @@ src/main.ts (入口)
   ├── 4. Initialize Log System
   │     createLogger(args) → Logger
   │
-  ├── 5. Init sandbox workspace
-  │     setSandbox(args.sandbox) → 绑定路径校验
+  ├── 5. Init sandbox workspace (src/bootstrap/agents.ts)
   │     initAtomDir(args.sandbox) → 创建 .atom/ 目录
   │     initAgentsMd(args.sandbox) → 检查/创建 AGENTS.md
   │
-  └── 6. Mode dispatch
-        ├── "core" → startCore(deps)     → src/packages/core/server.ts
-        ├── "tui"  → startTui(deps)      → src/packages/tui/app.tsx
+  ├── 6. Create RuntimeService (src/services/runtime-service.ts)
+  │     new RuntimeService({ mode, port, host, sandbox, apiKey })
+  │     → 统一环境信息入口，消除模块级全局变量
+  │
+  ├── 7. Create services (src/services/)
+  │     sm = new ServiceManager()
+  │     sm.register("runtime", runtime)
+  │     sm.register("agents-compiler", new AgentsCompilerService({ runtime }))
+  │     sm.startAll()
+  │
+  └── 8. Mode dispatch
+        ├── "core" → startCore({ port, host, logger, sm })
+        ├── "tui"  → startTui(deps)
         └── "full" → startCore + startGateway + startTui
 ```
+
+**关键变化（v0.3.9）：**
+- `setSandbox()` / `setBashSandbox()` 已删除。sandbox 路径通过 `RuntimeService` 的 factory 函数注入到 tools
+- `CoreDeps` 精简为 `{ port, host, logger, sm }`，sandbox/apiKey/getCompiledPrompt 全通过 `sm.get("runtime")` 获取
+- tools 改为工厂函数：`createAllTools(sandbox)` → `partitionTools(all)` 拆分 basic/advanced
 
 ### Startup Code Template
 

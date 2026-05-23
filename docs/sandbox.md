@@ -73,14 +73,17 @@ export function initAtomDir(sandboxPath: string): void {
 ```text
 src/main.ts
   ├── 1. parseArguments()                → BootArguments
-  ├── 2. loadEnv(args.sandbox)            → .env
+  ├── 2. loadEnv(args.sandbox)            → .env → process.env
   ├── 3. loadConfig(args.sandbox)         → config.json
   ├── 4. createLogger(args)               → Logger
-  ├── 5. setSandbox(args.sandbox)         → 绑定沙箱（路径校验）
-  ├── 6. initAtomDir(args.sandbox)        → 【新】创建 .atom/
-  ├── 7. initAgentsMd(args.sandbox)       → 【新】检查/创建 AGENTS.md
-  └── 8. startCore(deps)                  → HTTP 服务器
+  ├── 5. initAtomDir(args.sandbox)        → 创建 .atom/
+  ├── 6. initAgentsMd(args.sandbox)       → 检查/创建 AGENTS.md
+  ├── 7. new RuntimeService({...})        → 统一环境入口
+  ├── 8. sm.register("runtime", runtime)  → ServiceManager 管理
+  └── 9. startCore({ port, host, logger, sm }) → HTTP 服务器
 ```
+
+**v0.3.9 变化：** `setSandbox()` 已删除，sandbox 通过 `RuntimeService` 注入到工具工厂函数。
 
 ## 7. 模板文件
 
