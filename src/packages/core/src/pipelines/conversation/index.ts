@@ -3,6 +3,7 @@ import { registerElement } from "../../pipeline/registry";
 import {
   CollectPromptsElement,
   LoadSystemPromptElement,
+  FetchAgentsPromptElement,
   CollectContextElement,
   FormatMessagesElement,
   StreamLLMElement,
@@ -13,6 +14,7 @@ import {
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement as any);
   registerElement("load-system-prompt", LoadSystemPromptElement as any);
+  registerElement("fetch-agents-prompt", FetchAgentsPromptElement as any);
   registerElement("collect-context", CollectContextElement as any);
   registerElement("format-messages", FormatMessagesElement as any);
   registerElement("stream-llm", StreamLLMElement as any);
@@ -26,12 +28,16 @@ export type ConversationPipelineDeps = {
   apiKey?: string;
   model?: string;
   tools: any[];
+  getCompiledPrompt?: () => string;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
   return pipeline("conversation")
     .source("collect-prompts", { session: deps.session, task: deps.task })
     .transform("load-system-prompt", {})
+    .transform("fetch-agents-prompt", {
+      getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
+    })
     .transform("collect-context", {})
     .transform("format-messages", {})
     .transform("stream-llm", {

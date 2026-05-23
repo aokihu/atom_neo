@@ -10,6 +10,7 @@ export type ConversationFlowState = {
   task: import("@atom-neo/shared").TaskItem;
   prompts?: Array<{ role: string; content: string }>;
   systemPrompt?: string;
+  compiledAgentsPrompt?: string;
   contextData?: string;
   messages?: Array<{ role: string; content: string }>;
   responseText?: string;

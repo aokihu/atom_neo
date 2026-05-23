@@ -20,6 +20,7 @@ export type ConversationFlowState = {
   task: any;
   prompts?: Array<{ role: string; content: string }>;
   systemPrompt?: string;
+  compiledAgentsPrompt?: string;
   contextData?: string;
   messages?: Message[];
   responseText?: string;
@@ -72,6 +73,30 @@ export class LoadSystemPromptElement extends BaseElement<ConversationFlowState, 
   }
 }
 
+// ── Transform: fetch-agents-prompt ──
+export class FetchAgentsPromptElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  #getCompiledPrompt: () => string;
+
+  constructor(params: {
+    name: string;
+    kind: string;
+    bus: PipelineEventBus<PipelineEventMap>;
+    getCompiledPrompt: () => string;
+  }) {
+    super({ name: params.name, kind: "transform", bus: params.bus });
+    this.#getCompiledPrompt = params.getCompiledPrompt;
+  }
+
+  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
+    if (input.mode !== "streaming") return input;
+
+    const compiled = this.#getCompiledPrompt();
+    if (!compiled) return input; // skip: 提示词未就绪则跳过
+
+    return { ...input, compiledAgentsPrompt: compiled };
+  }
+}
+
 // ── Transform: collect-context ──
 export class CollectContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   constructor(params: {
@@ -112,6 +137,9 @@ export class FormatMessagesElement extends BaseElement<ConversationFlowState, Co
 
     if (input.systemPrompt) {
       messages.push({ role: "system", content: input.systemPrompt });
+    }
+    if (input.compiledAgentsPrompt) {
+      messages.push({ role: "system", content: input.compiledAgentsPrompt });
     }
     if (input.contextData) {
       messages.push({ role: "system", content: input.contextData });

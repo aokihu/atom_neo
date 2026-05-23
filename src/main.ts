@@ -7,6 +7,8 @@ import { loadEnv } from "./bootstrap/env";
 import { startCore } from "@atom-neo/core";
 import { setSandbox, setBashSandbox } from "@atom-neo/core";
 import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
+import { ServiceManager } from "./services/service-manager";
+import { AgentsCompilerService } from "./services/agents-compiler";
 
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 
@@ -57,6 +59,17 @@ export async function main(): Promise<void> {
 
   const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 
+  // Services
+  const serviceManager = new ServiceManager();
+  const compiler = new AgentsCompilerService({
+    sandbox: args.sandbox,
+    apiKey,
+  });
+  serviceManager.register("agents-compiler", compiler);
+  serviceManager.startAll();
+
+  const getCompiledPrompt = () => serviceManager.getCompiledAgentsPrompt();
+
   // Dispatch by mode
   switch (args.mode) {
     case "core":
@@ -66,20 +79,20 @@ export async function main(): Promise<void> {
         sandbox: args.sandbox,
         logger,
         apiKey,
+        getCompiledPrompt,
       });
       break;
     case "tui":
-      // TODO: start TUI
       logger.error("TUI mode not yet implemented");
       break;
     case "full":
-      // TODO: start core + gateway + tui
       await startCore({
         port: args.port,
         host: args.host,
         sandbox: args.sandbox,
         logger,
         apiKey,
+        getCompiledPrompt,
       });
       break;
   }

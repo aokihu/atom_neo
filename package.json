@@ -19,10 +19,12 @@
     "build": "bun run --workspaces build"
   },
   "dependencies": {
-    "@atom-neo/shared": "workspace:*",
+    "@ai-sdk/deepseek": "^2.0.35",
     "@atom-neo/core": "workspace:*",
+    "@atom-neo/shared": "workspace:*",
     "@heroui/react": "^3.0.5",
     "@heroui/styles": "^3.0.5",
+    "ai": "^6.0.191",
     "highlight.js": "^11.11.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

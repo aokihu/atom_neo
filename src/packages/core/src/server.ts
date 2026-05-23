@@ -21,10 +21,11 @@ export type CoreDeps = {
   sandbox: string;
   logger: Logger;
   apiKey: string;
+  getCompiledPrompt?: () => string;
 };
 
 export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
-  const { port, host, sandbox, logger, apiKey } = deps;
+  const { port, host, sandbox, logger, apiKey, getCompiledPrompt } = deps;
 
   const sessionStore = new SessionStore();
 
@@ -86,6 +87,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
           apiKey,
           model: "deepseek-chat",
           tools: toolRegistry.getAll(),
+          getCompiledPrompt,
         }).build(bus);
 
         return createTaskHandler(taskQueue, body, bus, pipeline);
