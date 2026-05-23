@@ -111,10 +111,13 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
 
+    const sandbox = input.task?.sandbox ?? process.cwd();
+
     const contextData = [
       `Current Time: ${new Date().toISOString()}`,
-      `Working Directory: ${process.cwd()}`,
+      `Sandbox Directory: ${sandbox}`,
       `OS: ${process.platform} ${process.arch}`,
+      `All file paths are relative to the sandbox directory.`,
     ].join("\n");
 
     return { ...input, contextData };

@@ -66,7 +66,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
 
       const pipeline = conversationPipeline({
         session: sessionStore.get(sid ?? "default"),
-        task,
+        task: { id: task.id, sessionId: sid, chatId: (p.task as any)?.chatId, sandbox, payload: [] },
         apiKey,
         model: "deepseek-chat",
         tools: [...BASIC_TOOLS, ...ADVANCED_TOOLS],
@@ -110,7 +110,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         }
         const pipeline = conversationPipeline({
           session,
-          task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, payload: [{ type: "text", data: body.data?.text ?? "" }] },
+          task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
           apiKey,
           model: "deepseek-chat",
           tools: BASIC_TOOLS,
