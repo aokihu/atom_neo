@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const ProviderProfilesSchema = z.object({
   advanced: z.string().default("deepseek/deepseek-chat"),
@@ -43,6 +43,10 @@ export function loadConfig(sandboxPath: string): AppConfig {
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
     return ConfigSchema.parse(raw);
   } catch {
-    return ConfigSchema.parse({});
+    const defaults = ConfigSchema.parse({});
+    if (!existsSync(configPath)) {
+      Bun.write(configPath, JSON.stringify(defaults, null, 2));
+    }
+    return defaults;
   }
 }
