@@ -1,20 +1,34 @@
+import { TaskSource } from "@atom-neo/shared";
 import type { TaskItem } from "@atom-neo/shared";
 
 export class TaskQueue {
-  #queue: TaskItem[] = [];
+  #waitingQueue: TaskItem[] = [];
+  #activeQueue: TaskItem[] = [];
   #processing = new Set<string>();
 
   enqueue(task: TaskItem): void {
-    this.#queue.push(task);
-    this.#queue.sort((a, b) => b.priority - a.priority);
+    if (task.source === TaskSource.EXTERNAL) {
+      this.#waitingQueue.push(task);
+    } else {
+      this.#activeQueue.push(task);
+    }
   }
 
   dequeue(): TaskItem | undefined {
-    return this.#queue.shift();
+    if (this.#activeQueue.length > 0) return this.#activeQueue.pop();
+    return this.#waitingQueue.shift();
   }
 
-  peek(): TaskItem | undefined {
-    return this.#queue[0];
+  remove(taskId: string): boolean {
+    for (const queue of [this.#activeQueue, this.#waitingQueue]) {
+      const idx = queue.findIndex((t) => t.id === taskId);
+      if (idx >= 0) {
+        queue.splice(idx, 1);
+        this.#processing.delete(taskId);
+        return true;
+      }
+    }
+    return false;
   }
 
   markProcessing(taskId: string): void {
@@ -29,18 +43,12 @@ export class TaskQueue {
     return this.#processing.has(taskId);
   }
 
-  remove(taskId: string): boolean {
-    const idx = this.#queue.findIndex((t) => t.id === taskId);
-    if (idx >= 0) {
-      this.#queue.splice(idx, 1);
-      this.#processing.delete(taskId);
-      return true;
-    }
-    return false;
+  get waiting(): number {
+    return this.#waitingQueue.length;
   }
 
-  get waiting(): number {
-    return this.#queue.length;
+  get active(): number {
+    return this.#activeQueue.length;
   }
 
   get processing(): number {
@@ -48,6 +56,6 @@ export class TaskQueue {
   }
 
   get size(): number {
-    return this.#queue.length + this.#processing.size;
+    return this.#waitingQueue.length + this.#activeQueue.length + this.#processing.size;
   }
 }

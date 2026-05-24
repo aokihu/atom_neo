@@ -6,10 +6,11 @@ export function healthHandler(taskQueue: TaskQueue): Response {
   return Response.json({
     status: "ok",
     uptime: Math.round((Date.now() - startTime) / 1000),
-    queue: {
-      waiting: taskQueue.waiting,
-      processing: taskQueue.processing,
-    },
+      queue: {
+        waiting: taskQueue.waiting,
+        active: taskQueue.active,
+        processing: taskQueue.processing,
+      },
   });
 }
 

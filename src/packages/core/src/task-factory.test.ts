@@ -22,7 +22,7 @@ describe("createTaskItem", () => {
     expect(task.priority).toBeGreaterThan(0);
   });
 
-  test("assigns higher priority to external tasks", () => {
+  test("internal tasks have lower priority value (routed by source, not priority)", () => {
     const ext = createTaskItem({
       sessionId: "s1", chatId: "c1", pipeline: "test",
       source: TaskSource.EXTERNAL, payload: [],
