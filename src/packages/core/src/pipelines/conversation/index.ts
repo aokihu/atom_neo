@@ -7,6 +7,7 @@ import {
   CollectContextElement,
   FormatSystemMessagesElement,
   FormatUserMessagesElement,
+  ParseIntentsElement,
   StreamLLMElement,
   CheckFollowUpElement,
   FinalizeElement,
@@ -19,6 +20,7 @@ export function registerConversationElements(): void {
   registerElement("collect-context", CollectContextElement as any);
   registerElement("format-system-messages", FormatSystemMessagesElement as any);
   registerElement("format-user-messages", FormatUserMessagesElement as any);
+  registerElement("parse-intents", ParseIntentsElement as any);
   registerElement("stream-llm", StreamLLMElement as any);
   registerElement("check-follow-up", CheckFollowUpElement as any);
   registerElement("finalize", FinalizeElement as any);
@@ -52,6 +54,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       tools: deps.tools ?? [],
       maxTokens: deps.maxTokens ?? 4096,
     })
+    .transform("parse-intents", {})
     .boundary("check-follow-up", { memory: deps.memory })
     .sink("finalize", {});
 }

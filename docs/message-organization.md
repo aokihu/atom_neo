@@ -36,13 +36,15 @@ collect-prompts    (source:    初始→streaming)
   → format-system-messages (transform: streaming→streaming，合并为 systemText)
   → format-user-messages   (transform: streaming→formatted，组装 userMessages)
   → stream-llm          (transform: formatted→executing，system + messages)
-  → check-follow-up     (boundary:  executing→ready_to_finalize)
+  → parse-intents       (transform: executing→executing，不切换mode)
+  → check-follow-up     (boundary:  executing→ready_to_finalize，按intent分派)
   → finalize            (sink:      ready_to_finalize→PipelineResult)
 ```
 
-**关键变化（v0.4.1）：**
-- `format-messages` 拆分为 `format-system-messages` + `format-user-messages`，各司其职
-- `stream-llm` 使用 `generateText({ system, messages })` 替代混在 messages 数组中的 system 消息——消除 AI SDK 安全警告
+**关键变化（v0.5.1）：**
+- `parse-intents` 加回 — 纯正则解析 `responseText` → `FlowState.intents[]`
+- `check-follow-up` 简化 — 消费 `input.intents[]`，按类型分派（FOLLOW_UP / KEEP_MEMORY / REQUEST_MORE_TOOLS）
+- 不影响流式设计 — parse-intents 在 stream-llm 完成后执行，不切换 mode
 
 ---
 
@@ -150,6 +152,35 @@ class FormatUserMessagesElement extends BaseElement {
 }
 ```
 
+### 3.5 `parse-intents`（加回）
+
+**kind**: `transform`，不切换 mode（executing → executing）
+
+**职责**: 纯正则解析 `responseText` → 结构化 `IntentRequest[]`
+
+```typescript
+class ParseIntentsElement extends BaseElement {
+  async doProcess(input): Promise {
+    if (input.mode !== "executing") return input;
+    const intents = parseIntentRequests(input.responseText);
+    return { ...input, intents };
+  }
+}
+
+function parseIntentRequests(text: string): IntentRequest[] {
+  const intents: IntentRequest[] = [];
+  if (/follow.?up|FOLLOW_UP|继续追问/i.test(text))
+    intents.push({ request: FOLLOW_UP, params: {} });
+  if (/REQUEST_MORE_TOOLS|需要更多工具/i.test(text))
+    intents.push({ request: REQUEST_MORE_TOOLS, params: {} });
+  const keep = text.match(/KEEP_MEMORY:(\w+)/i);
+  if (keep) intents.push({ request: KEEP_MEMORY, params: { id: keep[1] } });
+  return intents;
+}
+```
+
+**关键设计**: 零外部依赖，纯文本函数。单元测试只需一段字符串。
+
 **关键变化**: `mode` 从 `streaming` 切到 `formatted`，`stream-llm` 门控对应更新
 
 ---
@@ -170,6 +201,7 @@ type ConversationFlowState = {
   responseText?: string;           // stream-llm 写入
   followUp?: FollowUpData;         // check-follow-up 写入
   needMoreTools?: boolean;         // check-follow-up 写入
+  intents?: IntentRequest[];        // parse-intents 写入
 };
 ```
 

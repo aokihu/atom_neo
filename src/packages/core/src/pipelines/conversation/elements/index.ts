@@ -5,6 +5,8 @@ import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
+import { IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
+import type { IntentRequest } from "@atom-neo/shared";
 
 export type ConversationMode =
   | "initial"
@@ -31,6 +33,8 @@ export type ConversationFlowState = {
     avoidRepeat: string;
   };
   needMoreTools?: boolean;
+  intents?: IntentRequest[];
+  intentRequestText?: string;
 };
 
 // ── Source: collect-prompts ──
@@ -240,14 +244,59 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         maxTokens: this.#maxTokens,
       });
 
+      const MARKER = "<<<REQUEST>>>";
+      const WINDOW = MARKER.length - 1;
+      const CHUNK_BATCH = 3;  // 缓冲 3 个 chunk 再发送 TUI
+
       let fullText = "";
+      let buffer = "";
+      let pastMarker = false;
+      let intentRequestText = "";
+      let deltaBuffer = "";  // TUI 批处理缓冲区
+      let deltaCount = 0;
+
       for await (const chunk of streamResult.fullStream) {
-        if (chunk.type === "text-delta") {
-          fullText += chunk.textDelta;
-          this.report("transport.delta", { textDelta: chunk.textDelta });
+        if (chunk.type !== "text-delta") continue;
+
+        if (pastMarker) {
+          intentRequestText += chunk.textDelta;
+          continue;
+        }
+
+        buffer += chunk.textDelta;
+        const idx = buffer.indexOf(MARKER);
+
+        if (idx >= 0) {
+          if (idx > 0) {
+            fullText += buffer.slice(0, idx);
+            deltaBuffer += buffer.slice(0, idx);
+            deltaCount++;
+          }
+          intentRequestText = buffer.slice(idx + MARKER.length);
+          pastMarker = true;
+          buffer = "";
+        } else if (buffer.length > WINDOW) {
+          const emitLen = buffer.length - WINDOW;
+          const emit = buffer.slice(0, emitLen);
+          fullText += emit;
+          deltaBuffer += emit;
+          deltaCount++;
+          buffer = buffer.slice(emitLen);
+        }
+
+        // 累积 3 个 chunk 再发送 TUI
+        if (deltaCount >= CHUNK_BATCH && deltaBuffer) {
+          this.report("transport.delta", { textDelta: deltaBuffer });
+          deltaBuffer = "";
+          deltaCount = 0;
         }
       }
-      return { ...input, mode: "executing", responseText: fullText };
+
+      // 发送剩余缓冲
+      if (deltaBuffer) {
+        this.report("transport.delta", { textDelta: deltaBuffer });
+      }
+      return { ...input, mode: "executing", responseText: fullText, intentRequestText };
     } catch (err: any) {
       return {
         ...input,
@@ -256,6 +305,44 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       };
     }
   }
+}
+
+// ── Transform: parse-intents ──
+export class ParseIntentsElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
+    super({ name: params.name, kind: "transform", bus: params.bus });
+  }
+
+  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
+    if (input.mode !== "executing") return input;
+
+    const text = input.intentRequestText || input.responseText || "";
+    const intents: IntentRequest[] = parseIntentRequests(text);
+
+    return { ...input, intents };
+  }
+}
+
+function parseIntentRequests(text: string): IntentRequest[] {
+  const intents: IntentRequest[] = [];
+  const lines = text.trim().split("\n");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const [type, ...args] = trimmed.split(/\s+/);
+
+    if (type === "REQUEST_MORE_TOOLS") {
+      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.REQUEST_MORE_TOOLS, intent: "Request more tools", params: {} });
+    } else if (type === "KEEP_MEMORY" && args[0]) {
+      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.KEEP_MEMORY, intent: "Keep memory", params: { id: args[0] } });
+    } else if (type === "FOLLOW_UP") {
+      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "Follow up", params: { args } });
+    }
+  }
+
+  return intents;
 }
 
 // ── Boundary: check-follow-up ──
@@ -275,24 +362,32 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "executing") return input;
 
-    const text = input.responseText ?? "";
+    const intents = input.intents ?? [];
 
-    // KEEP_MEMORY detection
-    const keepMatch = text.match(/KEEP_MEMORY:\s*(?:mem:)?(\w+)/i);
-    if (keepMatch && this.#memory) {
-      this.#memory.keep(keepMatch[1]);
+    let needMoreTools = false;
+
+    for (const intent of intents) {
+      if (intent.request === IntentRequestType.KEEP_MEMORY && this.#memory) {
+        this.#memory.keep(intent.params.id as string);
+      }
+      if (intent.request === IntentRequestType.REQUEST_MORE_TOOLS) {
+        needMoreTools = true;
+      }
+      if (intent.request === IntentRequestType.FOLLOW_UP) {
+        return {
+          ...input,
+          mode: "ready_to_finalize",
+          followUp: { summary: "follow_up", nextPrompt: "", avoidRepeat: "" },
+          needMoreTools: false,
+        };
+      }
     }
 
-    // REQUEST_MORE_TOOLS detection
-    if (/request.more.tools|REQUEST_MORE_TOOLS|需要更多工具/i.test(text)) {
+    if (needMoreTools) {
       return {
         ...input,
         mode: "ready_to_finalize",
-        followUp: {
-          summary: "request_more_tools",
-          nextPrompt: "",
-          avoidRepeat: "",
-        },
+        followUp: { summary: "request_more_tools", nextPrompt: "", avoidRepeat: "" },
         needMoreTools: true,
       };
     }
