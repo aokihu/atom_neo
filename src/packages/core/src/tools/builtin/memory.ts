@@ -2,53 +2,71 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 
-export function createSearchMemoryTool(): ToolDefinition {
+export function createSearchMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "search_memory",
-    description: "Search memory graph by keywords.",
+    description: "Search memory by keywords.",
     source: "builtin",
-    inputSchema: z.object({ query: z.string(), scope: z.enum(["core", "short", "long"]).default("long"), limit: z.number().optional().default(10) }),
-    execute: async () => ({ ok: true, output: "(memory service not connected)", data: { results: [] } }),
+    inputSchema: z.object({ query: z.string(), limit: z.number().optional().default(3) }),
+    execute: async (args) => {
+      if (!memory) return { ok: true, output: "(memory service not connected)", data: { results: [] } };
+      const r = z.object({ query: z.string(), limit: z.number().optional().default(3) }).safeParse(args);
+      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      const nodes = memory.search(r.data.query, r.data.limit);
+      if (nodes.length === 0) return { ok: true, output: "No memories found." };
+      return { ok: true, output: nodes.map((n: any) => `- ${n.content}`).join("\n"), data: nodes };
+    },
     permission: PermissionLevel.READ_ONLY,
   };
 }
 
-export function createSaveMemoryTool(): ToolDefinition {
-  const schema = z.object({ key: z.string(), type: z.enum(["fact", "preference", "constraint"]), content: z.string(), category: z.string().optional() });
+export function createSaveMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "save_memory",
-    description: "Save a fact, preference, or constraint to memory.",
-    source: "builtin", inputSchema: schema,
+    description: "Save to memory.",
+    source: "builtin",
+    inputSchema: z.object({ content: z.string(), tags: z.array(z.string()).optional().default([]) }),
     execute: async (args) => {
-      const r = schema.safeParse(args);
+      if (!memory) return { ok: true, output: "(memory service not connected)", data: {} };
+      const r = z.object({ content: z.string(), tags: z.array(z.string()).optional().default([]) }).safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
-      return { ok: true, output: `Saved memory: ${r.data.key}`, data: r.data };
+      const id = memory.save(r.data.content, r.data.tags);
+      return { ok: true, output: `Saved memory: ${id.slice(0, 8)}...`, data: { id } };
     },
     permission: PermissionLevel.FILE_WRITE,
   };
 }
 
-export function createTraverseMemoryTool(): ToolDefinition {
+export function createTraverseMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "traverse_memory",
-    description: "Traverse memory graph from a starting key.",
+    description: "Traverse memory graph.",
     source: "builtin",
-    inputSchema: z.object({ goal: z.string(), startKey: z.string().optional(), maxSteps: z.number().optional().default(10), limit: z.number().optional().default(10) }),
-    execute: async () => ({ ok: true, output: "(memory service not connected)", data: { paths: [] } }),
+    inputSchema: z.object({ startKey: z.string(), maxSteps: z.number().optional().default(4) }),
+    execute: async (args) => {
+      if (!memory) return { ok: true, output: "(memory service not connected)", data: { paths: [] } };
+      const r = z.object({ startKey: z.string(), maxSteps: z.number().optional().default(4) }).safeParse(args);
+      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      const nodes = memory.traverse(r.data.startKey, r.data.maxSteps);
+      if (nodes.length === 0) return { ok: true, output: "No related memories found." };
+      return { ok: true, output: nodes.map((n: any) => `- ${n.content.slice(0, 100)}`).join("\n"), data: nodes };
+    },
     permission: PermissionLevel.READ_ONLY,
   };
 }
 
-export function createLinkMemoryTool(): ToolDefinition {
-  const schema = z.object({ sourceKey: z.string(), targetKey: z.string(), relation: z.string() });
+export function createLinkMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "link_memory",
-    description: "Create a relationship between two memory nodes.",
-    source: "builtin", inputSchema: schema,
+    description: "Link two memories.",
+    source: "builtin",
+    inputSchema: z.object({ source: z.string(), target: z.string(), relation: z.string() }),
     execute: async (args) => {
-      const r = schema.safeParse(args);
+      if (!memory) return { ok: true, output: "(memory service not connected)", data: {} };
+      const r = z.object({ source: z.string(), target: z.string(), relation: z.string() }).safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
-      return { ok: true, output: `Linked ${r.data.sourceKey} → ${r.data.targetKey}`, data: r.data };
+      memory.link(r.data.source, r.data.target, r.data.relation);
+      return { ok: true, output: `Linked.` };
     },
     permission: PermissionLevel.FILE_WRITE,
   };

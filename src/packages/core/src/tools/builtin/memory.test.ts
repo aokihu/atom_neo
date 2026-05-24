@@ -7,30 +7,30 @@ const traverse = createTraverseMemoryTool();
 const link = createLinkMemoryTool();
 
 describe("saveMemoryTool", () => {
-  test("returns ok with data", async () => {
-    const result = await save.execute({ key: "test.key", type: "fact", content: "test", category: "test" });
+  test("returns ok stub when no memory service", async () => {
+    const result = await save.execute({ content: "test memory", tags: ["test"] });
     expect(result.ok).toBe(true);
-    expect(result.output).toContain("test.key");
+    expect(result.output).toContain("memory service not connected");
   });
 });
 
 describe("searchMemoryTool", () => {
-  test("returns placeholder", async () => {
+  test("returns placeholder when no memory service", async () => {
     const result = await search.execute({ query: "test" });
     expect(result.ok).toBe(true);
   });
 });
 
 describe("traverseMemoryTool", () => {
-  test("returns placeholder", async () => {
-    const result = await traverse.execute({ goal: "find" });
+  test("returns placeholder when no memory service", async () => {
+    const result = await traverse.execute({ startKey: "test" });
     expect(result.ok).toBe(true);
   });
 });
 
 describe("linkMemoryTool", () => {
-  test("returns ok", async () => {
-    const result = await link.execute({ sourceKey: "a", targetKey: "b", relation: "depends_on" });
+  test("returns ok when no memory service", async () => {
+    const result = await link.execute({ source: "a", target: "b", relation: "relates_to" });
     expect(result.ok).toBe(true);
   });
 });

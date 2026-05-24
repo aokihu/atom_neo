@@ -5,6 +5,7 @@ export function initAtomDir(sandboxPath: string): void {
   const atomPath = `${sandboxPath}/.atom`;
   mkdirSync(atomPath, { recursive: true });
   mkdirSync(`${atomPath}/compiled_prompts`, { recursive: true });
+  mkdirSync(`${atomPath}/memory/nodes`, { recursive: true });
 }
 
 export function initAgentsMd(sandboxPath: string): void {

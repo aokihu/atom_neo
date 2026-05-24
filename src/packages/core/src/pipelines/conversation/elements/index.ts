@@ -101,12 +101,16 @@ export class FetchAgentsPromptElement extends BaseElement<ConversationFlowState,
 
 // ── Transform: collect-context ──
 export class CollectContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  #memory: any;
+
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    memory?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
+    this.#memory = params.memory;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -114,12 +118,22 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
 
     const sandbox = input.task?.sandbox ?? process.cwd();
 
-    const contextData = [
+    let contextData = [
       `Current Time: ${new Date().toISOString()}`,
       `Sandbox Directory: ${sandbox}`,
       `OS: ${process.platform} ${process.arch}`,
       `All file paths are relative to the sandbox directory.`,
     ].join("\n");
+
+    // Inject memories if available
+    if (this.#memory) {
+      const text = input.task?.payload?.[0]?.data || "";
+      const memories = this.#memory.search(text) || [];
+      if (memories.length > 0) {
+        contextData += "\n\nRelevant Memories:\n" +
+          memories.map((m: any) => `- [${m.tags?.join(",") || "general"}] ${m.content}`).join("\n");
+      }
+    }
 
     return { ...input, contextData };
   }

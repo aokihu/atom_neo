@@ -1,0 +1,229 @@
+import { BaseService } from "./base-service";
+import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
+import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+
+export type MemoryNode = {
+  id: string;
+  content: string;
+  tags: string[];
+  weight: number;
+  createdAt: number;
+  accessedAt: number;
+};
+
+export class MemoryService extends BaseService {
+  readonly name = "memory";
+
+  #db: Database;
+  #nodesPath: string;
+  #timer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(params: { dbPath: string; nodesPath: string }) {
+    super();
+    this.#db = new Database(params.dbPath);
+    this.#nodesPath = params.nodesPath;
+    this.#initDb();
+  }
+
+  // == Public API ==
+
+  search(query: string, limit = 3): MemoryNode[] {
+    if (!query.trim()) return [];
+
+    const sanitized = query.replace(/['"`\\]/g, "");
+    let hits: string[] = [];
+
+    // 1. ripgrep full-text search
+    try {
+      const output = execSync(
+        `rg --max-count ${limit} --json -i "${sanitized}" ${this.#nodesPath}/`,
+        { encoding: "utf-8", timeout: 5000 },
+      );
+      for (const line of output.trim().split("\n")) {
+        try {
+          const m = JSON.parse(line);
+          if (m.type === "match") {
+            const file = m.data.path.text.replace(/^.*nodes\//, "").replace(".txt", "");
+            if (!hits.includes(file)) hits.push(file);
+          }
+        } catch { /* skip */ }
+      }
+    } catch {
+      // rg failed or no matches — fallback to manual traversal
+      hits = this.#fallbackSearch(sanitized.toLowerCase());
+    }
+
+    if (hits.length === 0) return [];
+
+    // 2. Load from SQLite + sort by weight × recency
+    const nodes = hits
+      .map((id) => this.#loadNode(id))
+      .filter(Boolean)
+      .sort((a, b) => this.#score(b) - this.#score(a))
+      .slice(0, limit);
+
+    // 3. Boost weights
+    for (const n of nodes) this.#boostWeight(n.id);
+
+    return nodes;
+  }
+
+  traverse(startId: string, maxSteps = 4): MemoryNode[] {
+    const visited = new Set<string>();
+    const results: MemoryNode[] = [];
+    const queue = [{ id: startId, step: 0 }];
+
+    while (queue.length > 0 && results.length < 5) {
+      const { id, step } = queue.shift()!;
+      if (visited.has(id) || step >= maxSteps) continue;
+      visited.add(id);
+
+      const node = this.#loadNode(id);
+      if (node) results.push(node);
+
+      // Neighbors sorted by target weight
+      const stmt = this.#db.prepare(
+        "SELECT target_id, relation FROM edges WHERE source_id = ?",
+      );
+      const neighbors = stmt.all(id) as Array<{ target_id: string; relation: string }>;
+      neighbors.sort((a, b) => {
+        const aw = this.#loadWeight(a.target_id);
+        const bw = this.#loadWeight(b.target_id);
+        return bw - aw;
+      });
+
+      for (const n of neighbors.slice(0, 3)) {
+        if (!visited.has(n.target_id)) queue.push({ id: n.target_id, step: step + 1 });
+      }
+    }
+
+    return results;
+  }
+
+  save(content: string, tags: string[] = []): string {
+    const hash = createHash("sha256").update(content).digest("hex");
+    const now = Date.now();
+
+    // Write .txt file
+    mkdirSync(this.#nodesPath, { recursive: true });
+    writeFileSync(`${this.#nodesPath}/${hash}.txt`, content, "utf-8");
+
+    // Insert metadata
+    this.#db.run(
+      "INSERT OR REPLACE INTO nodes (id, tags, weight, created_at, accessed_at) VALUES (?, ?, ?, ?, ?)",
+      [hash, tags.join(","), 100, now, now],
+    );
+
+    return hash;
+  }
+
+  link(source: string, target: string, relation: string): void {
+    this.#db.run(
+      "INSERT INTO edges (source_id, target_id, relation) VALUES (?, ?, ?)",
+      [source, target, relation],
+    );
+  }
+
+  // == Service lifecycle ==
+
+  async start(): Promise<void> {
+    await super.start();
+    mkdirSync(this.#nodesPath, { recursive: true });
+    this.#timer = setInterval(() => this.#maintenance(), 5 * 60_000);
+  }
+
+  async stop(): Promise<void> {
+    if (this.#timer) clearInterval(this.#timer);
+    await super.stop();
+  }
+
+  // == Internal ==
+
+  #initDb(): void {
+    this.#db.run(`CREATE TABLE IF NOT EXISTS nodes (
+      id TEXT PRIMARY KEY,
+      tags TEXT DEFAULT '',
+      weight REAL DEFAULT 100,
+      created_at INTEGER,
+      accessed_at INTEGER
+    )`);
+    this.#db.run(`CREATE TABLE IF NOT EXISTS edges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      relation TEXT NOT NULL
+    )`);
+  }
+
+  #loadNode(id: string): MemoryNode | null {
+    const stmt = this.#db.prepare("SELECT * FROM nodes WHERE id = ?");
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    let content = "";
+    try {
+      content = readFileSync(`${this.#nodesPath}/${id}.txt`, "utf-8");
+    } catch {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      content,
+      tags: row.tags ? row.tags.split(",").filter(Boolean) : [],
+      weight: row.weight,
+      createdAt: row.created_at,
+      accessedAt: row.accessed_at,
+    };
+  }
+
+  #loadWeight(id: string): number {
+    const row = this.#db.prepare("SELECT weight FROM nodes WHERE id = ?").get(id) as any;
+    return row?.weight ?? 0;
+  }
+
+  #score(node: MemoryNode): number {
+    const daysOld = (Date.now() - node.createdAt) / 86400000;
+    const recency = Math.max(0, 1 - daysOld / 30); // 30 天内衰减线性
+    return node.weight * 0.7 + recency * 30;
+  }
+
+  #boostWeight(id: string): void {
+    this.#db.run(
+      "UPDATE nodes SET weight = MIN(100, weight + 5), accessed_at = ? WHERE id = ?",
+      [Date.now(), id],
+    );
+  }
+
+  #fallbackSearch(query: string): string[] {
+    const results: string[] = [];
+    if (!existsSync(this.#nodesPath)) return results;
+    const files = new Bun.Glob("*.txt").scanSync(this.#nodesPath);
+    for (const file of files) {
+      try {
+        const content = readFileSync(`${this.#nodesPath}/${file}`, "utf-8").toLowerCase();
+        if (content.includes(query)) {
+          results.push(file.replace(".txt", ""));
+        }
+      } catch { /* skip */ }
+    }
+    return results;
+  }
+
+  #maintenance(): void {
+    // Decay: daily -1 per day since creation
+    this.#db.run(
+      `UPDATE nodes SET weight = MAX(0, weight - (julianday('now') - julianday(created_at / 1000, 'unixepoch')) * 1)`,
+    );
+
+    // Cleanup: remove nodes with weight <= 0
+    const dead = this.#db.prepare("SELECT id FROM nodes WHERE weight <= 0").all() as Array<{ id: string }>;
+    for (const row of dead) {
+      this.#db.run("DELETE FROM edges WHERE source_id = ? OR target_id = ?", [row.id, row.id]);
+      this.#db.run("DELETE FROM nodes WHERE id = ?", [row.id]);
+      try { unlinkSync(`${this.#nodesPath}/${row.id}.txt`); } catch { /* skip */ }
+    }
+  }
+}

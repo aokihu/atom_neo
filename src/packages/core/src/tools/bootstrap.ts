@@ -9,15 +9,16 @@ import {
   createSearchMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool,
 } from "./builtin/memory";
-
-export function createAllTools(sandbox: string): ToolDefinition[] {
+export function createAllTools(sandbox: string, memory?: any): ToolDefinition[] {
   const sb = createSandbox(sandbox);
   return [
     createReadTool(sb), createWriteTool(sb), createLsTool(sb),
     createTreeTool(sb), createGrepTool(sb), createCpTool(sb), createMvTool(sb),
     createBashTool(sandbox),
-    createSearchMemoryTool(), createSaveMemoryTool(),
-    createTraverseMemoryTool(), createLinkMemoryTool(),
+    createSearchMemoryTool(memory as any),
+    createSaveMemoryTool(memory as any),
+    createTraverseMemoryTool(memory as any),
+    createLinkMemoryTool(memory as any),
   ];
 }
 

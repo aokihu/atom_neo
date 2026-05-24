@@ -9,6 +9,7 @@ import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
 import { RuntimeService } from "./services/runtime-service";
 import { ServiceManager } from "./services/service-manager";
 import { AgentsCompilerService } from "./services/agents-compiler";
+import { MemoryService } from "./services/memory-service";
 
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 
@@ -59,6 +60,10 @@ export async function main(): Promise<void> {
   const sm = new ServiceManager();
   sm.register("runtime", runtime);
   sm.register("agents-compiler", new AgentsCompilerService({ runtime }));
+  sm.register("memory", new MemoryService({
+    dbPath: runtime.atomDir + "/memory/memory.db",
+    nodesPath: runtime.atomDir + "/memory/nodes",
+  }));
   sm.startAll();
 
   // Dispatch

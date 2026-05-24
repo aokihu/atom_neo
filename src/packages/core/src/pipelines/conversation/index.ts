@@ -33,6 +33,7 @@ export type ConversationPipelineDeps = {
   toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
   maxTokens?: number;
+  memory?: any;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -42,7 +43,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
-    .transform("collect-context", {})
+    .transform("collect-context", { memory: deps.memory })
     .transform("format-system-messages", {})
     .transform("format-user-messages", {})
     .transform("stream-llm", {
