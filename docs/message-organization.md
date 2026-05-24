@@ -31,12 +31,18 @@ messages = [
 ```
 collect-prompts    (source:    初始→streaming)
   → load-system-prompt  (transform: streaming→streaming，不切换mode)
+  → fetch-agents-prompt (transform: streaming→streaming，不切换mode)
   → collect-context     (transform: streaming→streaming，不切换mode)
-  → format-messages     (transform: streaming→formatted)
-  → stream-llm          (transform: formatted→executing)
+  → format-system-messages (transform: streaming→streaming，合并为 systemText)
+  → format-user-messages   (transform: streaming→formatted，组装 userMessages)
+  → stream-llm          (transform: formatted→executing，system + messages)
   → check-follow-up     (boundary:  executing→ready_to_finalize)
   → finalize            (sink:      ready_to_finalize→PipelineResult)
 ```
+
+**关键变化（v0.4.1）：**
+- `format-messages` 拆分为 `format-system-messages` + `format-user-messages`，各司其职
+- `stream-llm` 使用 `generateText({ system, messages })` 替代混在 messages 数组中的 system 消息——消除 AI SDK 安全警告
 
 ---
 
@@ -96,41 +102,46 @@ class CollectContextElement extends BaseElement {
 - SessionContext 中的 inference facts
 - sandbox 目录结构快照
 
-### 3.3 `format-messages`（修改）
+### 3.3 `format-system-messages`（新增，拆分自 format-messages）
 
 **kind**: `transform`
 
-**职责**: 收敛前两个 Element 的数据，组装完整 messages 数组
+**职责**: 合并三个 system 层级，不切换 mode
 
 ```typescript
-class FormatMessagesElement extends BaseElement {
+class FormatSystemMessagesElement extends BaseElement {
+  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
+    if (input.mode !== "streaming") return input;
+
+    const parts: string[] = [];
+    if (input.systemPrompt) parts.push(input.systemPrompt);
+    if (input.compiledAgentsPrompt) parts.push(input.compiledAgentsPrompt);
+    if (input.contextData) parts.push(input.contextData);
+
+    return { ...input, systemText: parts.join("\n\n") };
+  }
+}
+```
+
+### 3.4 `format-user-messages`（新增，拆分自 format-messages）
+
+**kind**: `transform`
+
+**职责**: 组装用户/助手消息，切换到 `formatted` mode
+
+```typescript
+class FormatUserMessagesElement extends BaseElement {
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
 
     const messages: Message[] = [];
-
-    // 第 1 层：安全提示词
-    if (input.systemPrompt) {
-      messages.push({ role: "system", content: input.systemPrompt });
-    }
-
-    // 第 2 层：上下文数据
-    if (input.contextData) {
-      messages.push({ role: "system", content: input.contextData });
-    }
-
-    // 第 3 层：会话历史
     for (const m of input.prompts ?? []) {
       messages.push({ role: m.role, content: m.content });
     }
-
-    // 第 4 层：当前用户输入
     const text = input.task?.payload?.[0]?.data;
-    if (text) {
-      messages.push({ role: "user", content: text });
-    }
+    if (text) messages.push({ role: "user" as const, content: text });
 
-    return { ...input, mode: "formatted", messages };
+    return { ...input, mode: "formatted", userMessages: messages };
   }
 }
 ```
@@ -146,27 +157,31 @@ type ConversationFlowState = {
   mode: "initial" | "streaming" | "formatted" | "executing" | "ready_to_finalize";
   task: TaskItem;
   // 新增
-  systemPrompt?: string;      // load-system-prompt 写入
-  contextData?: string;       // collect-context 写入
-  messages?: Message[];       // format-messages 写入（组装后）
-  prompts?: PromptItem[];     // collect-prompts 写入（会话历史）
-  responseText?: string;      // stream-llm 写入
-  followUp?: FollowUpData;    // check-follow-up 写入
+  systemPrompt?: string;           // load-system-prompt 写入
+  compiledAgentsPrompt?: string;   // fetch-agents-prompt 写入
+  contextData?: string;            // collect-context 写入
+  systemText?: string;             // format-system-messages 写入（合并后）
+  userMessages?: Message[];        // format-user-messages 写入（历史+当前）
+  prompts?: PromptItem[];          // collect-prompts 写入（会话历史）
+  responseText?: string;           // stream-llm 写入
+  followUp?: FollowUpData;         // check-follow-up 写入
+  needMoreTools?: boolean;         // check-follow-up 写入
 };
 ```
 
 ---
 
-## 5. `stream-llm` 门控调整
+## 5. `stream-llm` — system 参数修复
 
 ```typescript
 // 门控
 if (input.mode !== "formatted") return input;
 
-// 流式输出：streamText 逐字推送 deltas
+// system 独立参数 — 消除 AI SDK 安全警告
 const streamResult = streamText({
   model,
-  messages: input.messages,
+  system: input.systemText,        // ← 专用参数，不混在 messages 中
+  messages: input.userMessages,    // ← 仅 user/assistant
   tools: aiTools,
   maxSteps: 5,
   maxTokens: input.maxTokens ?? 4096,
@@ -182,8 +197,6 @@ for await (const chunk of streamResult.fullStream) {
 
 return { ...input, responseText: fullText };
 ```
-
-**maxTokens** 从 `input.maxTokens`（来源于 `RuntimeService.appConfig.transport.maxOutputTokens`）动态获取，不再硬编码。
 
 ---
 
