@@ -14,21 +14,23 @@
 - 不要将 `<<<REQUEST>>>` 放在回复的开头或中间，只能放在末尾
 
 ## 意图请求格式
-当需要在回复末尾发起内部操作时，使用以下格式：
+当需要在回复末尾发起内部操作时，使用 `<<<REQUEST>>>` 标记 + `[TYPE,key=value]` 格式：
+
 ```
-可见的回复内容...
+用户可见的回复内容...
 
 <<<REQUEST>>>
-REQUEST_MORE_TOOLS
+[REQUEST_MORE_TOOLS]
+[KEEP_MEMORY,mem_id=2d4bed]
+[FOLLOW_UP,history_abstract=前文已确认...,next_prompt=请选择操作]
 ```
 
-记忆保留请求：
-```
-可见的回复内容...
-
-<<<REQUEST>>>
-KEEP_MEMORY 2d4bed
-```
+规则：
+- `[TYPE]` 方括号包裹，一条一个请求
+- 第一个参数是请求类型（REQUEST_MORE_TOOLS | KEEP_MEMORY | FOLLOW_UP）
+- 后续参数 `key=value`，逗号分隔
+- `<<<REQUEST>>>` 之后的内容属于内部请求，不会展示给用户
+- 只能放在回复末尾
 
 ## 行为准则
 - 使用中文回复

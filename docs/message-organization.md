@@ -162,24 +162,38 @@ class FormatUserMessagesElement extends BaseElement {
 class ParseIntentsElement extends BaseElement {
   async doProcess(input): Promise {
     if (input.mode !== "executing") return input;
-    const intents = parseIntentRequests(input.responseText);
+    const intents = parseIntentRequests(input.intentRequestText);
     return { ...input, intents };
   }
 }
 
 function parseIntentRequests(text: string): IntentRequest[] {
   const intents: IntentRequest[] = [];
-  if (/follow.?up|FOLLOW_UP|继续追问/i.test(text))
-    intents.push({ request: FOLLOW_UP, params: {} });
-  if (/REQUEST_MORE_TOOLS|需要更多工具/i.test(text))
-    intents.push({ request: REQUEST_MORE_TOOLS, params: {} });
-  const keep = text.match(/KEEP_MEMORY:(\w+)/i);
-  if (keep) intents.push({ request: KEEP_MEMORY, params: { id: keep[1] } });
+  const re = /\[([^\]]+)\]/g;  // 只匹配完整 [...]
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    const parts = match[1].split(",").map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) continue;
+    const type = parts[0];
+    const params: Record<string, string> = {};
+    for (const kv of parts.slice(1)) {
+      const [k, v] = kv.split("=", 2);
+      if (k && v) params[k.trim()] = v.trim();
+    }
+
+    if (type === "REQUEST_MORE_TOOLS")
+      intents.push({ source: CONVERSATION, request: REQUEST_MORE_TOOLS, intent: "more tools", params });
+    else if (type === "KEEP_MEMORY" && params.mem_id)
+      intents.push({ source: CONVERSATION, request: KEEP_MEMORY, intent: "keep", params: { id: params.mem_id } });
+    else if (type === "FOLLOW_UP")
+      intents.push({ source: CONVERSATION, request: FOLLOW_UP, intent: "follow up", params });
+  }
   return intents;
 }
 ```
 
-**关键设计**: 零外部依赖，纯文本函数。单元测试只需一段字符串。
+**格式**: `[TYPE,key=value,...]` — 方括号包裹，完整闭合才解析（滑动窗口安全）
 
 **关键变化**: `mode` 从 `streaming` 切到 `formatted`，`stream-llm` 门控对应更新
 

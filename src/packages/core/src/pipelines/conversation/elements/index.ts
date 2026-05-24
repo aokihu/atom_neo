@@ -325,20 +325,26 @@ export class ParseIntentsElement extends BaseElement<ConversationFlowState, Conv
 
 function parseIntentRequests(text: string): IntentRequest[] {
   const intents: IntentRequest[] = [];
-  const lines = text.trim().split("\n");
+  const re = /\[([^\]]+)\]/g;
+  let match: RegExpExecArray | null;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+  while ((match = re.exec(text)) !== null) {
+    const parts = match[1].split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (parts.length === 0) continue;
 
-    const [type, ...args] = trimmed.split(/\s+/);
+    const type = parts[0];
+    const params: Record<string, string> = {};
+    for (const kv of parts.slice(1)) {
+      const [k, v] = kv.split("=", 2);
+      if (k && v) params[k.trim()] = v.trim();
+    }
 
     if (type === "REQUEST_MORE_TOOLS") {
-      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.REQUEST_MORE_TOOLS, intent: "Request more tools", params: {} });
-    } else if (type === "KEEP_MEMORY" && args[0]) {
-      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.KEEP_MEMORY, intent: "Keep memory", params: { id: args[0] } });
+      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.REQUEST_MORE_TOOLS, intent: "more tools", params });
+    } else if (type === "KEEP_MEMORY" && params.mem_id) {
+      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.KEEP_MEMORY, intent: "keep", params: { id: params.mem_id } });
     } else if (type === "FOLLOW_UP") {
-      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "Follow up", params: { args } });
+      intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params });
     }
   }
 
