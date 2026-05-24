@@ -22,7 +22,8 @@ export type ConversationFlowState = {
   systemPrompt?: string;
   compiledAgentsPrompt?: string;
   contextData?: string;
-  messages?: Message[];
+  systemText?: string;
+  userMessages?: Message[];
   responseText?: string;
   followUp?: {
     summary: string;
@@ -124,13 +125,27 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
   }
 }
 
-// ── Transform: format-messages ──
-export class FormatMessagesElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
-  constructor(params: {
-    name: string;
-    kind: string;
-    bus: PipelineEventBus<PipelineEventMap>;
-  }) {
+// ── Transform: format-system-messages ──
+export class FormatSystemMessagesElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
+    super({ name: params.name, kind: "transform", bus: params.bus });
+  }
+
+  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
+    if (input.mode !== "streaming") return input;
+
+    const parts: string[] = [];
+    if (input.systemPrompt) parts.push(input.systemPrompt);
+    if (input.compiledAgentsPrompt) parts.push(input.compiledAgentsPrompt);
+    if (input.contextData) parts.push(input.contextData);
+
+    return { ...input, systemText: parts.join("\n\n") };
+  }
+}
+
+// ── Transform: format-user-messages ──
+export class FormatUserMessagesElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
   }
 
@@ -138,25 +153,13 @@ export class FormatMessagesElement extends BaseElement<ConversationFlowState, Co
     if (input.mode !== "streaming") return input;
 
     const messages: Message[] = [];
-
-    if (input.systemPrompt) {
-      messages.push({ role: "system", content: input.systemPrompt });
-    }
-    if (input.compiledAgentsPrompt) {
-      messages.push({ role: "system", content: input.compiledAgentsPrompt });
-    }
-    if (input.contextData) {
-      messages.push({ role: "system", content: input.contextData });
-    }
     for (const m of input.prompts ?? []) {
       messages.push({ role: m.role, content: m.content });
     }
     const text = input.task?.payload?.[0]?.data;
-    if (text) {
-      messages.push({ role: "user", content: text });
-    }
+    if (text) messages.push({ role: "user" as const, content: text });
 
-    return { ...input, mode: "formatted", messages };
+    return { ...input, mode: "formatted", userMessages: messages };
   }
 }
 
@@ -189,10 +192,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       return { ...input, mode: "executing", responseText: "(no API key configured)" };
     }
 
-    const messages = input.messages ?? [];
-    if (messages.length === 0) {
-      return { ...input, mode: "executing", responseText: "(no messages)" };
-    }
+    const userMessages = input.userMessages ?? [];
+    const systemText = input.systemText ?? "";
 
     const provider = createDeepSeek({ apiKey: this.#apiKey });
     const model = provider(this.#model);
@@ -214,7 +215,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     try {
       const streamResult = streamText({
         model,
-        messages: messages as any,
+        system: systemText || undefined,
+        messages: userMessages as any,
         tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
         maxSteps: 5,
         maxTokens: this.#maxTokens,

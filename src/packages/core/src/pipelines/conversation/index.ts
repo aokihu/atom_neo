@@ -5,7 +5,8 @@ import {
   LoadSystemPromptElement,
   FetchAgentsPromptElement,
   CollectContextElement,
-  FormatMessagesElement,
+  FormatSystemMessagesElement,
+  FormatUserMessagesElement,
   StreamLLMElement,
   CheckFollowUpElement,
   FinalizeElement,
@@ -16,7 +17,8 @@ export function registerConversationElements(): void {
   registerElement("load-system-prompt", LoadSystemPromptElement as any);
   registerElement("fetch-agents-prompt", FetchAgentsPromptElement as any);
   registerElement("collect-context", CollectContextElement as any);
-  registerElement("format-messages", FormatMessagesElement as any);
+  registerElement("format-system-messages", FormatSystemMessagesElement as any);
+  registerElement("format-user-messages", FormatUserMessagesElement as any);
   registerElement("stream-llm", StreamLLMElement as any);
   registerElement("check-follow-up", CheckFollowUpElement as any);
   registerElement("finalize", FinalizeElement as any);
@@ -41,7 +43,8 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
     .transform("collect-context", {})
-    .transform("format-messages", {})
+    .transform("format-system-messages", {})
+    .transform("format-user-messages", {})
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-chat",

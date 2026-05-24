@@ -12,7 +12,8 @@ export type ConversationFlowState = {
   systemPrompt?: string;
   compiledAgentsPrompt?: string;
   contextData?: string;
-  messages?: Array<{ role: string; content: string }>;
+  systemText?: string;
+  userMessages?: Array<{ role: string; content: string }>;
   responseText?: string;
   followUp?: {
     summary: string;
