@@ -62,6 +62,9 @@ class MemoryService extends BaseService {
   // 建立关系
   link(source: string, target: string, relation: string): void
 
+  // 重置记忆生命周期 — KEEP_MEMORY 意图触发
+  keep(id: string): void
+
   // Service 生命周期
   async start(): Promise<void>   // 初始化 DB + 启动后台任务
   async stop(): Promise<void>    // 停止后台任务
@@ -101,16 +104,54 @@ SELECT target_id FROM edges WHERE source_id = ?
 ## 7. 注入 conversation context
 
 ```typescript
-// collect-context 元素
-if (memory) {
-  const memories = await memory.search(taskPayload?.data);
-  if (memories.length > 0) {
-    contextData += `\n\nMemories:\n${memories.map(m => `- ${m.content}`).join("\n")}`;
-  }
+// collect-context 元素 — Memory 标签包裹
+for (const node of memories) {
+  if (node.accessCount >= 5) continue;  // 卸载
+  const aging = node.accessCount >= 3 ? ' aging="true"' : "";
+  const id = node.id.slice(0, 6);
+  contextData += `\n<Memory id="${id}" tags="${node.tags.join(",")}"${aging}>\n${node.content}\n</Memory>\n`;
 }
 ```
 
-## 8. 记忆工具
+### Context 中的 Memory 格式
+
+```xml
+<Memory id="2d4bed" tags="project,tech-stack" aging="true">
+项目使用 TypeScript 和 Bun 运行时
+</Memory>
+```
+
+| 属性 | 说明 |
+|------|------|
+| `id` | SHA-256 前 6 位，LLM 引用用 |
+| `tags` | 分类标签 |
+| `aging` | count ≥ 3 时出现，提示 LLM 该记忆即将被卸载 |
+
+## 8. 记忆生命周期管理
+
+### 访问计数
+
+| access_count | 行为 |
+|-------------|------|
+| 0–2 | 正常注入 context |
+| 3–4 | 注入 context + `aging="true"` 标签 |
+| ≥ 5 | **卸载**: 不注入 context，weight -10 |
+
+### KEEP_MEMORY 意图
+
+LLM 发现 `aging="true"` 且当前会话需要该记忆时：
+
+```
+LLM 回复: KEEP_MEMORY: mem:2d4bed
+```
+
+`check-follow-up` 检测 → 调用 `memory.keep("2d4bed")` → count = 0, weight += 5
+
+### 后台衰减
+
+每 5 分钟定时器：所有记忆每日 -1 权重，权重 ≤ 0 自动删除。
+
+## 9. 记忆工具
 
 | 工具 | 说明 |
 |------|------|

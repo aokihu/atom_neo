@@ -79,18 +79,22 @@ class LoadSystemPromptElement extends BaseElement {
 
 ```typescript
 class CollectContextElement extends BaseElement {
-  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
+  async doProcess(input): Promise {
     if (input.mode !== "streaming") return input;
 
-    const now = new Date().toISOString();
-    const cwd = process.cwd();
-    const os = `${process.platform} ${process.arch}`;
-
-    const contextData = [
-      `Current Time: ${now}`,
-      `Working Directory: ${cwd}`,
-      `OS: ${os}`,
+    let contextData = [
+      `Current Time: ${new Date().toISOString()}`,
+      `Sandbox Directory: ${sandbox}`,
+      `OS: ${process.platform} ${process.arch}`,
     ].join("\n");
+
+    // Memory injection with <Memory> tags
+    const memories = this.#memory?.search(input.task?.payload?.[0]?.data) || [];
+    for (const node of memories) {
+      if (node.accessCount >= 5) continue;
+      const aging = node.accessCount >= 3 ? ' aging="true"' : "";
+      contextData += `\n<Memory id="${node.id.slice(0,6)}" tags="${node.tags}"${aging}>\n${node.content}\n</Memory>`;
+    }
 
     return { ...input, contextData };
   }
