@@ -1,252 +1,168 @@
 # Configuration System
 
-> **Purpose**: How configuration is loaded, validated, and accessed across all packages.
-> Single source of truth per package, with clear precedence rules.
+> **版本**: v2 — 采用 `version: 2` 的 config.json 格式
 
 ---
 
-## 1. Loading Precedence
+## 1. config.json 完整结构
 
-```text
-CLI arguments  >  Environment variables  >  Config file  >  Default values
-    --port 3100     $CORE_PORT=3100         core.config.json    port: 3000
+```jsonc
+{
+  "version": 2,
+  "theme": "dark",
+
+  // 模型档位：advanced/balanced/basic，格式 "provider/model"
+  "providerProfiles": {
+    "advanced": "deepseek/deepseek-chat",
+    "balanced": "deepseek/deepseek-chat",
+    "basic": "deepseek/deepseek-reasoner"
+  },
+
+  // LLM 供应商配置
+  "providers": {
+    "deepseek": {
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "baseUrl": "https://api.deepseek.com/v1"
+    }
+  },
+
+  "transport": {
+    "maxOutputTokens": 4096
+  },
+
+  "gateway": {
+    "jwtSecret": "change-me-minimum-16-chars",
+    "port": 3000
+  },
+
+  "tui": {
+    "theme": "dark"
+  }
+}
 ```
 
-Every package calls `loadConfig()` at startup. The function:
-1. Reads default values from `defaults.ts`
-2. Overlays config file (JSON)
-3. Overlays `.env` file (via `Bun.env`)
-4. Overlays CLI arguments (via `Bun.argv` parsing)
-5. Validates final config with Zod schema
+---
+
+## 2. 配置优先级
+
+```text
+CLI args (--port, --host, --sandbox)  >  config.json  >  默认值
+```
+
+- CLI 只覆盖启动参数（port/host/sandbox/mode），不覆盖 config.json 内部字段
+- `.env` 用于存储 `DEEPSEEK_API_KEY` 等密钥，不参与 config 合并
+- `config.json` 不存在时，回退到默认值（deepseek/deepseek-chat）
 
 ---
 
-## 2. Core Config
+## 3. Schema 定义
 
 ```typescript
 // src/bootstrap/config.ts
-
-import { z } from "zod";
-
-const CoreConfigSchema = z.object({
-  port: z.number().int().default(3100),
-  host: z.string().default("0.0.0.0"),
-  logLevel: z.number().int().min(1).max(3).default(1),  // 1=minimal, 2=+debug, 3=+trace
-  logFile: z.string().optional(),
-
-  memoryDbPath: z.string().default("./data/memory.db"),
-  maxSessions: z.number().int().default(1000),
-  taskTimeoutMs: z.number().int().default(120_000),
-
-  replayEnabled: z.boolean().default(false),
-  replayMaxEvents: z.number().int().default(10_000),
-
-  sandboxPath: z.string().default("./sandbox"),
-
-  transportModel: z.string().default("deepseek/deepseek-chat"),
-  transportMaxOutputTokens: z.number().int().default(4096),
+const ProviderProfilesSchema = z.object({
+  advanced: z.string().default("deepseek/deepseek-chat"),
+  balanced: z.string().default("deepseek/deepseek-chat"),
+  basic: z.string().default("deepseek/deepseek-chat"),
 });
 
-export type CoreConfig = z.infer<typeof CoreConfigSchema>;
-
-export function loadCoreConfig(): CoreConfig {
-  const defaults: CoreConfig = CoreConfigSchema.parse({});
-
-  // Overlay from file
-  let fileConfig = {};
-  try {
-    fileConfig = JSON.parse(require("fs").readFileSync("core.config.json", "utf-8"));
-  } catch { /* no config file */ }
-
-  // Overlay from env
-  const envConfig = {
-    port: Bun.env.CORE_PORT ? parseInt(Bun.env.CORE_PORT) : undefined,
-    host: Bun.env.CORE_HOST,
-    logLevel: Bun.env.LOG_LEVEL as any,
-    transportModel: Bun.env.TRANSPORT_MODEL,
-  };
-
-  // Overlay from CLI
-  const cliConfig = parseCliArgs();
-
-  // Merge with precedence: default < file < env < cli
-  const merged = deepMerge(defaults, fileConfig, envConfig, cliConfig);
-
-  return CoreConfigSchema.parse(merged);
-}
-```
-
----
-
-## 3. Gateway Config
-
-```typescript
-// src/packages/gateway/src/config.ts
-
-const GatewayConfigSchema = z.object({
-  port: z.number().int().default(3000),
-  host: z.string().default("0.0.0.0"),
-  coreUrl: z.string().default("http://localhost:3100"),
-  jwtSecret: z.string().min(16),
-
-  rateLimitEnabled: z.boolean().default(true),
-  rateLimitRequestsPerMin: z.number().int().default(60),
-  rateLimitBurst: z.number().int().default(10),
-
-  corsOrigins: z.array(z.string()).default(["*"]),
+const ProviderDefinitionSchema = z.object({
+  apiKeyEnv: z.string(),
+  models: z.array(z.string()).min(1),
+  baseUrl: z.string().optional(),
+  options: z.record(z.unknown()).optional(),
 });
-```
 
----
-
-## 4. TUI Config
-
-```typescript
-// src/packages/tui/src/config.ts
-
-const TuiConfigSchema = z.object({
-  coreUrl: z.string().default("ws://localhost:3100"),
-  sessionId: z.string().optional(),  // Reconnect to existing session
-
-  theme: z.enum(["dark", "light"]).default("dark"),
-  fontSize: z.number().int().default(14),
-  maxVisibleLines: z.number().int().default(50),
+const ConfigSchema = z.object({
+  version: z.literal(2).default(2),
+  theme: z.string().default("dark"),
+  providerProfiles: ProviderProfilesSchema.default({...}),
+  providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
+  transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({...}),
+  gateway: z.object({ jwtSecret: z.string(), port: z.number().int().default(3000) }).default({...}),
+  tui: z.object({ theme: z.enum(["dark", "light"]).default("dark") }).default({...}),
 });
+
+export type AppConfig = z.infer<typeof ConfigSchema>;
 ```
 
 ---
 
-## 5. CLI Argument Parsing
+## 4. 模型解析流程
+
+```
+config.json
+  └─ providerProfiles.balanced = "deepseek/deepseek-chat"
+       │
+       ├─ provider = "deepseek"
+       ├─ model   = "deepseek-chat"
+       └─ → providers["deepseek"].apiKeyEnv = "DEEPSEEK_API_KEY"
+            → process.env.DEEPSEEK_API_KEY → apiKey
+            → providers["deepseek"].baseUrl → baseUrl (optional)
+
+RuntimeService.getResolvedModel("balanced") → {
+  provider: "deepseek",
+  model: "deepseek-chat",
+  apiKey: "sk-xxx",
+  baseUrl: "https://api.deepseek.com/v1"  // optional
+}
+```
+
+**Provider 处理逻辑**：
+- `deepseek` → `createDeepSeek({ apiKey, baseURL })`  — 使用 `@ai-sdk/deepseek`
+- `openai` / `openaiCompatible` → 同样使用 `createDeepSeek({ apiKey, baseURL })`  — DeepSeek SDK 兼容 OpenAI 协议
+
+**API Key 获取优先级**：
+1. `providers[provider].apiKeyEnv` 环境变量
+2. 回退到 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY`（全局 fallback）
+
+---
+
+## 5. 默认 config（config.json 不存在时）
 
 ```typescript
-// src/bootstrap/cli.ts
-
-export function parseCliArgs(): Partial<CoreConfig> {
-  const args = Bun.argv.slice(2);
-  const config: Record<string, any> = {};
-
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case "--port":
-        config.port = parseInt(args[++i]);
-        break;
-      case "--host":
-        config.host = args[++i];
-        break;
-      case "--log-level":
-        config.logLevel = parseInt(args[++i]);
-        break;
-      case "--config":
-        // Load alternative config file
-        break;
-      case "--help":
-        printHelp();
-        process.exit(0);
-      default:
-        console.warn(`Unknown argument: ${args[i]}`);
-    }
-  }
-
-  return config;
+// 最小可执行默认值
+{
+  version: 2,
+  theme: "dark",
+  providerProfiles: {
+    advanced: "deepseek/deepseek-chat",
+    balanced: "deepseek/deepseek-chat",
+    basic: "deepseek/deepseek-chat",
+  },
+  providers: {},
+  transport: { maxOutputTokens: 4096 },
+  gateway: { jwtSecret: "change-me-minimum-16-chars", port: 3000 },
+  tui: { theme: "dark" },
 }
 ```
 
 ---
 
-## 6. Config Validation Rules
+## 6. 运行时访问
 
 ```typescript
-// Additional validation beyond Zod schema:
+// RuntimeService (src/services/runtime-service.ts)
+const runtime = sm.get("runtime");
 
-function validateConfig(config: CoreConfig): void {
-  if (config.port < 1024 && process.getuid() !== 0) {
-    throw new Error(`Port ${config.port} requires root. Use port >= 1024.`);
-  }
+// 旧式访问（保留兼容）
+runtime.apiKey;       // 全局 apiKey（fallback）
+runtime.maxTokens;    // transport.maxOutputTokens
+runtime.appConfig;    // 完整配置对象
 
-  if (config.maxSessions < 1) {
-    throw new Error("maxSessions must be >= 1");
-  }
-
-  if (config.taskTimeoutMs < 1000) {
-    throw new Error("taskTimeoutMs must be >= 1000ms");
-  }
-
-  // Ensure DB directory exists
-  const dbDir = path.dirname(config.memoryDbPath);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-}
+// 新式访问
+const m = runtime.getResolvedModel("balanced");
+// → { provider: "deepseek", model: "deepseek-chat", apiKey: "sk-xxx" }
 ```
 
 ---
 
-## 7. Accessing Config at Runtime
-
-```typescript
-// Config is loaded ONCE at startup and passed down via constructor injection.
-// NEVER import config directly in element/service code.
-
-// BAD:
-import { config } from "../config";
-
-// GOOD:
-class MyService {
-  #config: CoreConfig;
-  constructor(config: CoreConfig) {
-    this.#config = config;
-  }
-}
-
-// For convenience, create a typed config context:
-type AppContext = {
-  config: CoreConfig;
-  logger: Logger;
-  toolRegistry: ToolRegistry;
-  sessionStore: SessionStore;
-};
-
-// Bootstrap creates AppContext, passes to all components.
-```
-
----
-
-## 8. Secrets Management
+## 7. 密钥管理
 
 ```text
-# Secrets NEVER go in config files or code.
-
-# Provider:
-.env file (gitignored)
-Environment variables (DOCKER_SECRET, systemd EnvironmentFile)
-Vault / cloud secret manager (production)
-
-# Example .env:
-CORE_PORT=3100
+.sandbox/.env (gitignored):
 DEEPSEEK_API_KEY=sk-xxx
 OPENAI_API_KEY=sk-xxx
-GATEWAY_JWT_SECRET=supersecret-min-16-chars
-
-# .gitignore:
-.env
-*.config.json
-data/
 ```
 
----
-
-## 9. Config Hot Reload (Future)
-
-```typescript
-// Some config values can be changed at runtime without restart:
-
-const HOT_RELOADABLE_KEYS = [
-  "logLevel",
-  "replayEnabled",
-  "transportMaxOutputTokens",
-  "taskTimeoutMs",
-] as const;
-
-// Implementation: watch config file, validate, apply changes
-// NOT in Phase 1. Marked as future enhancement.
-```
+密钥绝不写入 config.json。config.json 中的 `apiKeyEnv` 字段声明读取哪个环境变量。

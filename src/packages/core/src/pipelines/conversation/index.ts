@@ -31,6 +31,7 @@ export type ConversationPipelineDeps = {
   task: any;
   apiKey?: string;
   model?: string;
+  baseUrl?: string;
   tools: any[];
   toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
@@ -51,6 +52,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-chat",
+      baseUrl: deps.baseUrl,
       tools: deps.tools ?? [],
       maxTokens: deps.maxTokens ?? 4096,
     })

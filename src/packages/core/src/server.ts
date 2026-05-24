@@ -33,7 +33,12 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   const { port, host, logger, sm } = deps;
   const runtime: any = sm.get("runtime");
   const sandbox: string = runtime?.sandbox ?? "";
-  const apiKey: string = runtime?.apiKey ?? "";
+  const resolved = runtime?.getResolvedModel?.("balanced") ?? {
+    provider: "deepseek", model: "deepseek-chat", apiKey: runtime?.apiKey ?? "",
+  };
+  const apiKey: string = resolved.apiKey;
+  const model: string = resolved.model;
+  const baseUrl: string | undefined = resolved.baseUrl;
   const maxTokens: number = runtime?.maxTokens ?? 4096;
   const memory: any = sm.get("memory");
   const getCompiledPrompt = () => {
@@ -86,7 +91,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
       const pipeline = conversationPipeline({
         session: sessionStore.get(sid ?? "default"),
         task: { id: task.id, sessionId: sid, chatId: (p.task as any)?.chatId, sandbox, payload: [] },
-        apiKey, model: "deepseek-chat",
+        apiKey, model, baseUrl,
         tools: [...basic, ...advanced],
         getCompiledPrompt, maxTokens, memory,
       }).build(bus);
@@ -143,7 +148,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         const pipeline = conversationPipeline({
           session,
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
-          apiKey, model: "deepseek-chat",
+          apiKey, model, baseUrl,
           tools: basic,
         getCompiledPrompt, maxTokens, memory,
         }).build(bus);

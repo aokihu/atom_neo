@@ -189,6 +189,7 @@ export class FormatUserMessagesElement extends BaseElement<ConversationFlowState
 export class StreamLLMElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #apiKey: string;
   #model: string;
+  #baseUrl?: string;
   #tools: ToolDefinition[];
   #maxTokens: number;
 
@@ -198,12 +199,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     bus: PipelineEventBus<PipelineEventMap>;
     apiKey: string;
     model: string;
+    baseUrl?: string;
     tools: ToolDefinition[];
     maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#baseUrl = params.baseUrl;
     this.#tools = params.tools;
     this.#maxTokens = params.maxTokens ?? 4096;
   }
@@ -217,7 +220,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const userMessages = input.userMessages ?? [];
     const systemText = input.systemText ?? "";
 
-    const provider = createDeepSeek({ apiKey: this.#apiKey });
+    const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
 
     // Convert ToolDefinition to AI SDK v6 tool format

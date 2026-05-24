@@ -1,6 +1,15 @@
 import { BaseService } from "./base-service";
 import type { Mode } from "./types";
 
+export type ProfileLevel = "advanced" | "balanced" | "basic";
+
+export type ResolvedModel = {
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+};
+
 export type RuntimeParams = {
   mode: Mode;
   port: number;
@@ -44,5 +53,20 @@ export class RuntimeService extends BaseService {
   get appConfig(): Record<string, any> { return this.#appConfig; }
   get maxTokens(): number {
     return this.#appConfig?.transport?.maxOutputTokens ?? 4096;
+  }
+
+  getResolvedModel(level: ProfileLevel = "balanced"): ResolvedModel {
+    const profiles = this.#appConfig?.providerProfiles ?? {};
+    const profileId: string = profiles[level] ?? "deepseek/deepseek-chat";
+
+    const sepIndex = profileId.indexOf("/");
+    const provider = sepIndex >= 0 ? profileId.slice(0, sepIndex) : "deepseek";
+    const model = sepIndex >= 0 ? profileId.slice(sepIndex + 1) : profileId;
+
+    const providerConfig = this.#appConfig?.providers?.[provider];
+    const apiKeyEnv = providerConfig?.apiKeyEnv;
+    const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? this.#apiKey;
+
+    return { provider, model, apiKey, baseUrl: providerConfig?.baseUrl };
   }
 }

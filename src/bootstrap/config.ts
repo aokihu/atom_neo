@@ -1,7 +1,28 @@
 import { z } from "zod";
 import { readFileSync } from "node:fs";
 
+const ProviderProfilesSchema = z.object({
+  advanced: z.string().default("deepseek/deepseek-chat"),
+  balanced: z.string().default("deepseek/deepseek-chat"),
+  basic: z.string().default("deepseek/deepseek-chat"),
+});
+
+const ProviderDefinitionSchema = z.object({
+  apiKeyEnv: z.string(),
+  models: z.array(z.string()).min(1),
+  baseUrl: z.string().optional(),
+  options: z.record(z.unknown()).optional(),
+});
+
 const ConfigSchema = z.object({
+  version: z.literal(2).default(2),
+  theme: z.string().default("dark"),
+  providerProfiles: ProviderProfilesSchema.default({
+    advanced: "deepseek/deepseek-chat",
+    balanced: "deepseek/deepseek-chat",
+    basic: "deepseek/deepseek-chat",
+  }),
+  providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
   transport: z.object({
     maxOutputTokens: z.number().int().default(4096),
   }).default({ maxOutputTokens: 4096 }),
