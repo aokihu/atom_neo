@@ -88,7 +88,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         task: { id: task.id, sessionId: sid, chatId: (p.task as any)?.chatId, sandbox, payload: [] },
         apiKey, model: "deepseek-chat",
         tools: [...basic, ...advanced],
-        getCompiledPrompt, maxTokens,
+        getCompiledPrompt, maxTokens, memory,
       }).build(bus);
 
       setPipeline(task.id, pipeline);

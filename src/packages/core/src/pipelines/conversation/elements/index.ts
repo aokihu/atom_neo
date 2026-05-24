@@ -129,9 +129,13 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     if (this.#memory) {
       const text = input.task?.payload?.[0]?.data || "";
       const memories = this.#memory.search(text) || [];
-      if (memories.length > 0) {
-        contextData += "\n\nRelevant Memories:\n" +
-          memories.map((m: any) => `- [${m.tags?.join(",") || "general"}] ${m.content}`).join("\n");
+      for (const node of memories) {
+        if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }
+        const aging = node.accessCount >= 3 ? ' aging="true"' : "";
+        const id = node.id.slice(0, 6);
+        contextData += `\n<Memory id="${id}" tags="${node.tags?.join(",") || ""}"${aging}>\n${node.content}\n</Memory>`;
+        this.#memory.incrementAccess(node.id);
+        this.#memory.boostWeight(node.id);
       }
     }
 
@@ -256,12 +260,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
 // ── Boundary: check-follow-up ──
 export class CheckFollowUpElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  #memory: any;
+
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    memory?: any;
   }) {
     super({ name: params.name, kind: "boundary", bus: params.bus });
+    this.#memory = params.memory;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -269,11 +277,14 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
     const text = input.responseText ?? "";
 
-    // Check for REQUEST_MORE_TOOLS intent in response
-    const hasMoreToolsRequest =
-      /request.more.tools|REQUEST_MORE_TOOLS|需要更多工具/i.test(text);
+    // KEEP_MEMORY detection
+    const keepMatch = text.match(/KEEP_MEMORY:\s*(?:mem:)?(\w+)/i);
+    if (keepMatch && this.#memory) {
+      this.#memory.keep(keepMatch[1]);
+    }
 
-    if (hasMoreToolsRequest) {
+    // REQUEST_MORE_TOOLS detection
+    if (/request.more.tools|REQUEST_MORE_TOOLS|需要更多工具/i.test(text)) {
       return {
         ...input,
         mode: "ready_to_finalize",

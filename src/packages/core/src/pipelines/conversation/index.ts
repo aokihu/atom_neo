@@ -52,6 +52,6 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       tools: deps.tools ?? [],
       maxTokens: deps.maxTokens ?? 4096,
     })
-    .boundary("check-follow-up", {})
+    .boundary("check-follow-up", { memory: deps.memory })
     .sink("finalize", {});
 }

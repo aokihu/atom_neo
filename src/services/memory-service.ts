@@ -9,6 +9,7 @@ export type MemoryNode = {
   content: string;
   tags: string[];
   weight: number;
+  accessCount: number;
   createdAt: number;
   accessedAt: number;
 };
@@ -112,7 +113,7 @@ export class MemoryService extends BaseService {
 
     // Insert metadata
     this.#db.run(
-      "INSERT OR REPLACE INTO nodes (id, tags, weight, created_at, accessed_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT OR REPLACE INTO nodes (id, tags, weight, access_count, created_at, accessed_at) VALUES (?, ?, ?, 0, ?, ?)",
       [hash, tags.join(","), 100, now, now],
     );
 
@@ -124,6 +125,25 @@ export class MemoryService extends BaseService {
       "INSERT INTO edges (source_id, target_id, relation) VALUES (?, ?, ?)",
       [source, target, relation],
     );
+  }
+
+  keep(id: string): void {
+    this.#db.run(
+      "UPDATE nodes SET access_count = 0, weight = MIN(100, weight + 5), accessed_at = ? WHERE id = ?",
+      [Date.now(), id],
+    );
+  }
+
+  incrementAccess(id: string): void {
+    this.#db.run("UPDATE nodes SET access_count = access_count + 1, accessed_at = ? WHERE id = ?", [Date.now(), id]);
+  }
+
+  boostWeight(id: string): void {
+    this.#db.run("UPDATE nodes SET weight = MIN(100, weight + 5), accessed_at = ? WHERE id = ?", [Date.now(), id]);
+  }
+
+  decayWeight(id: string, amount: number): void {
+    this.#db.run("UPDATE nodes SET weight = MAX(0, weight - ?) WHERE id = ?", [amount, id]);
   }
 
   // == Service lifecycle ==
@@ -146,9 +166,12 @@ export class MemoryService extends BaseService {
       id TEXT PRIMARY KEY,
       tags TEXT DEFAULT '',
       weight REAL DEFAULT 100,
+      access_count INTEGER DEFAULT 0,
       created_at INTEGER,
       accessed_at INTEGER
     )`);
+    // Migration: add access_count if table was created without it
+    try { this.#db.run("ALTER TABLE nodes ADD COLUMN access_count INTEGER DEFAULT 0"); } catch { /* already exists */ }
     this.#db.run(`CREATE TABLE IF NOT EXISTS edges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       source_id TEXT NOT NULL,
@@ -172,10 +195,11 @@ export class MemoryService extends BaseService {
     return {
       id: row.id,
       content,
-      tags: row.tags ? row.tags.split(",").filter(Boolean) : [],
-      weight: row.weight,
-      createdAt: row.created_at,
-      accessedAt: row.accessed_at,
+      tags: row.tags ? (row.tags as string).split(",").filter(Boolean) : [],
+      weight: row.weight as number,
+      accessCount: (row.access_count as number) ?? 0,
+      createdAt: row.created_at as number,
+      accessedAt: row.accessed_at as number,
     };
   }
 
