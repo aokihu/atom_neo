@@ -22,8 +22,8 @@ export function createAllTools(sandbox: string, memory?: any): ToolDefinition[] 
   ];
 }
 
-const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "traverse_memory"];
-const ADVANCED_NAMES = ["cp", "mv", "bash", "save_memory", "link_memory"];
+const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "save_memory", "link_memory"];
+const ADVANCED_NAMES = ["cp", "mv", "bash", "traverse_memory"];
 
 export function partitionTools(all: ToolDefinition[]) {
   return {

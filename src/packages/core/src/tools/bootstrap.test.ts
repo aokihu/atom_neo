@@ -26,9 +26,9 @@ describe("partitionTools", () => {
   test("splits into basic and advanced", () => {
     const all = createAllTools(sandbox);
     const { basic, advanced } = partitionTools(all);
-    expect(basic.length).toBe(7);
-    expect(advanced.length).toBe(5);
-    expect(basic.every(t => ["read","write","ls","grep","tree","search_memory","traverse_memory"].includes(t.name))).toBe(true);
-    expect(advanced.every(t => ["cp","mv","bash","save_memory","link_memory"].includes(t.name))).toBe(true);
+    expect(basic.length).toBe(8);
+    expect(advanced.length).toBe(4);
+    expect(basic.every(t => ["read","write","ls","grep","tree","search_memory","save_memory","link_memory"].includes(t.name))).toBe(true);
+    expect(advanced.every(t => ["cp","mv","bash","traverse_memory"].includes(t.name))).toBe(true);
   });
 });
