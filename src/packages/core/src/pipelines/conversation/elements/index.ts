@@ -347,8 +347,11 @@ function parseIntentRequests(text: string): IntentRequest[] {
     } else if (type === "KEEP_MEMORY" && params.mem_id) {
       intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.KEEP_MEMORY, intent: "keep", params: { id: params.mem_id } });
     } else if (type === "FOLLOW_UP") {
+      // must have at least next_prompt or summary
+      if (!params.next_prompt && !params.summary) continue;
       intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params });
     }
+    // unknown TYPE → silently discarded
   }
 
   return intents;
@@ -377,7 +380,10 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
     for (const intent of intents) {
       if (intent.request === IntentRequestType.KEEP_MEMORY && this.#memory) {
-        this.#memory.keep(intent.params.id as string);
+        const memId = intent.params.id as string;
+        if (memId && this.#memory.has?.(memId)) {
+          this.#memory.keep(memId);
+        }
       }
       if (intent.request === IntentRequestType.REQUEST_MORE_TOOLS) {
         needMoreTools = true;

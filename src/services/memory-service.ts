@@ -120,6 +120,11 @@ export class MemoryService extends BaseService {
     return hash;
   }
 
+  has(id: string): boolean {
+    const row = this.#db.prepare("SELECT 1 FROM nodes WHERE id = ?").get(id);
+    return row !== null;
+  }
+
   link(source: string, target: string, relation: string): void {
     this.#db.run(
       "INSERT INTO edges (source_id, target_id, relation) VALUES (?, ?, ?)",

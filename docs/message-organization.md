@@ -156,20 +156,12 @@ class FormatUserMessagesElement extends BaseElement {
 
 **kind**: `transform`，不切换 mode（executing → executing）
 
-**职责**: 纯正则解析 `responseText` → 结构化 `IntentRequest[]`
+**职责**: 纯正则解析 `intentRequestText` → 结构化 `IntentRequest[]`，含格式安全校验
 
 ```typescript
-class ParseIntentsElement extends BaseElement {
-  async doProcess(input): Promise {
-    if (input.mode !== "executing") return input;
-    const intents = parseIntentRequests(input.intentRequestText);
-    return { ...input, intents };
-  }
-}
-
 function parseIntentRequests(text: string): IntentRequest[] {
   const intents: IntentRequest[] = [];
-  const re = /\[([^\]]+)\]/g;  // 只匹配完整 [...]
+  const re = /\[([^\]]+)\]/g;
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(text)) !== null) {
@@ -183,19 +175,58 @@ function parseIntentRequests(text: string): IntentRequest[] {
     }
 
     if (type === "REQUEST_MORE_TOOLS")
-      intents.push({ source: CONVERSATION, request: REQUEST_MORE_TOOLS, intent: "more tools", params });
-    else if (type === "KEEP_MEMORY" && params.mem_id)
-      intents.push({ source: CONVERSATION, request: KEEP_MEMORY, intent: "keep", params: { id: params.mem_id } });
-    else if (type === "FOLLOW_UP")
-      intents.push({ source: CONVERSATION, request: FOLLOW_UP, intent: "follow up", params });
+      intents.push({ ... });
+    else if (type === "KEEP_MEMORY" && validateKeepMemory(params))
+      intents.push({ ... });
+    else if (type === "FOLLOW_UP" && validateFollowUp(params))
+      intents.push({ ... });
+    // 未知 TYPE 被忽略，不生产 intent
   }
   return intents;
 }
 ```
 
+**安全校验**（parse 阶段 — 格式验证）：
+
+| TYPE | 必须参数 | 规则 |
+|------|---------|------|
+| `REQUEST_MORE_TOOLS` | 无 | 直接通过 |
+| `KEEP_MEMORY` | `mem_id` | 非空字符串 |
+| `FOLLOW_UP` | `next_prompt` 或 `summary` | 至少一个非空 |
+| 其他 | — | **跳过**，不产生 intent |
+
 **格式**: `[TYPE,key=value,...]` — 方括号包裹，完整闭合才解析（滑动窗口安全）
 
-**关键变化**: `mode` 从 `streaming` 切到 `formatted`，`stream-llm` 门控对应更新
+### 3.6 `check-follow-up` — 执行期存在性校验
+
+**kind**: `boundary`，切换 mode（executing → ready_to_finalize）
+
+**职责**: 消费 `input.intents[]`，按类型分派，KEEP_MEMORY 验证 mem_id 真实存在
+
+```typescript
+class CheckFollowUpElement extends BaseElement {
+  async doProcess(input): Promise {
+    for (const intent of input.intents ?? []) {
+      // 存在性校验：KEEP_MEMORY 的 mem_id 必须在 MemoryService 中存在
+      if (intent.request === KEEP_MEMORY && this.#memory) {
+        const id = intent.params.id as string;
+        if (id && this.#memory.has(id)) this.#memory.keep(id);
+      }
+      // FOLLOW_UP → 设置 followUp data
+      if (intent.request === FOLLOW_UP) { ... }
+      // REQUEST_MORE_TOOLS → 标记 needMoreTools
+      if (intent.request === REQUEST_MORE_TOOLS) { needMoreTools = true; }
+    }
+  }
+}
+```
+
+**两阶段安全校验总结**:
+
+| 阶段 | 位置 | 校验内容 |
+|------|------|---------|
+| parse | `parseIntentRequests()` | 格式校验：`mem_id` 非空、`next_prompt`/`summary` 至少一个非空、未知 TYPE 跳过 |
+| execute | `CheckFollowUpElement` | 存在性校验：`mem_id` 需在 MemoryService 中存在才执行 `keep()` |
 
 ---
 

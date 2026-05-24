@@ -65,6 +65,9 @@ class MemoryService extends BaseService {
   // 重置记忆生命周期 — KEEP_MEMORY 意图触发
   keep(id: string): void
 
+  // 检查记忆是否存在
+  has(id: string): boolean
+
   // Service 生命周期
   async start(): Promise<void>   // 初始化 DB + 启动后台任务
   async stop(): Promise<void>    // 停止后台任务
