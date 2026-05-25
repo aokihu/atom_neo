@@ -5,8 +5,10 @@ import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
-import { IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
+import { IntentRequestType, IntentRequestSource, TaskSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
+import { createTaskItem } from "../../../task-factory";
+import type { TaskQueue } from "../../../task-queue";
 
 export type ConversationMode =
   | "initial"
@@ -413,18 +415,40 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
 // ── Sink: finalize ──
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
+  #queue: TaskQueue;
+  #buildChainPipeline: ((taskId: string, sessionId: string, chatId: string) => void) | undefined;
+
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    queue?: TaskQueue;
+    buildChainPipeline?: (taskId: string, sessionId: string, chatId: string) => void;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
+    this.#queue = params.queue as TaskQueue;
+    this.#buildChainPipeline = params.buildChainPipeline;
   }
 
   async doProcess(input: ConversationFlowState): Promise<any> {
     if (input.mode !== "ready_to_finalize") {
       throw new Error("FinalizeElement: expected ready_to_finalize");
     }
+
+    if (input.needMoreTools && this.#buildChainPipeline && this.#queue) {
+      const chainTask = createTaskItem({
+        sessionId: input.task.sessionId,
+        chatId: input.task.chatId,
+        pipeline: "conversation",
+        source: TaskSource.INTERNAL,
+        payload: [{ type: "text", data: "" }],
+        parentTaskId: input.task.id,
+        chainId: input.task.chainId,
+      });
+      this.#buildChainPipeline(chainTask.id, input.task.sessionId, input.task.chatId);
+      this.#queue.enqueue(chainTask);
+    }
+
     return {
       type: "complete" as const,
       task: input.task,

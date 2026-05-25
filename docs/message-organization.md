@@ -228,6 +228,46 @@ class CheckFollowUpElement extends BaseElement {
 | parse | `parseIntentRequests()` | 格式校验：`mem_id` 非空、`next_prompt`/`summary` 至少一个非空、未知 TYPE 跳过 |
 | execute | `CheckFollowUpElement` | 存在性校验：`mem_id` 需在 MemoryService 中存在才执行 `keep()` |
 
+### 3.7 `finalize`（重写）— 链任务统一收口
+
+**kind**: `sink`，最后元素 — 收口 pipeline 产出 + 创建链任务
+
+**职责**: 二合一
+1. 返回 pipeline 产出给 TaskEngine
+2. 若 `needMoreTools` → 创建链任务、绑 pipeline、入队 ActiveQueue
+
+```typescript
+class FinalizeElement extends BaseElement {
+  #queue: TaskQueue;
+  #buildPipeline: (taskId: string) => void;
+
+  async doProcess(input: ConversationFlowState): Promise {
+    if (input.needMoreTools) {
+      const chainTask = createTaskItem({
+        source: INTERNAL,
+        parentTaskId: input.task.id,
+        chainId: input.task.chainId,
+        ...
+      });
+      this.#buildPipeline(chainTask.id);   // 构建新 pipeline 并 setPipeline
+      this.#queue.enqueue(chainTask);       // → ActiveQueue (LIFO)
+    }
+
+    return {
+      type: "complete",
+      task: input.task,
+      output: input.responseText,
+      needMoreTools: input.needMoreTools ?? false,
+    };
+  }
+}
+```
+
+**关键约束**:
+- 不等待链任务执行 — 创建 + 入队后立即返回
+- TaskEngine 不感知 `needMoreTools` — 只看 `{ type: "complete" }`
+- `server.ts` 不再创建链任务 — 只管日志/广播/session
+
 ---
 
 ## 4. FlowState 类型扩展

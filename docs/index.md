@@ -38,6 +38,7 @@
 | [memory-service.md](./memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
 | [configuration.md](./configuration.md) | 配置加载优先级、格式 | 添加配置项 |
 | [queue.md](./queue.md) | 双队列系统（ActiveQueue LIFO + WaitingQueue FIFO） | 理解任务调度 |
+| [runloop.md](./runloop.md) | TaskEngine 状态机 — Suspend/Resume/Complete 转换 | 理解任务生命周期 |
 
 ## 通信与错误（跨模块边界时查）
 

@@ -8,11 +8,8 @@ import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, setPipeline } from "./api/tasks";
-import { createTaskItem } from "./task-factory";
-import { TaskSource } from "@atom-neo/shared";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools, partitionTools } from "./tools/bootstrap";
-import type { ToolDefinition } from "@atom-neo/shared";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -46,6 +43,17 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     return compiler?.getCompiledPrompt?.() ?? "";
   };
 
+  const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string) => {
+    const pipeline = conversationPipeline({
+      session: sessionStore.get(sessionId),
+      task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
+      apiKey, model, baseUrl,
+      tools: [...basic, ...advanced],
+      getCompiledPrompt, maxTokens, memory,
+    }).build(bus);
+    setPipeline(chainTaskId, pipeline);
+  };
+
   const allTools = createAllTools(sandbox, memory);
   const { basic, advanced } = partitionTools(allTools);
 
@@ -69,37 +77,11 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     if (sid && output) {
       sessionStore.get(sid).addMessage({ role: "assistant", content: output, timestamp: Date.now() });
     }
-
-    // Broadcast task completion to WebSocket clients
     broadcaster.broadcastToSession(sid ?? "", {
       type: "event.task.completed",
       ts: Date.now(), seq: 0,
       payload: { taskId: p.task?.id, output: (p.result as any)?.output ?? "" },
     });
-
-    if ((p.result as any)?.needMoreTools) {
-      const task = createTaskItem({
-        sessionId: sid ?? "default",
-        chatId: (p.task as any)?.chatId ?? "default",
-        pipeline: "conversation",
-        source: TaskSource.INTERNAL,
-        payload: [{ type: "text", data: "" }],
-        parentTaskId: p.task?.id,
-        chainId: (p.task as any)?.chainId,
-      });
-
-      const pipeline = conversationPipeline({
-        session: sessionStore.get(sid ?? "default"),
-        task: { id: task.id, sessionId: sid, chatId: (p.task as any)?.chatId, sandbox, payload: [] },
-        apiKey, model, baseUrl,
-        tools: [...basic, ...advanced],
-        getCompiledPrompt, maxTokens, memory,
-      }).build(bus);
-
-      setPipeline(task.id, pipeline);
-      taskQueue.enqueue(task);
-      bus.emit("task.enqueued" as any, { task });
-    }
   });
   bus.on("task.failed" as any, (p: any) => {
     logger.error("task failed", { taskId: p.task?.id, error: String(p.error).slice(0, 200) });
@@ -150,7 +132,8 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
           apiKey, model, baseUrl,
           tools: basic,
-        getCompiledPrompt, maxTokens, memory,
+          getCompiledPrompt, maxTokens, memory,
+          queue: taskQueue, buildChainPipeline,
         }).build(bus);
         return createTaskHandler(taskQueue, body, bus, pipeline);
       }
