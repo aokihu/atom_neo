@@ -247,6 +247,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
         maxSteps: 5,
         maxTokens: this.#maxTokens,
+        allowSystemInMessages: true,
       });
 
       const MARKER = "<<<REQUEST>>>";

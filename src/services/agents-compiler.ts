@@ -162,6 +162,7 @@ export class AgentsCompilerService extends BaseService {
         { role: "user" as const, content: raw },
       ],
       maxTokens: 2048,
+      allowSystemInMessages: true,
     });
 
     return result.text.trim();

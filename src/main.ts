@@ -4,7 +4,6 @@ import { parseArguments } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";
 import { loadEnv } from "./bootstrap/env";
-import { startCore } from "@atom-neo/core";
 import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
 import { RuntimeService } from "./services/runtime-service";
 import { ServiceManager } from "./services/service-manager";
@@ -33,6 +32,9 @@ function createLogger(args: BootArguments) {
 }
 
 export async function main(): Promise<void> {
+  // Must set BEFORE AI SDK (via @atom-neo/core) is imported
+  (globalThis as any).AI_SDK_LOG_WARNINGS = false;
+
   const args = parseArguments(Bun.argv.slice(2));
 
   // Bootstrap
@@ -65,6 +67,9 @@ export async function main(): Promise<void> {
     nodesPath: runtime.atomDir + "/memory/nodes",
   }));
   sm.startAll();
+
+  // Lazy import to ensure AI_SDK_LOG_WARNINGS is set before AI SDK loads
+  const { startCore } = await import("@atom-neo/core");
 
   // Dispatch
   switch (args.mode) {
