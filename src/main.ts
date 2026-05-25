@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
 import { parseArguments, printHelp } from "./bootstrap/cli";
@@ -17,13 +18,33 @@ function shouldLog(level: LogLevel, minLevel: LogLevel, ignores: LogLevel[]): bo
   return LEVEL_ORDER.indexOf(level) >= LEVEL_ORDER.indexOf(minLevel);
 }
 
+function isFifo(path: string): boolean {
+  try { return statSync(path).isFIFO(); } catch { return false; }
+}
+
 function createLogger(args: BootArguments) {
-  const hub = new LogHub();
-  if (args.mode === "core" && !args.logFile && !args.logPipePath) {
-    hub.addSink(new StdoutSink());
+  if (args.logModes.length === 0) {
+    return new Logger(args.logLevel, () => {});
   }
-  if (args.logPipePath) hub.addSink(new PipeSink());
-  if (args.logFile) hub.addSink(new FileSink(args.logFile));
+
+  const hub = new LogHub();
+
+  for (const mode of args.logModes) {
+    switch (mode) {
+      case "console":
+        if (args.mode === "core") hub.addSink(new StdoutSink());
+        break;
+      case "pipe":
+        if (args.logPipePath && isFifo(args.logPipePath)) {
+          hub.addSink(new PipeSink(args.logPipePath));
+        }
+        break;
+      case "file":
+        if (args.logFile) hub.addSink(new FileSink(args.logFile));
+        break;
+    }
+  }
+
   return new Logger(args.logLevel, (entry) => {
     if (shouldLog(entry.level, args.logLevel, args.logIgnore)) {
       hub.write(entry);

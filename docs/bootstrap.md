@@ -21,16 +21,20 @@ Options:
   --port <number>         HTTP 端口（默认自动分配）
   --host <ip>             绑定地址（默认 127.0.0.1）
   --sandbox <path>        沙箱工作目录（默认 CWD）
+  --log console|pipe|file 日志输出模式（可叠加；不设置则无日志输出）
   --log-level debug|info|warn|error  最小日志级别（默认 debug）
   --log-ignore <level>    忽略指定级别的日志（可重复）
-  --log-file <path>       日志输出到文件（mode≠core 时可用）
-  --log-pipepath <path>   Named pipe 路径（mode≠core 时可用）
+  --log-file <path>       日志文件路径（--log=file 时必需）
+  --log-pipepath <path>   命名管道路径（--log=pipe 时必需，需为有效 FIFO）
 ```
 
 **日志规则：**
-- `--mode core` → 自动输出到 console
-- `--mode core` + `--log-file`/`--log-pipepath` → console 被抑制，仅输出到指定 sink
-- `--mode tui|full` → 默认无日志输出；设置 `--log-pipepath` 启用 pipe 输出；设置 `--log-file` 启用文件输出；两者可共存
+- `--log` 未设置 → 无任何日志输出（包括 console.log 也不会调用）
+- `--log=console` → 仅 `--mode core` 时生效，其他模式静默忽略
+- `--log=pipe` → 需要 `--log-pipepath` 指向有效的命名管道（FIFO），否则静默回退
+- `--log=file` → 需要 `--log-file` 指定输出文件路径，否则静默回退
+- 多个 `--log` 可叠加：`--log=pipe --log=file`
+- `--log-level` 和 `--log-ignore` 控制日志级别过滤，与输出模式独立
 
 ---
 
