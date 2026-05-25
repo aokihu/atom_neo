@@ -1,6 +1,6 @@
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
-import { parseArguments } from "./bootstrap/cli";
+import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";
 import { loadEnv } from "./bootstrap/env";
@@ -32,10 +32,15 @@ function createLogger(args: BootArguments) {
 }
 
 export async function main(): Promise<void> {
+  const parsed = parseArguments(Bun.argv.slice(2));
+  if (parsed === "help") {
+    printHelp();
+    process.exit(0);
+  }
+  const args = parsed;
+
   // Must set BEFORE AI SDK (via @atom-neo/core) is imported
   (globalThis as any).AI_SDK_LOG_WARNINGS = false;
-
-  const args = parseArguments(Bun.argv.slice(2));
 
   // Bootstrap
   loadEnv(args.sandbox);

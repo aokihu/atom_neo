@@ -248,7 +248,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         maxSteps: 5,
         maxTokens: this.#maxTokens,
         allowSystemInMessages: true,
-      });
+      } as any);
 
       const MARKER = "<<<REQUEST>>>";
       const WINDOW = MARKER.length - 1;
