@@ -67,3 +67,20 @@ TaskEngine.#processNext()
 - `FinalizeElement` 不等待链任务执行 — 只创建和入队
 - 双队列保证链任务不被打断 — [queue.md](./queue.md)
 - `chainAction` 只在 pipeline 内部流转，不出 pipeline
+
+## 安全门：chainDepth 防无限循环
+
+```
+MAX_FOLLOW_UP_DEPTH = 5
+
+Task (depth=0) → pipeline 执行 → FinalizeElement
+  ├─ depth >= 5 ? → 停止，标记 COMPLETED
+  └─ depth < 5  ? → 创建链任务 (depth+1) → ActiveQueue
+
+链式调用: request_more_tools → request_more_tools → ...
+           depth 0             depth 1              depth 5 → STOP
+```
+
+- `depth` 存储在 ConversationPipelineDeps 中，每个 pipeline 实例固定
+- FinalizeElement 创建链任务时传递 `depth + 1`
+- 上限可配置：`MAX_FOLLOW_UP_DEPTH` 常量

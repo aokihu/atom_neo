@@ -43,13 +43,14 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     return compiler?.getCompiledPrompt?.() ?? "";
   };
 
-  const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string) => {
+  const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string, chainDepth: number) => {
     const pipeline = conversationPipeline({
       session: sessionStore.get(sessionId),
       task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
       apiKey, model, baseUrl,
       tools: [...basic, ...advanced],
       getCompiledPrompt, maxTokens, memory,
+      chainDepth,
     }).build(bus);
     setPipeline(chainTaskId, pipeline);
   };
@@ -133,7 +134,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
           apiKey, model, baseUrl,
           tools: basic,
           getCompiledPrompt, maxTokens, memory,
-          queue: taskQueue, buildChainPipeline,
+          queue: taskQueue, buildChainPipeline, chainDepth: 0,
         }).build(bus);
         return createTaskHandler(taskQueue, body, bus, pipeline);
       }

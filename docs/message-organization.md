@@ -260,7 +260,9 @@ class FinalizeElement extends BaseElement {
 }
 ```
 
-**扩展新链类型**: 加一个字符串值 + FinalizeElement 一个分支。不该 FlowState 字段，不该 server.ts。
+**chainDepth 防循环**: `FinalizeElement` 注入 `chainDepth`，创建链任务时传递 `depth + 1`。上限 `MAX_FOLLOW_UP_DEPTH = 5`，到达上限停止创建链任务。
+
+**扩展新链类型**: 加一个字符串值 + FinalizeElement 一个分支。不改 FlowState 字段，不改 server.ts。
 
 **chainAction 设置顺序**（按 pipeline 执行序）:
 | Element | 设置值 | 条件 |

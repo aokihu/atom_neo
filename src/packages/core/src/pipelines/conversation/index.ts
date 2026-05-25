@@ -38,7 +38,8 @@ export type ConversationPipelineDeps = {
   maxTokens?: number;
   memory?: any;
   queue?: any;
-  buildChainPipeline?: (taskId: string, sessionId: string, chatId: string) => void;
+  buildChainPipeline?: (taskId: string, sessionId: string, chatId: string, chainDepth: number) => void;
+  chainDepth?: number;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -60,5 +61,5 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     })
     .transform("parse-intents", {})
     .boundary("check-follow-up", { memory: deps.memory })
-    .sink("finalize", { queue: deps.queue, buildChainPipeline: deps.buildChainPipeline });
+    .sink("finalize", { queue: deps.queue, buildChainPipeline: deps.buildChainPipeline, chainDepth: deps.chainDepth ?? 0 });
 }
