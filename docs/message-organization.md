@@ -192,7 +192,7 @@ function parseIntentRequests(text: string): IntentRequest[] {
 |------|---------|------|
 | `REQUEST_MORE_TOOLS` | 无 | 直接通过 |
 | `KEEP_MEMORY` | `mem_id` | 非空字符串 |
-| `FOLLOW_UP` | `next_prompt` 或 `summary` | 至少一个非空 |
+| `FOLLOW_UP` | `next_prompt` 或 `history_abstract` 或 `summary` | 至少一个非空 |
 | 其他 | — | **跳过**，不产生 intent |
 
 **格式**: `[TYPE,key=value,...]` — 方括号包裹，完整闭合才解析（滑动窗口安全）

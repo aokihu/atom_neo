@@ -326,7 +326,7 @@ export class ParseIntentsElement extends BaseElement<ConversationFlowState, Conv
   }
 }
 
-function parseIntentRequests(text: string): IntentRequest[] {
+export function parseIntentRequests(text: string): IntentRequest[] {
   const intents: IntentRequest[] = [];
   const re = /\[([^\]]+)\]/g;
   let match: RegExpExecArray | null;
@@ -347,8 +347,8 @@ function parseIntentRequests(text: string): IntentRequest[] {
     } else if (type === "KEEP_MEMORY" && params.mem_id) {
       intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.KEEP_MEMORY, intent: "keep", params: { id: params.mem_id } });
     } else if (type === "FOLLOW_UP") {
-      // must have at least next_prompt or summary
-      if (!params.next_prompt && !params.summary) continue;
+      // must have at least one meaningful param for continuation
+      if (!params.next_prompt && !params.history_abstract && !params.summary) continue;
       intents.push({ source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params });
     }
     // unknown TYPE → silently discarded
