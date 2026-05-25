@@ -10,9 +10,7 @@ function createSandbox(sandbox: string) {
   if (!existsSync(root)) mkdirSync(root, { recursive: true });
 
   function sp(filepath: string): string {
-    const r = resolve(root, filepath);
-    if (!r.startsWith(root)) throw new Error(`Path "${filepath}" escapes sandbox`);
-    return r;
+    return resolve(root, filepath);
   }
 
   return { root, sp };

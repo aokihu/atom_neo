@@ -33,6 +33,9 @@ const ConfigSchema = z.object({
   tui: z.object({
     theme: z.enum(["dark", "light"]).default("dark"),
   }).default({ theme: "dark" }),
+  permission: z.object({
+    whitelist: z.array(z.string()).default([]),
+  }).default({ whitelist: [] }),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

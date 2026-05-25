@@ -55,12 +55,12 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     setPipeline(chainTaskId, pipeline);
   };
 
-  const allTools = createAllTools(sandbox, memory);
+  const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
   const { basic, advanced } = partitionTools(allTools);
 
   const sessionStore = new SessionStore();
   const toolRegistry = new ToolRegistry();
-  registerBuiltinTools(toolRegistry, sandbox);
+  registerBuiltinTools(toolRegistry, sandbox, runtime?.appConfig?.permission?.whitelist ?? []);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
   registerConversationElements();

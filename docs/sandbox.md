@@ -4,13 +4,28 @@
 
 ---
 
-## 1. 隔离规则
+## 1. 隔离规则 (ToolGuard)
 
-Agent 的**所有操作默认限定在 SANDBOX 目录内**：
+所有工具执行前经由 **ToolGuard** 统一安全检查，访问控制模型如下：
 
-- **允许**：在 SANDBOX 内读取、写入、执行任意操作
-- **需要授权**：访问、改写 SANDBOX 外部的文件或目录（授权功能暂不实现，目前仅限 SANDBOX 内开发）
-- **路径校验**：所有 Tool 操作的路径需确认未越界到 SANDBOX 外
+```
+工具路径参数
+  ├─ 黑名单（.atom）        → 拒绝，返回 "File not found"（对 Agent 完全隐藏）
+  ├─ 沙箱目录内             → 允许
+  └─ 沙箱目录外             → 检查 config.json permission.whitelist
+       ├─ 在白名单中          → 允许
+       └─ 不在白名单中        → 拒绝，返回 "Path is outside sandbox"
+```
+
+**ToolGuard 是 Proxy 拦截层**，包裹每个 `ToolDefinition.execute`，在以下三个时机介入：
+
+| 阶段 | 检查内容 | 覆盖工具 |
+|------|---------|---------|
+| PRE (执行前) | 路径黑名单（.atom）+ 白名单 | read, write, ls, tree, grep, cp, mv |
+| PRE (执行前) | bash 命令含 `.atom` 字串 | bash |
+| POST (执行后) | 输出结果中移除 `.atom` 条目 | ls, tree, grep |
+
+**bash 工具**额外受 `.atom` 命令字串检查限制，但对沙箱外路径不做白名单拦截（shell 命令解析复杂，后续增强）。
 
 ## 2. 目录结构
 
@@ -101,7 +116,75 @@ src/main.ts
 <!-- 在此补充项目特定的开发指引 -->
 ```
 
-## 8. 相关文档
+## 8. ToolGuard 实现
+
+ToolGuard 使用 Proxy 模式，在 `bootstrap.ts` 创建工具数组后统一包裹：
+
+```typescript
+// src/packages/core/src/tools/guard.ts
+export function createToolGuard(
+  tool: ToolDefinition,
+  sandbox: string,
+  whitelist: string[],
+): ToolDefinition {
+  return new Proxy(tool, {
+    get(target, prop) {
+      if (prop !== "execute") return Reflect.get(target, prop);
+      return async (args: unknown) => {
+        // PRE: 黑名单/白名单/bash命令检查
+        const blocked = preCheck(target, args, sandbox, whitelist);
+        if (blocked) return blocked;
+        // EXEC: 原始工具执行
+        const result = await target.execute(args);
+        // POST: 输出过滤（ls/tree/grep 移除 .atom）
+        return postFilter(target, result);
+      };
+    },
+  });
+}
+```
+
+### 决策表
+
+| Agent 操作 | 拦截阶段 | 返回 |
+|-----------|---------|------|
+| `read .atom/x` | PRE 黑名单 | `"File not found"` |
+| `ls .atom` | PRE 黑名单 | `"Directory not found"` |
+| `read /etc/passwd` (未在白名单) | PRE 白名单 | `"Path is outside sandbox"` |
+| `read /tmp/shared` (在白名单) | PRE 通过 | 正常执行 |
+| `ls .` (沙箱根目录) | POST 过滤 | 结果中不含 `.atom` |
+| `tree .` (沙箱根目录) | POST 过滤 | 树中不含 `.atom` 分支 |
+| `grep "text" .` (沙箱根目录) | PRE 通过 + POST 过滤 | `.atom/` 内文件不参与搜索 |
+| `bash "cat .atom/x"` | PRE bash 检查 | `"Command not allowed"` |
+| `bash "cat /etc/passwd"` | PRE 通过 | 执行（后续增强） |
+| `search_memory` / `save_memory` | 无路径参数，透传 | 正常执行 |
+
+### 配置
+
+```jsonc
+// config.json
+{
+  "version": 2,
+  "permission": {
+    "whitelist": ["$HOME/Projects", "$SANDBOX/../shared", "/tmp/build"]
+  }
+}
+```
+
+### 路径别名
+
+whitelist 和 Agent 路径参数支持以下别名自动解析：
+
+| 别名 | 解析为 | 示例 |
+|------|--------|------|
+| `$HOME` | `os.homedir()` | `$HOME/Projects` → `/home/user/Projects` |
+| `$SANDBOX` | 沙箱根目录 | `$SANDBOX/../shared` → 沙箱上级目录 |
+
+别名在 ToolGuard PRE 检查时对 Agent 传入的路径同样生效，防止别名绕过。
+
+whitelist 路径可以是绝对路径或相对路径（相对路径相对于沙箱根目录解析）。
+
+## 9. 相关文档
 
 | 文档 | 说明 |
 |------|------|

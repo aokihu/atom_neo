@@ -9,9 +9,11 @@ import {
   createSearchMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool,
 } from "./builtin/memory";
-export function createAllTools(sandbox: string, memory?: any): ToolDefinition[] {
+import { createToolGuard } from "./guard";
+
+export function createAllTools(sandbox: string, memory?: any, whitelist?: string[]): ToolDefinition[] {
   const sb = createSandbox(sandbox);
-  return [
+  const raw: ToolDefinition[] = [
     createReadTool(sb), createWriteTool(sb), createLsTool(sb),
     createTreeTool(sb), createGrepTool(sb), createCpTool(sb), createMvTool(sb),
     createBashTool(sandbox),
@@ -20,6 +22,7 @@ export function createAllTools(sandbox: string, memory?: any): ToolDefinition[] 
     createTraverseMemoryTool(memory as any),
     createLinkMemoryTool(memory as any),
   ];
+  return raw.map(t => createToolGuard(t, sandbox, whitelist ?? []));
 }
 
 const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "save_memory", "link_memory"];
@@ -32,8 +35,8 @@ export function partitionTools(all: ToolDefinition[]) {
   };
 }
 
-export function registerBuiltinTools(registry: ToolRegistry, sandbox: string): void {
-  for (const t of createAllTools(sandbox)) {
+export function registerBuiltinTools(registry: ToolRegistry, sandbox: string, whitelist?: string[]): void {
+  for (const t of createAllTools(sandbox, undefined, whitelist)) {
     registry.register(t);
   }
 }

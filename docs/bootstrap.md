@@ -44,11 +44,16 @@ Options:
 {
   "transport": { "maxOutputTokens": 4096 },
   "gateway": { "port": 3000, "jwtSecret": "..." },
-  "tui": { "theme": "dark" }
+  "tui": { "theme": "dark" },
+  "permission": {
+    "whitelist": ["/home/user/other-project", "/tmp/shared"]
+  }
 }
 ```
 
 不含 server 配置（port/host 走 CLI）。文件缺失时使用默认值。
+
+`permission.whitelist` 用于 ToolGuard 白名单：沙箱外路径默认禁止访问，仅白名单中的路径可被 Agent 的工具操作访问（详见 [sandbox.md](./sandbox.md)）。
 
 ---
 
