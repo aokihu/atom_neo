@@ -1,79 +1,69 @@
 # TaskEngine Runloop — 任务状态机
 
-> **版本**: v0.5.3 →  FinalizeElement 统一收口
+> **版本**: v0.5.3 → FinalizeElement 统一收口 + chainAction 扩展
 
 ---
 
 ## 问题
 
-当前 `needMoreTools` 链式续接逻辑散落在 `server.ts` 的 `bus.on("task.completed")` handler 中，跨越 TaskEngine → server.ts 两个文件的回调跳转：
+当前 `needMoreTools` 链式续接逻辑散落在 `server.ts` 的 `bus.on("task.completed")` handler 中，跨越 TaskEngine → server.ts 两个文件的回调跳转。每新增一种链任务类型（续写、记忆检索等）都需要加新的 boolean 字段和 server.ts 代码。
+
+## 方案：FinalizeElement 统一收口 + chainAction
+
+将链任务创建逻辑从 `server.ts` 内聚到 `FinalizeElement`，用单一 `chainAction` 字段表达所有链类型：
 
 ```
-TaskEngine: pipeline完成 → COMPLETED → emit "task.completed"
-               ↓ 跨越文件边界 ↓
-server.ts:   检查 needMoreTools → 创建 task_B → 构建 pipeline → enqueue
+ConversationFlowState {
+  chainAction?: "more_tools" | "follow_up";  // 可扩展
+}
 ```
 
-## 方案：FinalizeElement 统一收口
+### chainAction 设置顺序（按 pipeline element 执行序）
 
-将链任务创建逻辑从 `server.ts` 内聚到 `FinalizeElement`（pipeline 的终点元素），线性控制流：
+| Element | 设置 | 条件 | 优先级 |
+|---------|------|------|--------|
+| stream-llm | `chainAction = "follow_up"` | `finishReason === "length"` (输出被截断) | 低 |
+| check-follow-up | `chainAction = "more_tools"` | intent 中检测到 REQUEST_MORE_TOOLS | 高（覆盖） |
 
+### FinalizeElement 消费
+
+```typescript
+FinalizeElement.doProcess():
+  if chainAction === "more_tools":
+    → 创建链任务 (tools: basic+advanced, payload: 空)
+  if chainAction === "follow_up":
+    → 创建续写任务 (payload: "请从上次中断处继续")
+  → enqueue → ActiveQueue (LIFO)
+  → return { type: "complete", ... }
 ```
-TaskEngine.#processNext()
-  └─ pipeline 执行 (10 elements)
-       └─ FinalizeElement.doProcess()
-            ├─ if needMoreTools:
-            │    task_B = createTaskItem(INTERNAL)
-            │    setPipeline(task_B, ...)
-            │    queue.enqueue(task_B)           ← ActiveQueue (LIFO)
-            │
-            └─ return { type: "complete", output, needMoreTools }
 
-TaskEngine: 拿结果 → COMPLETED → 收工
-```
+### 扩展新链类型
+
+只需：加一个字符串值 → 在 FinalizeElement 加一个分支。不改 FlowState 字段，不改 server.ts。
 
 ## 数据流
 
 ```
-FinalizeElement
-  │
-  ├─ 注入依赖：
-  │    queue:      TaskQueue           ← enqueue 链任务
-  │    sandbox:    string               ← 构建 pipeline 用
-  │    pipelineDeps: object             ← { apiKey, model, baseUrl, tools... }
-  │    sessionStore/memory/compiledPrompt ← 构建 pipeline 用
-  │
-  ├─ 决策逻辑：
-  │    input.needMoreTools === true ?
-  │      ├─ 创建 INTERNAL task (chainId 继承父任务)
-  │      ├─ 构建 conversationPipeline({ tools: basic+advanced })
-  │      ├─ setPipeline(taskId, pipeline)
-  │      └─ queue.enqueue(task)
-  │
-  └─ 返回：
-       { type: "complete", task, output, needMoreTools }
+TaskEngine.#processNext()
+  └─ pipeline 执行 (10 elements)
+       │
+       ├─ stream-llm:      chainAction = "follow_up" (if truncated)
+       ├─ parse-intents:   (只解析)
+       ├─ check-follow-up: chainAction = "more_tools" (覆盖)
+       └─ FinalizeElement:
+            ├─ "more_tools" → 创建工具链任务 → ActiveQueue
+            ├─ "follow_up"  → 创建续写任务   → ActiveQueue
+            └─ return complete
 ```
 
 ## server.ts 简化
 
-```
-之前:  ~45 行（存 session + 广播 + needMoreTools 逻辑）
-之后:  ~15 行（存 session + 广播）
-```
-
-`server.ts` 不再知道 `needMoreTools`、`basic vs advanced tools` 的存在。它只管 HTTP/WS 层。
+- 只负责日志、广播、session 存储
+- 不再知道 needMoreTools / chainAction / tool 层级
+- `buildChainPipeline` 回调传给 FinalizeElement
 
 ## 关键约束
 
-- `FinalizeElement` 不等待链任务执行 — 只负责创建和入队
-- 双队列保证链任务不被打断 — 详见 [queue.md](./queue.md)
-- `bus.emit("task.completed")` 仅做日志/广播，不创建任务
-- 链任务 parentTaskId 指向父任务，chainId 继承
-
-## 与 atom_next 对比
-
-| | atom_neo (之前) | atom_neo (之后) | atom_next |
-|---|-----------------|-----------------|-----------|
-| 链任务创建位置 | server.ts bus handler | FinalizeElement | Runtime (intent dispatch) |
-| 控制流 | 跨文件 event | 线性 | 线性 |
-| server 职责 | HTTP + WS + pipeline 细节 | HTTP + WS | HTTP + WS |
+- `FinalizeElement` 不等待链任务执行 — 只创建和入队
+- 双队列保证链任务不被打断 — [queue.md](./queue.md)
+- `chainAction` 只在 pipeline 内部流转，不出 pipeline

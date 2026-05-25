@@ -34,7 +34,7 @@ export type ConversationFlowState = {
     nextPrompt: string;
     avoidRepeat: string;
   };
-  needMoreTools?: boolean;
+  chainAction?: "more_tools" | "follow_up";
   intents?: IntentRequest[];
   intentRequestText?: string;
 };
@@ -257,10 +257,15 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let buffer = "";
       let pastMarker = false;
       let intentRequestText = "";
-      let deltaBuffer = "";  // TUI 批处理缓冲区
+      let deltaBuffer = "";
       let deltaCount = 0;
+      let finishReason = "";
 
       for await (const chunk of streamResult.fullStream) {
+        if (chunk.type === "step-finish") {
+          finishReason = (chunk as any).finishReason ?? "";
+          continue;
+        }
         if (chunk.type !== "text-delta") continue;
 
         if (pastMarker) {
@@ -301,7 +306,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       if (deltaBuffer) {
         this.report("transport.delta", { textDelta: deltaBuffer });
       }
-      return { ...input, mode: "executing", responseText: fullText, intentRequestText };
+      return {
+        ...input,
+        mode: "executing",
+        responseText: fullText,
+        intentRequestText,
+        chainAction: finishReason === "length" ? "follow_up" : undefined,
+      };
     } catch (err: any) {
       return {
         ...input,
@@ -378,8 +389,7 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
     const intents = input.intents ?? [];
 
-    let needMoreTools = false;
-
+    // Process KEEP_MEMORY first (always, regardless of chain action)
     for (const intent of intents) {
       if (intent.request === IntentRequestType.KEEP_MEMORY && this.#memory) {
         const memId = intent.params.id as string;
@@ -387,26 +397,20 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
           this.#memory.keep(memId);
         }
       }
+    }
+
+    // Chain action: REQUEST_MORE_TOOLS overrides stream-llm's follow_up
+    for (const intent of intents) {
       if (intent.request === IntentRequestType.REQUEST_MORE_TOOLS) {
-        needMoreTools = true;
+        return { ...input, mode: "ready_to_finalize", chainAction: "more_tools" };
       }
       if (intent.request === IntentRequestType.FOLLOW_UP) {
         return {
           ...input,
           mode: "ready_to_finalize",
           followUp: { summary: "follow_up", nextPrompt: "", avoidRepeat: "" },
-          needMoreTools: false,
         };
       }
-    }
-
-    if (needMoreTools) {
-      return {
-        ...input,
-        mode: "ready_to_finalize",
-        followUp: { summary: "request_more_tools", nextPrompt: "", avoidRepeat: "" },
-        needMoreTools: true,
-      };
     }
 
     return { ...input, mode: "ready_to_finalize" };
@@ -435,17 +439,25 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       throw new Error("FinalizeElement: expected ready_to_finalize");
     }
 
-    if (input.needMoreTools && this.#buildChainPipeline && this.#queue) {
+    if (input.chainAction && this.#buildChainPipeline && this.#queue) {
+      const payload: Array<{ type: "text"; data: string }> =
+        input.chainAction === "follow_up"
+          ? [{ type: "text", data: "请从上次中断处继续，不要重复已输出的内容。" }]
+          : [{ type: "text", data: "" }];
+
       const chainTask = createTaskItem({
         sessionId: input.task.sessionId,
         chatId: input.task.chatId,
         pipeline: "conversation",
         source: TaskSource.INTERNAL,
-        payload: [{ type: "text", data: "" }],
+        payload,
         parentTaskId: input.task.id,
         chainId: input.task.chainId,
       });
-      this.#buildChainPipeline(chainTask.id, input.task.sessionId, input.task.chatId);
+
+      if (input.chainAction === "more_tools") {
+        this.#buildChainPipeline(chainTask.id, input.task.sessionId, input.task.chatId);
+      }
       this.#queue.enqueue(chainTask);
     }
 
@@ -453,7 +465,6 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       type: "complete" as const,
       task: input.task,
       output: input.responseText,
-      needMoreTools: input.needMoreTools ?? false,
     };
   }
 }

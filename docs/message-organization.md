@@ -230,43 +230,43 @@ class CheckFollowUpElement extends BaseElement {
 
 ### 3.7 `finalize`（重写）— 链任务统一收口
 
-**kind**: `sink`，最后元素 — 收口 pipeline 产出 + 创建链任务
+**kind**: `sink`，最后元素 — 消费 `chainAction` 并创建链任务
 
-**职责**: 二合一
-1. 返回 pipeline 产出给 TaskEngine
-2. 若 `needMoreTools` → 创建链任务、绑 pipeline、入队 ActiveQueue
+**职责**: 根据 `chainAction` 值创建对应链任务
+- `"more_tools"` → 工具链任务（tools: basic+advanced, payload: 空）
+- `"follow_up"` → 续写任务（payload: "请从上次中断处继续"）
 
 ```typescript
 class FinalizeElement extends BaseElement {
   #queue: TaskQueue;
-  #buildPipeline: (taskId: string) => void;
+  #buildChainPipeline: (taskId, sessionId, chatId) => void;
 
-  async doProcess(input: ConversationFlowState): Promise {
-    if (input.needMoreTools) {
-      const chainTask = createTaskItem({
+  async doProcess(input): Promise {
+    if (input.chainAction === "more_tools") {
+      const task = createTaskItem({ source: INTERNAL, ... });
+      this.#buildChainPipeline(task.id, input.task.sessionId, input.task.chatId);
+      this.#queue.enqueue(task);
+    } else if (input.chainAction === "follow_up") {
+      const task = createTaskItem({
         source: INTERNAL,
-        parentTaskId: input.task.id,
-        chainId: input.task.chainId,
+        payload: [{ type: "text", data: "请从上次中断处继续" }],
         ...
       });
-      this.#buildPipeline(chainTask.id);   // 构建新 pipeline 并 setPipeline
-      this.#queue.enqueue(chainTask);       // → ActiveQueue (LIFO)
+      this.#queue.enqueue(task);
     }
 
-    return {
-      type: "complete",
-      task: input.task,
-      output: input.responseText,
-      needMoreTools: input.needMoreTools ?? false,
-    };
+    return { type: "complete", task: input.task, output: input.responseText };
   }
 }
 ```
 
-**关键约束**:
-- 不等待链任务执行 — 创建 + 入队后立即返回
-- TaskEngine 不感知 `needMoreTools` — 只看 `{ type: "complete" }`
-- `server.ts` 不再创建链任务 — 只管日志/广播/session
+**扩展新链类型**: 加一个字符串值 + FinalizeElement 一个分支。不该 FlowState 字段，不该 server.ts。
+
+**chainAction 设置顺序**（按 pipeline 执行序）:
+| Element | 设置值 | 条件 |
+|---------|--------|------|
+| stream-llm | `"follow_up"` | finishReason === "length" |
+| check-follow-up | `"more_tools"` | 覆盖（工具优先） |
 
 ---
 
@@ -285,7 +285,7 @@ type ConversationFlowState = {
   prompts?: PromptItem[];          // collect-prompts 写入（会话历史）
   responseText?: string;           // stream-llm 写入
   followUp?: FollowUpData;         // check-follow-up 写入
-  needMoreTools?: boolean;         // check-follow-up 写入
+  chainAction?: "more_tools" | "follow_up";  // stream-llm / check-follow-up 写入
   intents?: IntentRequest[];        // parse-intents 写入
 };
 ```
