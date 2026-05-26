@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import { MARKDOWN_STYLE } from "../theme";
 
 export function MessageBubble({ message }: { message: Message }) {
   switch (message.role) {
@@ -12,7 +13,12 @@ export function MessageBubble({ message }: { message: Message }) {
     case "assistant":
       return (
         <box paddingBottom={1} paddingLeft={2} paddingRight={2}>
-          <text fg="#e6edf3">{message.content}{message.streaming ? <span fg="#484f58"> ▌</span> : undefined}</text>
+          <markdown
+            content={message.content}
+            streaming={message.streaming}
+            syntaxStyle={MARKDOWN_STYLE}
+            conceal
+          />
         </box>
       );
     case "tool":
