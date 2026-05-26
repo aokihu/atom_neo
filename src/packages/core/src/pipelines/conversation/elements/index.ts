@@ -108,27 +108,28 @@ export class FetchAgentsPromptElement extends BaseElement<ConversationFlowState,
 // ── Transform: collect-context ──
 export class CollectContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #memory: any;
+  #cwd: string;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     memory?: any;
+    sandbox?: string;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#memory = params.memory;
+    this.#cwd = params.sandbox ?? process.cwd();
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
 
-    const sandbox = input.task?.sandbox ?? process.cwd();
-
     let contextData = [
       `Current Time: ${new Date().toISOString()}`,
-      `Sandbox Directory: ${sandbox}`,
+      `cwd: ${this.#cwd}`,
       `OS: ${process.platform} ${process.arch}`,
-      `All file paths are relative to the sandbox directory.`,
+      `All file paths are relative to cwd.`,
     ].join("\n");
 
     // Inject memories if available
@@ -303,7 +304,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         }
       }
 
-      // 发送剩余缓冲
+      // 刷新滑动窗口中残留的最后 ≤WINDOW 个字符
+      if (buffer) {
+        fullText += buffer;
+        deltaBuffer += buffer;
+      }
       if (deltaBuffer) {
         this.report("transport.delta", { textDelta: deltaBuffer });
       }

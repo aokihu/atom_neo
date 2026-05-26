@@ -294,7 +294,7 @@ type ConversationFlowState = {
 
 ---
 
-## 5. `stream-llm` — system 参数修复
+## 5. `stream-llm` — 流式输出 + `<<<REQUEST>>>` 标记检测
 
 ```typescript
 // 门控
@@ -310,16 +310,86 @@ const streamResult = streamText({
   maxTokens: input.maxTokens ?? 4096,
 });
 
+const MARKER = "<<<REQUEST>>>";
+const WINDOW = MARKER.length - 1;   // 滑动窗口，始终保留最后 WINDOW 个字符
+const CHUNK_BATCH = 3;              // 缓冲 N 个 chunk 再发送 TUI
+
 let fullText = "";
+let buffer = "";                     // 滑动窗口缓冲区
+let pastMarker = false;
+let intentRequestText = "";
+let deltaBuffer = "";
+let deltaCount = 0;
+
 for await (const chunk of streamResult.fullStream) {
-  if (chunk.type === "text-delta") {
-    fullText += chunk.textDelta;
-    bus.emit("transport.delta", { textDelta: chunk.textDelta });
+  if (chunk.type === "step-finish") {
+    finishReason = (chunk as any).finishReason ?? "";
+    continue;
+  }
+  if (chunk.type !== "text-delta") continue;
+
+  // 已检测到标记 → 后续内容归入 intentRequestText
+  if (pastMarker) {
+    intentRequestText += chunk.textDelta;
+    continue;
+  }
+
+  buffer += chunk.textDelta;
+  const idx = buffer.indexOf(MARKER);
+
+  if (idx >= 0) {
+    // 找到标记 → 发送标记前的内容
+    if (idx > 0) {
+      fullText += buffer.slice(0, idx);
+      deltaBuffer += buffer.slice(0, idx);
+      deltaCount++;
+    }
+    intentRequestText = buffer.slice(idx + MARKER.length);
+    pastMarker = true;
+    buffer = "";
+  } else if (buffer.length > WINDOW) {
+    // 未找到标记 → 发送 WINDOW 之前的安全内容
+    const emitLen = buffer.length - WINDOW;
+    fullText += buffer.slice(0, emitLen);
+    deltaBuffer += buffer.slice(0, emitLen);
+    deltaCount++;
+    buffer = buffer.slice(emitLen);   // 保留最后 WINDOW 个字符
+  }
+
+  // 累积 CHUNK_BATCH 个 chunk 后批量发送 TUI
+  if (deltaCount >= CHUNK_BATCH && deltaBuffer) {
+    bus.emit("transport.delta", { textDelta: deltaBuffer });
+    deltaBuffer = "";
+    deltaCount = 0;
   }
 }
 
-return { ...input, responseText: fullText };
+// IMPORTANT: 流结束后必须刷新 buffer 中的残留字符
+// buffer 中保留的是检测 <<<REQUEST>>> 用的最后 ≤WINDOW 个字符
+if (buffer) {
+  fullText += buffer;
+  deltaBuffer += buffer;
+}
+if (deltaBuffer) {
+  bus.emit("transport.delta", { textDelta: deltaBuffer });
+}
+
+return {
+  ...input,
+  mode: "executing",
+  responseText: fullText,
+  intentRequestText,
+  chainAction: finishReason === "length" ? "follow_up" : undefined,
+};
 ```
+
+### 关键设计点
+
+| 机制 | 说明 |
+|------|------|
+| `WINDOW = 12` | 滑动窗口始终保留最后 12 个字符，用于检测 `<<<REQUEST>>>`（13 字符）标记，确保标记不会被部分发送给 TUI |
+| `CHUNK_BATCH = 3` | 缓冲 3 个 text-delta 后再发送 TUI，减少 WebSocket 消息量 |
+| **Buffer 刷新** | 流结束后必须将 `buffer` 中残留字符刷新到 `fullText` 和 `deltaBuffer`，否则末尾 ≤WINDOW 个字符会丢失 |
 
 ---
 

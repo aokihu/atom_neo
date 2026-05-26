@@ -350,16 +350,25 @@ class LoadSystemPromptElement extends BaseElement<MyFlowState, MyFlowState> {
 
 ```typescript
 class CollectContextElement extends BaseElement<MyFlowState, MyFlowState> {
+  #cwd: string;
+
+  constructor(params: { sandbox?: string; /* ... */ }) {
+    super(params);
+    this.#cwd = params.sandbox ?? process.cwd();
+  }
+
   async doProcess(input: MyFlowState): Promise<MyFlowState> {
     if (input.mode !== "streaming") return input;
     const ctx = [
       `Current Time: ${new Date().toISOString()}`,
-      `Working Directory: ${process.cwd()}`,
+      `cwd: ${this.#cwd}`,
     ].join("\n");
     return { ...input, contextData: ctx };
   }
 }
 ```
+
+cwd 通过 Pipeline deps 从 `RuntimeService.sandbox` 注入，不与 Task 耦合。
 
 ### 7.3 `format-messages` — 消息组装
 

@@ -75,13 +75,20 @@ class LoadSystemPromptElement extends BaseElement {
       {/* ── Element 2: collect-context ── */}
       <Section title="collect-context（新增）">
         <CodeBlock lang="typescript" code={`class CollectContextElement extends BaseElement {
+  #cwd: string;
+
+  constructor(params: { sandbox?: string }) {
+    super(params);
+    this.#cwd = params.sandbox ?? process.cwd();
+  }
+
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
 
     const contextData = [
-      \`Current Time: \${new Date().toISOString()}\`,
-      \`Working Directory: \${process.cwd()}\`,
-      \`OS: \${process.platform} \${process.arch}\`,
+      \\u0060Current Time: \\u0024{new Date().toISOString()}\\u0060,
+      \\u0060cwd: \\u0024{this.#cwd}\\u0060,
+      \\u0060OS: \\u0024{process.platform} \\u0024{process.arch}\\u0060,
       // TODO: MemoryService 查询长期记忆
     ].join("\\n");
 
