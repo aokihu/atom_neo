@@ -151,5 +151,5 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   });
 
   logger.info("core ready", { port: server.port, address: host });
-  return { port: server.port, stop: () => { taskEngine.stop(); server.stop(); } };
+  return { port: server.port, tools: basic.map(t => t.name), stop: () => { taskEngine.stop(); server.stop(); } };
 }

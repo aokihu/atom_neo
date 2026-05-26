@@ -1,4 +1,5 @@
-type StreamCallback = (delta: string) => void;
+type DeltaCallback = (delta: string) => void;
+type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 
 export class TuiClient {
   #url: string;
@@ -6,7 +7,8 @@ export class TuiClient {
   #chatId: string;
   #ws: WebSocket | null = null;
   #ready = false;
-  #onDelta?: StreamCallback;
+  #onDelta?: DeltaCallback;
+  #onTool?: ToolCallback;
   #responseResolve?: (text: string) => void;
   #responseText = "";
 
@@ -36,8 +38,24 @@ export class TuiClient {
               this.#responseText += delta;
               this.#onDelta?.(delta);
             }
+          } else if (msg.type === "event.transport.tool.started") {
+            this.#onTool?.({
+              name: msg.payload?.toolName ?? "",
+              callId: msg.payload?.toolCallId ?? "",
+              input: msg.payload?.input,
+            });
+          } else if (msg.type === "event.transport.tool.finished") {
+            this.#onTool?.({
+              name: msg.payload?.toolName ?? "",
+              callId: msg.payload?.toolCallId ?? "",
+              result: msg.payload?.result,
+              error: msg.payload?.error,
+            });
           } else if (msg.type === "event.task.completed") {
             this.#responseResolve?.(this.#responseText);
+          } else if (msg.type === "event.task.failed") {
+            const err = msg.payload?.error ?? "Unknown error";
+            this.#responseResolve?.(`Error: ${err}`);
           }
         } catch { /* ignore */ }
       };
@@ -51,7 +69,7 @@ export class TuiClient {
     if (!this.#ws || !this.#ready) throw new Error("Not connected");
 
     const httpUrl = this.#url.replace(/^ws/, "http");
-    const res = await fetch(`${httpUrl}/api/tasks`, {
+    await fetch(`${httpUrl}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -59,14 +77,13 @@ export class TuiClient {
       }),
     });
 
-    // Wait for task.completed WebSocket event
     return new Promise<string>((resolve) => {
       this.#responseResolve = resolve;
       this.#responseText = "";
     });
   }
 
-  onDelta(cb: StreamCallback): void {
-    this.#onDelta = cb;
-  }
+  onDelta(cb: DeltaCallback): void { this.#onDelta = cb; }
+  onTool(cb: ToolCallback): void { this.#onTool = cb; }
+  close(): void { this.#ws?.close(); }
 }

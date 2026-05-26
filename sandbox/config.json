@@ -1,25 +1,25 @@
 {
-  "version": 2,
-  "theme": "dark",
-  "providerProfiles": {
-    "advanced": "deepseek/deepseek-chat",
-    "balanced": "deepseek/deepseek-chat",
-    "basic": "deepseek/deepseek-chat"
-  },
-  "providers": {
-    "deepseek": {
-      "apiKeyEnv": "DEEPSEEK_API_KEY",
-      "models": ["deepseek-chat", "deepseek-reasoner"]
+    "version": 2,
+    "theme": "dark",
+    "providerProfiles": {
+        "advanced": "deepseek/deepseek-v4-pro",
+        "balanced": "deepseek/deepseek-v4-flash",
+        "basic": "deepseek/deepseek-v4-flash"
+    },
+    "providers": {
+        "deepseek": {
+            "apiKeyEnv": "DEEPSEEK_API_KEY",
+            "models": ["deepseek-v4-pro", "deepseek-v4-flash"]
+        }
+    },
+    "transport": {
+        "maxOutputTokens": 4096
+    },
+    "gateway": {
+        "jwtSecret": "change-me-minimum-16-chars",
+        "port": 3000
+    },
+    "tui": {
+        "theme": "dark"
     }
-  },
-  "transport": {
-    "maxOutputTokens": 4096
-  },
-  "gateway": {
-    "jwtSecret": "change-me-minimum-16-chars",
-    "port": 3000
-  },
-  "tui": {
-    "theme": "dark"
-  }
 }

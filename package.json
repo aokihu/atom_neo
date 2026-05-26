@@ -1,6 +1,6 @@
 {
     "name": "atom-neo",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "workspaces": [
         "src/packages/shared",
         "src/packages/core",
@@ -8,10 +8,8 @@
         "src/packages/tui"
     ],
     "scripts": {
-        "dev": "bun run src/main.ts --port 3100 --sandbox ./sandbox --log=pipe --log-pipepath /tmp/atom-debug & sleep 2 && bun run src/packages/tui/src/app.tsx -u http://127.0.0.1:3100; kill %1 2>/dev/null",
-        "dev:core": "bun run --filter @atom-neo/core dev",
-        "dev:all": "bun run --workspaces dev",
-        "dev:tui": "bun run src/main.ts --port 3100 --sandbox ./sandbox & sleep 2 && bun run src/packages/tui/src/app.tsx -u http://127.0.0.1:3100; kill %1 2>/dev/null",
+        "dev": "bun run src/main.ts --sandbox ./sandbox",
+        "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
         "docs": "bun run --watch docs/server.tsx",
         "docs:dev": "bun run docs/server.tsx",
         "test": "bun test",
@@ -26,6 +24,8 @@
         "@atom-neo/tui": "workspace:*",
         "@heroui/react": "^3.0.5",
         "@heroui/styles": "^3.0.5",
+        "@opentui/core": "^0.2.15",
+        "@opentui/react": "^0.2.15",
         "ai": "^6.0.191",
         "highlight.js": "^11.11.1",
         "react": "^19.2.6",

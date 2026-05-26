@@ -103,7 +103,22 @@ export async function main(): Promise<void> {
   if (!args.mode) {
     const core = await startCore({ port, host: args.host, logger, sm });
     const { startTui } = await import("@atom-neo/tui");
-    await startTui({ url: `http://${args.host}:${core.port}` });
+    const resolved = runtime.getResolvedModel("balanced");
+    try {
+      await startTui({
+        url: `http://${args.host}:${core.port}`,
+        serverInfo: {
+          port: core.port,
+          host: args.host,
+          model: resolved.model,
+          sandbox: args.sandbox,
+          version: "0.7.0",
+          tools: core.tools,
+        },
+      });
+    } finally {
+      core.stop();
+    }
     return;
   }
 

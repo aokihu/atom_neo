@@ -25,8 +25,9 @@
 
 ```text
 ┌─────────────────────────────────────────────────────┐
-│                   TUI (Root)                         │
+│                   TUI (OpenTUI + React)              │
 │   本地终端，直连 Core，WebSocket，root 权限          │
+│   组件: StatusBar / ChatView / InputBar / Sidebar   │
 ├─────────────────────────────────────────────────────┤
 │                   Gateway                            │
 │   JWT 认证 → 权限检查 → 速率限制 → 请求转发         │
@@ -70,7 +71,7 @@ atom_neo/
 │       │
 │       ├── shared/               # types / pipeline-core / log / protocol / utils
 │       ├── gateway/              # auth / permissions / ratelimit / proxy
-│       └── tui/                  # ws-client / renderer / views
+│       └── tui/                  # OpenTUI React: App / ChatView / InputBar / Sidebar / hooks
 │
 ├── sandbox/                      # 运行时工作目录
 │   ├── config.json              # Model/TUI/Gateway 配置
@@ -366,7 +367,7 @@ enum PermissionLevel {
 | **P4: Pipeline Builder** | Builder DSL + Element 注册表 + 3 条 pipeline | 1.5 周 |
 | **P5: Core HTTP + WS** | 服务器 + WebSocket 事件协议 + Replay 系统 | 1 周 |
 | **P6: Gateway** | Auth + 权限 + 速率限制 + 代理 | 0.5 周 |
-| **P7: TUI** | WebSocket 客户端 + 流式渲染 + Session 管理 | 1 周 |
+| **P7: TUI** | OpenTUI React 客户端 + 流式渲染 + 信息面板 | 1 周 |
 | **P8: 集成** | E2E 测试 + 文档 + 部署配置 | 0.5 周 |
 
 **总计：约 8 周**

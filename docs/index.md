@@ -40,12 +40,13 @@
 | [queue.md](./queue.md) | 双队列系统（ActiveQueue LIFO + WaitingQueue FIFO） | 理解任务调度 |
 | [runloop.md](./runloop.md) | TaskEngine 状态机 — Suspend/Resume/Complete 转换 | 理解任务生命周期 |
 
-## 通信与错误（跨模块边界时查）
+## 通信与界面
 
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [protocol.md](./protocol.md) | WebSocket 事件协议、JWT 认证 | 通信层 |
 | [error-handling.md](./error-handling.md) | 错误跨层传播模型 | 写 try/catch |
+| [tui-redesign.md](./tui-redesign.md) | TUI 重构方案 — OpenTUI React 绑定 | TUI 开发 |
 
 ---
 
