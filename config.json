@@ -6,7 +6,13 @@
     "balanced": "deepseek/deepseek-chat",
     "basic": "deepseek/deepseek-chat"
   },
-  "providers": {},
+  "providers": {
+    "deepseek": {
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "models": ["deepseek-chat"],
+      "thinking": "disabled"
+    }
+  },
   "transport": {
     "maxOutputTokens": 4096
   },

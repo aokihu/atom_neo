@@ -12,6 +12,7 @@ const ProviderDefinitionSchema = z.object({
   models: z.array(z.string()).min(1),
   baseUrl: z.string().optional(),
   options: z.record(z.unknown()).optional(),
+  thinking: z.enum(["enabled", "disabled", "adaptive"]).default("disabled"),
 });
 
 const ConfigSchema = z.object({

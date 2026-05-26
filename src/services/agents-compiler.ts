@@ -155,6 +155,9 @@ export class AgentsCompilerService extends BaseService {
     const provider = createDeepSeek({ apiKey: this.#runtime.apiKey });
     const model = provider("deepseek-chat");
 
+    const thinking = (this.#runtime.appConfig as any)?.providers?.deepseek?.thinking ?? "disabled";
+    const providerOptions = { deepseek: { thinking: { type: thinking } } };
+
     const result = await generateText({
       model,
       messages: [
@@ -163,7 +166,8 @@ export class AgentsCompilerService extends BaseService {
       ],
       maxTokens: 2048,
       allowSystemInMessages: true,
-    });
+      providerOptions,
+    } as any);
 
     return result.text.trim();
   }

@@ -36,6 +36,9 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   const apiKey: string = resolved.apiKey;
   const model: string = resolved.model;
   const baseUrl: string | undefined = resolved.baseUrl;
+  const providerOptions: Record<string, any> = {
+    deepseek: { thinking: { type: resolved.thinking ?? "disabled" } },
+  };
   const maxTokens: number = runtime?.maxTokens ?? 4096;
   const memory: any = sm.get("memory");
   const getCompiledPrompt = () => {
@@ -47,7 +50,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     const pipeline = conversationPipeline({
       session: sessionStore.get(sessionId),
       task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
-      apiKey, model, baseUrl,
+      apiKey, model, baseUrl, providerOptions,
       tools: [...basic, ...advanced],
       getCompiledPrompt, maxTokens, memory,
       chainDepth,
@@ -75,8 +78,11 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     });
     const sid = (p.task as any)?.sessionId;
     const output = (p.result as any)?.responseText || (p.result as any)?.output || "";
+    const reasoningContent = (p.result as any)?.reasoningContent || "";
     if (sid && output) {
-      sessionStore.get(sid).addMessage({ role: "assistant", content: output, timestamp: Date.now() });
+      const msg: any = { role: "assistant", content: output, timestamp: Date.now() };
+      if (reasoningContent) msg.reasoningContent = reasoningContent;
+      sessionStore.get(sid).addMessage(msg);
     }
     broadcaster.broadcastToSession(sid ?? "", {
       type: "event.task.completed",
@@ -131,7 +137,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         const pipeline = conversationPipeline({
           session,
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
-          apiKey, model, baseUrl,
+          apiKey, model, baseUrl, providerOptions,
           tools: basic,
           getCompiledPrompt, maxTokens, memory,
           queue: taskQueue, buildChainPipeline, chainDepth: 0,

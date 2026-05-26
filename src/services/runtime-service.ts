@@ -8,6 +8,7 @@ export type ResolvedModel = {
   model: string;
   apiKey: string;
   baseUrl?: string;
+  thinking?: "enabled" | "disabled" | "adaptive";
 };
 
 export type RuntimeParams = {
@@ -67,6 +68,6 @@ export class RuntimeService extends BaseService {
     const apiKeyEnv = providerConfig?.apiKeyEnv;
     const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? this.#apiKey;
 
-    return { provider, model, apiKey, baseUrl: providerConfig?.baseUrl };
+    return { provider, model, apiKey, baseUrl: providerConfig?.baseUrl, thinking: providerConfig?.thinking };
   }
 }

@@ -17,18 +17,19 @@ export type ConversationMode =
   | "executing"
   | "ready_to_finalize";
 
-type Message = { role: string; content: string };
+type Message = { role: string; content: string; reasoning_content?: string };
 
 export type ConversationFlowState = {
   mode: string;
   task: any;
-  prompts?: Array<{ role: string; content: string }>;
+  prompts?: Array<{ role: string; content: string; reasoning_content?: string }>;
   systemPrompt?: string;
   compiledAgentsPrompt?: string;
   contextData?: string;
   systemText?: string;
   userMessages?: Message[];
   responseText?: string;
+  reasoningContent?: string;
   followUp?: {
     summary: string;
     nextPrompt: string;
@@ -56,10 +57,11 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "initial") return input;
 
-    const messages = (this.#session.messages ?? []).map((m: any) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const messages = (this.#session.messages ?? []).map((m: any) => {
+      const msg: any = { role: m.role, content: m.content };
+      if (m.reasoningContent) msg.reasoning_content = m.reasoningContent;
+      return msg;
+    });
 
     return { mode: "streaming", task: input.task, prompts: messages };
   }
@@ -195,6 +197,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #baseUrl?: string;
   #tools: ToolDefinition[];
   #maxTokens: number;
+  #providerOptions: Record<string, any>;
 
   constructor(params: {
     name: string;
@@ -205,6 +208,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     baseUrl?: string;
     tools: ToolDefinition[];
     maxTokens?: number;
+    providerOptions?: Record<string, any>;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -212,6 +216,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#baseUrl = params.baseUrl;
     this.#tools = params.tools;
     this.#maxTokens = params.maxTokens ?? 4096;
+    this.#providerOptions = params.providerOptions ?? {};
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -249,6 +254,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         maxSteps: 5,
         maxTokens: this.#maxTokens,
         allowSystemInMessages: true,
+        providerOptions: this.#providerOptions,
       } as any);
 
       const MARKER = "<<<REQUEST>>>";
@@ -312,10 +318,15 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       if (deltaBuffer) {
         this.report("transport.delta", { textDelta: deltaBuffer });
       }
+      const response = await streamResult.response;
+      const reasoningContent = (response.messages as any[])?.find((m: any) =>
+        m.role === "assistant" && m.reasoningContent
+      )?.reasoningContent ?? "";
       return {
         ...input,
         mode: "executing",
         responseText: fullText,
+        reasoningContent: String(reasoningContent),
         intentRequestText,
         chainAction: finishReason === "length" ? "follow_up" : undefined,
       };
@@ -456,6 +467,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
         type: "complete" as const,
         task: input.task,
         output: (input.responseText ?? "") + "\n\n(已达到最大连续对话深度，操作已停止)",
+        reasoningContent: input.reasoningContent,
       };
     }
 
@@ -485,6 +497,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       type: "complete" as const,
       task: input.task,
       output: input.responseText,
+      reasoningContent: input.reasoningContent,
     };
   }
 }

@@ -23,7 +23,8 @@
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": ["deepseek-chat", "deepseek-reasoner"],
-      "baseUrl": "https://api.deepseek.com/v1"
+      "baseUrl": "https://api.deepseek.com/v1",
+      "thinking": "disabled"
     }
   },
 
@@ -73,6 +74,7 @@ const ProviderDefinitionSchema = z.object({
   models: z.array(z.string()).min(1),
   baseUrl: z.string().optional(),
   options: z.record(z.unknown()).optional(),
+  thinking: z.enum(["enabled", "disabled", "adaptive"]).default("disabled"),
 });
 
 const ConfigSchema = z.object({
@@ -106,8 +108,16 @@ RuntimeService.getResolvedModel("balanced") → {
   provider: "deepseek",
   model: "deepseek-chat",
   apiKey: "sk-xxx",
-  baseUrl: "https://api.deepseek.com/v1"  // optional
+  baseUrl: "https://api.deepseek.com/v1",  // optional
+  thinking: "disabled",                     // "enabled" | "disabled" | "adaptive"
 }
+
+// server.ts 将 thinking 翻译为 AI SDK providerOptions
+const providerOptions = {
+  deepseek: { thinking: { type: resolved.thinking ?? "disabled" } },
+};
+// → 透传至 StreamLLMElement，直接注入 streamText()
+```
 ```
 
 **Provider 处理逻辑**：
@@ -138,6 +148,13 @@ RuntimeService.getResolvedModel("balanced") → {
   tui: { theme: "dark" },
 }
 ```
+
+**`thinking` 字段说明**：
+- `"disabled"` — 禁用思考模式（默认），避免 `reasoning_content` 回传错误
+- `"adaptive"` — 模型自行决定是否启用思考
+- `"enabled"` — 强制启用思考模式
+
+**架构说明**：`config.json` 中 `thinking` 的值由 `server.ts` 翻译为 AI SDK 的 `providerOptions` 对象，再透传给 `StreamLLMElement`。Element 不感知 provider 具体选项结构，仅负责将 `providerOptions` 原样注入 `streamText()`。未来扩展其他 provider（OpenAI `reasoningEffort`、Gemini `thinkingConfig`）时只需修改 `server.ts` 的翻译逻辑，无需改动 Element 代码。
 
 ---
 

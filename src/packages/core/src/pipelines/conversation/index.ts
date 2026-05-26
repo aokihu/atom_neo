@@ -32,6 +32,8 @@ export type ConversationPipelineDeps = {
   apiKey?: string;
   model?: string;
   baseUrl?: string;
+  thinking?: string;
+  providerOptions?: Record<string, any>;
   tools: any[];
   toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
@@ -58,6 +60,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       baseUrl: deps.baseUrl,
       tools: deps.tools ?? [],
       maxTokens: deps.maxTokens ?? 4096,
+      providerOptions: deps.providerOptions,
     })
     .transform("parse-intents", {})
     .boundary("check-follow-up", { memory: deps.memory })
