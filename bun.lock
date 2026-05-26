@@ -8,6 +8,7 @@
         "@ai-sdk/deepseek": "^2.0.35",
         "@atom-neo/core": "workspace:*",
         "@atom-neo/shared": "workspace:*",
+        "@atom-neo/tui": "workspace:*",
         "@heroui/react": "^3.0.5",
         "@heroui/styles": "^3.0.5",
         "ai": "^6.0.191",
@@ -22,7 +23,7 @@
     },
     "src/packages/core": {
       "name": "@atom-neo/core",
-      "version": "0.3.4",
+      "version": "0.6.0",
       "dependencies": {
         "@ai-sdk/deepseek": "^0.2.15",
         "@ai-sdk/openai": "^3.0.64",
@@ -36,7 +37,7 @@
     },
     "src/packages/gateway": {
       "name": "@atom-neo/gateway",
-      "version": "0.3.4",
+      "version": "0.6.0",
       "dependencies": {
         "@atom-neo/shared": "workspace:*",
         "jose": "^5.10.0",
@@ -48,7 +49,7 @@
     },
     "src/packages/shared": {
       "name": "@atom-neo/shared",
-      "version": "0.3.4",
+      "version": "0.6.0",
       "dependencies": {
         "radashi": "^12.3.1",
         "zod": "^4.4.3",
@@ -59,7 +60,7 @@
     },
     "src/packages/tui": {
       "name": "@atom-neo/tui",
-      "version": "0.3.4",
+      "version": "0.6.0",
       "dependencies": {
         "@atom-neo/shared": "workspace:*",
         "react": "^19.2.6",

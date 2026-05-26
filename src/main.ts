@@ -97,16 +97,21 @@ export async function main(): Promise<void> {
   // Lazy import to ensure AI_SDK_LOG_WARNINGS is set before AI SDK loads
   const { startCore } = await import("@atom-neo/core");
 
-  // Dispatch
+  const port = args.port || 3100;
+
+  // Default (no --mode): core + TUI
+  if (!args.mode) {
+    const core = await startCore({ port, host: args.host, logger, sm });
+    const { startTui } = await import("@atom-neo/tui");
+    await startTui({ url: `http://${args.host}:${core.port}` });
+    return;
+  }
+
+  // Explicit --mode: core or full
   switch (args.mode) {
     case "core":
-      await startCore({ port: args.port, host: args.host, logger, sm });
-      break;
-    case "tui":
-      logger.error("TUI mode not yet implemented");
-      break;
     case "full":
-      await startCore({ port: args.port, host: args.host, logger, sm });
+      await startCore({ port, host: args.host, logger, sm });
       break;
   }
 }

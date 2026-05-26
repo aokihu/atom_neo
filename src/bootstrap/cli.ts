@@ -6,7 +6,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogMode = "console" | "pipe" | "file";
 
 export type BootArguments = {
-  mode: Mode;
+  mode?: Mode;
   port: number;
   host: string;
   sandbox: string;
@@ -18,11 +18,11 @@ export type BootArguments = {
 };
 
 export function parseArguments(rawArgs: string[]): BootArguments | "help" {
-  const { values } = parseArgs({
+  const { values, tokens } = parseArgs({
     args: rawArgs,
     options: {
       help: { type: "boolean", short: "h", default: false },
-      mode: { type: "string", short: "m", default: "core" },
+      mode: { type: "string", short: "m" },
       port: { type: "string", default: "0" },
       host: { type: "string", default: "127.0.0.1" },
       sandbox: { type: "string" },
@@ -32,6 +32,7 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
       "log-file": { type: "string" },
       "log-pipepath": { type: "string" },
     },
+    tokens: true,
     allowPositionals: true,
     strict: false,
   });
@@ -42,8 +43,12 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
     ? resolve(values.sandbox as string)
     : process.cwd();
 
+  const modeExplicit = tokens?.some((t: any) =>
+    t.kind === "option" && (t.name === "mode" || t.name === "m"),
+  );
+
   return {
-    mode: validateMode(values.mode as string),
+    mode: modeExplicit ? validateMode(values.mode as string) : undefined,
     port: parseInt(values.port as string) || 0,
     host: values.host as string,
     sandbox,
@@ -56,14 +61,16 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
 }
 
 export function printHelp(): void {
+  const binName = (Bun.main || "").endsWith("atom") ? "atom" : "bun run src/main.ts";
+
   console.log(`
 atom-neo — AI Agent Development Platform
 
 USAGE
-  bun run src/main.ts [OPTIONS]
+  ${binName} [OPTIONS]
 
 OPTIONS
-  -m, --mode <mode>      运行模式: core | tui | full (默认: core)
+  -m, --mode <mode>      运行模式: core | full (默认: core + TUI 交互模式)
   --port <port>           监听端口 (默认: 0, 随机)
   --host <host>           绑定地址 (默认: 127.0.0.1)
   --sandbox <path>        沙箱目录 (默认: 当前目录)
@@ -75,9 +82,9 @@ OPTIONS
   -h, --help              显示此帮助信息
 
 EXAMPLES
-  bun run src/main.ts --port 3100 --sandbox ./sandbox --log=file --log-file /tmp/atom-debug
-  bun run src/main.ts --mode core --log=console
-  bun run src/main.ts --mode core --log=pipe --log-pipepath /tmp/atom-debug
+  ${binName} --sandbox ./sandbox
+  ${binName} --mode core --port 3100 --log=console
+  ${binName} --mode full --port 3100 --log=console
 `);
 }
 

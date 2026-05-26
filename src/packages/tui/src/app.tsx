@@ -2,23 +2,29 @@ import { createInterface } from "node:readline";
 import { TuiClient } from "./client/ws-client";
 import { parseArgs } from "node:util";
 
-function parseTuiArgs(rawArgs: string[]): { url?: string } {
+function parseTuiArgs(rawArgs: string[]): { url?: string; sessionId?: string } {
   const { values } = parseArgs({
     args: rawArgs,
-    options: { url: { type: "string", short: "u", default: "http://127.0.0.1:3100" } },
+    options: {
+      url: { type: "string", short: "u" },
+      session: { type: "string", short: "s" },
+    },
     allowPositionals: true,
     strict: false,
   });
-  return { url: values.url as string };
+  return { url: values.url as string, sessionId: values.session as string };
 }
 
-async function main() {
-  const args = parseTuiArgs(Bun.argv.slice(2));
-  const client = new TuiClient({ url: args.url });
+export async function startTui(params?: { url?: string; sessionId?: string }): Promise<void> {
+  const baseUrl = params?.url ?? "http://127.0.0.1:3100";
+  const client = new TuiClient({
+    url: baseUrl,
+    sessionId: params?.sessionId ?? `tui-${Date.now()}`,
+  });
 
   console.log(`\x1b[1m\x1b[36matom_neo\x1b[0m \x1b[2mchat\x1b[0m`);
   console.log(`\x1b[2msession:\x1b[0m ${client.sessionId}`);
-  console.log(`\x1b[2mcore:\x1b[0m   ${args.url}`);
+  console.log(`\x1b[2mcore:\x1b[0m   ${baseUrl}`);
   console.log(`\x1b[2mconnecting...\x1b[0m`);
 
   await client.connect();
@@ -32,7 +38,6 @@ async function main() {
       if (input === "/quit") { console.log(`\x1b[2mGoodbye!\x1b[0m`); rl.close(); process.exit(0); }
       if (!input.trim()) { ask(); return; }
 
-      // Start incremental render
       let started = false;
       client.onDelta((delta) => {
         if (!started) { process.stdout.write("\n"); started = true; }
@@ -56,4 +61,11 @@ async function main() {
   ask();
 }
 
-main();
+async function main() {
+  const args = parseTuiArgs(Bun.argv.slice(2));
+  await startTui({ url: args.url, sessionId: args.sessionId });
+}
+
+if (import.meta.main) {
+  main();
+}

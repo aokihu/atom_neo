@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "theme": "dark",
+  "providerProfiles": {
+    "advanced": "deepseek/deepseek-chat",
+    "balanced": "deepseek/deepseek-chat",
+    "basic": "deepseek/deepseek-chat"
+  },
+  "providers": {},
+  "transport": {
+    "maxOutputTokens": 4096
+  },
+  "gateway": {
+    "jwtSecret": "change-me-minimum-16-chars",
+    "port": 3000
+  },
+  "tui": {
+    "theme": "dark"
+  },
+  "permission": {
+    "whitelist": []
+  }
+}
