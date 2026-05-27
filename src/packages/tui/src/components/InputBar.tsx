@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
+import { useTheme } from "./App";
 
 export function InputBar({ onSend }: { onSend: (text: string) => void }) {
+  const { colors } = useTheme();
   const [value, setValue] = useState("");
 
   const handleSubmit = useCallback(() => {
@@ -11,7 +13,7 @@ export function InputBar({ onSend }: { onSend: (text: string) => void }) {
   }, [value, onSend]);
 
   return (
-    <box height={2} marginLeft={1} marginRight={1} marginTop={1} marginBottom={1} backgroundColor="#1c2128">
+    <box height={2} marginLeft={1} marginRight={1} marginTop={1} marginBottom={1} backgroundColor={colors.bg.input}>
       <input
         placeholder="Message..."
         value={value}
@@ -19,12 +21,11 @@ export function InputBar({ onSend }: { onSend: (text: string) => void }) {
         onSubmit={handleSubmit}
         focused
         flexGrow={1}
-        backgroundColor="#1c2128"
-        focusedBackgroundColor="#1c2128"
-        textColor="#e6edf3"
-        cursorColor="#58a6ff"
+        backgroundColor={colors.bg.input}
+        focusedBackgroundColor={colors.bg.input}
+        textColor={colors.text.primary}
+        cursorColor={colors.accent.brand}
       />
     </box>
   );
 }
-

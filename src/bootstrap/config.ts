@@ -32,8 +32,11 @@ const ConfigSchema = z.object({
     port: z.number().int().default(3000),
   }).default({ jwtSecret: "change-me-minimum-16-chars", port: 3000 }),
   tui: z.object({
-    theme: z.enum(["dark", "light"]).default("dark"),
-  }).default({ theme: "dark" }),
+    theme: z.enum([
+      "github-dark", "github-light", "dracula", "nord",
+      "tokyo-night", "solarized-dark", "monokai",
+    ]).default("github-dark"),
+  }).default({ theme: "github-dark" }),
   permission: z.object({
     whitelist: z.array(z.string()).default([]),
   }).default({ whitelist: [] }),

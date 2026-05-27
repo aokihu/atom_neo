@@ -112,8 +112,9 @@ export async function main(): Promise<void> {
           host: args.host,
           model: resolved.model,
           sandbox: args.sandbox,
-          version: "0.7.0",
+          version: "0.7.3",
           tools: core.tools,
+          theme: (appConfig as any).tui?.theme ?? "github-dark",
         },
       });
     } finally {

@@ -9,6 +9,7 @@ export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const clientRef = useRef<TuiClient | null>(null);
   const connectedRef = useRef(false);
+  const thinkingIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (connectedRef.current) return;
@@ -18,6 +19,10 @@ export function useChat(url: string, sessionId?: string) {
     clientRef.current = client;
 
     client.onDelta((delta) => {
+      if (thinkingIdRef.current) {
+        setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
+        thinkingIdRef.current = null;
+      }
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -54,14 +59,22 @@ export function useChat(url: string, sessionId?: string) {
   }, [url, sessionId]);
 
   const send = useCallback(async (text: string) => {
-    const id = nextId();
-    setMessages(prev => [...prev, { role: "user", content: text, id }]);
+    const userMsgId = nextId();
+    const thinkingId = nextId();
+    thinkingIdRef.current = thinkingId;
+    setMessages(prev => [
+      ...prev,
+      { role: "user", content: text, id: userMsgId },
+      { role: "thinking", id: thinkingId },
+    ]);
 
     try {
       const client = clientRef.current;
       if (!client) throw new Error("Not connected");
       await client.send(text);
 
+      thinkingIdRef.current = null;
+      setMessages(prev => prev.filter(m => m.id !== thinkingId));
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -70,6 +83,8 @@ export function useChat(url: string, sessionId?: string) {
         return prev;
       });
     } catch (err: any) {
+      thinkingIdRef.current = null;
+      setMessages(prev => prev.filter(m => m.id !== thinkingId));
       setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId() }]);
     }
   }, []);

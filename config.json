@@ -21,7 +21,7 @@
     "port": 3000
   },
   "tui": {
-    "theme": "dark"
+    "theme": "github-dark"
   },
   "permission": {
     "whitelist": []
