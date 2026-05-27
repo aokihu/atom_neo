@@ -1,5 +1,6 @@
 type DeltaCallback = (delta: string) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
+type TokenUsageCallback = (total: number) => void;
 
 export class TuiClient {
   #url: string;
@@ -9,6 +10,7 @@ export class TuiClient {
   #ready = false;
   #onDelta?: DeltaCallback;
   #onTool?: ToolCallback;
+  #onTokenUsage?: TokenUsageCallback;
   #responseResolve?: (text: string) => void;
   #responseText = "";
 
@@ -53,6 +55,8 @@ export class TuiClient {
             });
           } else if (msg.type === "event.task.completed") {
             this.#responseResolve?.(this.#responseText);
+            const tu = msg.payload?.tokenUsage;
+            if (tu) this.#onTokenUsage?.(tu.total);
           } else if (msg.type === "event.task.failed") {
             const err = msg.payload?.error ?? "Unknown error";
             this.#responseResolve?.(`Error: ${err}`);
@@ -85,5 +89,6 @@ export class TuiClient {
 
   onDelta(cb: DeltaCallback): void { this.#onDelta = cb; }
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
+  onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
   close(): void { this.#ws?.close(); }
 }

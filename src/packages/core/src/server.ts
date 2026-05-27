@@ -39,6 +39,8 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
   const providerOptions: Record<string, any> = {
     deepseek: { thinking: { type: resolved.thinking ?? "disabled" } },
   };
+  const providerModel = `${resolved.provider}/${model}`;
+  const configContextLimit: number | undefined = (runtime?.appConfig as any)?.providers?.[resolved.provider]?.contextLimit;
   const maxTokens: number = runtime?.maxTokens ?? 4096;
   const memory: any = sm.get("memory");
   const getCompiledPrompt = () => {
@@ -50,7 +52,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
     const pipeline = conversationPipeline({
       session: sessionStore.get(sessionId),
       task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
-      apiKey, model, baseUrl, providerOptions,
+      apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
       tools: [...basic, ...advanced],
       getCompiledPrompt, maxTokens, memory,
       chainDepth,
@@ -84,10 +86,15 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
       if (reasoningContent) msg.reasoningContent = reasoningContent;
       sessionStore.get(sid).addMessage(msg);
     }
+    const tokenUsage = (p.result as any)?.tokenUsage;
+    if (sid && tokenUsage) {
+      sessionStore.get(sid).addTokenUsage(tokenUsage.total);
+    }
+    const accumulated = sessionStore.get(sid).tokenUsage;
     broadcaster.broadcastToSession(sid ?? "", {
       type: "event.task.completed",
       ts: Date.now(), seq: 0,
-      payload: { taskId: p.task?.id, output: (p.result as any)?.output ?? "" },
+      payload: { taskId: p.task?.id, output: (p.result as any)?.output ?? "", tokenUsage: accumulated },
     });
   });
   bus.on("task.failed" as any, (p: any) => {
@@ -137,7 +144,7 @@ export async function startCore(deps: CoreDeps): Promise<{ stop: () => void }> {
         const pipeline = conversationPipeline({
           session,
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
-          apiKey, model, baseUrl, providerOptions,
+          apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
           tools: basic,
           getCompiledPrompt, maxTokens, memory,
           queue: taskQueue, buildChainPipeline, chainDepth: 0,

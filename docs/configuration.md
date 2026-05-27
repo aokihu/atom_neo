@@ -24,7 +24,8 @@
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": ["deepseek-chat", "deepseek-reasoner"],
       "baseUrl": "https://api.deepseek.com/v1",
-      "thinking": "disabled"
+      "thinking": "disabled",
+      "contextLimit": 131072
     }
   },
 
@@ -75,6 +76,7 @@ const ProviderDefinitionSchema = z.object({
   baseUrl: z.string().optional(),
   options: z.record(z.unknown()).optional(),
   thinking: z.enum(["enabled", "disabled", "adaptive"]).default("disabled"),
+  contextLimit: z.number().int().positive().optional(),
 });
 
 const ConfigSchema = z.object({
@@ -155,6 +157,16 @@ const providerOptions = {
 - `"enabled"` — 强制启用思考模式
 
 **架构说明**：`config.json` 中 `thinking` 的值由 `server.ts` 翻译为 AI SDK 的 `providerOptions` 对象，再透传给 `StreamLLMElement`。Element 不感知 provider 具体选项结构，仅负责将 `providerOptions` 原样注入 `streamText()`。未来扩展其他 provider（OpenAI `reasoningEffort`、Gemini `thinkingConfig`）时只需修改 `server.ts` 的翻译逻辑，无需改动 Element 代码。
+
+**`contextLimit` 字段**：
+- 可选，指定模型的最大上下文 Token 数量
+- 最高优先级：`providers[provider].contextLimit`（用户显式覆盖）
+- 次优先级：内置 `CONTEXT_LIMITS` 表（`src/packages/core/src/constants.ts`）
+- 均无时默认 `131,072` (128K)
+- 用于计算 `Session Token Usage` 中的百分比：
+  ```
+  Total: 12,480 / 1,000,000 (1.25%)
+  ```
 
 ---
 

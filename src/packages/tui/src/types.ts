@@ -32,4 +32,5 @@ export interface ServerInfo {
   version: string;
   tools: string[];
   theme?: ThemeName;
+  contextLimit?: number;
 }

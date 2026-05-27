@@ -2,7 +2,11 @@ import { useState, useEffect } from "react";
 import type { ServerInfo } from "../types";
 import { useTheme } from "./App";
 
-export function Sidebar({ serverInfo }: { serverInfo: ServerInfo }) {
+export function Sidebar({ serverInfo, tokenUsage, contextLimit }: {
+  serverInfo: ServerInfo;
+  tokenUsage: number;
+  contextLimit: number;
+}) {
   const { colors } = useTheme();
   const [uptime, setUptime] = useState(0);
 
@@ -49,6 +53,17 @@ export function Sidebar({ serverInfo }: { serverInfo: ServerInfo }) {
 
       <text fg={colors.border.default}>{'─'.repeat(44)}</text>
       <text fg={colors.text.secondary}>{serverInfo.tools.join("  ")}</text>
+
+      <text fg={colors.border.default}>{'─'.repeat(44)}</text>
+      <text fg={colors.text.primary}><strong>Usage</strong></text>
+      <box flexDirection="row" gap={1}>
+        <text fg={colors.text.muted}>tokens</text>
+        <text fg={colors.text.secondary}>{String(tokenUsage)}</text>
+      </box>
+      <box flexDirection="row" gap={1}>
+        <text fg={colors.text.muted}>ratio</text>
+        <text fg={colors.text.secondary}>{((tokenUsage / contextLimit) * 100).toFixed(2)}%</text>
+      </box>
 
       <text flexGrow={1} />
       <text fg={colors.decoration.subtle}>{'─'.repeat(44)}</text>

@@ -1,0 +1,17 @@
+/** Model context limits — max input tokens per provider+model */
+export const CONTEXT_LIMITS: Record<string, number> = {
+  "deepseek/deepseek-v4-pro": 1_000_000,
+  "deepseek/deepseek-v4-flash": 1_000_000,
+};
+
+/** Fallback context limit when no explicit value is found */
+export const DEFAULT_CONTEXT_LIMIT = 131_072;
+
+export function resolveContextLimit(
+  providerModel: string,
+  configLimit?: number,
+): number {
+  if (configLimit) return configLimit;
+  if (CONTEXT_LIMITS[providerModel]) return CONTEXT_LIMITS[providerModel];
+  return DEFAULT_CONTEXT_LIMIT;
+}

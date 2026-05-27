@@ -10,7 +10,8 @@
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": ["deepseek-chat"],
-      "thinking": "disabled"
+      "thinking": "disabled",
+      "contextLimit": 131072
     }
   },
   "transport": {

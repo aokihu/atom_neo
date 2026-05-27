@@ -32,8 +32,13 @@ export class SessionContext {
   // Continuation context (for follow-up)
   #continuationContext: ContinuationContext | null = null;
 
-  // MCP connections (per-session)
-  #mcpConnections: MCPConnection[] = [];
+  // Token usage
+  #tokenUsage: TokenUsage = { total: 0 };
+
+  get tokenUsage(): Readonly<TokenUsage> { return this.#tokenUsage; }
+  addTokenUsage(total: number): void {
+    this.#tokenUsage.total += total;
+  }
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -117,6 +122,13 @@ type ContinuationContext = {
   avoidRepeat: string;
   updatedAt: number;
 };
+
+type TokenUsage = {
+  total: number;
+};
+
+// Ratio: total / TOKEN_BUDGET(default 1,000,000)
+const TOKEN_BUDGET = 1_000_000;
 ```
 
 ## 4. Orchestrator Integration
@@ -196,4 +208,32 @@ ctx.setMemoryScopeStatus("long", "loaded", "user query about project structure")
 
 // When session ends:
 ctx.resetMemoryScopes();  // All go back to idle
+
+## 7. Token Usage Tracking
+
+```
+AI SDK streamResult.usage
+  → { inputTokens, outputTokens, totalTokens }
+      ↓
+StreamLLMElement → ConversationFlowState.tokenUsage
+      ↓
+FinalizeElement → PipelineResult.tokenUsage
+      ↓
+server.ts task.completed handler
+  → sessionContext.addTokenUsage(tokenUsage)
+  → session tokenUsage 累积到会话级统计
+```
+
+**双重用途：**
+1. **LLM 上下文** — `CollectContextElement` 从 session 读取 `tokenUsage.total`，注入 system context：
+   ```
+   Session Token Usage:
+     Total: 12,480 / 1,000,000 (1.25%)
+   ```
+2. **TUI 展示** — 右侧栏实时显示 tokens 和 ratio：
+   ```
+   Usage:
+     tokens     12,480
+     ratio       1.25%
+   ```
 ```

@@ -34,6 +34,8 @@ export type ConversationPipelineDeps = {
   baseUrl?: string;
   thinking?: string;
   providerOptions?: Record<string, any>;
+  providerModel?: string;
+  configContextLimit?: number;
   tools: any[];
   toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
@@ -51,7 +53,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
-    .transform("collect-context", { memory: deps.memory, sandbox: deps.task?.sandbox })
+    .transform("collect-context", { memory: deps.memory, sandbox: deps.task?.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit })
     .transform("format-system-messages", {})
     .transform("format-user-messages", {})
     .transform("stream-llm", {

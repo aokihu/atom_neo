@@ -17,7 +17,7 @@ export function useTheme() { return useContext(ThemeContext); }
 
 export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }) {
   const { width } = useTerminalDimensions();
-  const { messages, send } = useChat(url);
+  const { messages, send, tokenUsage } = useChat(url);
   const theme = getTheme(serverInfo.theme);
   const showSidebar = width >= 90;
 
@@ -30,7 +30,7 @@ export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }
             <ChatView messages={messages} />
             <InputBar onSend={send} />
           </box>
-          {showSidebar && <Sidebar serverInfo={serverInfo} />}
+          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? 131072} />}
         </box>
       </box>
     </ThemeContext.Provider>

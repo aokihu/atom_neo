@@ -7,6 +7,7 @@ function nextId() { return `msg-${Date.now()}-${++msgCounter}`; }
 
 export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [tokenUsage, setTokenUsage] = useState(0);
   const clientRef = useRef<TuiClient | null>(null);
   const connectedRef = useRef(false);
   const thinkingIdRef = useRef<string | null>(null);
@@ -17,6 +18,10 @@ export function useChat(url: string, sessionId?: string) {
 
     const client = new TuiClient({ url, sessionId });
     clientRef.current = client;
+
+    client.onTokenUsage((total) => {
+      setTokenUsage(total);
+    });
 
     client.onDelta((delta) => {
       if (thinkingIdRef.current) {
@@ -89,5 +94,5 @@ export function useChat(url: string, sessionId?: string) {
     }
   }, []);
 
-  return { messages, send };
+  return { messages, send, tokenUsage };
 }

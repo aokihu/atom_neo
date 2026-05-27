@@ -1,5 +1,7 @@
 import type { SessionMessage, ToolResult } from "@atom-neo/shared";
 
+export type TokenUsage = { total: number };
+
 export type InferenceFact = {
   key: string;
   value: string;
@@ -41,6 +43,7 @@ export class SessionContext {
     long: { status: "idle", query: "" },
   };
   #continuationContext: ContinuationContext | null = null;
+  #tokenUsage: TokenUsage = { total: 0 };
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -110,6 +113,14 @@ export class SessionContext {
     this.#continuationContext = null;
   }
 
+  get tokenUsage(): Readonly<TokenUsage> {
+    return this.#tokenUsage;
+  }
+
+  addTokenUsage(total: number): void {
+    this.#tokenUsage.total += total;
+  }
+
   toJSON(): Record<string, unknown> {
     return {
       sessionId: this.sessionId,
@@ -118,6 +129,7 @@ export class SessionContext {
       toolMode: this.#toolContext.mode,
       memoryScopes: this.#memoryScopes,
       hasContinuation: this.#continuationContext !== null,
+      tokenUsage: this.#tokenUsage,
     };
   }
 }

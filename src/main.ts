@@ -10,6 +10,7 @@ import { RuntimeService } from "./services/runtime-service";
 import { ServiceManager } from "./services/service-manager";
 import { AgentsCompilerService } from "./services/agents-compiler";
 import { MemoryService } from "./services/memory-service";
+import { resolveContextLimit } from "./packages/core/src/constants";
 
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 
@@ -112,9 +113,13 @@ export async function main(): Promise<void> {
           host: args.host,
           model: resolved.model,
           sandbox: args.sandbox,
-          version: "0.7.3",
+          version: "0.7.4",
           tools: core.tools,
           theme: (appConfig as any).tui?.theme ?? "github-dark",
+          contextLimit: resolveContextLimit(
+            `${resolved.provider}/${resolved.model}`,
+            (appConfig as any)?.providers?.[resolved.provider]?.contextLimit,
+          ),
         },
       });
     } finally {

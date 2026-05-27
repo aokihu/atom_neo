@@ -9,6 +9,8 @@ import { IntentRequestType, IntentRequestSource, TaskSource } from "@atom-neo/sh
 import type { IntentRequest } from "@atom-neo/shared";
 import { createTaskItem } from "../../../task-factory";
 import type { TaskQueue } from "../../../task-queue";
+import type { TokenUsage } from "../../../session/context";
+import { resolveContextLimit } from "../../../constants";
 
 export type ConversationMode =
   | "initial"
@@ -38,6 +40,7 @@ export type ConversationFlowState = {
   chainAction?: "more_tools" | "follow_up";
   intents?: IntentRequest[];
   intentRequestText?: string;
+  tokenUsage?: TokenUsage;
 };
 
 // ── Source: collect-prompts ──
@@ -111,6 +114,9 @@ export class FetchAgentsPromptElement extends BaseElement<ConversationFlowState,
 export class CollectContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #memory: any;
   #cwd: string;
+  #session: any;
+  #providerModel: string;
+  #configContextLimit?: number;
 
   constructor(params: {
     name: string;
@@ -118,10 +124,16 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     bus: PipelineEventBus<PipelineEventMap>;
     memory?: any;
     sandbox?: string;
+    session?: any;
+    providerModel?: string;
+    configContextLimit?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#memory = params.memory;
     this.#cwd = params.sandbox ?? process.cwd();
+    this.#session = params.session;
+    this.#providerModel = params.providerModel ?? "";
+    this.#configContextLimit = params.configContextLimit;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -146,6 +158,14 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         this.#memory.incrementAccess(node.id);
         this.#memory.boostWeight(node.id);
       }
+    }
+
+    // Inject token usage as context for LLM
+    if (this.#session) {
+      const tu = this.#session.tokenUsage;
+      const limit = resolveContextLimit(this.#providerModel, this.#configContextLimit);
+      const pct = ((tu.total / limit) * 100).toFixed(2);
+      contextData += `\nSession Token Usage:\n  Total: ${tu.total} / ${limit} (${pct}%)`;
     }
 
     return { ...input, contextData };
@@ -322,11 +342,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       const reasoningContent = (response.messages as any[])?.find((m: any) =>
         m.role === "assistant" && m.reasoningContent
       )?.reasoningContent ?? "";
+      const usage = await streamResult.usage;
+      const tokenUsage: TokenUsage = {
+        total: usage?.totalTokens ?? 0,
+      };
       return {
         ...input,
         mode: "executing",
         responseText: fullText,
         reasoningContent: String(reasoningContent),
+        tokenUsage,
         intentRequestText,
         chainAction: finishReason === "length" ? "follow_up" : undefined,
       };
@@ -468,6 +493,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
         task: input.task,
         output: (input.responseText ?? "") + "\n\n(已达到最大连续对话深度，操作已停止)",
         reasoningContent: input.reasoningContent,
+        tokenUsage: input.tokenUsage,
       };
     }
 
@@ -498,6 +524,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       task: input.task,
       output: input.responseText,
       reasoningContent: input.reasoningContent,
+      tokenUsage: input.tokenUsage,
     };
   }
 }
