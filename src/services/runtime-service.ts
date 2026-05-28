@@ -1,5 +1,5 @@
-import { BaseService } from "./base-service";
 import type { Mode } from "./types";
+import type { AppConfig } from "../bootstrap/config";
 
 export type ProfileLevel = "advanced" | "balanced" | "basic";
 
@@ -17,27 +17,24 @@ export type RuntimeParams = {
   host: string;
   sandbox: string;
   apiKey: string;
-  appConfig?: Record<string, any>;
+  appConfig?: AppConfig;
 };
 
-export class RuntimeService extends BaseService {
-  readonly name = "runtime";
-
+export class RuntimeService {
   readonly mode: Mode;
   readonly port: number;
   readonly host: string;
   #sandbox: string;
   #apiKey: string;
-  #appConfig: Record<string, any> = {};
+  #appConfig: AppConfig | null = null;
 
   constructor(params: RuntimeParams) {
-    super();
     this.mode = params.mode;
     this.port = params.port;
     this.host = params.host;
     this.#sandbox = params.sandbox;
     this.#apiKey = params.apiKey;
-    this.#appConfig = params.appConfig ?? {};
+    this.#appConfig = params.appConfig ?? null;
   }
 
   get sandbox(): string              { return this.#sandbox; }
@@ -51,7 +48,7 @@ export class RuntimeService extends BaseService {
   get metaPath(): string             { return `${this.atomDir}/agents_meta.json`; }
   get apiKey(): string               { return this.#apiKey; }
 
-  get appConfig(): Record<string, any> { return this.#appConfig; }
+  get appConfig(): AppConfig | null { return this.#appConfig; }
   get maxTokens(): number {
     return this.#appConfig?.transport?.maxOutputTokens ?? 4096;
   }

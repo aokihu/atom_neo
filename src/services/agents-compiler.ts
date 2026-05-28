@@ -1,6 +1,7 @@
 import { BaseService } from "./base-service";
 import { createHash } from "node:crypto";
 import { watch, readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { resolve } from "node:path";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import compilerSystemPrompt from "@assets/prompts/agents_compiler_system_prompt.md";
@@ -100,8 +101,8 @@ export class AgentsCompilerService extends BaseService {
 
       this.#writeMeta(meta);
       this.#prompt = compiled;
-    } catch {
-      // Compilation failed, keep previous prompt
+    } catch (err) {
+      this.logger?.error("LLM compilation failed", { error: String(err) });
     }
   }
 
@@ -155,7 +156,7 @@ export class AgentsCompilerService extends BaseService {
     const provider = createDeepSeek({ apiKey: this.#runtime.apiKey });
     const model = provider("deepseek-chat");
 
-    const thinking = (this.#runtime.appConfig as any)?.providers?.deepseek?.thinking ?? "disabled";
+    const thinking = this.#runtime.appConfig?.providers?.deepseek?.thinking ?? "disabled";
     const providerOptions = { deepseek: { thinking: { type: thinking } } };
 
     const result = await generateText({

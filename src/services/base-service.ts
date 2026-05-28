@@ -1,19 +1,19 @@
+import type { Logger } from "@atom-neo/shared";
+
 export abstract class BaseService {
   abstract readonly name: string;
 
   #running = false;
+  #logger: Logger | null = null;
 
-  get isRunning(): boolean {
-    return this.#running;
-  }
+  get logger(): Logger | null { return this.#logger; }
 
-  async start(): Promise<void> {
-    this.#running = true;
-  }
+  setLogger(logger: Logger): void { this.#logger = logger; }
 
-  async stop(): Promise<void> {
-    this.#running = false;
-  }
+  get isRunning(): boolean { return this.#running; }
+
+  async start(): Promise<void> { this.#running = true; }
+  async stop(): Promise<void> { this.#running = false; }
 
   async restart(): Promise<void> {
     await this.stop();

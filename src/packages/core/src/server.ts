@@ -57,12 +57,13 @@ export type CoreDeps = {
   host: string;
   logger: Logger;
   sm: ServiceProvider;
+  runtime: RuntimeLike;
 };
 
+/** Start the core HTTP + WebSocket server with AI pipeline processing. */
 export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; stop: () => void }> {
-  const { port, host, logger, sm } = deps;
-  const runtime = sm.get<RuntimeLike>("runtime")!;
-  const sandbox: string = runtime?.sandbox ?? "";
+  const { port, host, logger, sm, runtime } = deps;
+  const sandbox: string = runtime.sandbox ?? "";
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
     provider: "deepseek", model: "deepseek-chat", apiKey: runtime?.apiKey ?? "",
   };
@@ -106,6 +107,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerFollowUpElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
+  bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
   bus.on(BusEvents.Task.Completed, (p) => {
     const result = p.result as CompletedResult;
     logger.info("task completed", {
@@ -143,7 +145,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
-  const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus });
+  const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus, logger });
 
   // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
   // BaseElement.report() wraps payload in { name, payload } — FullEventMap doesn't reflect this yet

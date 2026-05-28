@@ -12,7 +12,7 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
       if (!memory) return { ok: true, output: "(memory service not connected)", data: { results: [] } };
       const r = z.object({ query: z.string(), limit: z.number().optional().default(3) }).safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
-      const nodes = memory.search(r.data.query, r.data.limit);
+      const nodes = await memory.search(r.data.query, r.data.limit);
       if (nodes.length === 0) return { ok: true, output: "No memories found." };
       return { ok: true, output: nodes.map((n: any) => `- ${n.content}`).join("\n"), data: nodes };
     },

@@ -1,8 +1,6 @@
-export enum PermissionLevel {
-  READ_ONLY = 0,
-  FILE_WRITE = 1,
-  FULL = 2,
-}
+import { PermissionLevel } from "@atom-neo/shared";
+
+export { PermissionLevel };
 
 export function checkPermission(required: number, granted: number): boolean {
   return granted >= required;

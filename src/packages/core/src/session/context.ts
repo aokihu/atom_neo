@@ -10,14 +10,6 @@ import type {
 
 export type TokenUsage = { total: number };
 
-export type {
-  InferenceFact,
-  ToolContext,
-  ScopeState,
-  MemoryScopeState,
-  ContinuationContext,
-};
-
 export class SessionContext {
   readonly sessionId: string;
 

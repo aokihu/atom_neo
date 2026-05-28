@@ -13,7 +13,7 @@ export type {
   ScopeState,
   MemoryScopeState,
   ContinuationContext,
-} from "./session/context";
+} from "@atom-neo/shared";
 
 export { SessionStore } from "./session/store";
 

@@ -16,6 +16,10 @@ import { AgentsCompilerService } from "./services/agents-compiler";
 import { MemoryService } from "./services/memory-service";
 import { resolveContextLimit } from "./packages/core/src/constants";
 
+declare global {
+  var AI_SDK_LOG_WARNINGS: boolean;
+}
+
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 
 function shouldLog(level: LogLevel, minLevel: LogLevel, ignores: LogLevel[]): boolean {
@@ -66,7 +70,7 @@ export async function main(): Promise<void> {
   const args = parsed;
 
   // Must set BEFORE AI SDK (via @atom-neo/core) is imported
-  (globalThis as any).AI_SDK_LOG_WARNINGS = false;
+  globalThis.AI_SDK_LOG_WARNINGS = false;
 
   // Bootstrap
   loadEnv(args.sandbox);
@@ -90,8 +94,7 @@ export async function main(): Promise<void> {
   });
 
   // Services
-  const sm = new ServiceManager();
-  sm.register("runtime", runtime);
+  const sm = new ServiceManager({ logger });
   sm.register("agents-compiler", new AgentsCompilerService({ runtime }));
   sm.register("memory", new MemoryService({
     dbPath: runtime.atomDir + "/memory/memory.db",
@@ -106,7 +109,7 @@ export async function main(): Promise<void> {
 
   // Default (no --mode): core + TUI
   if (!args.mode) {
-    const core = await startCore({ port, host: args.host, logger, sm });
+    const core = await startCore({ port, host: args.host, logger, sm, runtime });
     const { startTui } = await import("@atom-neo/tui");
     const resolved = runtime.getResolvedModel("balanced");
     try {
@@ -119,10 +122,10 @@ export async function main(): Promise<void> {
           sandbox: args.sandbox,
           version: VERSION,
           tools: core.tools,
-          theme: (appConfig as any).tui?.theme ?? "github-dark",
+          theme: appConfig.tui?.theme ?? "github-dark",
           contextLimit: resolveContextLimit(
             `${resolved.provider}/${resolved.model}`,
-            (appConfig as any)?.providers?.[resolved.provider]?.contextLimit,
+            appConfig?.providers?.[resolved.provider]?.contextLimit,
           ),
         },
       });
@@ -136,7 +139,7 @@ export async function main(): Promise<void> {
   switch (args.mode) {
     case "core":
     case "full":
-      await startCore({ port, host: args.host, logger, sm });
+      await startCore({ port, host: args.host, logger, sm, runtime });
       break;
   }
 }

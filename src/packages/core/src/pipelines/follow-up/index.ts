@@ -23,8 +23,8 @@ class FollowUpSinkElement extends BaseElement<any, any> {
 }
 
 export function registerFollowUpElements(): void {
-  registerElement("follow-up-source", FollowUpSourceElement as any);
-  registerElement("follow-up-sink", FollowUpSinkElement as any);
+  registerElement("follow-up-source", FollowUpSourceElement);
+  registerElement("follow-up-sink", FollowUpSinkElement);
 }
 
 export function followUpPipeline() {

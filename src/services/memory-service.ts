@@ -1,7 +1,6 @@
 import { BaseService } from "./base-service";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 
 export type MemoryNode = {
@@ -30,29 +29,32 @@ export class MemoryService extends BaseService {
 
   // == Public API ==
 
-  search(query: string, limit = 3): MemoryNode[] {
+  async search(query: string, limit = 3): Promise<MemoryNode[]> {
     if (!query.trim()) return [];
 
     const sanitized = query.replace(/['"`\\]/g, "");
     let hits: string[] = [];
 
-    // 1. ripgrep full-text search
     try {
-      const output = execSync(
-        `rg --max-count ${limit} --json -i "${sanitized}" ${this.#nodesPath}/`,
-        { encoding: "utf-8", timeout: 5000 },
+      const proc = Bun.spawn(
+        ["rg", "--max-count", String(limit), "--json", "-i", sanitized, `${this.#nodesPath}/`],
+        { stdout: "pipe", stderr: "pipe" },
       );
+      const output = await new Response(proc.stdout).text();
+      proc.kill();
+
       for (const line of output.trim().split("\n")) {
+        if (!line) continue;
         try {
           const m = JSON.parse(line);
           if (m.type === "match") {
             const file = m.data.path.text.replace(/^.*nodes\//, "").replace(".txt", "");
             if (!hits.includes(file)) hits.push(file);
           }
-        } catch { /* skip */ }
+        } catch { /* skip non-JSON rg line */ }
       }
-    } catch {
-      // rg failed or no matches — fallback to manual traversal
+    } catch (err) {
+      this.logger?.error("rg search failed", { error: String(err) });
       hits = this.#fallbackSearch(sanitized.toLowerCase());
     }
 
@@ -183,6 +185,8 @@ export class MemoryService extends BaseService {
       target_id TEXT NOT NULL,
       relation TEXT NOT NULL
     )`);
+    try { this.#db.run("CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id)"); } catch {}
+    try { this.#db.run("CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id)"); } catch {}
   }
 
   #loadNode(id: string): MemoryNode | null {
@@ -237,7 +241,7 @@ export class MemoryService extends BaseService {
   #maintenance(): void {
     // Decay: daily -1 per day since creation
     this.#db.run(
-      `UPDATE nodes SET weight = MAX(0, weight - (julianday('now') - julianday(created_at / 1000, 'unixepoch')) * 1)`,
+      `UPDATE nodes SET weight = MAX(0, weight - (julianday('now') - julianday(created_at / 1000.0, 'unixepoch')) * 1)`,
     );
 
     // Cleanup: remove nodes with weight <= 0

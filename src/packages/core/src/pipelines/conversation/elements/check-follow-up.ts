@@ -1,0 +1,48 @@
+import { BaseElement } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { IntentRequestType } from "@atom-neo/shared";
+import type { ConversationFlowState } from "./types";
+
+export class CheckFollowUpElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
+  #memory: any;
+
+  constructor(params: {
+    name: string;
+    kind: string;
+    bus: PipelineEventBus<PipelineEventMap>;
+    memory?: any;
+  }) {
+    super({ name: params.name, kind: "boundary", bus: params.bus });
+    this.#memory = params.memory;
+  }
+
+  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
+    if (input.mode !== "executing") return input;
+
+    const intents = input.intents ?? [];
+
+    for (const intent of intents) {
+      if (intent.request === IntentRequestType.KEEP_MEMORY && this.#memory) {
+        const memId = intent.params.id as string;
+        if (memId && this.#memory.has?.(memId)) {
+          this.#memory.keep(memId);
+        }
+      }
+    }
+
+    for (const intent of intents) {
+      if (intent.request === IntentRequestType.REQUEST_MORE_TOOLS) {
+        return { ...input, mode: "ready_to_finalize", chainAction: "more_tools" };
+      }
+      if (intent.request === IntentRequestType.FOLLOW_UP) {
+        return {
+          ...input,
+          mode: "ready_to_finalize",
+          followUp: { summary: "follow_up", nextPrompt: "", avoidRepeat: "" },
+        };
+      }
+    }
+
+    return { ...input, mode: "ready_to_finalize" };
+  }
+}

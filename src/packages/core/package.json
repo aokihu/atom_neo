@@ -10,12 +10,11 @@
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^0.2.15",
-    "@ai-sdk/openai": "^3.0.64",
     "@atom-neo/shared": "workspace:*",
-    "ai": "^4.3.19"
+    "ai": "^4.3.19",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
-    "zod": "^4.4.3"
+    "@types/bun": "^1.3.14"
   }
 }

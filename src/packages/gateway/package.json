@@ -11,10 +11,9 @@
   },
   "dependencies": {
     "@atom-neo/shared": "workspace:*",
-    "jose": "^5.10.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
-    "zod": "^4.4.3"
+    "@types/bun": "^1.3.14"
   }
 }

@@ -255,7 +255,7 @@ export interface ToolResult {
 const builtinTools: ToolDefinition[] = [
   readTool, writeTool, lsTool, grepTool, treeTool, cpTool, mvTool,
   bashTool,        // 需确认
-  searchMemoryTool, saveMemoryTool, traverseMemoryTool, linkMemoryTool, recallMemoryTool,
+  searchMemoryTool, saveMemoryTool, traverseMemoryTool, linkMemoryTool,
 ];
 ```
 

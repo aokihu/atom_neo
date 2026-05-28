@@ -11,7 +11,7 @@ export function Sidebar({ serverInfo, tokenUsage, contextLimit }: {
   const [uptime, setUptime] = useState(0);
 
   useEffect(() => {
-    const timer = setInterval(() => setUptime(t => t + 1), 1000);
+    const timer = setInterval(() => setUptime(t => t + 10), 10000);
     return () => clearInterval(timer);
   }, []);
 

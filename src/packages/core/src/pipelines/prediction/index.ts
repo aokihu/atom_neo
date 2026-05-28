@@ -24,8 +24,8 @@ class PredictionSinkElement extends BaseElement<any, any> {
 }
 
 export function registerPredictionElements(): void {
-  registerElement("prediction-source", PredictionSourceElement as any);
-  registerElement("prediction-sink", PredictionSinkElement as any);
+  registerElement("prediction-source", PredictionSourceElement);
+  registerElement("prediction-sink", PredictionSinkElement);
 }
 
 export function predictionPipeline() {

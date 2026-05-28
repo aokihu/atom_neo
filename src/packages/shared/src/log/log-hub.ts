@@ -12,8 +12,8 @@ export class LogHub {
     for (const sink of this.#sinks) {
       try {
         sink.write(entry);
-      } catch {
-        // Sink errors should not propagate
+      } catch (err) {
+        console.error("[log-hub] sink write failed:", err instanceof Error ? err.message : String(err));
       }
     }
   }

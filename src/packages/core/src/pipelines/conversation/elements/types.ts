@@ -1,0 +1,33 @@
+import type { IntentRequest } from "@atom-neo/shared";
+import type { TokenUsage } from "../../../session/context";
+
+export type ConversationMode =
+  | "initial"
+  | "streaming"
+  | "formatted"
+  | "executing"
+  | "ready_to_finalize";
+
+export type Message = { role: string; content: string; reasoning_content?: string };
+
+export type ConversationFlowState = {
+  mode: ConversationMode;
+  task: any;
+  prompts?: Array<{ role: string; content: string; reasoning_content?: string }>;
+  systemPrompt?: string;
+  compiledAgentsPrompt?: string;
+  contextData?: string;
+  systemText?: string;
+  userMessages?: Message[];
+  responseText?: string;
+  reasoningContent?: string;
+  followUp?: {
+    summary: string;
+    nextPrompt: string;
+    avoidRepeat: string;
+  };
+  chainAction?: "more_tools" | "follow_up";
+  intents?: IntentRequest[];
+  intentRequestText?: string;
+  tokenUsage?: TokenUsage;
+};

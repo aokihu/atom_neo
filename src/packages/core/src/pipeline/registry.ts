@@ -1,6 +1,6 @@
 import type { BaseElement, PipelineEventBus, PipelineEventMap } from "@atom-neo/shared";
 
-export type ElementConstructor = new (params: Record<string, unknown>) => BaseElement;
+export type ElementConstructor = new (...args: any[]) => BaseElement;
 
 const registry = new Map<string, ElementConstructor>();
 

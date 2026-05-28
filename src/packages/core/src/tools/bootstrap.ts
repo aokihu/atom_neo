@@ -11,6 +11,7 @@ import {
 } from "./builtin/memory";
 import { createToolGuard } from "./guard";
 
+/** Create all builtin tool definitions (fs, bash, memory) for a sandbox. */
 export function createAllTools(sandbox: string, memory?: any, whitelist?: string[]): ToolDefinition[] {
   const sb = createSandbox(sandbox);
   const raw: ToolDefinition[] = [

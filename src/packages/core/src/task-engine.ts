@@ -88,7 +88,6 @@ export class TaskEngine {
       try {
         current = await element.process(current);
       } catch (err) {
-        this.#bus.emit(BusEvents.Task.Failed as any, { task, error: err });
         throw err;
       }
     }

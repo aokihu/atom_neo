@@ -4,6 +4,7 @@ import { createRoot } from "@opentui/react";
 import { App } from "./components/App";
 import type { ServerInfo } from "./types";
 
+/** Launch the terminal UI using OpenTUI React renderer. */
 export function startTui(params: {
   url: string;
   sessionId?: string;

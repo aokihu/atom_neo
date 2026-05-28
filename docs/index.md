@@ -95,9 +95,9 @@
   19. architecture.md      → JWT auth + RateLimit + CoreProxy
   ✔ 116 total tests, 100% pass
 
-⬇ P7：TUI（进行中）
+✅ P7：TUI（已完成）
   19. architecture.md      → TUI 终端界面
 
 ✅ P8：Integration（已完成）
-  ✔ 119 total tests, 100% pass
+  ✔ 130 total tests, 100% pass
 ```

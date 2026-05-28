@@ -2,19 +2,23 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { startCore } from "../../src/packages/core/src/server";
 import { Logger, StdoutSink, LogHub } from "@atom-neo/shared";
 
-let server: { stop: () => void };
+let server: { port: number; tools: string[]; stop: () => void };
 const BASE = "http://127.0.0.1:3200";
+
+const mockRuntime = {
+  sandbox: process.cwd() + "/sandbox",
+  apiKey: "",
+  mode: "core",
+  port: 3200,
+  host: "127.0.0.1",
+  appConfig: null,
+  maxTokens: 4096,
+  getResolvedModel: () => ({ provider: "deepseek", model: "deepseek-chat", apiKey: "" }),
+};
 
 const mockSm = {
   get(name: string) {
-    if (name === "runtime") return {
-      sandbox: process.cwd() + "/sandbox",
-      apiKey: "",
-      mode: "core",
-      port: 3200,
-      host: "127.0.0.1",
-    };
-    if (name === "compiler") return { getCompiledPrompt: () => "" };
+    if (name === "agents-compiler") return { getCompiledPrompt: () => "" };
     return undefined;
   }
 };
@@ -29,6 +33,7 @@ beforeAll(async () => {
     host: "127.0.0.1",
     logger: logger as any,
     sm: mockSm,
+    runtime: mockRuntime,
   });
 });
 

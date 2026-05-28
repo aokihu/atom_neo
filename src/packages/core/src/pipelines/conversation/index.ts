@@ -16,16 +16,16 @@ import {
 import { DEFAULT_MAX_TOKENS } from "../../constants";
 
 export function registerConversationElements(): void {
-  registerElement("collect-prompts", CollectPromptsElement as any);
-  registerElement("load-system-prompt", LoadSystemPromptElement as any);
-  registerElement("fetch-agents-prompt", FetchAgentsPromptElement as any);
-  registerElement("collect-context", CollectContextElement as any);
-  registerElement("format-system-messages", FormatSystemMessagesElement as any);
-  registerElement("format-user-messages", FormatUserMessagesElement as any);
-  registerElement("parse-intents", ParseIntentsElement as any);
-  registerElement("stream-llm", StreamLLMElement as any);
-  registerElement("check-follow-up", CheckFollowUpElement as any);
-  registerElement("finalize", FinalizeElement as any);
+  registerElement("collect-prompts", CollectPromptsElement);
+  registerElement("load-system-prompt", LoadSystemPromptElement);
+  registerElement("fetch-agents-prompt", FetchAgentsPromptElement);
+  registerElement("collect-context", CollectContextElement);
+  registerElement("format-system-messages", FormatSystemMessagesElement);
+  registerElement("format-user-messages", FormatUserMessagesElement);
+  registerElement("parse-intents", ParseIntentsElement);
+  registerElement("stream-llm", StreamLLMElement);
+  registerElement("check-follow-up", CheckFollowUpElement);
+  registerElement("finalize", FinalizeElement);
 }
 
 export type ConversationPipelineDeps = {

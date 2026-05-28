@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useChat } from "../hooks/useChat";
 import { getTheme } from "../theme";
@@ -21,7 +21,7 @@ export function useTheme() { return useContext(ThemeContext); }
 export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }) {
   const { width } = useTerminalDimensions();
   const { messages, send, tokenUsage } = useChat(url);
-  const theme = getTheme(serverInfo.theme);
+  const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
 
   return (
