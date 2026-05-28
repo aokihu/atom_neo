@@ -7,6 +7,9 @@ export const CONTEXT_LIMITS: Record<string, number> = {
 /** Fallback context limit when no explicit value is found */
 export const DEFAULT_CONTEXT_LIMIT = 131_072;
 
+/** Default max output tokens when not specified in config */
+export const DEFAULT_MAX_TOKENS = 4096;
+
 export function resolveContextLimit(
   providerModel: string,
   configLimit?: number,

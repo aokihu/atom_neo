@@ -1,34 +1,21 @@
-import type { SessionMessage, ToolResult } from "@atom-neo/shared";
+import type {
+  SessionMessage,
+  ToolResult,
+  InferenceFact,
+  ToolContext,
+  ScopeState,
+  MemoryScopeState,
+  ContinuationContext,
+} from "@atom-neo/shared";
 
 export type TokenUsage = { total: number };
 
-export type InferenceFact = {
-  key: string;
-  value: string;
-  reason: string;
-};
-
-export type ToolContext = {
-  mode: "idle" | "active" | "finished";
-  results: ToolResult[];
-};
-
-export type ScopeState = {
-  status: "idle" | "loaded" | "searching";
-  query: string;
-};
-
-export type MemoryScopeState = {
-  core: ScopeState;
-  short: ScopeState;
-  long: ScopeState;
-};
-
-export type ContinuationContext = {
-  summary: string;
-  nextPrompt: string;
-  avoidRepeat: string;
-  updatedAt: number;
+export type {
+  InferenceFact,
+  ToolContext,
+  ScopeState,
+  MemoryScopeState,
+  ContinuationContext,
 };
 
 export class SessionContext {

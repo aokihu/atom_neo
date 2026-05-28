@@ -66,7 +66,7 @@ export class MemoryService extends BaseService {
       .slice(0, limit);
 
     // 3. Boost weights
-    for (const n of nodes) this.#boostWeight(n.id);
+    for (const n of nodes) this.boostWeight(n.id);
 
     return nodes;
   }
@@ -217,13 +217,6 @@ export class MemoryService extends BaseService {
     const daysOld = (Date.now() - node.createdAt) / 86400000;
     const recency = Math.max(0, 1 - daysOld / 30); // 30 天内衰减线性
     return node.weight * 0.7 + recency * 30;
-  }
-
-  #boostWeight(id: string): void {
-    this.#db.run(
-      "UPDATE nodes SET weight = MIN(100, weight + 5), accessed_at = ? WHERE id = ?",
-      [Date.now(), id],
-    );
   }
 
   #fallbackSearch(query: string): string[] {

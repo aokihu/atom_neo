@@ -2,20 +2,16 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
 import type { Message } from "../types";
 
-let msgCounter = 0;
-function nextId() { return `msg-${Date.now()}-${++msgCounter}`; }
-
 export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
   const clientRef = useRef<TuiClient | null>(null);
-  const connectedRef = useRef(false);
   const thinkingIdRef = useRef<string | null>(null);
+  const counterRef = useRef(0);
+
+  function nextId() { return `msg-${Date.now()}-${++counterRef.current}`; }
 
   useEffect(() => {
-    if (connectedRef.current) return;
-    connectedRef.current = true;
-
     const client = new TuiClient({ url, sessionId });
     clientRef.current = client;
 
@@ -61,6 +57,11 @@ export function useChat(url: string, sessionId?: string) {
     client.connect().catch(() => {
       setMessages(prev => [...prev, { role: "error", content: "Connection failed", id: nextId() }]);
     });
+
+    return () => {
+      client.close();
+      clientRef.current = null;
+    };
   }, [url, sessionId]);
 
   const send = useCallback(async (text: string) => {

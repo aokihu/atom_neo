@@ -13,6 +13,8 @@ import {
   FinalizeElement,
 } from "./elements";
 
+import { DEFAULT_MAX_TOKENS } from "../../constants";
+
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement as any);
   registerElement("load-system-prompt", LoadSystemPromptElement as any);
@@ -61,7 +63,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       model: deps.model ?? "deepseek-chat",
       baseUrl: deps.baseUrl,
       tools: deps.tools ?? [],
-      maxTokens: deps.maxTokens ?? 4096,
+      maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,
       providerOptions: deps.providerOptions,
     })
     .transform("parse-intents", {})

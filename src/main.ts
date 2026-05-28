@@ -1,5 +1,9 @@
-import { statSync } from "node:fs";
+import { statSync, readFileSync } from "node:fs";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
+
+const VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf-8")
+).version as string;
 import type { LogLevel } from "@atom-neo/shared";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
@@ -113,7 +117,7 @@ export async function main(): Promise<void> {
           host: args.host,
           model: resolved.model,
           sandbox: args.sandbox,
-          version: "0.7.4",
+          version: VERSION,
           tools: core.tools,
           theme: (appConfig as any).tui?.theme ?? "github-dark",
           contextLimit: resolveContextLimit(

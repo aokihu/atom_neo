@@ -10,7 +10,7 @@ import type { IntentRequest } from "@atom-neo/shared";
 import { createTaskItem } from "../../../task-factory";
 import type { TaskQueue } from "../../../task-queue";
 import type { TokenUsage } from "../../../session/context";
-import { resolveContextLimit } from "../../../constants";
+import { resolveContextLimit, DEFAULT_MAX_TOKENS } from "../../../constants";
 
 export type ConversationMode =
   | "initial"
@@ -235,7 +235,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
     this.#tools = params.tools;
-    this.#maxTokens = params.maxTokens ?? 4096;
+    this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
     this.#providerOptions = params.providerOptions ?? {};
   }
 

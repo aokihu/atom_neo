@@ -1,6 +1,6 @@
 {
   "name": "@atom-neo/gateway",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

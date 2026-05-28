@@ -2,6 +2,12 @@ type DeltaCallback = (delta: string) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type TokenUsageCallback = (total: number) => void;
 
+type PendingRequest = {
+  resolve: (text: string) => void;
+  reject: (err: Error) => void;
+  text: string;
+};
+
 export class TuiClient {
   #url: string;
   #sessionId: string;
@@ -11,8 +17,7 @@ export class TuiClient {
   #onDelta?: DeltaCallback;
   #onTool?: ToolCallback;
   #onTokenUsage?: TokenUsageCallback;
-  #responseResolve?: (text: string) => void;
-  #responseText = "";
+  #pending: PendingRequest[] = [];
 
   constructor(params: { url?: string; sessionId?: string; chatId?: string } = {}) {
     this.#url = (params.url ?? "http://127.0.0.1:3100").replace(/^http/, "ws");
@@ -37,7 +42,8 @@ export class TuiClient {
           } else if (msg.type === "event.transport.delta") {
             const delta = msg.payload?.textDelta ?? "";
             if (delta) {
-              this.#responseText += delta;
+              const head = this.#pending[0];
+              if (head) head.text += delta;
               this.#onDelta?.(delta);
             }
           } else if (msg.type === "event.transport.tool.started") {
@@ -54,12 +60,14 @@ export class TuiClient {
               error: msg.payload?.error,
             });
           } else if (msg.type === "event.task.completed") {
-            this.#responseResolve?.(this.#responseText);
+            const pending = this.#pending.shift();
+            if (pending) pending.resolve(pending.text);
             const tu = msg.payload?.tokenUsage;
             if (tu) this.#onTokenUsage?.(tu.total);
           } else if (msg.type === "event.task.failed") {
+            const pending = this.#pending.shift();
             const err = msg.payload?.error ?? "Unknown error";
-            this.#responseResolve?.(`Error: ${err}`);
+            if (pending) pending.reject(new Error(String(err)));
           }
         } catch { /* ignore */ }
       };
@@ -81,14 +89,18 @@ export class TuiClient {
       }),
     });
 
-    return new Promise<string>((resolve) => {
-      this.#responseResolve = resolve;
-      this.#responseText = "";
+    return new Promise<string>((resolve, reject) => {
+      this.#pending.push({ resolve, reject, text: "" });
     });
   }
 
   onDelta(cb: DeltaCallback): void { this.#onDelta = cb; }
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
   onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
-  close(): void { this.#ws?.close(); }
+
+  close(): void {
+    for (const p of this.#pending) p.reject(new Error("Connection closed"));
+    this.#pending = [];
+    this.#ws?.close();
+  }
 }

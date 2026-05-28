@@ -9,6 +9,9 @@ import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
 import { Sidebar } from "./Sidebar";
 
+const SIDEBAR_MIN_WIDTH = 90;
+const FALLBACK_CONTEXT_LIMIT = 131_072;
+
 type ThemeCtx = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
 
 const ThemeContext = createContext<ThemeCtx>(getTheme());
@@ -19,7 +22,7 @@ export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }
   const { width } = useTerminalDimensions();
   const { messages, send, tokenUsage } = useChat(url);
   const theme = getTheme(serverInfo.theme);
-  const showSidebar = width >= 90;
+  const showSidebar = width >= SIDEBAR_MIN_WIDTH;
 
   return (
     <ThemeContext.Provider value={theme}>
@@ -30,7 +33,7 @@ export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }
             <ChatView messages={messages} />
             <InputBar onSend={send} />
           </box>
-          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? 131072} />}
+          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT} />}
         </box>
       </box>
     </ThemeContext.Provider>

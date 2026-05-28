@@ -47,14 +47,24 @@ export type AppConfig = z.infer<typeof ConfigSchema>;
 
 export function loadConfig(sandboxPath: string): AppConfig {
   const configPath = `${sandboxPath}/config.json`;
+  if (!existsSync(configPath)) {
+    const defaults = ConfigSchema.parse({});
+    Bun.write(configPath, JSON.stringify(defaults, null, 2));
+    return defaults;
+  }
   try {
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
     return ConfigSchema.parse(raw);
-  } catch {
-    const defaults = ConfigSchema.parse({});
-    if (!existsSync(configPath)) {
-      Bun.write(configPath, JSON.stringify(defaults, null, 2));
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      console.error(`[config] Invalid config in ${configPath}:`);
+      for (const issue of err.issues) {
+        const path = issue.path.length ? issue.path.join(".") : "(root)";
+        console.error(`  ${path}: ${issue.message}`);
+      }
+    } else {
+      console.error(`[config] Failed to load ${configPath}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return defaults;
+    return ConfigSchema.parse({});
   }
 }
