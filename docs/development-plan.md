@@ -140,7 +140,25 @@
 |------|------|------|
 | E2E tests | `tests/e2e/core.test.ts` | 6 tests: health, tasks, sessions, cancel |
 | Documentation | `docs/*.md` | Complete documentation suite |
-| Tests | 119 total (113 + 6 e2e), 100% pass |
+| Tests | 130 total, 100% pass |
+
+---
+
+## P9: Intent Prediction Pipeline
+
+**预估**: 1 周 | **状态**: in_progress
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| Prediction types | `src/packages/shared/src/types/intent.ts` | 新增 IntentPredictionResult 类型 |
+| Predict-input element | `src/packages/core/src/pipelines/prediction/elements/predict-input.ts` | Source: 提取用户消息 |
+| Predict-intent element | `src/packages/core/src/pipelines/prediction/elements/predict-intent.ts` | Transform: basic 模型分类 |
+| Route-conversation element | `src/packages/core/src/pipelines/prediction/elements/route-conversation.ts` | Sink: 构建 conversation 并入队 |
+| Pipeline DSL | `src/packages/core/src/pipelines/prediction/index.ts` | predictionPipeline(deps) builder |
+| Server 注入 | `src/packages/core/src/server.ts` | POST /api/tasks 先走 prediction pipeline |
+| 文档 | `docs/milestones/P9-intent-prediction.md` | 详细实施方案 |
+| 单元测试 | `src/packages/core/src/pipelines/prediction/elements/predict-intent.test.ts` | 14+ 分类场景测试 |
+| 集成测试 | `src/packages/core/src/pipelines/prediction/*.test.ts` | 完整流程 + 降级测试 |
 
 ---
 
@@ -157,5 +175,6 @@
 | P6 | Gateway | 6 | completed | 0.5 weeks |
 | P7 | TUI | 6 | in_progress | 1 week |
 | P8 | Integration | 3 | completed | 0.5 weeks |
+| P9 | Intent Prediction | 9 | in_progress | 1 week |
 
-**Total: 119 tests, ~8 weeks**
+**Total: 130 tests, ~9 weeks**

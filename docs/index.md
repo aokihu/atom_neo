@@ -99,5 +99,9 @@
   19. architecture.md      → TUI 终端界面
 
 ✅ P8：Integration（已完成）
-  ✔ 130 total tests, 100% pass
+   ✔ 130 total tests, 100% pass
+
+⬇ P9：Intent Prediction Pipeline（进行中）
+   24. milestones/P9-intent-prediction.md → 意图预测管线完整实施方案
+   ✔ 详细计划已完成，待实施
 ```
