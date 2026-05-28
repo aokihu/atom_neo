@@ -9,16 +9,16 @@ export function startTui(params: {
   sessionId?: string;
   serverInfo: ServerInfo;
 }): Promise<void> {
-  return new Promise<void>(async (resolve) => {
-    const renderer = await createCliRenderer({
+  return new Promise<void>((resolve) => {
+    createCliRenderer({
       exitOnCtrlC: true,
       screenMode: "alternate-screen",
       backgroundColor: "#0d1117",
       onDestroy: () => resolve(),
+    }).then(renderer => {
+      createRoot(renderer).render(
+        <App url={params.url} serverInfo={params.serverInfo} />,
+      );
     });
-
-    createRoot(renderer).render(
-      <App url={params.url} serverInfo={params.serverInfo} />,
-    );
   });
 }
