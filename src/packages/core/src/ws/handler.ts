@@ -3,8 +3,8 @@ import type { Broadcaster } from "./broadcaster";
 import type { TaskQueue } from "../task-queue";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
+import { TaskSource, BusEvents, WsMessages } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
-import { TaskSource } from "@atom-neo/shared";
 
 type ServerContext = {
   broadcaster: Broadcaster;
@@ -26,7 +26,7 @@ export function createWsHandlers(ctx: ServerContext) {
       const sid = (ws as any).data?.sessionId;
       if (sid) {
         ctx.broadcaster.add(ws, sid);
-        send(ws, "session.ready", { sessionId: sid });
+        send(ws, WsMessages.Server.SessionReady, { sessionId: sid });
       }
     },
     message(ws: ServerWebSocket<unknown>, msg: string | Buffer) {
@@ -34,7 +34,7 @@ export function createWsHandlers(ctx: ServerContext) {
         const data = JSON.parse(msg.toString());
         const { type, payload } = data;
 
-        if (type === "event.task.submit") {
+        if (type === WsMessages.Client.TaskSubmit) {
           const sid = (ws as any).data?.sessionId;
           if (sid) ctx.broadcaster.add(ws, sid);
 
@@ -47,16 +47,16 @@ export function createWsHandlers(ctx: ServerContext) {
           });
 
           ctx.taskQueue.enqueue(task);
-          send(ws, "event.task.created", { taskId: task.id, state: task.state });
-          ctx.bus?.emit("task.enqueued" as any, { task });
-        } else if (type === "event.task.cancel") {
+          send(ws, WsMessages.Server.TaskCreated, { taskId: task.id, state: task.state });
+          ctx.bus?.emit(BusEvents.Task.Enqueued as any, { task });
+        } else if (type === WsMessages.Client.TaskCancel) {
           ctx.taskQueue.remove(payload.taskId);
-          send(ws, "event.task.state-changed", { taskId: payload.taskId, currentState: "failed" });
-        } else if (type === "ping") {
-          send(ws, "pong", {});
+          send(ws, WsMessages.Server.TaskStateChanged, { taskId: payload.taskId, currentState: "failed" });
+        } else if (type === WsMessages.Control.Ping) {
+          send(ws, WsMessages.Control.Pong, {});
         }
       } catch {
-        send(ws, "error", { message: "Invalid message format" });
+        send(ws, WsMessages.Control.Error, { message: "Invalid message format" });
       }
     },
     close(ws: ServerWebSocket<unknown>) {

@@ -1,4 +1,4 @@
-import { TaskState } from "@atom-neo/shared";
+import { TaskState, BusEvents } from "@atom-neo/shared";
 import type { TaskItem, CoreEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { TaskQueue } from "./task-queue";
@@ -19,7 +19,7 @@ export class TaskEngine {
     this.#queue = params.queue;
     this.#timeoutMs = params.timeoutMs ?? 120_000;
 
-    this.#bus.on("task.enqueued", () => this.#onTaskEnqueued());
+    this.#bus.on(BusEvents.Task.Enqueued, () => this.#onTaskEnqueued());
   }
 
   start(): void {
@@ -54,7 +54,7 @@ export class TaskEngine {
     task.state = TaskState.PROCESSING;
     task.updatedAt = Date.now();
 
-    this.#bus.emit("task.activated", { task });
+    this.#bus.emit(BusEvents.Task.Activated, { task });
 
     try {
       const result = await this.#executeTask(task);
@@ -63,14 +63,14 @@ export class TaskEngine {
       task.state = TaskState.COMPLETED;
       task.updatedAt = Date.now();
 
-      this.#bus.emit("task.completed", { task, result });
-      this.#bus.emit("pipeline.result", { task, result });
+      this.#bus.emit(BusEvents.Task.Completed, { task, result });
+      this.#bus.emit(BusEvents.Pipeline.Result, { task, result });
     } catch (error) {
       this.#queue.markDone(task.id);
       task.state = TaskState.FAILED;
       task.updatedAt = Date.now();
 
-      this.#bus.emit("task.failed", { task, error });
+      this.#bus.emit(BusEvents.Task.Failed, { task, error });
     } finally {
       removePipeline(task.id);
     }
@@ -88,7 +88,7 @@ export class TaskEngine {
       try {
         current = await element.process(current);
       } catch (err) {
-        this.#bus.emit("task.failed" as any, { task, error: err });
+        this.#bus.emit(BusEvents.Task.Failed as any, { task, error: err });
         throw err;
       }
     }

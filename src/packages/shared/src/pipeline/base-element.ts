@@ -1,6 +1,7 @@
 import type { PipelineElementKind } from "./types";
 import type { PipelineEventBus } from "./event-bus";
 import type { PipelineEventMap } from "../types/pipeline";
+import { BusEvents } from "../constants/events";
 
 export abstract class BaseElement<I = any, O = any> {
   readonly name: string;
@@ -43,7 +44,7 @@ export abstract class BaseElement<I = any, O = any> {
 
   #reportState(state: string): void {
     this.#state = state as any;
-    this.bus.emit("element.state-changed", {
+    this.bus.emit(BusEvents.Element.StateChanged, {
       name: this.name,
       payload: { state: state as any },
     });

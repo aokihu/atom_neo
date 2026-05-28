@@ -1,8 +1,8 @@
-import type { PipelineResult } from "../types/pipeline";
+import type { PipelineResult, PipelineEventMap } from "../types/pipeline";
 import type { PipelineDefinition } from "./types";
 import type { BaseElement } from "./base-element";
 import type { PipelineEventBus } from "./event-bus";
-import type { PipelineEventMap } from "../types/pipeline";
+import { BusEvents } from "../constants/events";
 
 export class PipelineRunner {
   #bus: PipelineEventBus<PipelineEventMap>;
@@ -20,7 +20,7 @@ export class PipelineRunner {
     input: any,
     def: PipelineDefinition,
   ): Promise<PipelineResult> {
-    this.#bus.emit("pipeline.element.started", {
+    this.#bus.emit(BusEvents.Pipeline.ElementStarted, {
       pipelineName: def.name,
       elementName: def.name,
       elementKind: "sink",
@@ -40,14 +40,14 @@ export class PipelineRunner {
 
       try {
         current = await element.process(current);
-        this.#bus.emit("pipeline.element.finished", {
+        this.#bus.emit(BusEvents.Pipeline.ElementFinished, {
           pipelineName: def.name,
           elementName: elDef.name,
           elementKind: elDef.kind,
           durationMs: performance.now() - start,
         });
       } catch (error) {
-        this.#bus.emit("pipeline.element.failed", {
+        this.#bus.emit(BusEvents.Pipeline.ElementFailed, {
           pipelineName: def.name,
           elementName: elDef.name,
           elementKind: elDef.kind,

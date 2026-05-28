@@ -1,8 +1,8 @@
 import type { TaskQueue } from "../task-queue";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { CoreEventMap } from "@atom-neo/shared";
+import { TaskSource, BusEvents } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
-import { TaskSource } from "@atom-neo/shared";
 import type { Pipeline } from "../pipeline/builder";
 
 const pipelineMap = new Map<string, Pipeline>();
@@ -37,7 +37,7 @@ export async function createTaskHandler(
     if (pipeline) pipelineMap.set(task.id, pipeline);
 
     taskQueue.enqueue(task);
-    if (bus) bus.emit("task.enqueued" as any, { task });
+    if (bus) bus.emit(BusEvents.Task.Enqueued as any, { task });
 
     return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
   } catch (err) {

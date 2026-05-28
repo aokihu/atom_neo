@@ -75,3 +75,6 @@ export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
 export { normalizeError, errorMessage, truncate, slugify, sleep, debounce } from "./utils";
+
+// ── Constants ──
+export { BusEvents, WsMessages } from "./constants";

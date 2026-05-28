@@ -2,6 +2,8 @@ type DeltaCallback = (delta: string) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type TokenUsageCallback = (total: number) => void;
 
+import { WsMessages } from "@atom-neo/shared";
+
 type PendingRequest = {
   resolve: (text: string) => void;
   reject: (err: Error) => void;
@@ -36,35 +38,35 @@ export class TuiClient {
       this.#ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data as string);
-          if (msg.type === "session.ready") {
+          if (msg.type === WsMessages.Server.SessionReady) {
             this.#ready = true;
             resolve();
-          } else if (msg.type === "event.transport.delta") {
+          } else if (msg.type === WsMessages.Server.TransportDelta) {
             const delta = msg.payload?.textDelta ?? "";
             if (delta) {
               const head = this.#pending[0];
               if (head) head.text += delta;
               this.#onDelta?.(delta);
             }
-          } else if (msg.type === "event.transport.tool.started") {
+          } else if (msg.type === WsMessages.Server.TransportToolStarted) {
             this.#onTool?.({
               name: msg.payload?.toolName ?? "",
               callId: msg.payload?.toolCallId ?? "",
               input: msg.payload?.input,
             });
-          } else if (msg.type === "event.transport.tool.finished") {
+          } else if (msg.type === WsMessages.Server.TransportToolFinished) {
             this.#onTool?.({
               name: msg.payload?.toolName ?? "",
               callId: msg.payload?.toolCallId ?? "",
               result: msg.payload?.result,
               error: msg.payload?.error,
             });
-          } else if (msg.type === "event.task.completed") {
+          } else if (msg.type === WsMessages.Server.TaskCompleted) {
             const pending = this.#pending.shift();
             if (pending) pending.resolve(pending.text);
             const tu = msg.payload?.tokenUsage;
             if (tu) this.#onTokenUsage?.(tu.total);
-          } else if (msg.type === "event.task.failed") {
+          } else if (msg.type === WsMessages.Server.TaskFailed) {
             const pending = this.#pending.shift();
             const err = msg.payload?.error ?? "Unknown error";
             if (pending) pending.reject(new Error(String(err)));

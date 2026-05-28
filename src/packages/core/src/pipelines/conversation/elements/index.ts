@@ -5,7 +5,7 @@ import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
-import { IntentRequestType, IntentRequestSource, TaskSource } from "@atom-neo/shared";
+import { IntentRequestType, IntentRequestSource, TaskSource, BusEvents } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import { createTaskItem } from "../../../task-factory";
 import type { TaskQueue } from "../../../task-queue";
@@ -324,7 +324,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
         // 累积 3 个 chunk 再发送 TUI
         if (deltaCount >= CHUNK_BATCH && deltaBuffer) {
-          this.report("transport.delta", { textDelta: deltaBuffer });
+          this.report(BusEvents.Transport.Delta, { textDelta: deltaBuffer });
           deltaBuffer = "";
           deltaCount = 0;
         }
@@ -336,7 +336,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         deltaBuffer += buffer;
       }
       if (deltaBuffer) {
-        this.report("transport.delta", { textDelta: deltaBuffer });
+        this.report(BusEvents.Transport.Delta, { textDelta: deltaBuffer });
       }
       const response = await streamResult.response;
       const reasoningContent = (response.messages as any[])?.find((m: any) =>

@@ -1,6 +1,7 @@
 import type { PipelineRecorder, RecordedEvent } from "./recorder";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 
 export class PipelinePlayer {
   #recorder: PipelineRecorder;
@@ -18,7 +19,7 @@ export class PipelinePlayer {
     const events = this.#recorder.getEvents(taskId);
     if (events.length === 0) return;
 
-    this.#bus.emit("event.pipeline.replay-start" as any, {
+    this.#bus.emit(BusEvents.Replay.Start as any, {
       taskId,
       eventCount: events.length,
     });
@@ -27,7 +28,7 @@ export class PipelinePlayer {
       this.#bus.emit(event.type as any, event.payload);
     }
 
-    this.#bus.emit("event.pipeline.replay-end" as any, {
+    this.#bus.emit(BusEvents.Replay.End as any, {
       taskId,
       durationMs: 0,
     });

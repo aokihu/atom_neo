@@ -2,6 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
+import { BusEvents, WsMessages } from "@atom-neo/shared";
 import { TaskQueue } from "./task-queue";
 import { TaskEngine } from "./task-engine";
 import { SessionStore } from "./session/store";
@@ -105,7 +106,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerFollowUpElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
-  bus.on("task.completed", (p) => {
+  bus.on(BusEvents.Task.Completed, (p) => {
     const result = p.result as CompletedResult;
     logger.info("task completed", {
       taskId: p.task.id,
@@ -128,12 +129,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
     const accumulated = sessionStore.get(sid).tokenUsage;
     broadcaster.broadcastToSession(sid, {
-      type: "event.task.completed",
+      type: WsMessages.Server.TaskCompleted,
       ts: Date.now(), seq: 0,
       payload: { taskId: p.task.id, output: result.output ?? "", tokenUsage: accumulated },
     });
   });
-  bus.on("task.failed", (p) => {
+  bus.on(BusEvents.Task.Failed, (p) => {
     logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
   });
 
@@ -146,10 +147,10 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
   // BaseElement.report() wraps payload in { name, payload } — FullEventMap doesn't reflect this yet
-  bus.on("transport.delta" as any, (ev: { name: string; payload: { textDelta: string } }) => {
+  bus.on(BusEvents.Transport.Delta as any, (ev: { name: string; payload: { textDelta: string } }) => {
     const textDelta = ev.payload.textDelta;
     if (textDelta) {
-      broadcaster.broadcast({ type: "event.transport.delta", ts: Date.now(), seq: 0, payload: { textDelta } });
+      broadcaster.broadcast({ type: WsMessages.Server.TransportDelta, ts: Date.now(), seq: 0, payload: { textDelta } });
     }
   });
 
