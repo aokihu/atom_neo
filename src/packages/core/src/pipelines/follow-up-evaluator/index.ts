@@ -20,6 +20,7 @@ export function followUpEvaluatorPipeline(deps: {
   baseUrl?: string;
   maxTokens?: number;
   queue: any;
+  logger: any;
 }) {
   return pipeline("follow-up-evaluator")
     .source("evaluator-input", { session: deps.session })
@@ -28,6 +29,7 @@ export function followUpEvaluatorPipeline(deps: {
       model: deps.model,
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
+      logger: deps.logger,
     })
-    .sink("evaluate-finalize", { queue: deps.queue });
+    .sink("evaluate-finalize", { queue: deps.queue, logger: deps.logger });
 }

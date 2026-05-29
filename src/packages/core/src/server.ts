@@ -156,6 +156,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         queue: taskQueue,
+        logger,
       }).build(bus);
     },
   };

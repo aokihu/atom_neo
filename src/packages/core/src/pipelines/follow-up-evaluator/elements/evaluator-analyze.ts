@@ -31,6 +31,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
   #model: string;
   #baseUrl?: string;
   #maxTokens: number;
+  #logger: any;
 
   constructor(params: {
     name: string;
@@ -40,22 +41,26 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
     model: string;
     baseUrl?: string;
     maxTokens?: number;
+    logger?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
     this.#maxTokens = params.maxTokens ?? 512;
+    this.#logger = params.logger;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<EvaluatorFlowState> {
     if (input.mode !== "analyzing") return input;
 
     if (!input.recentSummary) {
+      this.#logger?.debug("evaluator-analyze: empty summary, fallback to healthy");
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
 
     if (!this.#apiKey) {
+      this.#logger?.debug("evaluator-analyze: no apiKey, fallback to healthy");
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
 
@@ -63,17 +68,26 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
       const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
       const model = provider(this.#model);
 
+      const prompt = `Recent conversation:\n${input.recentSummary}`;
+      this.#logger?.debug("evaluator-analyze: classifying", {
+        summaryLen: input.recentSummary.length,
+        promptPreview: prompt.slice(0, 200),
+      });
+
       const result = await generateText({
         model,
         system: ANALYZE_SYSTEM_PROMPT,
-        prompt: `Recent conversation:\n${input.recentSummary}`,
+        prompt,
         maxTokens: this.#maxTokens,
         temperature: 0,
       });
 
       const raw = result.text.trim();
+      this.#logger?.debug("evaluator-analyze: LLM response", { raw });
+
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
+        this.#logger?.warn("evaluator-analyze: no JSON in response, fallback");
         return { ...input, mode: "intervening", evaluation: FALLBACK };
       }
 
@@ -85,8 +99,11 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
         upgradeModel: parsed.upgradeModel === true,
         reason: parsed.reason ?? "",
       };
+
+      this.#logger?.debug("evaluator-analyze: classified", evaluation);
       return { ...input, mode: "intervening", evaluation };
-    } catch {
+    } catch (err: any) {
+      this.#logger?.warn("evaluator-analyze: error, fallback", { error: err.message });
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
   }
