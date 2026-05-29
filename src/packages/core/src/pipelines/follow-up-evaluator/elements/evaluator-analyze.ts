@@ -78,19 +78,20 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        ...input,
-        mode: "intervening",
-        evaluation: {
-          health: ["healthy", "looping", "stuck", "degrading"].includes(parsed.health)
-            ? parsed.health : "healthy",
-          suggestion: parsed.suggestion ?? "",
-          upgradeModel: parsed.upgradeModel === true,
-          reason: parsed.reason ?? "",
-        },
+      const evaluation = {
+        health: ["healthy", "looping", "stuck", "degrading"].includes(parsed.health)
+          ? parsed.health : "healthy",
+        suggestion: parsed.suggestion ?? "",
+        upgradeModel: parsed.upgradeModel === true,
+        reason: parsed.reason ?? "",
       };
+      return { ...input, mode: "intervening", evaluation };
     } catch {
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
+  }
+
+  static getPrompt(summary: string): string {
+    return `Recent conversation:\n${summary}`;
   }
 }

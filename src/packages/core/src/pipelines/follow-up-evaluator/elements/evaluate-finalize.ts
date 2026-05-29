@@ -28,14 +28,26 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
   async doProcess(input: EvaluatorFlowState): Promise<PipelineResult> {
     const { health, suggestion, upgradeModel, reason } = input.evaluation ?? FALLBACK;
 
+    const debugMsg = `evaluator: health=${health} | suggestion="${suggestion}" | upgradeModel=${upgradeModel} | reason="${reason}" | summaryLen=${input.recentSummary.length}`;
+
+    input.session.addMessage
+      ? input.session.addMessage({
+          role: "assistant",
+          content: debugMsg,
+          visible: false,
+          pipeline: "follow-up-evaluator",
+          timestamp: Date.now(),
+        })
+      : null;
+
     if (health === "stuck") {
       const termMsg = reason
         ? `(任务过长，已自动中断。原因: ${reason})`
         : "(任务过长，已自动中断。)";
       input.session.addMessage
-        ? input.session.addMessage({ role: "assistant", content: termMsg, visible: true, pipeline: "follow-up-evaluator" })
+        ? input.session.addMessage({ role: "assistant", content: termMsg, visible: true, pipeline: "follow-up-evaluator", timestamp: Date.now() })
         : null;
-      return { type: "complete", task: input.task, output: termMsg };
+      return { type: "complete", task: input.task, output: debugMsg };
     }
 
     if (health !== "healthy") {
@@ -54,10 +66,6 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
 
     this.#queue.enqueue(convTask);
 
-    return {
-      type: "complete",
-      task: input.task,
-      output: `evaluator: health=${health}`,
-    };
+    return { type: "complete", task: input.task, output: debugMsg };
   }
 }
