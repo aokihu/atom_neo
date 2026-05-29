@@ -38,6 +38,7 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
         return {
           ...input,
           mode: "ready_to_finalize",
+          chainAction: "follow_up",
           followUp: { summary: "follow_up", nextPrompt: "", avoidRepeat: "" },
         };
       }

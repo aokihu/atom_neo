@@ -13,6 +13,11 @@ export type TokenUsage = { total: number };
 export class SessionContext {
   readonly sessionId: string;
 
+  // Transient per-request fields (set/cleared within a single task chain)
+  evaluatorSuggestion?: string;
+  upgradeModel?: boolean;
+  pendingPrediction?: any;
+
   #messages: SessionMessage[] = [];
   #inferenceFacts: InferenceFact[] = [];
   #toolContext: ToolContext = { mode: "idle", results: [] };

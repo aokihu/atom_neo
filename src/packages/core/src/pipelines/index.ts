@@ -13,3 +13,8 @@ export {
   registerFollowUpElements,
   followUpPipeline,
 } from "./follow-up";
+
+export {
+  registerFollowUpEvaluatorElements,
+  followUpEvaluatorPipeline,
+} from "./follow-up-evaluator";

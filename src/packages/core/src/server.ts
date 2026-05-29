@@ -17,6 +17,7 @@ import { registerBuiltinTools, createAllTools, partitionTools } from "./tools/bo
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
+import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { DEFAULT_MAX_TOKENS } from "./constants";
@@ -110,6 +111,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         queue: taskQueue,
       }).build(bus);
     },
+
     conversation: (task: any) => {
       const session = sessionStore.get(task.sessionId);
       const prediction = session.pendingPrediction ?? {
@@ -121,7 +123,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       const tools = prediction.toolTier === "full" ? [...basic, ...advanced] : basic;
 
       const resolvedModel = runtime.getResolvedModel
-        ? runtime.getResolvedModel(prediction.difficulty)
+        ? runtime.getResolvedModel(
+            session.upgradeModel ? "advanced" : prediction.difficulty,
+          )
         : { provider: "deepseek", model: "deepseek-chat", apiKey, baseUrl, thinking: "disabled" as const };
 
       return conversationPipeline({
@@ -144,6 +148,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         chainDepth: 0,
       }).build(bus);
     },
+
+    "follow-up-evaluator": (task: any) => {
+      const session = sessionStore.get(task.sessionId);
+      return followUpEvaluatorPipeline({
+        session,
+        task,
+        apiKey, model, baseUrl, maxTokens,
+        queue: taskQueue,
+      }).build(bus);
+    },
   };
 
   const sessionStore = new SessionStore();
@@ -154,6 +168,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerConversationElements();
   registerPredictionElements();
   registerFollowUpElements();
+  registerFollowUpEvaluatorElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));

@@ -56,6 +56,15 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       const limit = resolveContextLimit(this.#providerModel, this.#configContextLimit);
       const pct = ((tu.total / limit) * 100).toFixed(2);
       contextData += `\nSession Token Usage:\n  Total: ${tu.total} / ${limit} (${pct}%)`;
+
+      if (this.#session.evaluatorSuggestion) {
+        contextData += `\n\n[评估建议] ${this.#session.evaluatorSuggestion}`;
+        delete this.#session.evaluatorSuggestion;
+      }
+      if (this.#session.upgradeModel) {
+        contextData += `\n\n[模型提示] 已切换为更高级别的模型处理此任务。`;
+        delete this.#session.upgradeModel;
+      }
     }
 
     return { ...input, contextData };
