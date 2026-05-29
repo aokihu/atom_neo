@@ -249,20 +249,7 @@ src/packages/core/src/pipelines/follow-up-evaluator/
 
 ## 6. 预留扩展点
 
-当前不实现，但设计和接口上预留空间：
-
-| 扩展点 | 说明 | 触发时机 | 优先级 |
-|--------|------|----------|--------|
-| **上下文压缩** | 消息接近 token 上限时，对早期消息做摘要，释放上下文 | chainDepth ≥ 6 或 token usage > 80% | 高 |
-| **阶段性 checkpoint** | 将进度摘要写入 memory（traverse_memory 可读取） | 每 5 轮 | 中 |
-| **话题漂移检测** | 检测偏离原始任务，偏离时提示用户 | 每次 evaluator | 中 |
-| **质量回归检测** | 对比当前输出和早期输出的质量指标 | 每次 evaluator | 低 |
-| **任务分解** | 检查是否可拆分成子 task 并行处理 | evaluator 触发时 | 低 |
-| **混合模型调度** | 推理子任务用 reasoner，生成子任务用 chat | 根据 upgradeModel 标记 | 低 |
-| **成本/延迟统计** | 每轮 token 消耗和延迟汇总 | 长会话后自动生成 | 低 |
-| **自动 fallback** | 连续失败后降级模型 | stuck 时 | 中 |
-
----
+参见 [future-features.md](../future-features.md#evaluator-pipeline)（Evaluator Pipeline 分类），包括上下文压缩、阶段性 checkpoint、话题漂移检测、自动 fallback 等，共 9 项。
 
 ## 7. 分析指标（future）
 

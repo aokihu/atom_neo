@@ -266,21 +266,7 @@ src/packages/core/src/pipelines/follow-up-evaluator/
 
 ## 7. 预留扩展点
 
-当前不实现，设计和接口预留：
-
-| 扩展点 | 说明 | 优先级 |
-|--------|------|--------|
-| 上下文压缩 | 接近 token 上限时压缩早期消息 | 高 |
-| 阶段性 checkpoint | 进度摘要写入 memory | 中 |
-| 自动 fallback | 连续失败降级模型 | 中 |
-| 话题漂移检测 | 检测偏离原始任务 | 中 |
-| 结构化分析指标 | evaluator-input 预计算 stats（相似度、成功率等） | 低 |
-| 质量回归检测 | 输出质量趋势分析 | 低 |
-| 任务分解 | 拆分并行子 task | 低 |
-| 混合模型调度 | 不同子任务用不同模型 | 低 |
-| 成本/延迟统计 | 长会话后生成报告 | 低 |
-
----
+参见 [docs/future-features.md#evaluator-pipeline](docs/future-features.md#evaluator-pipeline)，共 9 项。
 
 ## 8. 测试用例
 
