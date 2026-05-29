@@ -4,6 +4,8 @@ export type SessionMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   timestamp: number;
+  pipeline?: string;
+  visible?: boolean;
   metadata?: Record<string, unknown>;
 };
 

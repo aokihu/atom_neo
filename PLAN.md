@@ -298,13 +298,75 @@ async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
 
 ---
 
-## 6. TUI 链路完成判断
+## 6. Session 消息可见性控制
 
 ### 6.1 问题
 
+预测 Task 完成时，其 `output`（`"prediction: toolTier=full, difficulty=balanced, reasoning=..."`）被写入 session messages 作为 assistant 消息。后续 conversation pipeline 的 collect-prompts 全量读取 session 消息，将预测输出带入了 LLM 上下文。
+
+### 6.2 SessionMessage 扩展
+
+```diff
+  export type SessionMessage = {
+    role: "user" | "assistant" | "system" | "tool";
+    content: string;
+    timestamp: number;
++   pipeline?: string;     // 哪个 pipeline 产生："prediction" | "conversation"
++   visible?: boolean;     // 默认 true；false = 内部消息，不加入 LLM 上下文
+    metadata?: Record<string, unknown>;
+  };
+```
+
+### 6.3 写入侧（server.ts TaskCompleted 处理器）
+
+```diff
+  if (sid && output) {
+    const msg = {
+      role: "assistant" as const,
+      content: output,
+      timestamp: Date.now(),
++     pipeline: p.task.pipeline,
++     visible: p.task.pipeline === "conversation",
+    };
+    sessionStore.get(sid).addMessage(msg);
+  }
+```
+
+### 6.4 读取侧（collect-prompts）
+
+```diff
+- const messages = (this.#session.messages ?? []).map(...)
++ const messages = (this.#session.messages ?? [])
++   .filter((m: any) => m.visible !== false)
++   .map(...)
+```
+
+### 6.5 效果
+
+| 消息来源 | visible | collect-prompts 包含 | TUI 展示 |
+|----------|---------|---------------------|---------|
+| 用户消息（POST 处理器） | `undefined`（默认 true） | 包含 | 包含 |
+| 预测输出 | `false` | 不包含 | 不包含 |
+| conversation assistant 回复 | `true` | 包含 | 包含 |
+| tool 消息 | `undefined`（默认 true） | 包含 | 包含 |
+
+### 6.6 关联改动
+
+| 文件 | 操作 |
+|------|------|
+| `shared/src/types/session.ts` | 新增 `pipeline?` + `visible?` |
+| `server.ts` | TaskCompleted 写消息时附加字段 |
+| `collect-prompts.ts` | filter invisible 消息 |
+
+---
+
+## 7. TUI 链路完成判断
+
+### 7.1 问题
+
 当前 `ws-client.send()` 在收到第一个 `TaskCompleted` 时就 resolve。引入预测管道后，第一个 TaskCompleted 是预测 task，spinner 提前消失。
 
-### 6.2 方案
+### 7.2 方案
 
 | 收到的 TaskCompleted | parentTaskId | taskId | 判断 | TUI 行为 |
 |---------------------|-------------|--------|------|---------|
@@ -313,7 +375,7 @@ async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
 
 判断条件：`parentTaskId === rootTaskId && taskId !== rootTaskId`
 
-### 6.3 server.ts 改动
+### 7.3 server.ts 改动
 
 TaskCompleted 广播 payload 加 `parentTaskId`（**一行**）：
 
@@ -326,7 +388,7 @@ TaskCompleted 广播 payload 加 `parentTaskId`（**一行**）：
   },
 ```
 
-### 6.4 ws-client.ts 改动
+### 7.4 ws-client.ts 改动
 
 **send()** — POST 返回的 taskId 作为 rootTaskId：
 
@@ -369,7 +431,7 @@ async send(text: string): Promise<string> {
 
 无 fallback timer：预测失败走 `TaskFailed` → reject。
 
-### 6.5 useChat.ts 改动
+### 7.5 useChat.ts 改动
 
 删除 `send()` resolve 中移除 spinner 的两行：
 
@@ -389,7 +451,7 @@ async send(text: string): Promise<string> {
 
 spinner 由 `onDelta` 控制（已有逻辑：第一个 delta 到达时移除 thinking）。
 
-### 6.6 ChatView.tsx — 帧率
+### 7.6 ChatView.tsx — 帧率
 
 ```diff
 - 200
@@ -398,7 +460,7 @@ spinner 由 `onDelta` 控制（已有逻辑：第一个 delta 到达时移除 th
 
 ---
 
-## 7. 实施清单
+## 8. 实施清单
 
 按顺序，每步后 `bun test` 确认。
 
@@ -444,7 +506,7 @@ spinner 由 `onDelta` 控制（已有逻辑：第一个 delta 到达时移除 th
 
 ---
 
-## 8. 时序图
+## 9. 时序图
 
 ```
  用户       TUI(client)          server             TaskEngine           Pipeline           LLM

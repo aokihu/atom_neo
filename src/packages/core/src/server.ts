@@ -171,6 +171,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         role: "assistant" as const,
         content: output,
         timestamp: Date.now(),
+        pipeline: p.task.pipeline,
+        visible: p.task.pipeline === "conversation",
         ...(reasoningContent ? { reasoningContent } : {}),
       };
       sessionStore.get(sid).addMessage(msg);

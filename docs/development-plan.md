@@ -156,7 +156,8 @@
 | Predict-intent element | `src/packages/core/src/pipelines/prediction/elements/predict-intent.ts` | Transform: basic 模型分类 |
 | Predict-finalize element | `src/packages/core/src/pipelines/prediction/elements/predict-finalize.ts` | Sink: 写 session + 建 task + 入队 |
 | Pipeline DSL | `src/packages/core/src/pipelines/prediction/index.ts` | predictionPipeline(deps) builder |
-| Server 注入 | `src/packages/core/src/server.ts` | pipelineBuilders + TaskCompleted +parentTaskId |
+| Server 注入 | `src/packages/core/src/server.ts` | pipelineBuilders + TaskCompleted +parentTaskId + visible |
+| Session 消息控制 | `src/packages/shared/src/types/session.ts` + `src/packages/core/src/pipelines/conversation/elements/collect-prompts.ts` | SessionMessage 加 visible/pipeline；filter 不可见消息 |
 | TUI 链路判断 | `src/packages/tui/src/client/ws-client.ts` | send() 按 parentTaskId 判断 |
 | Spinner 数据驱动 | `src/packages/tui/src/hooks/useChat.ts` | 删 send() 中 spinner 移除 |
 | Spinner 帧率 | `src/packages/tui/src/components/ChatView.tsx` | 80ms 刷新 |

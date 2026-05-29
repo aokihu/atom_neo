@@ -136,7 +136,9 @@ class TaskEngine {
 | `elements/types.ts` | **修改** | 更新 PredictionPipelineDeps |
 | `elements/index.ts` | **修改** | 导出 predict-finalize |
 | `prediction/index.ts` | **修改** | DSL sink 改名 |
-| `server.ts` | **修改** | 删 buildConversation；注册 pipelineBuilders；TaskCompleted +parentTaskId |
+| `server.ts` | **修改** | 删 buildConversation；注册 pipelineBuilders；TaskCompleted +parentTaskId；TaskCompleted 写 session 时附加 pipeline + visible |
+| `collect-prompts.ts` | **修改** | filter `visible !== false` 消息 |
+| `types/session.ts` | **修改** | SessionMessage 新增 `pipeline?` + `visible?` 字段 |
 | `ws-client.ts` | **修改** | send() 按 parentTaskId 判断；无 fallback |
 | `useChat.ts` | **修改** | 删 send() 中 spinner 移除 |
 | `ChatView.tsx` | **修改** | 80ms 帧率 |

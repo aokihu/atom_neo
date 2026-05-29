@@ -18,11 +18,13 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "initial") return input;
 
-    const messages = (this.#session.messages ?? []).map((m: any) => {
-      const msg: any = { role: m.role, content: m.content };
-      if (m.reasoningContent) msg.reasoning_content = m.reasoningContent;
-      return msg;
-    });
+    const messages = (this.#session.messages ?? [])
+      .filter((m: any) => m.visible !== false)
+      .map((m: any) => {
+        const msg: any = { role: m.role, content: m.content };
+        if (m.reasoningContent) msg.reasoning_content = m.reasoningContent;
+        return msg;
+      });
 
     return { mode: "streaming", task: input.task, prompts: messages };
   }
