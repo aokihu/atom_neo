@@ -17,7 +17,7 @@ describe("createTaskItem", () => {
     expect(task.state).toBe(TaskState.WAITING);
     expect(task.source).toBe(TaskSource.EXTERNAL);
     expect(task.pipeline).toBe("conversation");
-    expect(task.parentTaskId).toBeNull();
+    expect(task.parentTaskId).toBe(task.id);
     expect(task.chainId).toBe(task.id);
     expect(task.priority).toBeGreaterThan(0);
   });

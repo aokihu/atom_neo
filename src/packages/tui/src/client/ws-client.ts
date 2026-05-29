@@ -8,6 +8,7 @@ type PendingRequest = {
   resolve: (text: string) => void;
   reject: (err: Error) => void;
   text: string;
+  rootTaskId: string;
 };
 
 export class TuiClient {
@@ -62,8 +63,17 @@ export class TuiClient {
               error: msg.payload?.error,
             });
           } else if (msg.type === WsMessages.Server.TaskCompleted) {
-            const pending = this.#pending.shift();
-            if (pending) pending.resolve(pending.text);
+            const { taskId: completedId, parentTaskId } = msg.payload ?? {};
+
+            for (let i = 0; i < this.#pending.length; i++) {
+              const head = this.#pending[i];
+              if (parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
+                const done = this.#pending.splice(i, 1)[0];
+                done.resolve(done.text);
+                break;
+              }
+            }
+
             const tu = msg.payload?.tokenUsage;
             if (tu) this.#onTokenUsage?.(tu.total);
           } else if (msg.type === WsMessages.Server.TaskFailed) {
@@ -83,16 +93,17 @@ export class TuiClient {
     if (!this.#ws || !this.#ready) throw new Error("Not connected");
 
     const httpUrl = this.#url.replace(/^ws/, "http");
-    await fetch(`${httpUrl}/api/tasks`, {
+    const res = await fetch(`${httpUrl}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sessionId: this.#sessionId, chatId: this.#chatId, data: { text },
       }),
     });
+    const { taskId } = await res.json();
 
     return new Promise<string>((resolve, reject) => {
-      this.#pending.push({ resolve, reject, text: "" });
+      this.#pending.push({ resolve, reject, text: "", rootTaskId: taskId });
     });
   }
 

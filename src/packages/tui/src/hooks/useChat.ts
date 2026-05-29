@@ -79,8 +79,6 @@ export function useChat(url: string, sessionId?: string) {
       if (!client) throw new Error("Not connected");
       await client.send(text);
 
-      thinkingIdRef.current = null;
-      setMessages(prev => prev.filter(m => m.id !== thinkingId));
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {

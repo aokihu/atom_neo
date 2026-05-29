@@ -19,5 +19,5 @@ export type PredictionPipelineDeps = {
   model: string;
   baseUrl?: string;
   maxTokens?: number;
-  buildConversation: (session: any, prediction: IntentPredictionResult) => void;
+  queue: any;
 };

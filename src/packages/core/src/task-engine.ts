@@ -2,21 +2,27 @@ import { TaskState, BusEvents } from "@atom-neo/shared";
 import type { TaskItem, CoreEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { TaskQueue } from "./task-queue";
-import { getPipeline, removePipeline } from "./api/tasks";
+import { getPipeline, removePipeline, setPipeline } from "./api/tasks";
+import type { Pipeline } from "./pipeline/builder";
+
+type PipelineBuilder = (task: TaskItem) => Pipeline | undefined;
 
 export class TaskEngine {
   #bus: PipelineEventBus<CoreEventMap>;
   #queue: TaskQueue;
   #running = false;
   #timeoutMs: number;
+  #pipelineBuilders: Record<string, PipelineBuilder>;
 
   constructor(params: {
     bus: PipelineEventBus<CoreEventMap>;
     queue: TaskQueue;
+    pipelineBuilders?: Record<string, PipelineBuilder>;
     timeoutMs?: number;
   }) {
     this.#bus = params.bus;
     this.#queue = params.queue;
+    this.#pipelineBuilders = params.pipelineBuilders ?? {};
     this.#timeoutMs = params.timeoutMs ?? 120_000;
 
     this.#bus.on(BusEvents.Task.Enqueued, () => this.#onTaskEnqueued());
@@ -79,7 +85,16 @@ export class TaskEngine {
   }
 
   async #executeTask(task: TaskItem): Promise<any> {
-    const pipeline = getPipeline(task.id);
+    let pipeline = getPipeline(task.id);
+
+    if (!pipeline && task.pipeline) {
+      const builder = this.#pipelineBuilders[task.pipeline];
+      if (builder) {
+        pipeline = builder(task);
+        if (pipeline) setPipeline(task.id, pipeline);
+      }
+    }
+
     if (!pipeline) return { type: "complete", task };
 
     let current: any = { mode: "initial", task };

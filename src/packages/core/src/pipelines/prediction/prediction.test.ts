@@ -134,59 +134,61 @@ describe("prediction pipeline elements", () => {
     expect(result.prediction!.toolTier).toBe("basic");
   });
 
-  test("route-conversation calls buildConversation with prediction", async () => {
+  test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
     const bus = makeBus();
-    let captured: any = null;
     const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }] };
+    let enqueued: any = null;
+    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
 
-    const Ctor = resolveElement("route-conversation");
+    const Ctor = resolveElement("predict-finalize");
     const el = new Ctor({
-      name: "route-conversation",
+      name: "predict-finalize",
       kind: "sink",
       bus,
-      buildConversation: (s: any, p: any) => {
-        captured = { session: s, prediction: p };
-      },
+      queue: mockQueue,
     });
 
     const result = await el.doProcess({
       mode: "routing",
-      task: { id: "t1" },
+      task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
       userMessage: "hello",
       prediction: { toolTier: "full", difficulty: "advanced", reasoning: "needs shell" },
     });
 
     expect(result.type).toBe("complete");
-    expect(captured).not.toBeNull();
-    expect(captured.session).toBe(session);
-    expect(captured.prediction.toolTier).toBe("full");
-    expect(captured.prediction.difficulty).toBe("advanced");
+    expect(session.pendingPrediction).toBeDefined();
+    expect(session.pendingPrediction.toolTier).toBe("full");
+    expect(session.pendingPrediction.difficulty).toBe("advanced");
+    expect(enqueued).not.toBeNull();
+    expect(enqueued.pipeline).toBe("conversation");
+    expect(enqueued.parentTaskId).toBe("t1");
   });
 
-  test("route-conversation uses fallback when no prediction", async () => {
+  test("predict-finalize uses fallback when no prediction", async () => {
     const bus = makeBus();
-    let captured: any = null;
+    const session = { sessionId: "s1" };
+    let enqueued: any = null;
+    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
 
-    const Ctor = resolveElement("route-conversation");
+    const Ctor = resolveElement("predict-finalize");
     const el = new Ctor({
-      name: "route-conversation",
+      name: "predict-finalize",
       kind: "sink",
       bus,
-      buildConversation: (s: any, p: any) => {
-        captured = { prediction: p };
-      },
+      queue: mockQueue,
     });
 
     await el.doProcess({
       mode: "routing",
-      task: { id: "t1" },
-      session: { sessionId: "s1" },
+      task: { id: "t1", chatId: "c1", payload: [] },
+      session,
       userMessage: "hello",
     });
 
-    expect(captured.prediction.toolTier).toBe("basic");
-    expect(captured.prediction.difficulty).toBe("balanced");
+    expect(session.pendingPrediction.toolTier).toBe("basic");
+    expect(session.pendingPrediction.difficulty).toBe("balanced");
+    expect(enqueued.pipeline).toBe("conversation");
   });
 });
 
@@ -198,7 +200,7 @@ describe("prediction pipeline DSL", () => {
       task: { id: "t1", payload: [{ data: "test" }] },
       apiKey: "sk-test",
       model: "deepseek-chat",
-      buildConversation: () => {},
+      queue: { enqueue: () => {} },
     }).build(bus);
 
     expect(pipeline.name).toBe("prediction");

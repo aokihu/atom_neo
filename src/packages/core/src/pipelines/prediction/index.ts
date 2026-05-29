@@ -3,14 +3,14 @@ import { registerElement } from "../../pipeline/registry";
 import {
   PredictInputElement,
   PredictIntentElement,
-  RouteConversationElement,
+  PredictFinalizeElement,
 } from "./elements";
 import type { PredictionPipelineDeps } from "./elements";
 
 export function registerPredictionElements(): void {
   registerElement("predict-input", PredictInputElement);
   registerElement("predict-intent", PredictIntentElement);
-  registerElement("route-conversation", RouteConversationElement);
+  registerElement("predict-finalize", PredictFinalizeElement);
 }
 
 export function predictionPipeline(deps: PredictionPipelineDeps) {
@@ -22,5 +22,5 @@ export function predictionPipeline(deps: PredictionPipelineDeps) {
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
     })
-    .sink("route-conversation", { buildConversation: deps.buildConversation });
+    .sink("predict-finalize", { queue: deps.queue });
 }

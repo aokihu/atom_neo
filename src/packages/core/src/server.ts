@@ -20,7 +20,6 @@ import { registerFollowUpElements } from "./pipelines/follow-up";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { DEFAULT_MAX_TOKENS } from "./constants";
-import type { IntentPredictionResult } from "@atom-neo/shared";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -101,57 +100,50 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     setPipeline(chainTaskId, pipeline);
   };
 
-  const buildConversation = (session: any, prediction: IntentPredictionResult) => {
-    const sessionId = session?.sessionId ?? "default";
+  const pipelineBuilders: Record<string, (task: any) => any> = {
+    prediction: (task: any) => {
+      const session = sessionStore.get(task.sessionId);
+      return predictionPipeline({
+        session,
+        task,
+        apiKey, model, baseUrl, maxTokens,
+        queue: taskQueue,
+      }).build(bus);
+    },
+    conversation: (task: any) => {
+      const session = sessionStore.get(task.sessionId);
+      const prediction = session.pendingPrediction ?? {
+        toolTier: "basic",
+        difficulty: "balanced",
+        reasoning: "default",
+      };
 
-    const tools = prediction.toolTier === "full" ? [...basic, ...advanced] : basic;
+      const tools = prediction.toolTier === "full" ? [...basic, ...advanced] : basic;
 
-    const resolvedModel = runtime.getResolvedModel
-      ? runtime.getResolvedModel(prediction.difficulty)
-      : { provider: "deepseek", model: "deepseek-chat", apiKey, baseUrl, thinking: "disabled" as const };
+      const resolvedModel = runtime.getResolvedModel
+        ? runtime.getResolvedModel(prediction.difficulty)
+        : { provider: "deepseek", model: "deepseek-chat", apiKey, baseUrl, thinking: "disabled" as const };
 
-    const pipeline = conversationPipeline({
-      session,
-      task: {
-        id: "pending",
-        sessionId,
-        chatId: "chat",
-        sandbox,
-        payload: [{ type: "text", data: session?.messages?.slice(-1)?.[0]?.content ?? "" }],
-      },
-      apiKey: resolvedModel.apiKey,
-      model: resolvedModel.model,
-      baseUrl: resolvedModel.baseUrl,
-      providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
-      configContextLimit,
-      providerOptions: {
-        deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
-      },
-      tools,
-      getCompiledPrompt,
-      maxTokens,
-      memory,
-      queue: taskQueue,
-      buildChainPipeline,
-      chainDepth: 0,
-    }).build(bus);
-
-    const chainTask = createTaskItem({
-      sessionId,
-      chatId: "chat",
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      payload: session?.messages?.slice(-1)?.[0]?.content
-        ? [{ type: "text", data: session.messages.slice(-1)[0].content }]
-        : [],
-    });
-    setPipeline(chainTask.id, pipeline);
-    taskQueue.enqueue(chainTask);
-    logger.debug("conversation task enqueued", {
-      taskId: chainTask.id,
-      toolTier: prediction.toolTier,
-      difficulty: prediction.difficulty,
-    });
+      return conversationPipeline({
+        session,
+        task,
+        apiKey: resolvedModel.apiKey,
+        model: resolvedModel.model,
+        baseUrl: resolvedModel.baseUrl,
+        providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
+        configContextLimit,
+        providerOptions: {
+          deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
+        },
+        tools,
+        getCompiledPrompt,
+        maxTokens,
+        memory,
+        queue: taskQueue,
+        buildChainPipeline,
+        chainDepth: 0,
+      }).build(bus);
+    },
   };
 
   const sessionStore = new SessionStore();
@@ -190,7 +182,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     broadcaster.broadcastToSession(sid, {
       type: WsMessages.Server.TaskCompleted,
       ts: Date.now(), seq: 0,
-      payload: { taskId: p.task.id, output: result.output ?? "", tokenUsage: accumulated },
+      payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", tokenUsage: accumulated },
     });
   });
   bus.on(BusEvents.Task.Failed, (p) => {
@@ -198,7 +190,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   const taskQueue = new TaskQueue();
-  const taskEngine = new TaskEngine({ bus, queue: taskQueue });
+  const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
@@ -237,14 +229,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         if (body.data?.text) {
           session.addMessage({ role: "user", content: body.data.text, timestamp: Date.now() });
         }
-        const pipeline = predictionPipeline({
-          session,
-          task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
-          apiKey, model, baseUrl, maxTokens,
-          buildConversation,
-        }).build(bus);
-        logger.debug("prediction pipeline built", { sessionId: body.sessionId, text: body.data?.text?.slice(0, 60) });
-        return createTaskHandler(taskQueue, body, bus, pipeline);
+        return createTaskHandler(taskQueue, body, bus);
       }
       if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "GET") {
         const sid = url.pathname.split("/").pop()!;

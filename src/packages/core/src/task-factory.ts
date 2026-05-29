@@ -23,7 +23,7 @@ export function createTaskItem(params: {
   return {
     id,
     chainId,
-    parentTaskId: params.parentTaskId ?? null,
+    parentTaskId: params.parentTaskId ?? id,
     sessionId: params.sessionId,
     chatId: params.chatId,
     source: params.source,

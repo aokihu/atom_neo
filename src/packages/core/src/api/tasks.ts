@@ -29,7 +29,7 @@ export async function createTaskHandler(
     const task = createTaskItem({
       sessionId: body.sessionId,
       chatId: body.chatId,
-      pipeline: body.pipeline ?? "conversation",
+      pipeline: body.pipeline ?? "prediction",
       source: TaskSource.EXTERNAL,
       payload: [{ type: "text", data: body.data?.text ?? "" }],
     });
