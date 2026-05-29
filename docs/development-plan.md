@@ -146,7 +146,7 @@
 
 ## P9: Intent Prediction Pipeline
 
-**预估**: 1 周 | **状态**: in_progress
+**预估**: 1 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
@@ -162,8 +162,26 @@
 | Spinner 数据驱动 | `src/packages/tui/src/hooks/useChat.ts` | 删 send() 中 spinner 移除 |
 | Spinner 帧率 | `src/packages/tui/src/components/ChatView.tsx` | 80ms 刷新 |
 | 单元测试 | `src/packages/core/src/pipelines/prediction/prediction.test.ts` | 预测 element 测试 |
-| 集成测试 | `src/packages/core/src/pipelines/prediction/*.test.ts` | 完整流程 + 降级测试 |
 | 文档 | `docs/milestones/P9-intent-prediction.md` + `PLAN.md` | 详细实施方案 |
+
+---
+
+## P10: Follow-Up Evaluator Pipeline
+
+**预估**: 0.5 周 | **状态**: planned
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| Evaluator-input element | `src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluator-input.ts` | Source: 读 session 生成摘要 |
+| Evaluator-analyze element | `src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluator-analyze.ts` | Transform: LLM 健康分类 |
+| Evaluate-finalize element | `src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluate-finalize.ts` | Sink: 按健康状态决定续写/终止 |
+| Pipeline DSL | `src/packages/core/src/pipelines/follow-up-evaluator/index.ts` | followUpEvaluatorPipeline(deps) |
+| BUG 修复 | `src/packages/core/src/pipelines/conversation/elements/check-follow-up.ts` | FOLLOW_UP 加 chainAction |
+| 触发逻辑 | `src/packages/core/src/pipelines/conversation/elements/finalize.ts` | chainDepth ≥ 3 触发 evaluator |
+| Server 注入 | `src/packages/core/src/server.ts` | 注册 evaluator pipelineBuilder；conversation builder 读 evaluatorSuggestion |
+| Session 扩展 | `src/packages/core/src/session/context.ts` + `src/packages/shared/src/types/session.ts` | evaluatorSuggestion / upgradeModel |
+| 单元测试 | `src/packages/core/src/pipelines/follow-up-evaluator/evaluator.test.ts` | evaluator element 测试 |
+| 文档 | `docs/milestones/P10-follow-up-evaluator.md` + `PLAN.md §10` | 详细设计文档 |
 
 ---
 
@@ -180,6 +198,7 @@
 | P6 | Gateway | 6 | completed | 0.5 weeks |
 | P7 | TUI | 6 | in_progress | 1 week |
 | P8 | Integration | 3 | completed | 0.5 weeks |
-| P9 | Intent Prediction | 9 | in_progress | 1 week |
+| P9 | Intent Prediction | 13 | completed | 1 week |
+| P10 | Follow-Up Evaluator | 10 | planned | 0.5 week |
 
-**Total: 130 tests, ~9 weeks**
+**Total: ~10 weeks**

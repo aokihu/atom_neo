@@ -570,3 +570,87 @@ spinner 由 `onDelta` 控制（已有逻辑：第一个 delta 到达时移除 th
 | T=4s+ | TransportDelta → spinner 隐藏，文字显示 | — |
 | T=7s+ | Conversation 完成 → TaskCompleted(B) 广播 | — |
 | T=7s+ | TUI 收到 TaskCompleted(B)：`parentTaskId=A, taskId=B≠A` → **resolve** | 会话完成 |
+
+---
+
+## 10. Follow-Up Evaluator Pipeline
+
+> 长会话自动运行的质量保障守护管道。保证 FOLLOW_UP 链持续稳定运转。
+
+### 10.1 定位
+
+```
+prediction pipeline        → 入口守卫（决定工具集和模型）
+conversation pipeline      → 主执行者（干活）
+follow-up-evaluator        → 守护进程（监控、纠偏、护航）
+```
+
+### 10.2 触发机制
+
+```typescript
+// finalize.ts
+if (input.chainAction === "follow_up") {
+  if (chainDepth >= MAX_FOLLOW_UP_DEPTH) {
+    createEvaluatorTask();   // 硬上限，强制介入
+  } else if (chainDepth >= 3 && chainDepth % 3 === 0) {
+    createEvaluatorTask();   // 每 3 轮周期性巡检
+  } else {
+    createFollowUpTask();    // 正常续写
+  }
+}
+```
+
+### 10.3 Pipeline 结构
+
+```
+evaluator-input (source) → evaluator-analyze (transform) → evaluate-finalize (sink)
+```
+
+| Element | Kind | 职责 |
+|---------|------|------|
+| evaluator-input | source | 读 session 最近 N 轮消息，格式化对话摘要 |
+| evaluator-analyze | transform | 非流式调用 basic 模型，分类 `{ health, suggestion, upgradeModel }` |
+| evaluate-finalize | sink | 按 health 决定：healthy/looping/degrading → 续写；stuck → 终止 |
+
+### 10.4 分析结果与行为
+
+| health | 行为 |
+|--------|------|
+| healthy | 不干预，创建 conversation task 续写 |
+| looping | 注入 suggestion 到 system prompt，续写 |
+| degrading | 注入 suggestion + 可选升级模型，续写 |
+| stuck | 追加终止消息，**不创建 task**，链路结束 |
+
+### 10.5 联调点
+
+- **check-follow-up.ts** — BUG 修复：`FOLLOW_UP` 时设置 `chainAction: "follow_up"`
+- **server.ts** — pipelineBuilder 注册 `"follow-up-evaluator"`；conversation builder 读取 `session.evaluatorSuggestion` 注入 system prompt
+- **session** — 扩展 `evaluatorSuggestion` / `upgradeModel` 字段
+- **finalize.ts** — 改造触发逻辑
+
+### 10.6 与 prediction pipeline 对比
+
+| | prediction | follow-up-evaluator |
+|---|-----------|-------------------|
+| 触发 | 每次用户 POST | 每 3 轮 / chainDepth 上限 |
+| 分类内容 | 工具需求 + 难度 | 对话健康状态 |
+| 非流式 | 是 | 是 |
+| 是否创建 conversation task | 是（无条件） | 条件性（healthy/looping/degrading 时） |
+| 用户可见 | 否 | 仅 stuck 时可见 |
+
+### 10.7 预留扩展点
+
+| 扩展点 | 说明 | 优先级 |
+|--------|------|--------|
+| 上下文压缩 | 消息接近 token 上限时压缩早期消息 | 高 |
+| 阶段性 checkpoint | 进度摘要写入 memory | 中 |
+| 自动 fallback | 连续失败降级模型 | 中 |
+| 话题漂移检测 | 偏离原始任务时提示 | 中 |
+| 质量回归检测 | 输出质量趋势分析 | 低 |
+| 任务分解 | 拆分并行子 task | 低 |
+| 混合模型调度 | 不同子任务用不同模型 | 低 |
+| 成本/延迟统计 | 长会话后生成报告 | 低 |
+
+### 10.8 详细设计
+
+见 [`docs/milestones/P10-follow-up-evaluator.md`](docs/milestones/P10-follow-up-evaluator.md)。

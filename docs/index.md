@@ -101,7 +101,11 @@
 ✅ P8：Integration（已完成）
    ✔ 130 total tests, 100% pass
 
-⬇ P9：Intent Prediction Pipeline（进行中）
+✅ P9：Intent Prediction Pipeline（已完成）
    24. milestones/P9-intent-prediction.md → 意图预测管线完整实施方案
-   ✔ 详细计划已完成，待实施
+   ✔ 意图预测、动态工具/模型选择、parentTaskId 链路完成
+
+⬇ P10：Follow-Up Evaluator（计划中）
+   25. milestones/P10-follow-up-evaluator.md → 长会话质量保障守护管道
+   ✔ 设计文档已完成，待审核
 ```
