@@ -13,46 +13,52 @@
   ├─ POST /api/tasks
   │    task.pipeline = "prediction"
   │    task.source = EXTERNAL
-  │    task.parentTaskId = task.id  (自引用，父 Task 即本身)
-  │    server.ts 构建 predictionPipeline → setPipeline(task.id, pipeline) → enqueue
+  │    task.parentTaskId = task.id  (自引用)
+  │    server.ts 只 createTask + enqueue，不碰 pipeline
+  ▼
+┌─ TaskEngine: #executeTask(task=A) ──────────────────────────────────────┐
+│  getPipeline(A) → null                                                   │
+│  pipelineBuilders["prediction"](task=A) → build + setPipeline(A)         │
+│  执行 Prediction Pipeline · · · · · · · · · · · · · · · · · · · · · · │
+└─────────────────────────────────────────────────────────────────────────┘
+  │
   ▼
 ┌─ Prediction Pipeline ───────────────────────────────────────────────────┐
 │  predict-input → predict-intent → predict-finalize                      │
 │                                                                          │
-│  predict-finalize 内部 (sink element):                                    │
-│    ① 读预测结果 { toolTier, difficulty }                                  │
-│    ② 写入 session.predictToolTier / session.predictDifficulty            │
+│  predict-finalize (sink):                                                 │
+│    ① 读预测结果                                                            │
+│    ② session.pendingPrediction = { toolTier, difficulty }                │
 │    ③ createTaskItem({ pipeline:"conversation", source:INTERNAL,          │
-│         parentTaskId: predictionTask.id }) → enqueue                     │
-│    ④ return PipelineResult (预测 task 完成)                                │
+│         parentTaskId: predictionTask.id })                               │
+│    ④ queue.enqueue(convTask)                                              │
+│    ⑤ return PipelineResult                                                │
 └──────────────────────────────────────────────────────────────────────────┘
-                     │
-                     ▼ Task Queue（唯一中转站）
-                     │
-                     ▼
-┌─ TaskEngine 延迟构建 Pipeline ──────────────────────────────────────────┐
-│  #executeTask(task):                                                     │
-│    pipeline = getPipeline(task.id)                                       │
-│    if (!pipeline && task.pipeline)                                       │
-│      pipeline = pipelineBuilders[task.pipeline](task)                    │
-│      setPipeline(task.id, pipeline)                                      │
-│    // 执行 pipeline.elements...                                           │
-└──────────────────────────────────────────────────────────────────────────┘
-                     │
-                     ▼
+  │
+  ▼ Task Queue
+  │
+  ▼
+┌─ TaskEngine: #executeTask(task=B) ──────────────────────────────────────┐
+│  getPipeline(B) → null                                                   │
+│  pipelineBuilders["conversation"](task=B) → build + setPipeline(B)       │
+│    └─ 读 session.pendingPrediction → 选 tools + 选 model                 │
+│  执行 Conversation Pipeline · · · · · · · · · · · · · · · · · · · · · │
+└─────────────────────────────────────────────────────────────────────────┘
+  │
+  ▼
 ┌─ Conversation Pipeline ───────────────────────────────────────┐
-│  collect-prompts → ... → stream-llm(full/partial tools)       │
-│       → parse-intents → check-follow-up → finalize             │
+│  collect-prompts → ... → stream-llm → ... → finalize          │
 │  用户看到回复                                                   │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 **核心原则：**
 
-- **TaskEngine 持有 `pipelineBuilders`**，按 task 的 pipeline 字段延迟构建。不接触 session 等业务数据，只调用闭包函数。
-- **调用方只创建 task + 入队**，不碰 pipeline 构建逻辑。
-- **TaskQueue** 是 prediction 和 conversation 之间的唯一中转站。
-- **`parentTaskId` 永不 null**：根 task 自引用 `parentTaskId = taskId`；子 task 指向父 task。
+1. **server.ts 只创建 Task 入队，不构建任何 pipeline 对象，不调用 setPipeline。**
+2. **所有 pipeline 构建都在 TaskEngine 中延迟完成**，通过 `pipelineBuilders[task.pipeline](task)` 统一入口。
+3. **pipelineBuilders 是在 server.ts 闭包中定义的函数映射**，持有 session、tools、model 等业务数据，TaskEngine 只持有函数引用，不接触数据本身。
+4. **TaskQueue 是 prediction 和 conversation 之间的唯一中转站。**
+5. **`parentTaskId` 永不 null**：根 task 自引用；子 task 指向父 task。
 
 ---
 
@@ -62,84 +68,104 @@
 
 | Task | parentTaskId | 含义 |
 |------|-------------|------|
-| 根 task（EXTERNAL，用户直接请求） | `task.id`（自己） | 没有上级，自己是链路起点 |
-| 子 task（INTERNAL，predict-finalize 创建） | 父 task 的 id | 链路中的真正结束点 |
+| 根 task（EXTERNAL，POST /api/tasks 创建） | = taskId | 自己是链路起点 |
+| 子 task（INTERNAL，predict-finalize 创建） | 父 task 的 id | 链路真正结束点 |
 
 ### 2.2 实现
 
-修改 `task-factory.ts` 中的默认值（一行）：
+`task-factory.ts` 一行改动：
 
 ```diff
-export function createTaskItem(params: { ... parentTaskId?: string | null ... }): TaskItem {
-  const id = generateId("task");
-  return {
-    // ...
--   parentTaskId: params.parentTaskId ?? null,
-+   parentTaskId: params.parentTaskId ?? id,
-  };
-}
+- parentTaskId: params.parentTaskId ?? null,
++ parentTaskId: params.parentTaskId ?? id,
 ```
 
-无论何处调用 `createTaskItem`，不传 `parentTaskId` 时自动设为自身 id。
+不传 `parentTaskId` 则自动设为自身 id。**只有 predict-finalize 显式传了 `parentTaskId`，其他所有调用方都不传，接受默认值。**
 
 ---
 
-## 3. TaskEngine 延迟构建 Pipeline
+## 3. Task 流转
 
-### 3.1 当前问题
+### 3.1 POST /api/tasks 处理器（server.ts）
 
-pipeline 构建逻辑分散在多处（server.ts、predict-finalize、finalize），每处都要知道 tools/model/session 的选择规则。
+```
+① session = sessionStore.get(body.sessionId)
+② session.addMessage(userMessage)
+③ task = createTaskItem({
+     pipeline: "prediction",
+     source: EXTERNAL,
+     (不传 parentTaskId → 自动 = task.id)
+   })
+④ taskQueue.enqueue(task)
+⑤ return Response(201, { taskId: task.id })
 
-### 3.2 方案
+// 不 build pipeline, 不调 setPipeline
+```
 
-TaskEngine 增加 `pipelineBuilders` 参数：
+### 3.2 predict-finalize（prediction pipeline sink）
+
+```
+① prediction = input.prediction ?? FALLBACK
+② session.pendingPrediction = prediction   // 供 conversation builder 读取
+③ convTask = createTaskItem({
+     pipeline: "conversation",
+     source: INTERNAL,
+     parentTaskId: input.task.id,           // ← 显式指向父 task
+   })
+④ queue.enqueue(convTask)
+⑤ return { type: "complete", output: "prediction: ..." }
+
+// 不 build pipeline, 不调 setPipeline
+```
+
+### 3.3 TaskEngine（两个 task 统一入口）
 
 ```typescript
-type PipelineBuilder = (task: TaskItem) => Pipeline | undefined;
+async #executeTask(task: TaskItem): Promise<any> {
+  let pipeline = getPipeline(task.id);
 
-export class TaskEngine {
-  #pipelineBuilders: Record<string, PipelineBuilder>;
-
-  constructor(params: {
-    bus: PipelineEventBus<CoreEventMap>;
-    queue: TaskQueue;
-    pipelineBuilders: Record<string, PipelineBuilder>;  // ← 新增
-    timeoutMs?: number;
-  }) { ... }
-
-  async #executeTask(task: TaskItem): Promise<any> {
-    let pipeline = getPipeline(task.id);
-
-    // 延迟构建：pipelineMap 中没有，按 task.pipeline 字段匹配 builder
-    if (!pipeline && task.pipeline) {
-      const builder = this.#pipelineBuilders[task.pipeline];
-      if (builder) {
-        pipeline = builder(task);
-        if (pipeline) setPipeline(task.id, pipeline);
-      }
+  if (!pipeline && task.pipeline) {
+    const builder = this.#pipelineBuilders[task.pipeline];
+    if (builder) {
+      pipeline = builder(task);
+      if (pipeline) setPipeline(task.id, pipeline);
     }
-
-    if (!pipeline) return { type: "complete", task };
-
-    // ... 执行 pipeline.elements ...
   }
+
+  if (!pipeline) return { type: "complete", task };
+
+  // 执行 pipeline.elements...
 }
 ```
 
-### 3.3 pipelineBuilders 注册（server.ts）
+同一个逻辑处理 prediction（`task.pipeline === "prediction"`）和 conversation（`task.pipeline === "conversation"`）。
 
-所有业务上下文（session、tools、model、apiKey）都在 server.ts 的闭包中，通过 builder 函数注入：
+### 3.4 两个 Task 生命周期
+
+| 次序 | id | parentTaskId | pipeline | source | pipeline 何时构建 |
+|------|-----|-------------|----------|--------|------------------|
+| 1 | A | A | "prediction" | EXTERNAL | TaskEngine 取 task 时 |
+| 2 | B | A | "conversation" | INTERNAL | TaskEngine 取 task 时 |
+
+---
+
+## 4. pipelineBuilders 完整定义
+
+### 4.1 server.ts 注册
 
 ```typescript
-// server.ts — 注册 pipeline builders
 const pipelineBuilders: Record<string, (task: TaskItem) => Pipeline | undefined> = {
+
   prediction: (task) => {
     const session = sessionStore.get(task.sessionId);
     return predictionPipeline({
       session,
       task,
-      apiKey, model, baseUrl, maxTokens,
-      // ...
+      apiKey,        // ← 预测 LLM 用
+      model,         // ← 预测 LLM 用
+      baseUrl,
+      maxTokens,
+      buildConversation: undefined as any,   // 过渡期传 undefined，改 predict-finalize 后删
     }).build(bus);
   },
 
@@ -179,31 +205,29 @@ const pipelineBuilders: Record<string, (task: TaskItem) => Pipeline | undefined>
 const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
 ```
 
-### 3.4 效果
+### 4.2 buildConversation 过渡处理
 
-| 文件 | 之前（提前 setPipeline） | 之后（延迟构建） |
-|------|------------------------|----------------|
-| `server.ts` | 手动 build 并 setPipeline，代码分散 | 只在 pipelineBuilders 中集中定义 |
-| `predict-finalize.ts` | 手动 build conversation pipeline + setPipeline | **只创建 task + 入队**，不再碰 pipeline |
-| `buildConversation` | 独立函数，~40行 | **删除** |
-| `route-conversation.ts` | 带 buildConversation 回调 | **删除** |
+当前 `PredictionPipelineDeps` 还有 `buildConversation` 字段，`route-conversation` 依赖它。实施分两步：
+
+1. 第 1 步（阶段二）：创建 predict-finalize，prediction deps 保留 buildConversation 但 predict-finalize 不用它
+2. 第 2 步（收尾）：删 route-conversation 后从 PredictionPipelineDeps 中移除 buildConversation
 
 ---
 
-## 4. predict-finalize 规格
+## 5. predict-finalize 规格
 
 **位置**：`src/packages/core/src/pipelines/prediction/elements/predict-finalize.ts`
-**操作**：新建，**替代** `route-conversation.ts`
+**操作**：新建，最终替代 `route-conversation.ts`
 
-### 4.1 Element 类型
+### 5.1 Element 类型
 
 - Kind: **sink**
 - 输入: `PredictionFlowState`
 - 输出: `PipelineResult`
 
-### 4.2 依赖
+### 5.2 依赖
 
-大幅精简，不再需要 tools/model/apiKey/...，只需要 `queue`：
+只依赖 `queue`——唯一需要的东西：
 
 ```typescript
 constructor(params: {
@@ -213,7 +237,7 @@ constructor(params: {
 })
 ```
 
-### 4.3 doProcess
+### 5.3 doProcess
 
 ```typescript
 async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
@@ -223,11 +247,10 @@ async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
     reasoning: "fallback",
   };
 
-  const session = input.session;
-  session.pendingPrediction = prediction;
+  input.session.pendingPrediction = prediction;
 
   const convTask = createTaskItem({
-    sessionId: session.sessionId,
+    sessionId: input.session.sessionId,
     chatId: input.task.chatId,
     pipeline: "conversation",
     source: TaskSource.INTERNAL,
@@ -236,7 +259,6 @@ async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
   });
 
   this.#queue.enqueue(convTask);
-  // 不再 setPipeline — 由 TaskEngine 延迟构建
 
   return {
     type: "complete",
@@ -246,51 +268,54 @@ async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
 }
 ```
 
-### 4.4 PredictionPipelineDeps 变更
+### 5.4 PredictionFlowState / PredictionPipelineDeps（最终态）
 
 ```diff
+  PredictionFlowState:
+    (不变)
+
   PredictionPipelineDeps:
--   buildConversation: (session, prediction) => void
--   sandbox, apiKey, model, baseUrl, providerModel, ...
--   basicTools, advancedTools, getCompiledPrompt, ...
-+   queue: TaskQueue
-+   (其余由 pipelineBuilders["prediction"] 闭包捕获)
+    session: any;
+    task: any;
+    apiKey: string;            // predict-intent 分类 LLM 用
+    model: string;             // predict-intent 分类 LLM 用
+    baseUrl?: string;
+    maxTokens?: number;
++   queue: TaskQueue;           // predict-finalize 用
+-   buildConversation: (...);  // 删除
 ```
 
-### 4.5 关联改动
+### 5.5 关联改动
 
 | 文件 | 操作 |
 |------|------|
-| `elements/route-conversation.ts` | **删除** |
 | `elements/predict-finalize.ts` | **新建** |
-| `elements/types.ts` | 更新 `PredictionPipelineDeps`（删 buildConversation） |
+| `elements/route-conversation.ts` | **删除** |
+| `elements/types.ts` | 删 `buildConversation`，加 `queue` |
 | `elements/index.ts` | 导出 `PredictFinalizeElement`，移除 `RouteConversationElement` |
-| `prediction/index.ts` | DSL sink 从 `route-conversation` 改为 `predict-finalize` |
-| `server.ts` | ①删 `buildConversation` ②注册 pipelineBuilders ③TaskCompleted payload +parentTaskId |
-| `prediction.test.ts` | 更新测试 |
+| `prediction/index.ts` | DSL sink 改为 `"predict-finalize"` |
+| `prediction DSL` deps | predictionPipeline(deps) 传入 `queue`，不再传 `buildConversation` |
 
 ---
 
-## 5. TUI 链路完成判断
+## 6. TUI 链路完成判断
 
-### 5.1 问题
+### 6.1 问题
 
-引入 Prediction Pipeline 后每个用户请求产生两个 Task。`ws-client.send()` 收到第一个 TaskCompleted（预测完成）就 resolve，导致 spinner 提前消失。
+当前 `ws-client.send()` 在收到第一个 `TaskCompleted` 时就 resolve。引入预测管道后，第一个 TaskCompleted 是预测 task，spinner 提前消失。
 
-### 5.2 方案
+### 6.2 方案
 
-按 `parentTaskId` 区分：只有子 task（产生文本的 task）完成时才 resolve。
-
-| 收到的 TaskCompleted | parentTaskId | 含义 | TUI 行为 |
-|---------------------|-------------|------|---------|
-| 预测 task (id=A) | A（自引用） | 预测完成 | **不 resolve** |
-| 对话 task (id=B) | A（≠B） | 会话结束 | **resolve** |
+| 收到的 TaskCompleted | parentTaskId | taskId | 判断 | TUI 行为 |
+|---------------------|-------------|--------|------|---------|
+| 预测 task A | A（自引用） | A | `parentTaskId === rootTaskId` 但 `taskId === rootTaskId` | **不 resolve** |
+| 对话 task B | A | B | `parentTaskId === rootTaskId` 且 `taskId !== rootTaskId` | **resolve** |
 
 判断条件：`parentTaskId === rootTaskId && taskId !== rootTaskId`
 
-### 5.3 server.ts 改动
+### 6.3 server.ts 改动
 
-TaskCompleted 广播 payload 加 `parentTaskId`（一行）：
+TaskCompleted 广播 payload 加 `parentTaskId`（**一行**）：
 
 ```diff
   payload: {
@@ -301,9 +326,9 @@ TaskCompleted 广播 payload 加 `parentTaskId`（一行）：
   },
 ```
 
-### 5.4 ws-client.ts 改动
+### 6.4 ws-client.ts 改动
 
-**send()** — 获取 rootTaskId：
+**send()** — POST 返回的 taskId 作为 rootTaskId：
 
 ```typescript
 type PendingRequest = {
@@ -330,8 +355,7 @@ async send(text: string): Promise<string> {
 
   for (let i = 0; i < this.#pending.length; i++) {
     const head = this.#pending[i];
-    // 子 task 完成：parentTaskId 指向 rootTaskId 且不是 rootTask 自身
-    if (parentTaskId && parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
+    if (parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
       const done = this.#pending.splice(i, 1)[0];
       done.resolve(done.text);
       break;
@@ -343,22 +367,29 @@ async send(text: string): Promise<string> {
 }
 ```
 
-**无需 fallback。** 预测 pipeline 一定产生子 task。预测失败走 `TaskFailed` → reject。
+无 fallback timer：预测失败走 `TaskFailed` → reject。
 
-### 5.5 useChat.ts 改动
+### 6.5 useChat.ts 改动
 
-删除 `send()` resolve 中移除 spinner 的两行。spinner 由 `onDelta` 控制（已有逻辑）。
+删除 `send()` resolve 中移除 spinner 的两行：
 
 ```diff
   await client.send(text);
 - thinkingIdRef.current = null;
 - setMessages(prev => prev.filter(m => m.id !== thinkingId));
 
-  // 保留 streaming: false 收尾
-  setMessages(prev => { ... });
+  setMessages(prev => {
+    const last = prev[prev.length - 1];
+    if (last?.role === "assistant" && last.streaming) {
+      return prev.map(m => m.id === last.id ? { ...m, streaming: false } : m);
+    }
+    return prev;
+  });
 ```
 
-### 5.6 ChatView.tsx — 帧率
+spinner 由 `onDelta` 控制（已有逻辑：第一个 delta 到达时移除 thinking）。
+
+### 6.6 ChatView.tsx — 帧率
 
 ```diff
 - 200
@@ -367,92 +398,113 @@ async send(text: string): Promise<string> {
 
 ---
 
-## 6. 实施清单
+## 7. 实施清单
 
 按顺序，每步后 `bun test` 确认。
 
-### 阶段一：parentTaskId + TaskEngine
+### 阶段一：基础设施
 
 | # | 文件 | 操作 |
 |---|------|------|
-| 1 | `task-factory.ts` | `parentTaskId` 默认值改为 `id`（自引用） |
-| 2 | `task-engine.ts` | 加 `pipelineBuilders` 参数（§3.2） |
+| 1 | `task-factory.ts` | `parentTaskId` 默认值改为 `id`（§2.2） |
+| 2 | `task-engine.ts` | 加 `pipelineBuilders` 参数 + 延迟构建逻辑（§3.3） |
 
 ### 阶段二：Prediction Pipeline
 
 | # | 文件 | 操作 |
 |---|------|------|
-| 3 | `elements/predict-finalize.ts` | 新建（精简版 sink，§4） |
+| 3 | `elements/predict-finalize.ts` | 新建（§5） |
 | 4 | `elements/route-conversation.ts` | 删除 |
-| 5 | `elements/types.ts` | 更新 deps |
-| 6 | `elements/index.ts` | 导出 predict-finalize |
-| 7 | `prediction/index.ts` | DSL sink 改名 |
-| 8 | `server.ts` | ①删 buildConversation ②注册 pipelineBuilders ③TaskCompleted +parentTaskId |
+| 5 | `elements/types.ts` | 删 `buildConversation`，加 `queue`（§5.4） |
+| 6 | `elements/index.ts` | 导出 predict-finalize，移除 route-conversation |
+| 7 | `prediction/index.ts` | DSL sink 改为 `"predict-finalize"` |
+| 8 | `server.ts` | ①注册 pipelineBuilders（§4.1）②删 `buildConversation` ③TaskCompleted +parentTaskId（§6.3）④POST 处理器只 enqueue 不 build |
 
 ### 阶段三：TUI
 
 | # | 文件 | 操作 |
 |---|------|------|
-| 9 | `ws-client.ts` | send() 按 parentTaskId 判断链路结束（§5.4） |
-| 10 | `useChat.ts` | 删两行 spinner 移除（§5.5） |
-| 11 | `ChatView.tsx` | 80ms 帧率（§5.6） |
+| 9 | `ws-client.ts` | send() 按 parentTaskId 判断链路结束（§6.4） |
+| 10 | `useChat.ts` | 删两行 spinner 移除（§6.5） |
+| 11 | `ChatView.tsx` | 80ms 帧率（§6.6） |
 
 ### 阶段四：测试
 
 | # | 文件 | 操作 |
 |---|------|------|
-| 12 | `prediction.test.ts` | 更新测试用例 |
-| 13 | `task-engine.test.ts` | 测试 pipelineBuilders 延迟构建 |
+| 12 | `prediction.test.ts` | 更新测试（route-conversation → predict-finalize） |
+| 13 | `task-engine.test.ts` | 新增：pipelineBuilders 延迟构建 |
 
 ### 阶段五：验证
 
 | # | 检查项 |
 |---|--------|
 | 14 | `bun test` 全部通过 |
-| 15 | `bun run --bun tsc --noEmit` 无新增类型错误 |
-| 16 | E2E 手动验证：发送天气查询 → spinner 持续 → 文本出现 → 会话完成 |
+| 15 | 手动 E2E：天气查询 → spinner 持续到文本出现 → 会话完成 |
 
 ---
 
-## 7. 时序图
+## 8. 时序图
 
 ```
  用户       TUI(client)          server             TaskEngine           Pipeline           LLM
   │             │                    │                   │                    │                │
   ├─输入文本───→│                    │                   │                    │                │
   │             ├─POST /api/tasks───→│                   │                    │                │
-  │             │  (taskId=A,        │                   │                    │                │
-  │             │   pipeline=pred,   │                   │                    │                │
-  │             │   parent=A)        │                   │                    │                │
-  │  [spinner]  │                    ├─enqueue(task)─────→│                    │                │
-  │             │                    │  setPipeline(A,    │                    │                │
-  │             │                    │   predictPipeline) │                    │                │
-  │             │                    │                    ├─getPipeline(A)────→│                │
-  │             │                    │                    │                    ├─predict-input │
-  │             │                    │                    │                    ├─predict-intent→│generateText
-  │             │                    │                    │                    ├─predict-finalize
-  │             │                    │                    │                    │  ├─写session   │
-  │             │                    │                    │                    │  ├─createTask(B)
-  │             │                    │                    │                    │  └─enqueue(B)  │
-  │             │←─TaskCompleted(A)──┤                    │←────────────────────┤                │
-  │             │  parent=A,         │                    │  Completed(A)       │                │
-  │             │  taskId=A(A=A)→不resolve               │                    │                │
-  │  [spinner]  │                    │                    ├─getPipeline(B)→null│                │
-  │             │                    │                    ├─pipelineBuilders    │                │
-  │             │                    │                    │  ["conversation"]   │                │
-  │             │                    │                    │  → build+setPipeline│                │
-  │             │                    │                    ├─getPipeline(B)────→│                │
-  │             │                    │                    │                    ├─collect-prompts
-  │             │                    │                    │                    ├─...            │
-  │             │                    │                    │                    ├─stream-llm────→│streamText
+  │  [spinner]  │  → { taskId: A }   │                   │                    │                │
+  │             │                    ├─enqueue(task=A)──→│                    │                │
+  │             │                    │  ■ 不 build       │                    │                │
+  │             │                    │  ■ 不 setPipeline │                    │                │
+  │             │                    │                   ├─getPipeline(A)→null│                │
+  │             │                    │                   ├─pipelineBuilders   │                │
+  │             │                    │                   │  ["prediction"](A) │                │
+  │             │                    │                   │  → buildPipeline   │                │
+  │             │                    │                   │  → setPipeline(A)  │                │
+  │             │                    │                   ├─getPipeline(A)────→│                │
+  │             │                    │                   │                    ├─predict-input │
+  │             │                    │                   │                    ├─predict-intent→│generateText
+  │             │                    │                   │                    ├─predict-finalize
+  │             │                    │                   │                    │  ├─session.prediction
+  │             │                    │                   │                    │  ├─createTask(B)
+  │             │                    │                   │                    │  └─enqueue(B)  │
+  │             │←─TaskCompleted(A)──┤                   │←────────────────────┤                │
+  │             │  parent=A,         │                   │  Completed(A)       │                │
+  │             │  taskId=A →不resolve                  │                    │                │
+  │  [spinner]  │                    │                   ├─getPipeline(B)→null│                │
+  │             │                    │                   ├─pipelineBuilders   │                │
+  │             │                    │                   │  ["conversation"](B)│               │
+  │             │                    │                   │  → 读session.prediction              │
+  │             │                    │                   │  → 选tools+选model │                │
+  │             │                    │                   │  → buildPipeline   │                │
+  │             │                    │                   │  → setPipeline(B)  │                │
+  │             │                    │                   ├─getPipeline(B)────→│                │
+  │             │                    │                   │                    ├─collect-prompts
+  │             │                    │                   │                    ├─...            │
+  │             │                    │                   │                    ├─stream-llm────→│streamText
   │             │←─TransportDelta───┤←───────────────────┤←───────────────────┤←───────────────│text chunks
-  │  [文字显示]  │                    │                    │                    │                │
-  │  [spinner隐藏]│                   │                    │                    ├─parse-intents  │
-  │             │                    │                    │                    ├─check-follow-up│
-  │             │                    │                    │                    ├─finalize       │
-  │             │←─TaskCompleted(B)──┤                    │←────────────────────┤                │
-  │             │  parent=A,         │                    │  Completed(B)       │                │
-  │             │  taskId=B(A≠B)→ resolve send()         │                    │                │
-  │  [streaming=false]               │                    │                    │                │
-  │  [会话完成]    │                    │                    │                    │                │
+  │  [文字显示]  │                    │                   │                    │                │
+  │  [spinner隐藏]│                   │                   │                    ├─parse-intents  │
+  │             │                    │                   │                    ├─check-follow-up│
+  │             │                    │                   │                    ├─finalize       │
+  │             │←─TaskCompleted(B)──┤                   │←────────────────────┤                │
+  │             │  parent=A,         │                   │  Completed(B)       │                │
+  │             │  taskId=B → resolve send()            │                    │                │
+  │  [streaming=false]               │                   │                    │                │
+  │  [会话完成]    │                    │                   │                    │                │
 ```
+
+### 时序说明
+
+| 时刻 | 事件 | pipeline 状态 |
+|------|------|-------------|
+| T=0 | POST → server 创建 task=A，入队 | task=A 无 pipeline |
+| T=0+ | TaskEngine 取 task=A → `getPipeline(A)=null` → `pipelineBuilders["prediction"](A)` → build + setPipeline | task=A 有 prediction pipeline |
+| T=1~3s | Prediction pipeline 执行 | — |
+| T=3s | predict-finalize 创建 task=B，入队 | task=B 无 pipeline |
+| T=3s | Prediction 返回 → TaskCompleted(A) 广播 | — |
+| T=3s+ | TUI 收到 TaskCompleted(A)：`parentTaskId=A, taskId=A` → **不 resolve** | — |
+| T=3s+ | TaskEngine 取 task=B → `getPipeline(B)=null` → `pipelineBuilders["conversation"](B)` → 读 session.prediction → 选 tools+model → build + setPipeline | task=B 有 conversation pipeline |
+| T=4s+ | Conversation pipeline 开始流式输出 | — |
+| T=4s+ | TransportDelta → spinner 隐藏，文字显示 | — |
+| T=7s+ | Conversation 完成 → TaskCompleted(B) 广播 | — |
+| T=7s+ | TUI 收到 TaskCompleted(B)：`parentTaskId=A, taskId=B≠A` → **resolve** | 会话完成 |

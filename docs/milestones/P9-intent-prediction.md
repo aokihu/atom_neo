@@ -8,6 +8,10 @@
 
 ```
 POST /api/tasks
+  │  server.ts: createTask({ pipeline:"prediction" }) + enqueue
+  │  (不 build pipeline, 不调 setPipeline)
+  ▼
+TaskEngine: getPipeline→null → pipelineBuilders["prediction"] → build + setPipeline
   │
   │  (1) Prediction Pipeline — 非流式，结果不展示给用户
   ├── predict-input → predict-intent → predict-finalize
@@ -22,7 +26,7 @@ POST /api/tasks
   │             （不再构建 pipeline — 由 TaskEngine 延迟构建）
   │
   │  (2) TaskEngine 取到 conversation task:
-  │       getPipeline(taskId) → null → pipelineBuilders["conversation"](task)
+  │       getPipeline→null → pipelineBuilders["conversation"](task)
   │       → 读 session.pendingPrediction → 选 tools + 选 model
   │       → build + setPipeline → 执行
   │
