@@ -3,6 +3,8 @@ import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
 import { BusEvents, WsMessages } from "@atom-neo/shared";
+import { TaskSource } from "@atom-neo/shared";
+import { createTaskItem } from "./task-factory";
 import { TaskQueue } from "./task-queue";
 import { TaskEngine } from "./task-engine";
 import { SessionStore } from "./session/store";
@@ -16,7 +18,9 @@ import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
 import { conversationPipeline } from "./pipelines/conversation";
+import { predictionPipeline } from "./pipelines/prediction";
 import { DEFAULT_MAX_TOKENS } from "./constants";
+import type { IntentPredictionResult } from "@atom-neo/shared";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -82,6 +86,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     return compiler?.getCompiledPrompt() ?? "";
   };
 
+  const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
+  const { basic, advanced } = partitionTools(allTools);
+
   const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string, chainDepth: number) => {
     const pipeline = conversationPipeline({
       session: sessionStore.get(sessionId),
@@ -94,8 +101,58 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     setPipeline(chainTaskId, pipeline);
   };
 
-  const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
-  const { basic, advanced } = partitionTools(allTools);
+  const buildConversation = (session: any, prediction: IntentPredictionResult) => {
+    const sessionId = session?.sessionId ?? "default";
+
+    const tools = prediction.toolTier === "full" ? [...basic, ...advanced] : basic;
+
+    const resolvedModel = runtime.getResolvedModel
+      ? runtime.getResolvedModel(prediction.difficulty)
+      : { provider: "deepseek", model: "deepseek-chat", apiKey, baseUrl, thinking: "disabled" as const };
+
+    const pipeline = conversationPipeline({
+      session,
+      task: {
+        id: "pending",
+        sessionId,
+        chatId: "chat",
+        sandbox,
+        payload: [{ type: "text", data: session?.messages?.slice(-1)?.[0]?.content ?? "" }],
+      },
+      apiKey: resolvedModel.apiKey,
+      model: resolvedModel.model,
+      baseUrl: resolvedModel.baseUrl,
+      providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
+      configContextLimit,
+      providerOptions: {
+        deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
+      },
+      tools,
+      getCompiledPrompt,
+      maxTokens,
+      memory,
+      queue: taskQueue,
+      buildChainPipeline,
+      chainDepth: 0,
+    }).build(bus);
+
+    const chainTask = createTaskItem({
+      sessionId,
+      chatId: "chat",
+      pipeline: "conversation",
+      source: TaskSource.INTERNAL,
+      payload: session?.messages?.slice(-1)?.[0]?.content
+        ? [{ type: "text", data: session.messages.slice(-1)[0].content }]
+        : [],
+    });
+    setPipeline(chainTask.id, pipeline);
+    taskQueue.enqueue(chainTask);
+    logger.debug("conversation task enqueued", {
+      taskId: chainTask.id,
+      toolTier: prediction.toolTier,
+      difficulty: prediction.difficulty,
+    });
+  };
 
   const sessionStore = new SessionStore();
   const toolRegistry = new ToolRegistry();
@@ -180,14 +237,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         if (body.data?.text) {
           session.addMessage({ role: "user", content: body.data.text, timestamp: Date.now() });
         }
-        const pipeline = conversationPipeline({
+        const pipeline = predictionPipeline({
           session,
           task: { id: "pending", sessionId: body.sessionId, chatId: body.chatId, sandbox, payload: [{ type: "text", data: body.data?.text ?? "" }] },
-          apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
-          tools: basic,
-          getCompiledPrompt, maxTokens, memory,
-          queue: taskQueue, buildChainPipeline, chainDepth: 0,
+          apiKey, model, baseUrl, maxTokens,
+          buildConversation,
         }).build(bus);
+        logger.debug("prediction pipeline built", { sessionId: body.sessionId, text: body.data?.text?.slice(0, 60) });
         return createTaskHandler(taskQueue, body, bus, pipeline);
       }
       if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "GET") {

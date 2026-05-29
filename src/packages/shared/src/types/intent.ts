@@ -25,6 +25,16 @@ export type FollowUpIntentRequest = IntentRequest & {
   };
 };
 
+export type ToolTier = "basic" | "full";
+
+export type DifficultyLevel = "basic" | "balanced" | "advanced";
+
+export type IntentPredictionResult = {
+  toolTier: ToolTier;
+  difficulty: DifficultyLevel;
+  reasoning: string;
+};
+
 // NOTE: SEARCH_MEMORY / EXECUTE_TOOL 已删除
 // 文件读写/搜索/工具调用走 AI SDK streamText tool calling 路径
 // 不在 IntentRequest 中定义

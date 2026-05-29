@@ -150,15 +150,19 @@
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
-| Prediction types | `src/packages/shared/src/types/intent.ts` | 新增 IntentPredictionResult 类型 |
-| Predict-input element | `src/packages/core/src/pipelines/prediction/elements/predict-input.ts` | Source: 提取用户消息 |
+| parentTaskId 自引用 | `src/packages/core/src/task-factory.ts` | 默认值改为 taskId |
+| TaskEngine 延迟构建 | `src/packages/core/src/task-engine.ts` | 加 pipelineBuilders 参数 |
+| Predict-input element | `src/packages/core/src/pipelines/prediction/elements/predict-input.ts` | Source: 提取用户消息+上下文 |
 | Predict-intent element | `src/packages/core/src/pipelines/prediction/elements/predict-intent.ts` | Transform: basic 模型分类 |
-| Route-conversation element | `src/packages/core/src/pipelines/prediction/elements/route-conversation.ts` | Sink: 构建 conversation 并入队 |
+| Predict-finalize element | `src/packages/core/src/pipelines/prediction/elements/predict-finalize.ts` | Sink: 写 session + 建 task + 入队 |
 | Pipeline DSL | `src/packages/core/src/pipelines/prediction/index.ts` | predictionPipeline(deps) builder |
-| Server 注入 | `src/packages/core/src/server.ts` | POST /api/tasks 先走 prediction pipeline |
-| 文档 | `docs/milestones/P9-intent-prediction.md` | 详细实施方案 |
-| 单元测试 | `src/packages/core/src/pipelines/prediction/elements/predict-intent.test.ts` | 14+ 分类场景测试 |
+| Server 注入 | `src/packages/core/src/server.ts` | pipelineBuilders + TaskCompleted +parentTaskId |
+| TUI 链路判断 | `src/packages/tui/src/client/ws-client.ts` | send() 按 parentTaskId 判断 |
+| Spinner 数据驱动 | `src/packages/tui/src/hooks/useChat.ts` | 删 send() 中 spinner 移除 |
+| Spinner 帧率 | `src/packages/tui/src/components/ChatView.tsx` | 80ms 刷新 |
+| 单元测试 | `src/packages/core/src/pipelines/prediction/prediction.test.ts` | 预测 element 测试 |
 | 集成测试 | `src/packages/core/src/pipelines/prediction/*.test.ts` | 完整流程 + 降级测试 |
+| 文档 | `docs/milestones/P9-intent-prediction.md` + `PLAN.md` | 详细实施方案 |
 
 ---
 

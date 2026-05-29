@@ -13,6 +13,9 @@ export { IntentRequestType, IntentRequestSource } from "./intent";
 export type {
   IntentRequest,
   FollowUpIntentRequest,
+  ToolTier,
+  DifficultyLevel,
+  IntentPredictionResult,
 } from "./intent";
 
 export type {
