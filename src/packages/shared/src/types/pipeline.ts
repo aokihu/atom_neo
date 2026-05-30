@@ -90,6 +90,12 @@ export type DomainEventMap = {
     error?: unknown;
   };
   "transport.failed": { error: unknown };
+  "conversation.chain": {
+    sessionId: string;
+    chatId: string;
+    parentTaskId: string;
+    action: "follow_up" | "more_tools";
+  };
 };
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;

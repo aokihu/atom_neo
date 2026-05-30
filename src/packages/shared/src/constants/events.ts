@@ -28,6 +28,9 @@ export const BusEvents = {
     Start: "event.pipeline.replay-start",
     End: "event.pipeline.replay-end",
   },
+  Conversation: {
+    Chain: "conversation.chain",
+  },
 } as const;
 
 export const WsMessages = {

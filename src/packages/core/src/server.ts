@@ -91,14 +91,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
   const { basic, advanced } = partitionTools(allTools);
 
-  const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string, chainDepth: number) => {
+  const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string) => {
     const pipeline = conversationPipeline({
       session: sessionStore.get(sessionId),
       task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
       apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
       tools: [...basic, ...advanced],
       getCompiledPrompt, maxTokens, memory,
-      chainDepth,
     }).build(bus);
     setPipeline(chainTaskId, pipeline);
   };
@@ -145,10 +144,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         getCompiledPrompt,
         maxTokens,
         memory,
-        queue: taskQueue,
-        orchestrator,
-        buildChainPipeline,
-        chainDepth: 0,
       }).build(bus);
     },
 
@@ -175,7 +170,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     },
   };
 
-  const sessionStore = new SessionStore();
+  const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx));
   const toolRegistry = new ToolRegistry();
   registerBuiltinTools(toolRegistry, sandbox, runtime?.appConfig?.permission?.whitelist ?? []);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
@@ -207,6 +202,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         ...(reasoningContent ? { reasoningContent } : {}),
       };
       sessionStore.get(sid).addMessage(msg);
+      logger.debug("task completed: message added to session", { sessionId: sid, msgCount: sessionStore.get(sid).messages.length, pipeline: p.task.pipeline });
     }
     if (sid && result.tokenUsage) {
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
@@ -241,6 +237,35 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const taskQueue = new TaskQueue();
   const orchestrator = new InternalTaskOrchestrator(taskQueue);
+
+  const MAX_FOLLOW_UP_DEPTH = 5;
+  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: string } }) => {
+    const p = e.payload;
+    const session = sessionStore.get(p.sessionId);
+    logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
+    if (p.action === "more_tools") {
+      session.incrementChainDepth();
+      orchestrator.scheduleConversation(p.sessionId, p.chatId, p.parentTaskId, [{ type: "text", data: "" }], (task) => {
+        buildChainPipeline(task.id, p.sessionId, p.chatId);
+      });
+      return;
+    }
+
+    const depth = session.chainDepth;
+    if (depth >= MAX_FOLLOW_UP_DEPTH) {
+      logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });
+      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId);
+      return;
+    }
+    if (depth >= 3 && depth % 3 === 0) {
+      logger.debug("conversation chain: periodic evaluator", { depth, action: p.action });
+      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId);
+      return;
+    }
+    session.incrementChainDepth();
+    orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);
+  });
+
   const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
   taskEngine.start();
 
@@ -279,6 +304,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         const session = sessionStore.get(body.sessionId ?? "default");
         if (body.data?.text) {
           session.addMessage({ role: "user", content: body.data.text, timestamp: Date.now() });
+          session.resetChainDepth();
         }
         return createTaskHandler(taskQueue, body, bus);
       }

@@ -19,7 +19,10 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "initial") return input;
 
-    const messages = (this.#session.messages ?? [])
+    const allMsgs = this.#session.messages ?? [];
+    this.report(BusEvents.Element.Data, { step: "session-state", totalMsgs: allMsgs.length, visibleMsgs: allMsgs.filter((m: any) => m.visible !== false).length });
+
+    const messages = allMsgs
       .filter((m: any) => m.visible !== false)
       .map((m: any) => {
         const msg: any = { role: m.role, content: m.content };

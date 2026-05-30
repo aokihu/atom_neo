@@ -35,10 +35,15 @@ export class SessionContext {
   };
   #continuationContext: ContinuationContext | null = null;
   #tokenUsage: TokenUsage = { total: 0 };
+  #chainDepth: number = 0;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
   }
+
+  get chainDepth(): number { return this.#chainDepth; }
+  incrementChainDepth(): void { this.#chainDepth++; }
+  resetChainDepth(): void { this.#chainDepth = 0; }
 
   get messages(): readonly SessionMessage[] {
     return this.#messages;

@@ -1,28 +1,11 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ConversationFlowState } from "./types";
 
-const MAX_FOLLOW_UP_DEPTH = 5;
-
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
-  #orchestrator: InternalTaskOrchestrator;
-  #chainDepth: number;
-  #buildChainPipeline: ((taskId: string, sessionId: string, chatId: string, chainDepth: number) => void) | undefined;
-
-  constructor(params: {
-    name: string;
-    kind: string;
-    bus: PipelineEventBus<PipelineEventMap>;
-    orchestrator: InternalTaskOrchestrator;
-    buildChainPipeline?: (taskId: string, sessionId: string, chatId: string, chainDepth: number) => void;
-    chainDepth?: number;
-  }) {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
-    this.#orchestrator = params.orchestrator;
-    this.#buildChainPipeline = params.buildChainPipeline;
-    this.#chainDepth = params.chainDepth ?? 0;
   }
 
   async doProcess(input: ConversationFlowState): Promise<any> {
@@ -30,42 +13,18 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       throw new Error("FinalizeElement: expected ready_to_finalize");
     }
 
-    if (!input.chainAction || !this.#buildChainPipeline) {
-      this.report(BusEvents.Element.Data, { step: "complete", chainAction: input.chainAction ?? "none" });
+    if (!input.chainAction) {
+      this.report(BusEvents.Element.Data, { step: "complete", chainAction: "none" });
       return this.#complete(input);
     }
 
-    if (input.chainAction === "more_tools") {
-      this.report(BusEvents.Element.Data, { step: "scheduling more_tools" });
-      this.#orchestrator.scheduleConversation(
-        input.task.sessionId,
-        input.task.chatId,
-        input.task.id,
-        [{ type: "text", data: "" }],
-        (task) => {
-          this.#buildChainPipeline!(task.id, input.task.sessionId, input.task.chatId, this.#chainDepth + 1);
-        },
-      );
-      return this.#complete(input);
-    }
-
-    if (input.chainAction === "follow_up") {
-      if (this.#chainDepth >= MAX_FOLLOW_UP_DEPTH) {
-        this.report(BusEvents.Element.Data, { step: "follow_up depth exceeded, scheduling evaluator", depth: this.#chainDepth });
-        this.#orchestrator.scheduleEvaluator(input.task.sessionId, input.task.chatId, input.task.parentTaskId ?? input.task.id);
-        return this.#complete(input);
-      }
-      if (this.#chainDepth >= 3 && this.#chainDepth % 3 === 0) {
-        this.report(BusEvents.Element.Data, { step: "follow_up periodic evaluator", depth: this.#chainDepth });
-        this.#orchestrator.scheduleEvaluator(input.task.sessionId, input.task.chatId, input.task.parentTaskId ?? input.task.id);
-        return this.#complete(input);
-      }
-      this.report(BusEvents.Element.Data, { step: "scheduling follow_up", depth: this.#chainDepth });
-      this.#orchestrator.scheduleFollowUp(input.task.sessionId, input.task.chatId, input.task.id);
-      return this.#complete(input);
-    }
-
-    this.report(BusEvents.Element.Data, { step: "complete", chainAction: input.chainAction });
+    this.report(BusEvents.Element.Data, { step: "scheduling chain", chainAction: input.chainAction });
+    this.report(BusEvents.Conversation.Chain, {
+      sessionId: input.task.sessionId,
+      chatId: input.task.chatId,
+      parentTaskId: input.task.parentTaskId ?? input.task.id,
+      action: input.chainAction,
+    });
     return this.#complete(input);
   }
 
