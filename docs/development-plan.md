@@ -185,6 +185,22 @@
 
 ---
 
+## P11: InternalTaskOrchestrator
+
+**预估**: 0.5 周 | **状态**: planned
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| Orchestrator 实现 | `src/packages/core/src/task/internal-task-orchestrator.ts` | 集中管理 internal task 创建与入队 |
+| predict-finalize 改 | `src/packages/core/src/pipelines/prediction/elements/predict-finalize.ts` | 替换 createTaskItem+enqueue |
+| evaluate-finalize 改 | `src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluate-finalize.ts` | 替换 createTaskItem+enqueue |
+| finalize 改 | `src/packages/core/src/pipelines/conversation/elements/finalize.ts` | 三个分支各替换 |
+| Server 注入 | `src/packages/core/src/server.ts` | 构造 orchestrator 注入 pipeline deps |
+| 单元测试 | `src/packages/core/src/task/internal-task-orchestrator.test.ts` | 4 个 schedule 方法测试 |
+| 文档 | `docs/milestones/P11-internal-task-orchestrator.md` | 详细设计文档 |
+
+---
+
 ## Summary
 
 | Phase | Name | Tasks | Status | Estimate |
@@ -200,5 +216,6 @@
 | P8 | Integration | 3 | completed | 0.5 weeks |
 | P9 | Intent Prediction | 13 | completed | 1 week |
 | P10 | Follow-Up Evaluator | 10 | planned | 0.5 week |
+| P11 | InternalTaskOrchestrator | 7 | planned | 0.5 week |
 
 **Total: ~10 weeks**

@@ -292,3 +292,15 @@ src/packages/core/src/pipelines/follow-up-evaluator/
 6. [ ] conversation builder 正确注入 evaluatorSuggestion
 7. [ ] evaluator 输出 `visible: false`
 8. [ ] 现有所测试通过
+
+---
+
+## 10. InternalTaskOrchestrator
+
+> 统一管理所有内部 Task 的创建与入队。详细设计见 [P11-internal-task-orchestrator](docs/milestones/P11-internal-task-orchestrator.md)。
+
+核心变更点：
+
+- `InternalTaskOrchestrator` 集中 `scheduleConversation` / `scheduleEvaluator` / `scheduleCompress` / `scheduleFollowUp` 四个方法
+- `predict-finalize` / `evaluate-finalize` / `finalize` 中替换散落的 `createTaskItem + enqueue` 为 orchestrator 调用
+- `finalize.ts` 移除 `buildChainPipeline` 和 `queue` 依赖

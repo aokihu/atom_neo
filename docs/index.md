@@ -106,7 +106,11 @@
    24. milestones/P9-intent-prediction.md → 意图预测管线完整实施方案
    ✔ 意图预测、动态工具/模型选择、parentTaskId 链路完成
 
-⬇ P10：Follow-Up Evaluator（计划中）
+⬇ P10：Follow-Up Evaluator（已实施）
    25. milestones/P10-follow-up-evaluator.md → 长会话质量保障守护管道
+   ✔ 已实施完成，v0.9.0
+
+⬇ P11：InternalTaskOrchestrator（计划中）
+   26. milestones/P11-internal-task-orchestrator.md → 统一管理内部 Task 创建与入队
    ✔ 设计文档已完成，待审核
 ```
