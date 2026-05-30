@@ -168,7 +168,7 @@
 
 ## P10: Follow-Up Evaluator Pipeline
 
-**预估**: 0.5 周 | **状态**: planned
+**预估**: 0.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
@@ -215,7 +215,7 @@
 | P7 | TUI | 6 | in_progress | 1 week |
 | P8 | Integration | 3 | completed | 0.5 weeks |
 | P9 | Intent Prediction | 13 | completed | 1 week |
-| P10 | Follow-Up Evaluator | 10 | planned | 0.5 week |
+| P10 | Follow-Up Evaluator | 10 | completed | 0.5 week |
 | P11 | InternalTaskOrchestrator | 7 | planned | 0.5 week |
 
 **Total: ~10 weeks**
