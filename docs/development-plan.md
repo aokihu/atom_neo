@@ -201,6 +201,27 @@
 
 ---
 
+## P12: Context Compression Pipeline
+
+**预估**: 0.5 周 | **状态**: planned
+
+| 任务 | 文件 | 说明 |
+|------|------|------|
+| Compress-input element | `src/packages/core/src/pipelines/context-compress/elements/compress-input.ts` | Source: 选取待压缩消息 |
+| Compress-summarize element | `src/packages/core/src/pipelines/context-compress/elements/compress-summarize.ts` | Transform: LLM 生成摘要 |
+| Compress-finalize element | `src/packages/core/src/pipelines/context-compress/elements/compress-finalize.ts` | Sink: 归档 + 删消息 + 续写 |
+| Pipeline DSL | `src/packages/core/src/pipelines/context-compress/index.ts` | contextCompressPipeline(deps) |
+| Session 清理 | `src/packages/core/src/session/context.ts` | +`replaceEarlyMessages()` + `conversationSummary` |
+| 归档模块 | `src/packages/core/src/session/archiver.ts` | `archiveMessages(sessionId, messages)` 写入 JSONL |
+| collect-context 改 | `src/packages/core/src/pipelines/conversation/elements/collect-context.ts` | +读 conversationSummary 注入 system prompt |
+| evaluate-finalize 分流 | `src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluate-finalize.ts` | +token>80% → scheduleCompress |
+| Server 注入 | `src/packages/core/src/server.ts` | +`context-compress` pipelineBuilder |
+| pipeline 导出 | `src/packages/core/src/pipelines/index.ts` | 导出 compress pipeline |
+| 单元测试 | `src/packages/core/src/pipelines/context-compress/compress.test.ts` | element 测试 |
+| 文档 | `docs/milestones/P12-context-compression.md` | 详细设计文档 |
+
+---
+
 ## Summary
 
 | Phase | Name | Tasks | Status | Estimate |
@@ -217,5 +238,6 @@
 | P9 | Intent Prediction | 13 | completed | 1 week |
 | P10 | Follow-Up Evaluator | 10 | completed | 0.5 week |
 | P11 | InternalTaskOrchestrator | 7 | planned | 0.5 week |
+| P12 | Context Compression | 12 | planned | 0.5 week |
 
 **Total: ~10 weeks**

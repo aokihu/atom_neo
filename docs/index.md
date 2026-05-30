@@ -113,4 +113,8 @@
 ⬇ P11：InternalTaskOrchestrator（计划中）
    26. milestones/P11-internal-task-orchestrator.md → 统一管理内部 Task 创建与入队
    ✔ 设计文档已完成，待审核
+
+⬇ P12：Context Compression（计划中）
+   27. milestones/P12-context-compression.md → 长会话上下文自动压缩与归档
+   ✔ 设计文档已完成，待审核
 ```
