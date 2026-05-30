@@ -1,4 +1,5 @@
 import type { IntentPredictionResult } from "@atom-neo/shared";
+import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 
 export type PredictionMode = "initial" | "predicting" | "routing";
 
@@ -19,5 +20,5 @@ export type PredictionPipelineDeps = {
   model: string;
   baseUrl?: string;
   maxTokens?: number;
-  queue: any;
+  orchestrator: InternalTaskOrchestrator;
 };

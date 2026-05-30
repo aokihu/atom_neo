@@ -1,21 +1,19 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { TaskSource } from "@atom-neo/shared";
-import { createTaskItem } from "../../../task-factory";
-import type { TaskQueue } from "../../../task-queue";
+import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { PredictionFlowState } from "./types";
 
 export class PredictFinalizeElement extends BaseElement<PredictionFlowState, PipelineResult> {
-  #queue: TaskQueue;
+  #orchestrator: InternalTaskOrchestrator;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    queue: TaskQueue;
+    orchestrator: InternalTaskOrchestrator;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
-    this.#queue = params.queue;
+    this.#orchestrator = params.orchestrator;
   }
 
   async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
@@ -28,16 +26,12 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     const session = input.session;
     session.pendingPrediction = prediction;
 
-    const convTask = createTaskItem({
-      sessionId: session.sessionId,
-      chatId: input.task.chatId,
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      parentTaskId: input.task.id,
-      payload: input.task.payload ?? [],
-    });
-
-    this.#queue.enqueue(convTask);
+    this.#orchestrator.scheduleConversation(
+      session.sessionId,
+      input.task.chatId,
+      input.task.id,
+      input.task.payload ?? [],
+    );
 
     return {
       type: "complete",

@@ -1,8 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { TaskSource } from "@atom-neo/shared";
-import { createTaskItem } from "../../../task-factory";
-import type { TaskQueue } from "../../../task-queue";
+import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 
 const FALLBACK: EvaluatorResult = {
@@ -13,18 +11,18 @@ const FALLBACK: EvaluatorResult = {
 };
 
 export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, PipelineResult> {
-  #queue: TaskQueue;
+  #orchestrator: InternalTaskOrchestrator;
   #logger: any;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    queue: TaskQueue;
+    orchestrator: InternalTaskOrchestrator;
     logger?: any;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
-    this.#queue = params.queue;
+    this.#orchestrator = params.orchestrator;
     this.#logger = params.logger;
   }
 
@@ -52,16 +50,11 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
       input.session.upgradeModel = upgradeModel ?? false;
     }
 
-    const convTask = createTaskItem({
-      sessionId: input.session.sessionId,
-      chatId: input.task.chatId,
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      parentTaskId: input.task.parentTaskId ?? input.task.id,
-      payload: [{ type: "text", data: "请继续，不要重复已输出的内容。" }],
-    });
-
-    this.#queue.enqueue(convTask);
+    this.#orchestrator.scheduleConversation(
+      input.session.sessionId,
+      input.task.chatId,
+      input.task.parentTaskId ?? input.task.id,
+    );
 
     return {
       type: "complete",

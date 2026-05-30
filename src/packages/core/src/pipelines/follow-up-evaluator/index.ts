@@ -5,6 +5,7 @@ import {
   EvaluatorAnalyzeElement,
   EvaluateFinalizeElement,
 } from "./elements";
+import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 
 export function registerFollowUpEvaluatorElements(): void {
   registerElement("evaluator-input", EvaluatorInputElement);
@@ -19,7 +20,7 @@ export function followUpEvaluatorPipeline(deps: {
   model: string;
   baseUrl?: string;
   maxTokens?: number;
-  queue: any;
+  orchestrator: InternalTaskOrchestrator;
   logger: any;
 }) {
   return pipeline("follow-up-evaluator")
@@ -31,5 +32,5 @@ export function followUpEvaluatorPipeline(deps: {
       maxTokens: deps.maxTokens,
       logger: deps.logger,
     })
-    .sink("evaluate-finalize", { queue: deps.queue, logger: deps.logger });
+    .sink("evaluate-finalize", { orchestrator: deps.orchestrator, logger: deps.logger });
 }

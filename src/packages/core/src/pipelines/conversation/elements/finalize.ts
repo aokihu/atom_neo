@@ -1,27 +1,25 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { TaskSource } from "@atom-neo/shared";
-import { createTaskItem } from "../../../task-factory";
-import type { TaskQueue } from "../../../task-queue";
+import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ConversationFlowState } from "./types";
 
 const MAX_FOLLOW_UP_DEPTH = 5;
 
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
-  #queue: TaskQueue;
-  #buildChainPipeline: ((taskId: string, sessionId: string, chatId: string, chainDepth: number) => void) | undefined;
+  #orchestrator: InternalTaskOrchestrator;
   #chainDepth: number;
+  #buildChainPipeline: ((taskId: string, sessionId: string, chatId: string, chainDepth: number) => void) | undefined;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    queue?: TaskQueue;
+    orchestrator: InternalTaskOrchestrator;
     buildChainPipeline?: (taskId: string, sessionId: string, chatId: string, chainDepth: number) => void;
     chainDepth?: number;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
-    this.#queue = params.queue as TaskQueue;
+    this.#orchestrator = params.orchestrator;
     this.#buildChainPipeline = params.buildChainPipeline;
     this.#chainDepth = params.chainDepth ?? 0;
   }
@@ -31,93 +29,40 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       throw new Error("FinalizeElement: expected ready_to_finalize");
     }
 
-    if (!input.chainAction || !this.#buildChainPipeline || !this.#queue) {
-      return {
-        type: "complete" as const,
-        task: input.task,
-        output: input.responseText,
-        reasoningContent: input.reasoningContent,
-        tokenUsage: input.tokenUsage,
-      };
+    if (!input.chainAction || !this.#buildChainPipeline) {
+      return this.#complete(input);
     }
 
     if (input.chainAction === "more_tools") {
-      return this.#createMoreToolsTask(input);
+      this.#orchestrator.scheduleConversation(
+        input.task.sessionId,
+        input.task.chatId,
+        input.task.id,
+        [{ type: "text", data: "" }],
+        (task) => {
+          this.#buildChainPipeline!(task.id, input.task.sessionId, input.task.chatId, this.#chainDepth + 1);
+        },
+      );
+      return this.#complete(input);
     }
 
     if (input.chainAction === "follow_up") {
       if (this.#chainDepth >= MAX_FOLLOW_UP_DEPTH) {
-        return this.#createEvaluatorTask(input);
+        this.#orchestrator.scheduleEvaluator(input.task.sessionId, input.task.chatId, input.task.parentTaskId ?? input.task.id);
+        return this.#complete(input);
       }
       if (this.#chainDepth >= 3 && this.#chainDepth % 3 === 0) {
-        return this.#createEvaluatorTask(input);
+        this.#orchestrator.scheduleEvaluator(input.task.sessionId, input.task.chatId, input.task.parentTaskId ?? input.task.id);
+        return this.#complete(input);
       }
-      return this.#createFollowUpTask(input);
+      this.#orchestrator.scheduleFollowUp(input.task.sessionId, input.task.chatId, input.task.id);
+      return this.#complete(input);
     }
 
-    return {
-      type: "complete" as const,
-      task: input.task,
-      output: input.responseText,
-      reasoningContent: input.reasoningContent,
-      tokenUsage: input.tokenUsage,
-    };
+    return this.#complete(input);
   }
 
-  #createMoreToolsTask(input: ConversationFlowState) {
-    const chainTask = createTaskItem({
-      sessionId: input.task.sessionId,
-      chatId: input.task.chatId,
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      payload: [{ type: "text", data: "" }],
-      parentTaskId: input.task.id,
-      chainId: input.task.chainId,
-    });
-    this.#buildChainPipeline!(chainTask.id, input.task.sessionId, input.task.chatId, this.#chainDepth + 1);
-    this.#queue.enqueue(chainTask);
-
-    return {
-      type: "complete" as const,
-      task: input.task,
-      output: input.responseText,
-      reasoningContent: input.reasoningContent,
-      tokenUsage: input.tokenUsage,
-    };
-  }
-
-  #createFollowUpTask(input: ConversationFlowState) {
-    const chainTask = createTaskItem({
-      sessionId: input.task.sessionId,
-      chatId: input.task.chatId,
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      payload: [{ type: "text", data: "请从上次中断处继续，不要重复已输出的内容。" }],
-      parentTaskId: input.task.id,
-      chainId: input.task.chainId,
-    });
-    this.#queue.enqueue(chainTask);
-
-    return {
-      type: "complete" as const,
-      task: input.task,
-      output: input.responseText,
-      reasoningContent: input.reasoningContent,
-      tokenUsage: input.tokenUsage,
-    };
-  }
-
-  #createEvaluatorTask(input: ConversationFlowState) {
-    const evalTask = createTaskItem({
-      sessionId: input.task.sessionId,
-      chatId: input.task.chatId,
-      pipeline: "follow-up-evaluator",
-      source: TaskSource.INTERNAL,
-      parentTaskId: input.task.parentTaskId ?? input.task.id,
-      payload: [],
-    });
-    this.#queue.enqueue(evalTask);
-
+  #complete(input: ConversationFlowState) {
     return {
       type: "complete" as const,
       task: input.task,

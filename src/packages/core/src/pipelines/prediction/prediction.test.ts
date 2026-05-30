@@ -12,6 +12,17 @@ function makeBus() {
   return new PipelineEventBus<FullEventMap>();
 }
 
+function makeMockOrchestrator(capture: { enqueued: any } | null) {
+  return {
+    scheduleConversation: (sid: string, cid: string, ptid: string, payload?: any[]) => {
+      if (capture) capture.enqueued = { pipeline: "conversation", parentTaskId: ptid, payload };
+    },
+    scheduleEvaluator: () => {},
+    scheduleCompress: () => {},
+    scheduleFollowUp: () => {},
+  };
+}
+
 describe("prediction pipeline elements", () => {
   test("predict-input extracts user message from task payload", async () => {
     const bus = makeBus();
@@ -137,15 +148,14 @@ describe("prediction pipeline elements", () => {
   test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
     const bus = makeBus();
     const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }] };
-    let enqueued: any = null;
-    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
+    const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
     const el = new Ctor({
       name: "predict-finalize",
       kind: "sink",
       bus,
-      queue: mockQueue,
+      orchestrator: makeMockOrchestrator(capture),
     });
 
     const result = await el.doProcess({
@@ -160,23 +170,22 @@ describe("prediction pipeline elements", () => {
     expect(session.pendingPrediction).toBeDefined();
     expect(session.pendingPrediction.toolTier).toBe("full");
     expect(session.pendingPrediction.difficulty).toBe("advanced");
-    expect(enqueued).not.toBeNull();
-    expect(enqueued.pipeline).toBe("conversation");
-    expect(enqueued.parentTaskId).toBe("t1");
+    expect(capture.enqueued).not.toBeNull();
+    expect(capture.enqueued.pipeline).toBe("conversation");
+    expect(capture.enqueued.parentTaskId).toBe("t1");
   });
 
   test("predict-finalize uses fallback when no prediction", async () => {
     const bus = makeBus();
     const session = { sessionId: "s1" };
-    let enqueued: any = null;
-    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
+    const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
     const el = new Ctor({
       name: "predict-finalize",
       kind: "sink",
       bus,
-      queue: mockQueue,
+      orchestrator: makeMockOrchestrator(capture),
     });
 
     await el.doProcess({
@@ -188,7 +197,7 @@ describe("prediction pipeline elements", () => {
 
     expect(session.pendingPrediction.toolTier).toBe("basic");
     expect(session.pendingPrediction.difficulty).toBe("balanced");
-    expect(enqueued.pipeline).toBe("conversation");
+    expect(capture.enqueued.pipeline).toBe("conversation");
   });
 });
 
@@ -200,7 +209,7 @@ describe("prediction pipeline DSL", () => {
       task: { id: "t1", payload: [{ data: "test" }] },
       apiKey: "sk-test",
       model: "deepseek-chat",
-      queue: { enqueue: () => {} },
+      orchestrator: makeMockOrchestrator(null),
     }).build(bus);
 
     expect(pipeline.name).toBe("prediction");

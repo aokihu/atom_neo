@@ -22,5 +22,5 @@ export function predictionPipeline(deps: PredictionPipelineDeps) {
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
     })
-    .sink("predict-finalize", { queue: deps.queue });
+    .sink("predict-finalize", { orchestrator: deps.orchestrator });
 }

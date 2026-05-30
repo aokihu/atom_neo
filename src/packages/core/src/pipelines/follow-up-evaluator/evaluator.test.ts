@@ -12,6 +12,17 @@ function makeBus() {
   return new PipelineEventBus<FullEventMap>();
 }
 
+function makeMockOrchestrator(capture: { enqueued: any } | null) {
+  return {
+    scheduleConversation: (sid: string, cid: string, ptid: string, payload?: any[]) => {
+      if (capture) capture.enqueued = { pipeline: "conversation", parentTaskId: ptid, payload };
+    },
+    scheduleEvaluator: () => {},
+    scheduleCompress: () => {},
+    scheduleFollowUp: () => {},
+  };
+}
+
 describe("evaluator-input", () => {
   test("generates summary from session messages", async () => {
     const bus = makeBus();
@@ -88,14 +99,13 @@ describe("evaluator-analyze", () => {
 describe("evaluate-finalize", () => {
   test("healthy creates conversation task", async () => {
     const bus = makeBus();
-    let enqueued: any = null;
+    const capture = { enqueued: null as any };
     const session = { sessionId: "s1", addMessage: () => {} };
-    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
 
     const Ctor = resolveElement("evaluate-finalize");
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
-      queue: mockQueue,
+      orchestrator: makeMockOrchestrator(capture),
     });
 
     await el.doProcess({
@@ -104,20 +114,19 @@ describe("evaluate-finalize", () => {
       evaluation: { health: "healthy", suggestion: "", upgradeModel: false, reason: "" },
     });
 
-    expect(enqueued.pipeline).toBe("conversation");
-    expect(enqueued.parentTaskId).toBe("root");
+    expect(capture.enqueued.pipeline).toBe("conversation");
+    expect(capture.enqueued.parentTaskId).toBe("root");
   });
 
   test("looping writes suggestion and creates task", async () => {
     const bus = makeBus();
-    let enqueued: any = null;
+    const capture = { enqueued: null as any };
     const session = { sessionId: "s1", addMessage: () => {} };
-    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
 
     const Ctor = resolveElement("evaluate-finalize");
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
-      queue: mockQueue,
+      orchestrator: makeMockOrchestrator(capture),
     });
 
     await el.doProcess({
@@ -127,23 +136,22 @@ describe("evaluate-finalize", () => {
     });
 
     expect(session.evaluatorSuggestion).toBe("try differently");
-    expect(enqueued.pipeline).toBe("conversation");
+    expect(capture.enqueued.pipeline).toBe("conversation");
   });
 
   test("stuck does not create task, appends termination message", async () => {
     const bus = makeBus();
-    let enqueued: any = null;
+    const capture = { enqueued: null as any };
     let addedMsg: any = null;
     const session = {
       sessionId: "s1",
       addMessage: (m: any) => { addedMsg = m; },
     };
-    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
 
     const Ctor = resolveElement("evaluate-finalize");
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
-      queue: mockQueue,
+      orchestrator: makeMockOrchestrator(capture),
     });
 
     await el.doProcess({
@@ -152,7 +160,7 @@ describe("evaluate-finalize", () => {
       evaluation: { health: "stuck", suggestion: "", upgradeModel: false, reason: "dead end" },
     });
 
-    expect(enqueued).toBeNull();
+    expect(capture.enqueued).toBeNull();
     expect(addedMsg).not.toBeNull();
     expect(addedMsg.content).toContain("已自动中断");
     expect(addedMsg.visible).toBe(true);
@@ -160,14 +168,13 @@ describe("evaluate-finalize", () => {
 
   test("uses fallback when no evaluation", async () => {
     const bus = makeBus();
-    let enqueued: any = null;
+    const capture = { enqueued: null as any };
     const session = { sessionId: "s1", addMessage: () => {} };
-    const mockQueue = { enqueue: (t: any) => { enqueued = t; } };
 
     const Ctor = resolveElement("evaluate-finalize");
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
-      queue: mockQueue,
+      orchestrator: makeMockOrchestrator(capture),
     });
 
     await el.doProcess({
@@ -175,7 +182,7 @@ describe("evaluate-finalize", () => {
       session, recentSummary: "",
     });
 
-    expect(enqueued.pipeline).toBe("conversation");
+    expect(capture.enqueued.pipeline).toBe("conversation");
   });
 });
 
@@ -187,7 +194,8 @@ describe("follow-up-evaluator pipeline DSL", () => {
       task: { id: "t1" },
       apiKey: "sk-test",
       model: "deepseek-chat",
-      queue: { enqueue: () => {} },
+      orchestrator: makeMockOrchestrator(null),
+      logger: null,
     }).build(bus);
 
     expect(pipeline.name).toBe("follow-up-evaluator");

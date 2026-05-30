@@ -20,6 +20,7 @@ import { registerFollowUpElements } from "./pipelines/follow-up";
 import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
+import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
 import { DEFAULT_MAX_TOKENS } from "./constants";
 
 const API_PREFIX = "/api/";
@@ -108,7 +109,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
-        queue: taskQueue,
+        orchestrator,
       }).build(bus);
     },
 
@@ -144,6 +145,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         maxTokens,
         memory,
         queue: taskQueue,
+        orchestrator,
         buildChainPipeline,
         chainDepth: 0,
       }).build(bus);
@@ -155,7 +157,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
-        queue: taskQueue,
+        orchestrator,
         logger,
       }).build(bus);
     },
@@ -208,6 +210,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   const taskQueue = new TaskQueue();
+  const orchestrator = new InternalTaskOrchestrator(taskQueue);
   const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
   taskEngine.start();
 
