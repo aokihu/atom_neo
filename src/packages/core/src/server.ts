@@ -18,6 +18,7 @@ import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
 import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
+import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
@@ -159,6 +160,19 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
         logger,
+        configContextLimit,
+      }).build(bus);
+    },
+
+    "context-compress": (task: any) => {
+      const session = sessionStore.get(task.sessionId);
+      return contextCompressPipeline({
+        session,
+        task,
+        apiKey, model, baseUrl,
+        orchestrator,
+        sandbox,
+        logger,
       }).build(bus);
     },
   };
@@ -172,6 +186,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerPredictionElements();
   registerFollowUpElements();
   registerFollowUpEvaluatorElements();
+  registerContextCompressElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));

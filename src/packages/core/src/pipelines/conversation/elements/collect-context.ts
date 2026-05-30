@@ -65,6 +65,10 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         contextData += `\n\n[模型提示] 已切换为更高级别的模型处理此任务。`;
         delete this.#session.upgradeModel;
       }
+      if (this.#session.conversationSummary) {
+        contextData += `\n\n${this.#session.conversationSummary}`;
+        delete this.#session.conversationSummary;
+      }
     }
 
     return { ...input, contextData };

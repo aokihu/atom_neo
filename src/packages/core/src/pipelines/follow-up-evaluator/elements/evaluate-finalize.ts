@@ -12,6 +12,7 @@ const FALLBACK: EvaluatorResult = {
 
 export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
+  #configContextLimit: number;
   #logger: any;
 
   constructor(params: {
@@ -19,10 +20,12 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator: InternalTaskOrchestrator;
+    configContextLimit?: number;
     logger?: any;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
+    this.#configContextLimit = params.configContextLimit ?? 131072;
     this.#logger = params.logger;
   }
 
@@ -48,6 +51,18 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     if (health !== "healthy") {
       input.session.evaluatorSuggestion = suggestion;
       input.session.upgradeModel = upgradeModel ?? false;
+    }
+
+    const tu = input.session?.tokenUsage?.total ?? 0;
+    const limit = this.#configContextLimit ?? 131072;
+    if (tu > limit * 0.8 && health !== "stuck") {
+      this.#logger?.info("evaluate-finalize: token usage high, scheduling compress", { total: tu, limit });
+      this.#orchestrator.scheduleCompress(
+        input.session.sessionId,
+        input.task.chatId,
+        input.task.parentTaskId ?? input.task.id,
+      );
+      return { type: "complete", task: input.task, output: `evaluator: health=${health}, compress scheduled` };
     }
 
     this.#orchestrator.scheduleConversation(

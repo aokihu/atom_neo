@@ -17,8 +17,15 @@ export class SessionContext {
   evaluatorSuggestion?: string;
   upgradeModel?: boolean;
   pendingPrediction?: any;
+  conversationSummary?: string;
 
   #messages: SessionMessage[] = [];
+
+  replaceEarlyMessages(keep: number): number {
+    const removed = Math.max(0, this.#messages.length - keep);
+    this.#messages = this.#messages.slice(-keep);
+    return removed;
+  }
   #inferenceFacts: InferenceFact[] = [];
   #toolContext: ToolContext = { mode: "idle", results: [] };
   #memoryScopes: MemoryScopeState = {

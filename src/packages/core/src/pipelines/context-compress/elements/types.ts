@@ -1,0 +1,10 @@
+export type CompressMode = "initial" | "summarizing" | "finalizing";
+
+export type CompressFlowState = {
+  mode: CompressMode;
+  task: any;
+  session: any;
+  archiveMessages: Array<{ role: string; content: string; timestamp: number }>;
+  summaryText: string;
+  summary?: string;
+};

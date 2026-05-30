@@ -18,3 +18,8 @@ export {
   registerFollowUpEvaluatorElements,
   followUpEvaluatorPipeline,
 } from "./follow-up-evaluator";
+
+export {
+  registerContextCompressElements,
+  contextCompressPipeline,
+} from "./context-compress";

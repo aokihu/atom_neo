@@ -22,6 +22,7 @@ export function followUpEvaluatorPipeline(deps: {
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
   logger: any;
+  configContextLimit?: number;
 }) {
   return pipeline("follow-up-evaluator")
     .source("evaluator-input", { session: deps.session })
@@ -32,5 +33,5 @@ export function followUpEvaluatorPipeline(deps: {
       maxTokens: deps.maxTokens,
       logger: deps.logger,
     })
-    .sink("evaluate-finalize", { orchestrator: deps.orchestrator, logger: deps.logger });
+    .sink("evaluate-finalize", { orchestrator: deps.orchestrator, configContextLimit: deps.configContextLimit, logger: deps.logger });
 }
