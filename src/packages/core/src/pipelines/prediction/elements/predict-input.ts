@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { PredictionFlowState } from "./types";
 
 const MAX_CONTEXT_PAIRS = 5;
@@ -39,6 +40,7 @@ export class PredictInputElement extends BaseElement<any, PredictionFlowState> {
       const msgs = this.#session.messages;
       for (let i = msgs.length - 1; i >= 0; i--) {
         if (msgs[i].role === "user") {
+          this.report(BusEvents.Element.Data, { step: "done", userMsgLen: msgs[i].content?.trim().length ?? 0 });
           return {
             mode: "predicting",
             task,
@@ -50,6 +52,7 @@ export class PredictInputElement extends BaseElement<any, PredictionFlowState> {
       }
     }
 
+    this.report(BusEvents.Element.Data, { step: "done", userMsgLen: text.length });
     return {
       mode: "predicting",
       task,

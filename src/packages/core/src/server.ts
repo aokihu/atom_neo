@@ -159,7 +159,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
-        logger,
         configContextLimit,
       }).build(bus);
     },
@@ -172,7 +171,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         apiKey, model, baseUrl,
         orchestrator,
         sandbox,
-        logger,
       }).build(bus);
     },
   };
@@ -222,6 +220,23 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
+  });
+
+  bus.on(BusEvents.Pipeline.ElementStarted, (p) => {
+    logger.debug("pipeline element started", { pipeline: p.pipelineName, element: p.elementName, kind: p.elementKind });
+  });
+  bus.on(BusEvents.Pipeline.ElementFinished, (p) => {
+    logger.debug("pipeline element done", { pipeline: p.pipelineName, element: p.elementName, durationMs: p.durationMs });
+  });
+  bus.on(BusEvents.Pipeline.ElementFailed, (p) => {
+    logger.warn("pipeline element failed", { pipeline: p.pipelineName, element: p.elementName, error: String(p.error).slice(0, 200) });
+  });
+  bus.on(BusEvents.Element.Data, (e) => {
+    const { step, level, ...data } = e.payload;
+    const msg = `${e.name}: ${step}`;
+    if (level === "warn") logger.warn(msg, data);
+    else if (level === "error") logger.error(msg, data);
+    else logger.debug(msg, data);
   });
 
   const taskQueue = new TaskQueue();

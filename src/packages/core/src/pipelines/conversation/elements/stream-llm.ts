@@ -39,11 +39,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "formatted") return input;
     if (!this.#apiKey) {
+      this.report(BusEvents.Element.Data, { step: "no apiKey, fallback" });
       return { ...input, mode: "executing", responseText: "(no API key configured)" };
     }
 
     const userMessages = input.userMessages ?? [];
     const systemText = input.systemText ?? "";
+
+    this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: this.#tools.length });
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
@@ -140,6 +143,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       const tokenUsage: TokenUsage = {
         total: usage?.totalTokens ?? 0,
       };
+      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: !!intentRequestText, finishReason });
       return {
         ...input,
         mode: "executing",
@@ -150,6 +154,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         chainAction: finishReason === "length" ? "follow_up" : undefined,
       };
     } catch (err: any) {
+      this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
       return {
         ...input,
         mode: "executing",

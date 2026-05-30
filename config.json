@@ -26,5 +26,9 @@
   },
   "permission": {
     "whitelist": []
+  },
+  "log": {
+    "level": "debug",
+    "ignore": []
   }
 }

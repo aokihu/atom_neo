@@ -47,6 +47,10 @@ Options:
   "tui": { "theme": "dark" },
   "permission": {
     "whitelist": ["/home/user/other-project", "/tmp/shared"]
+  },
+  "log": {
+    "level": "debug",
+    "ignore": []
   }
 }
 ```

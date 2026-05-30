@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
 export class CollectPromptsElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -26,6 +27,7 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
         return msg;
       });
 
+    this.report(BusEvents.Element.Data, { step: "done", messageCount: messages.length });
     return { mode: "streaming", task: input.task, prompts: messages };
   }
 }

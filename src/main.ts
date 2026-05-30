@@ -1,10 +1,10 @@
 import { statSync, readFileSync } from "node:fs";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
+import type { LogLevel } from "@atom-neo/shared";
 
 const VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf-8")
 ).version as string;
-import type { LogLevel } from "@atom-neo/shared";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";
@@ -20,20 +20,13 @@ declare global {
   var AI_SDK_LOG_WARNINGS: boolean;
 }
 
-const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
-
-function shouldLog(level: LogLevel, minLevel: LogLevel, ignores: LogLevel[]): boolean {
-  if (ignores.includes(level)) return false;
-  return LEVEL_ORDER.indexOf(level) >= LEVEL_ORDER.indexOf(minLevel);
-}
-
 function isFifo(path: string): boolean {
   try { return statSync(path).isFIFO(); } catch { return false; }
 }
 
 function createLogger(args: BootArguments) {
   if (args.logModes.length === 0) {
-    return new Logger(args.logLevel, () => {});
+    return new Logger(args.logLevel, () => {}, args.logIgnore);
   }
 
   const hub = new LogHub();
@@ -54,11 +47,7 @@ function createLogger(args: BootArguments) {
     }
   }
 
-  return new Logger(args.logLevel, (entry) => {
-    if (shouldLog(entry.level, args.logLevel, args.logIgnore)) {
-      hub.write(entry);
-    }
-  });
+  return new Logger(args.logLevel, (entry) => hub.write(entry), args.logIgnore);
 }
 
 export async function main(): Promise<void> {
@@ -75,8 +64,11 @@ export async function main(): Promise<void> {
   // Bootstrap
   loadEnv(args.sandbox);
   const appConfig = loadConfig(args.sandbox);
+  if (!args.logLevelExplicit) args.logLevel = appConfig.log?.level ?? args.logLevel;
+  if (!args.logIgnoreExplicit) args.logIgnore = appConfig.log?.ignore ?? args.logIgnore;
   const logger = createLogger(args);
   logger.info("booting", { mode: args.mode, sandbox: args.sandbox, port: args.port });
+  logger.debug("log level active", { level: args.logLevel, ignore: args.logIgnore });
 
   initAtomDir(args.sandbox);
   initAgentsMd(args.sandbox);

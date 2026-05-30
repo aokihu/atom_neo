@@ -195,7 +195,6 @@ describe("follow-up-evaluator pipeline DSL", () => {
       apiKey: "sk-test",
       model: "deepseek-chat",
       orchestrator: makeMockOrchestrator(null),
-      logger: null,
     }).build(bus);
 
     expect(pipeline.name).toBe("follow-up-evaluator");

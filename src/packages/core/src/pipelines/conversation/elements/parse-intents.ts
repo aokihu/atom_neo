@@ -1,6 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
@@ -13,6 +14,7 @@ export class ParseIntentsElement extends BaseElement<ConversationFlowState, Conv
     if (input.mode !== "executing") return input;
     const text = input.intentRequestText || input.responseText || "";
     const intents: IntentRequest[] = parseIntentRequests(text);
+    this.report(BusEvents.Element.Data, { step: "done", intentCount: intents.length, types: intents.map(i => i.request) });
     return { ...input, intents };
   }
 }

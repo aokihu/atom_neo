@@ -44,7 +44,6 @@ GATEWAY_JWT_SECRET=your-secret-at-least-16-chars
 # Optional (defaults are fine for dev):
 CORE_PORT=3100
 GATEWAY_PORT=3000
-LOG_LEVEL=debug
 MEMORY_DB_PATH=./data/memory.db
 REPLAY_ENABLED=true    # Enable pipeline replay for debugging
 ```

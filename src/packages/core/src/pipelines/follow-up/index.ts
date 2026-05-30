@@ -2,6 +2,7 @@ import { pipeline } from "../../pipeline/builder";
 import { registerElement } from "../../pipeline/registry";
 import { BaseElement, PipelineEventBus } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 
 class FollowUpSourceElement extends BaseElement<any, any> {
   constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
@@ -9,6 +10,7 @@ class FollowUpSourceElement extends BaseElement<any, any> {
   }
   async doProcess(input: any) {
     if (input.mode !== "initial") return input;
+    this.report(BusEvents.Element.Data, { step: "initial → asking" });
     return { mode: "asking", ...input };
   }
 }
@@ -18,6 +20,7 @@ class FollowUpSinkElement extends BaseElement<any, any> {
     super({ name: params.name, kind: "sink", bus: params.bus });
   }
   async doProcess(input: any) {
+    this.report(BusEvents.Element.Data, { step: "complete" });
     return { type: "complete", ...input };
   }
 }

@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
 export class FetchAgentsPromptElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -18,6 +19,7 @@ export class FetchAgentsPromptElement extends BaseElement<ConversationFlowState,
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
     const compiled = this.#getCompiledPrompt();
+    this.report(BusEvents.Element.Data, { step: "done", hasCompiled: !!compiled });
     if (!compiled) return input;
     return { ...input, compiledAgentsPrompt: compiled };
   }

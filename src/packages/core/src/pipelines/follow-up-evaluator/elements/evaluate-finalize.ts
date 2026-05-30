@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 
@@ -13,7 +14,6 @@ const FALLBACK: EvaluatorResult = {
 export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
   #configContextLimit: number;
-  #logger: any;
 
   constructor(params: {
     name: string;
@@ -21,21 +21,16 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator: InternalTaskOrchestrator;
     configContextLimit?: number;
-    logger?: any;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
     this.#configContextLimit = params.configContextLimit ?? 131072;
-    this.#logger = params.logger;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<PipelineResult> {
     const { health, suggestion, upgradeModel, reason } = input.evaluation ?? FALLBACK;
 
-    this.#logger?.debug("evaluate-finalize: decision", {
-      health, suggestion, upgradeModel, reason,
-      summaryLen: input.recentSummary.length,
-    });
+    this.report(BusEvents.Element.Data, { step: "decision", health, suggestion, upgradeModel, reason, summaryLen: input.recentSummary.length });
 
     if (health === "stuck") {
       const termMsg = reason
@@ -44,7 +39,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
       input.session.addMessage
         ? input.session.addMessage({ role: "assistant", content: termMsg, visible: true, pipeline: "follow-up-evaluator", timestamp: Date.now() })
         : null;
-      this.#logger?.info("evaluate-finalize: stuck, stopping chain", { reason });
+      this.report(BusEvents.Element.Data, { step: "stuck, stopping chain", reason });
       return { type: "complete", task: input.task, output: `evaluator: stuck — ${reason}` };
     }
 
@@ -56,7 +51,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     const tu = input.session?.tokenUsage?.total ?? 0;
     const limit = this.#configContextLimit ?? 131072;
     if (tu > limit * 0.8 && health !== "stuck") {
-      this.#logger?.info("evaluate-finalize: token usage high, scheduling compress", { total: tu, limit });
+      this.report(BusEvents.Element.Data, { step: "token usage high, scheduling compress", total: tu, limit });
       this.#orchestrator.scheduleCompress(
         input.session.sessionId,
         input.task.chatId,

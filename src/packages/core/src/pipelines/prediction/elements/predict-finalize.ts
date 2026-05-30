@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { PredictionFlowState } from "./types";
 
@@ -25,6 +26,8 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
 
     const session = input.session;
     session.pendingPrediction = prediction;
+
+    this.report(BusEvents.Element.Data, { step: "scheduling conversation", toolTier: prediction.toolTier, difficulty: prediction.difficulty });
 
     this.#orchestrator.scheduleConversation(
       session.sessionId,

@@ -1,6 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { IntentRequestType } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
 export class CheckFollowUpElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -32,9 +33,11 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
     for (const intent of intents) {
       if (intent.request === IntentRequestType.REQUEST_MORE_TOOLS) {
+        this.report(BusEvents.Element.Data, { step: "done", chainAction: "more_tools" });
         return { ...input, mode: "ready_to_finalize", chainAction: "more_tools" };
       }
       if (intent.request === IntentRequestType.FOLLOW_UP) {
+        this.report(BusEvents.Element.Data, { step: "done", chainAction: "follow_up" });
         return {
           ...input,
           mode: "ready_to_finalize",
@@ -44,6 +47,7 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
       }
     }
 
+    this.report(BusEvents.Element.Data, { step: "done", chainAction: "none" });
     return { ...input, mode: "ready_to_finalize" };
   }
 }

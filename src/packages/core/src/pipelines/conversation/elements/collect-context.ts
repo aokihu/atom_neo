@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 import { resolveContextLimit } from "../../../constants";
 
@@ -38,6 +39,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       `All file paths are relative to cwd.`,
     ].join("\n");
 
+    let memoryCount = 0;
     if (this.#memory) {
       const text = input.task?.payload?.[0]?.data || "";
       const memories = (await this.#memory.search(text)) || [];
@@ -48,6 +50,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         contextData += `\n<Memory id="${id}" tags="${node.tags?.join(",") || ""}"${aging}>\n${node.content}\n</Memory>`;
         this.#memory.incrementAccess(node.id);
         this.#memory.boostWeight(node.id);
+        memoryCount++;
       }
     }
 
@@ -71,6 +74,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
     }
 
+    this.report(BusEvents.Element.Data, { step: "done", memoryCount, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary });
     return { ...input, contextData };
   }
 }

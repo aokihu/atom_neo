@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
+import { BusEvents } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
 
 const SUMMARIZE_PROMPT = `将以下对话历史总结为 500 字以内的摘要，保留关键信息、决策和进展。`;
@@ -10,7 +11,6 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
-  #logger: any;
 
   constructor(params: {
     name: string;
@@ -19,20 +19,18 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
     apiKey: string;
     model: string;
     baseUrl?: string;
-    logger?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
-    this.#logger = params.logger;
   }
 
   async doProcess(input: CompressFlowState): Promise<CompressFlowState> {
     if (input.mode !== "summarizing") return input;
 
     if (!input.summaryText || !this.#apiKey) {
-      this.#logger?.debug("compress-summarize: skipping, no text or apiKey");
+      this.report(BusEvents.Element.Data, { step: "skipping, no text or apiKey" });
       return { ...input, mode: "finalizing", summary: "" };
     }
 
@@ -49,10 +47,10 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
       });
 
       const summary = result.text.trim();
-      this.#logger?.debug("compress-summarize: generated", { summaryLen: summary.length });
+      this.report(BusEvents.Element.Data, { step: "generated", summaryLen: summary.length });
       return { ...input, mode: "finalizing", summary };
     } catch (err: any) {
-      this.#logger?.warn("compress-summarize: error", { error: err.message });
+      this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err.message });
       return { ...input, mode: "finalizing", summary: "" };
     }
   }

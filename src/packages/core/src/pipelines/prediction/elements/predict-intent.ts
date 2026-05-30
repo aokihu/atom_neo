@@ -1,7 +1,8 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { generateText, jsonSchema } from "ai";
+import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
+import { BusEvents } from "@atom-neo/shared";
 import type { IntentPredictionResult } from "@atom-neo/shared";
 import type { PredictionFlowState } from "./types";
 
@@ -19,7 +20,7 @@ const PREDICT_SYSTEM_PROMPT = `You are an intent classifier. Analyze the user's 
 
 When recent conversation history is provided in the prompt, use it to understand the context 
 of multi-turn conversations. A seemingly simple current message may actually be a follow-up 
-or progress check on a more complex ongoing task that was started earlier in the conversation.
+or progress check on more complex ongoing tasks that were started earlier in the conversation.
 
 Reply ONLY with JSON in this exact format:
 {"tool_tier":"basic or full","difficulty":"basic or balanced or advanced","reasoning":"brief explanation"}`;
@@ -57,16 +58,20 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
 
     const text = input.userMessage;
     if (!text) {
+      this.report(BusEvents.Element.Data, { step: "empty input, fallback" });
       return { ...input, mode: "routing", prediction: FALLBACK };
     }
 
     if (!this.#apiKey) {
+      this.report(BusEvents.Element.Data, { step: "no apiKey, fallback" });
       return { ...input, mode: "routing", prediction: FALLBACK };
     }
 
     try {
       const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
       const model = provider(this.#model);
+
+      this.report(BusEvents.Element.Data, { step: "classifying", userMsgLen: text.length });
 
       const result = await generateText({
         model,
@@ -81,20 +86,20 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
       const raw = result.text.trim();
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
+        this.report(BusEvents.Element.Data, { step: "no JSON in response, fallback" });
         return { ...input, mode: "routing", prediction: FALLBACK };
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        ...input,
-        mode: "routing",
-        prediction: {
-          toolTier: parsed.tool_tier === "full" ? "full" : "basic",
-          difficulty: (["basic", "balanced", "advanced"].includes(parsed.difficulty) ? parsed.difficulty : "balanced") as IntentPredictionResult["difficulty"],
-          reasoning: parsed.reasoning ?? "",
-        },
+      const prediction: IntentPredictionResult = {
+        toolTier: parsed.tool_tier === "full" ? "full" : "basic",
+        difficulty: (["basic", "balanced", "advanced"].includes(parsed.difficulty) ? parsed.difficulty : "balanced") as IntentPredictionResult["difficulty"],
+        reasoning: parsed.reasoning ?? "",
       };
-    } catch {
+      this.report(BusEvents.Element.Data, { step: "done", toolTier: prediction.toolTier, difficulty: prediction.difficulty, reasoning: prediction.reasoning });
+      return { ...input, mode: "routing", prediction };
+    } catch (err: any) {
+      this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });
       return { ...input, mode: "routing", prediction: FALLBACK };
     }
   }

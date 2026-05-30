@@ -21,7 +21,6 @@ export function contextCompressPipeline(deps: {
   baseUrl?: string;
   orchestrator: InternalTaskOrchestrator;
   sandbox: string;
-  logger: any;
 }) {
   return pipeline("context-compress")
     .source("compress-input", { session: deps.session })
@@ -29,11 +28,9 @@ export function contextCompressPipeline(deps: {
       apiKey: deps.apiKey,
       model: deps.model,
       baseUrl: deps.baseUrl,
-      logger: deps.logger,
     })
     .sink("compress-finalize", {
       orchestrator: deps.orchestrator,
       sandbox: deps.sandbox,
-      logger: deps.logger,
     });
 }

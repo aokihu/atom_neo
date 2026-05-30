@@ -41,6 +41,10 @@ const ConfigSchema = z.object({
   permission: z.object({
     whitelist: z.array(z.string()).default([]),
   }).default({ whitelist: [] }),
+  log: z.object({
+    level: z.enum(["debug", "info", "warn", "error"]).default("debug"),
+    ignore: z.array(z.enum(["debug", "info", "warn", "error"])).default([]),
+  }).default({ level: "debug", ignore: [] }),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

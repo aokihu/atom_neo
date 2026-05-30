@@ -1,8 +1,9 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+export type { LogLevel } from "@atom-neo/shared";
+import type { LogLevel } from "@atom-neo/shared";
 
 export type Mode = "core" | "tui" | "full";
-export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogMode = "console" | "pipe" | "file";
 
 export type BootArguments = {
@@ -12,6 +13,8 @@ export type BootArguments = {
   sandbox: string;
   logLevel: LogLevel;
   logIgnore: LogLevel[];
+  logLevelExplicit: boolean;
+  logIgnoreExplicit: boolean;
   logModes: LogMode[];
   logFile?: string;
   logPipePath?: string;
@@ -46,6 +49,12 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
   const modeExplicit = tokens?.some((t: any) =>
     t.kind === "option" && (t.name === "mode" || t.name === "m"),
   );
+  const logLevelExplicit = tokens?.some((t: any) =>
+    t.kind === "option" && t.name === "log-level",
+  ) ?? false;
+  const logIgnoreExplicit = tokens?.some((t: any) =>
+    t.kind === "option" && t.name === "log-ignore",
+  ) ?? false;
 
   return {
     mode: modeExplicit ? validateMode(values.mode as string) : undefined,
@@ -54,6 +63,8 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
     sandbox,
     logLevel: validateLogLevel(values["log-level"] as string),
     logIgnore: (values["log-ignore"] as string[]).map(validateLogLevel),
+    logLevelExplicit,
+    logIgnoreExplicit,
     logModes: (values.log as string[]).map(validateLogMode),
     logFile: values["log-file"] as string | undefined,
     logPipePath: values["log-pipepath"] as string | undefined,

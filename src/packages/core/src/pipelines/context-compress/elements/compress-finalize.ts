@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import { archiveMessages } from "../../../session/archiver";
 import type { CompressFlowState } from "./types";
@@ -7,7 +8,6 @@ import type { CompressFlowState } from "./types";
 export class CompressFinalizeElement extends BaseElement<CompressFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
   #sandbox: string;
-  #logger: any;
 
   constructor(params: {
     name: string;
@@ -15,12 +15,10 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator: InternalTaskOrchestrator;
     sandbox: string;
-    logger?: any;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
     this.#sandbox = params.sandbox;
-    this.#logger = params.logger;
   }
 
   async doProcess(input: CompressFlowState): Promise<PipelineResult> {
@@ -30,9 +28,9 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     if (input.archiveMessages.length > 0) {
       try {
         const path = archiveMessages(this.#sandbox, sessionId, input.archiveMessages);
-        this.#logger?.info("compress-finalize: archived", { path, count: input.archiveMessages.length });
+        this.report(BusEvents.Element.Data, { step: "archived", path, count: input.archiveMessages.length });
       } catch (err: any) {
-        this.#logger?.warn("compress-finalize: archive failed", { error: err.message });
+        this.report(BusEvents.Element.Data, { step: "archive failed", level: "warn", error: err.message });
       }
     }
 
@@ -42,7 +40,7 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     }
     const removed = before - (session.messages?.length ?? 0);
 
-    this.#logger?.debug("compress-finalize: messages cleaned", { removed });
+    this.report(BusEvents.Element.Data, { step: "messages cleaned", removed });
 
     if (input.summary) {
       const label = "[对话历史摘要]";

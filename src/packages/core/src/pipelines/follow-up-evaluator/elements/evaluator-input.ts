@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { EvaluatorFlowState } from "./types";
 
 const MAX_MESSAGES = 10;
@@ -27,6 +28,7 @@ export class EvaluatorInputElement extends BaseElement<any, EvaluatorFlowState> 
       .map(m => `${m.role}: ${(m.content ?? "").slice(0, MAX_MSG_LEN)}`)
       .join("\n");
 
+    this.report(BusEvents.Element.Data, { step: "done", msgCount: msgs.length, summaryLen: summary.length });
     return {
       mode: "analyzing",
       task,

@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
 
 const KEEP_COUNT = 20;
@@ -37,6 +38,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
 
+    this.report(BusEvents.Element.Data, { step: "done", totalMsgs: dialog.length, toCompress: toCompress.length, keep: keepCount });
     return {
       mode: "summarizing",
       task: input.task,

@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
 
@@ -10,6 +11,7 @@ export class LoadSystemPromptElement extends BaseElement<ConversationFlowState, 
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
+    this.report(BusEvents.Element.Data, { step: "done", promptLen: baseSystemPrompt.length });
     return { ...input, systemPrompt: baseSystemPrompt };
   }
 }

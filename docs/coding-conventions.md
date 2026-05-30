@@ -164,28 +164,18 @@ class MyElement {
 ## 10. Logging
 
 ```typescript
-// Log level: 1=essential, 2=debug, 3=trace (higher includes lower)
-// --log-level=N: only output logs where level <= N
-// Default message level = 2, default --log-level = 1
+// Log level: "debug" | "info" | "warn" | "error" (increasing severity)
+// --log-level=<level>: minimum level to output (default: debug)
+// --log-ignore=<level>: suppress specific levels (can repeat)
 
-// log(level, type, message, payload?)
-logger.log(1, "info", "task.created", { taskId, sessionId });
-logger.log(2, "debug", "element.passthrough", { name, reason });
-logger.log(3, "trace", "state.transition", { from, to });
+// Logger API:
+logger.debug("element.passthrough", { name, reason });
+logger.info("session.created", { sessionId });
+logger.warn("retry.attempt", { attempt });
+logger.error("pipeline.failed", { taskId, error: String(err) });
 
-// Convenience methods (level implied):
-logger.info("session.created", { sessionId });        // type=info,  level=1
-logger.warn("retry.attempt", { attempt });            // type=warn,  level=1
-logger.error("pipeline.failed", { taskId, error });   // type=error, level=1
-logger.debug("element.skipped", { name });            // type=debug, level=2
-logger.trace("flow.transition", { mode, next });      // type=trace, level=3
-
-// Log types determine message category/output format:
-//   error: critical failures (red, always logged)
-//   warn:  recoverable issues (yellow, level >= 1)
-//   info:  lifecycle events (default, level >= 1)
-//   debug: dev-time diagnostics (level >= 2)
-//   trace: fine-grained state tracking (level >= 3)
+// Log entry structure:
+// { level: LogLevel, message: string, timestamp: number, context?: Record<string, unknown> }
 
 // NEVER: console.log, console.error in production code
 // EXCEPTION: test files may use console.log for debugging

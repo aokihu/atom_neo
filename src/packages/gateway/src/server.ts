@@ -2,6 +2,11 @@ import { loadGatewayConfig } from "./config";
 import { JwtVerifier } from "./auth/jwt";
 import { RateLimiter } from "./ratelimit/limiter";
 import { CoreProxy } from "./proxy/core-proxy";
+import { Logger, LogHub, StdoutSink } from "@atom-neo/shared";
+
+const logHub = new LogHub();
+logHub.addSink(new StdoutSink());
+const logger = new Logger("info", (entry) => logHub.write(entry));
 
 export async function startGateway(): Promise<void> {
   const config = loadGatewayConfig();
@@ -12,7 +17,7 @@ export async function startGateway(): Promise<void> {
   });
   const proxy = new CoreProxy(config.coreUrl);
 
-  console.log(`Gateway starting on :${config.port} → ${config.coreUrl}`);
+  logger.info("gateway starting", { port: config.port, coreUrl: config.coreUrl });
 
   const server = Bun.serve({
     port: config.port,
@@ -41,7 +46,7 @@ export async function startGateway(): Promise<void> {
     },
   });
 
-  console.log(`Gateway ready on :${server.port}`);
+  logger.info("gateway ready", { port: server.port });
 }
 
 if (import.meta.main) {

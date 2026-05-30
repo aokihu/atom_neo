@@ -128,7 +128,6 @@ describe("context-compress DSL", () => {
       model: "test",
       orchestrator: makeMockOrchestrator(null),
       sandbox: "/tmp/test",
-      logger: null,
     }).build(bus);
 
     expect(pipeline.name).toBe("context-compress");

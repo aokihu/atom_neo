@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ConversationFlowState } from "./types";
 
@@ -30,10 +31,12 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     }
 
     if (!input.chainAction || !this.#buildChainPipeline) {
+      this.report(BusEvents.Element.Data, { step: "complete", chainAction: input.chainAction ?? "none" });
       return this.#complete(input);
     }
 
     if (input.chainAction === "more_tools") {
+      this.report(BusEvents.Element.Data, { step: "scheduling more_tools" });
       this.#orchestrator.scheduleConversation(
         input.task.sessionId,
         input.task.chatId,
@@ -48,17 +51,21 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
 
     if (input.chainAction === "follow_up") {
       if (this.#chainDepth >= MAX_FOLLOW_UP_DEPTH) {
+        this.report(BusEvents.Element.Data, { step: "follow_up depth exceeded, scheduling evaluator", depth: this.#chainDepth });
         this.#orchestrator.scheduleEvaluator(input.task.sessionId, input.task.chatId, input.task.parentTaskId ?? input.task.id);
         return this.#complete(input);
       }
       if (this.#chainDepth >= 3 && this.#chainDepth % 3 === 0) {
+        this.report(BusEvents.Element.Data, { step: "follow_up periodic evaluator", depth: this.#chainDepth });
         this.#orchestrator.scheduleEvaluator(input.task.sessionId, input.task.chatId, input.task.parentTaskId ?? input.task.id);
         return this.#complete(input);
       }
+      this.report(BusEvents.Element.Data, { step: "scheduling follow_up", depth: this.#chainDepth });
       this.#orchestrator.scheduleFollowUp(input.task.sessionId, input.task.chatId, input.task.id);
       return this.#complete(input);
     }
 
+    this.report(BusEvents.Element.Data, { step: "complete", chainAction: input.chainAction });
     return this.#complete(input);
   }
 

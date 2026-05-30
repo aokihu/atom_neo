@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
+import { BusEvents } from "@atom-neo/shared";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 
 const ANALYZE_SYSTEM_PROMPT = `You are a conversation health monitor. Analyze the recent conversation flow and classify:
@@ -31,7 +32,6 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
   #model: string;
   #baseUrl?: string;
   #maxTokens: number;
-  #logger: any;
 
   constructor(params: {
     name: string;
@@ -41,26 +41,24 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
     model: string;
     baseUrl?: string;
     maxTokens?: number;
-    logger?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
     this.#maxTokens = params.maxTokens ?? 512;
-    this.#logger = params.logger;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<EvaluatorFlowState> {
     if (input.mode !== "analyzing") return input;
 
     if (!input.recentSummary) {
-      this.#logger?.debug("evaluator-analyze: empty summary, fallback to healthy");
+      this.report(BusEvents.Element.Data, { step: "empty summary, fallback to healthy" });
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
 
     if (!this.#apiKey) {
-      this.#logger?.debug("evaluator-analyze: no apiKey, fallback to healthy");
+      this.report(BusEvents.Element.Data, { step: "no apiKey, fallback to healthy" });
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
 
@@ -69,10 +67,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
       const model = provider(this.#model);
 
       const prompt = `Recent conversation:\n${input.recentSummary}`;
-      this.#logger?.debug("evaluator-analyze: classifying", {
-        summaryLen: input.recentSummary.length,
-        promptPreview: prompt.slice(0, 200),
-      });
+      this.report(BusEvents.Element.Data, { step: "classifying", summaryLen: input.recentSummary.length, promptPreview: prompt.slice(0, 200) });
 
       const result = await generateText({
         model,
@@ -83,11 +78,11 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
       });
 
       const raw = result.text.trim();
-      this.#logger?.debug("evaluator-analyze: LLM response", { raw });
+      this.report(BusEvents.Element.Data, { step: "LLM response", raw: raw.slice(0, 500) });
 
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        this.#logger?.warn("evaluator-analyze: no JSON in response, fallback");
+        this.report(BusEvents.Element.Data, { step: "no JSON in response, fallback", level: "warn" });
         return { ...input, mode: "intervening", evaluation: FALLBACK };
       }
 
@@ -100,10 +95,10 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
         reason: parsed.reason ?? "",
       };
 
-      this.#logger?.debug("evaluator-analyze: classified", evaluation);
+      this.report(BusEvents.Element.Data, { step: "classified", evaluation });
       return { ...input, mode: "intervening", evaluation };
     } catch (err: any) {
-      this.#logger?.warn("evaluator-analyze: error, fallback", { error: err.message });
+      this.report(BusEvents.Element.Data, { step: "error, fallback", level: "warn", error: err.message });
       return { ...input, mode: "intervening", evaluation: FALLBACK };
     }
   }

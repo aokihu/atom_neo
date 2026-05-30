@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
 export class FormatSystemMessagesElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -15,6 +16,7 @@ export class FormatSystemMessagesElement extends BaseElement<ConversationFlowSta
     if (input.compiledAgentsPrompt) parts.push(input.compiledAgentsPrompt);
     if (input.contextData) parts.push(input.contextData);
 
+    this.report(BusEvents.Element.Data, { step: "done", systemLen: input.systemPrompt?.length ?? 0, agentsLen: input.compiledAgentsPrompt?.length ?? 0, contextLen: input.contextData?.length ?? 0 });
     return { ...input, systemText: parts.join("\n\n") };
   }
 }
