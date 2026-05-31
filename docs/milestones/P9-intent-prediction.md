@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 Conversation Pipeline 之前插入轻量级预测 Pipeline，用 basic 模型对用户意图做分类，输出工具集需求和任务难度。消除 `REQUEST_MORE_TOOLS` 的额外轮次，并为将来动态模型选择做好准备。
+在 Conversation Pipeline 之前插入轻量级预测 Pipeline，用 basic 模型对用户意图做分类，输出工具集需求、任务类型、上下文关联度。消除 `REQUEST_MORE_TOOLS` 的额外轮次，优化正式会话的上下文管理和工具分配。
 
 ## 架构
 
@@ -16,10 +16,10 @@ TaskEngine: getPipeline→null → pipelineBuilders["prediction"] → build + se
   │  (1) Prediction Pipeline — 非流式，结果不展示给用户
   ├── predict-input → predict-intent → predict-finalize
   │       │
-  │       ▼  输出: { toolTier, difficulty, reasoning }
+  │       ▼  输出: { toolTier, difficulty, taskIntent, contextRelevance, reasoning }
   │       │
   │       └── predict-finalize 内部：
-  │             ① 写入 session.pendingPrediction = { toolTier, difficulty }
+  │             ① 写入 session.pendingPrediction = { toolTier, difficulty, taskIntent, contextRelevance }
   │             ② createTaskItem({ pipeline:"conversation", source:INTERNAL,
   │                  parentTaskId: predictionTask.id })
   │             ③ queue.enqueue(convTask)
@@ -27,17 +27,18 @@ TaskEngine: getPipeline→null → pipelineBuilders["prediction"] → build + se
   │
   │  (2) TaskEngine 取到 conversation task:
   │       getPipeline→null → pipelineBuilders["conversation"](task)
-  │       → 读 session.pendingPrediction → 选 tools + 选 model
+  │       → 读 session.pendingPrediction → 选 tools + 选 model + 调节 context
   │       → build + setPipeline → 执行
   │
   │  (3) Conversation Pipeline — 流式，展示给用户
   └── collect-prompts → ... → stream-llm → parse-intents → check-follow-up → finalize
-          │                    ▲
-          │                    └── tools: 预测结果决定；model: 预测结果决定
-          │
-          │   parse-intents + check-follow-up 保留作为兜底
-          ▼
-      用户看到回复
+           │                    ▲
+           │                    └── tools: taskIntent 决定；model: difficulty 决定
+           │                    └── context window: contextRelevance 决定
+           │
+           │   parse-intents + check-follow-up 保留作为兜底
+           ▼
+       用户看到回复
 ```
 
 ### 关键设计决策
@@ -65,8 +66,31 @@ You are an intent classifier. Analyze the user's message and classify:
    - "balanced": multi-step tasks, code generation, moderate changes
    - "advanced": system design, architecture refactoring, complex debugging
 
-Reply with JSON: {"tool_tier":"...", "difficulty":"...", "reasoning":"brief explanation"}
+3. task_intent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation"
+   - "tool_execution": executing commands, querying APIs, manipulating files
+   - "creative_generation": writing long articles, generating code, composing text
+   - "knowledge_retrieval": searching memory, looking up documentation, recalling facts
+   - "conversation": casual chat, Q&A, brief explanations
+
+4. context_relevance: "standalone" | "follow_up" | "continuation"
+   - "standalone": new topic, unrelated to conversation history
+   - "follow_up": follows up on the previous response, needs full context
+   - "continuation": explicitly continuing a previously interrupted task
+
+Reply with JSON: {"tool_tier":"...", "difficulty":"...", "task_intent":"...", "context_relevance":"...", "reasoning":"brief explanation"}
 ```
+
+### 预测输出 → 正式会话参数
+
+| 预测字段 | 值 | 工具集 | memory search | context window |
+|---------|-----|--------|--------------|----------------|
+| **taskIntent** | `tool_execution` | full（12 tools） | 开启 | 保留全部 |
+| | `creative_generation` | 无工具 | 关闭 | 保留全部 |
+| | `knowledge_retrieval` | basic + 搜索类 | 开启 | 保留全部 |
+| | `conversation` | basic（不含 search_memory） | 关闭 | 保留全部 |
+| **contextRelevance** | `standalone` | — | — | 只保留最近 2 轮 |
+| | `follow_up` | — | — | 保留全部 |
+| | `continuation` | — | — | 保留全部 + 不 reset chainDepth |
 
 ### 模型选择策略
 
@@ -83,6 +107,8 @@ Reply with JSON: {"tool_tier":"...", "difficulty":"...", "reasoning":"brief expl
 | "basic" | `basic` (8 tools) | 读写、搜索、目录列表、基础记忆 |
 | "full" | `basic + advanced` (12 tools) | 额外包括 bash, cp, mv, traverse_memory |
 
+> **注意**：上述工具集是**上限**。最终传给 LLM 的工具还受 `taskIntent` 进一步约束。例如 `taskIntent = "creative_generation"` 时即使 `toolTier = "full"` 也不传任何工具。
+
 ## 组件
 
 ### Elements（3 个）
@@ -92,6 +118,33 @@ Reply with JSON: {"tool_tier":"...", "difficulty":"...", "reasoning":"brief expl
 | `predict-input` | source | 提取用户消息 + 对话上下文 |
 | `predict-intent` | transform | 调用 `generateText`（非流式）分类 |
 | `predict-finalize` | sink | 写 session → 建 conversation task → 入队 |
+
+### PredictionFlowState 类型
+
+```typescript
+type PredictionMode = "initial" | "predicting" | "routing";
+
+type PredictionFlowState = {
+  mode: PredictionMode;
+  task: any;
+  session: any;
+  userMessage: string;
+  contextMessages?: string;
+  prediction?: IntentPredictionResult;
+};
+```
+
+### IntentPredictionResult 类型
+
+```typescript
+type IntentPredictionResult = {
+  toolTier: "basic" | "full";
+  difficulty: "basic" | "balanced" | "advanced";
+  taskIntent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
+  contextRelevance: "standalone" | "follow_up" | "continuation";
+  reasoning: string;
+};
+```
 
 ### TaskEngine 扩展
 
@@ -129,42 +182,41 @@ class TaskEngine {
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
-| `task-factory.ts` | **修改** | parentTaskId 默认自引用 |
-| `task-engine.ts` | **修改** | 增加 pipelineBuilders 参数 + 延迟构建逻辑 |
-| `elements/predict-finalize.ts` | **新建** | 精简版 sink（§4） |
-| `elements/route-conversation.ts` | **删除** | 不再需要 |
-| `elements/types.ts` | **修改** | 更新 PredictionPipelineDeps |
-| `elements/index.ts` | **修改** | 导出 predict-finalize |
-| `prediction/index.ts` | **修改** | DSL sink 改名 |
-| `server.ts` | **修改** | 删 buildConversation；注册 pipelineBuilders；TaskCompleted +parentTaskId；TaskCompleted 写 session 时附加 pipeline + visible |
-| `collect-prompts.ts` | **修改** | filter `visible !== false` 消息 |
-| `types/session.ts` | **修改** | SessionMessage 新增 `pipeline?` + `visible?` 字段 |
-| `ws-client.ts` | **修改** | send() 按 parentTaskId 判断；无 fallback |
-| `useChat.ts` | **修改** | 删 send() 中 spinner 移除 |
-| `ChatView.tsx` | **修改** | 80ms 帧率 |
-| `prediction.test.ts` | **修改** | 更新测试 |
-| `task-engine.test.ts` | **新建** | pipelineBuilders 延迟构建测试 |
+| `prediction/elements/types.ts` | **修改** | 新增 `taskIntent`、`contextRelevance` 字段 |
+| `prediction/elements/predict-intent.ts` | **修改** | 更新 system prompt + 解析逻辑 |
+| `prediction/elements/predict-finalize.ts` | **修改** | 传递新字段到 session |
+| `prediction/elements/predict-input.ts` | **修改** | 无需改动（输入不变） |
+| `prediction/index.ts` | **修改** | 无需改动（deps 不变） |
+| `conversation/index.ts` | **修改** | 新增 `taskIntent`、`contextRelevance` 到 deps |
+| `collect-prompts.ts` | **修改** | 根据 `contextRelevance` 控制保留消息数 |
+| `collect-context.ts` | **修改** | 根据 `taskIntent` 控制 memory search |
+| `stream-llm.ts` | **修改** | 根据 `taskIntent` 过滤工具集 |
+| `server.ts` | **修改** | 从 session.pendingPrediction 读取新字段 |
+| `types/prediction.ts` (shared) | **修改** | 更新 `IntentPredictionResult` 类型 |
+| `prediction.test.ts` | **修改** | 更新测试用例 |
 
 ## 测试用例
 
-### 单元测试
+### 单元测试 — 完整维度
 
-| 测试场景 | 输入 | 期望 toolTier | 期望 difficulty |
-|----------|------|--------------|----------------|
-| 天气查询 | "帮我查一下杭州明天的天气" | full | balanced |
-| 运行命令 | "运行 npm install 安装依赖" | full | balanced |
-| docker 检查 | "检查系统有没有安装 docker" | full | balanced |
-| git 操作 | "从 github 克隆这个仓库" | full | balanced |
-| 批量文件 | "把 src 目录复制到 dist" | full | balanced |
-| 部署操作 | "部署这个项目到生产环境" | full | advanced |
-| 读文件 | "读一下 package.json" | basic | basic |
-| 搜索 | "搜索包含 TODO 的文件" | basic | basic |
-| 列出文件 | "列出当前目录下的所有文件" | basic | basic |
-| 简单修改 | "把 foo 改成 bar" | basic | basic |
-| 概念解释 | "什么是闭包" | basic | basic |
-| 多步骤编辑 | "先读 config，再根据配置修改代码" | basic | balanced |
-| 架构重构 | "设计一个微服务架构方案" | basic | advanced |
-| 空消息 | "" | basic | basic (fallback) |
+| 测试场景 | toolTier | difficulty | taskIntent | contextRelevance |
+|----------|----------|-----------|------------|-----------------|
+| 天气查询 | full | balanced | tool_execution | standalone |
+| 运行命令 | full | balanced | tool_execution | standalone |
+| docker 检查 | full | balanced | tool_execution | standalone |
+| git 操作 | full | balanced | tool_execution | standalone |
+| 批量文件 | full | balanced | tool_execution | standalone |
+| 部署操作 | full | advanced | tool_execution | standalone |
+| 读文件 | basic | basic | tool_execution | standalone |
+| 搜索 | basic | basic | knowledge_retrieval | standalone |
+| 列出文件 | basic | basic | tool_execution | standalone |
+| 写长文 | basic | balanced | creative_generation | standalone |
+| 生成代码 | basic | balanced | creative_generation | standalone |
+| 简单修改 | basic | basic | tool_execution | standalone |
+| 概念解释 | basic | basic | conversation | standalone |
+| 追问上一轮 | basic | basic | conversation | follow_up |
+| 继续上次任务 | basic | balanced | creative_generation | continuation |
+| 空消息 | basic | basic(?) | conversation(?) | standalone(?) |
 
 ### TaskEngine 测试
 
@@ -179,6 +231,8 @@ class TaskEngine {
 1. **完整流程** — POST 发送天气查询 → prediction → conversation 用 full tools → LLM 用 bash+curl 返回
 2. **降级** — 预测失败 → fallback basic+balanced → REQUEST_MORE_TOOLS 兜底
 3. **简单任务不浪费** — POST 读文件请求 → prediction basic+basic → 只用 basic tools
+4. **纯文本任务无工具** — POST 写长文请求 → taskIntent=creative_generation → 不传任何工具，LLM 不被工具干扰
+5. **上下文修剪** — 重 session 中猜新话题 → contextRelevance=standalone → 只传最近 2 轮，LLM 响应速度提升
 
 ## 风险与缓解
 
@@ -188,13 +242,17 @@ class TaskEngine {
 | 预测增加每次对话 1 次 LLM 调用 | 用 basic 模型（最轻量），非 stream 模式返回更快 |
 | 预测失败导致整体流程阻塞 | try/catch fallback 到默认值 |
 | parentTaskId 改动影响已有逻辑 | 单行改动，所有现有测试通过即为安全 |
+| contextRelevance 误判为 standalone | 极端情况只少传几轮消息，不影响对话正确性 |
 
 ## 验收标准
 
-1. [ ] Prediction Pipeline 正确分类（14 个测试场景）
+1. [ ] Prediction Pipeline 正确分类全部 16 个测试场景
 2. [ ] 高级工具场景不出现 REQUEST_MORE_TOOLS 额外轮次
 3. [ ] 简单任务不加载高级工具
-4. [ ] 预测失败优雅降级，不影响核心对话
-5. [ ] TUI spinner 在预测期间保持显示，文本到达后隐藏
-6. [ ] TUI 按 parentTaskId 正确判断会话完成
-7. [ ] 所有已有测试通过
+4. [ ] 纯文本生成任务（creative_generation）不传工具
+5. [ ] standalone 模式下 context 被正确修剪
+6. [ ] follow_up / continuation 模式下 context 完整保留
+7. [ ] 预测失败优雅降级，不影响核心对话
+8. [ ] TUI spinner 在预测期间保持显示，文本到达后隐藏
+9. [ ] TUI 按 parentTaskId 正确判断会话完成
+10. [ ] 所有已有测试通过

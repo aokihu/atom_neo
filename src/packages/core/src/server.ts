@@ -100,6 +100,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
       tools: [...basic, ...advanced],
       getCompiledPrompt, maxTokens, maxSteps, memory,
+      taskIntent: "tool_execution",
+      contextRelevance: "continuation",
     }).build(bus);
     setPipeline(chainTaskId, pipeline);
   };
@@ -120,6 +122,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       const prediction = session.pendingPrediction ?? {
         toolTier: "basic",
         difficulty: "balanced",
+        taskIntent: "conversation",
+        contextRelevance: "standalone",
         reasoning: "default",
       };
 
@@ -147,6 +151,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         maxTokens,
         maxSteps,
         memory,
+        taskIntent: prediction.taskIntent,
+        contextRelevance: prediction.contextRelevance,
       }).build(bus);
     },
 

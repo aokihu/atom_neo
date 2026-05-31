@@ -1,7 +1,7 @@
 import { BaseService } from "./base-service";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 
 export type MemoryNode = {
   id: string;
@@ -243,13 +243,5 @@ export class MemoryService extends BaseService {
     this.#db.run(
       `UPDATE nodes SET weight = MAX(0, weight - (julianday('now') - julianday(created_at / 1000.0, 'unixepoch')) * 1)`,
     );
-
-    // Cleanup: remove nodes with weight <= 0
-    const dead = this.#db.prepare("SELECT id FROM nodes WHERE weight <= 0").all() as Array<{ id: string }>;
-    for (const row of dead) {
-      this.#db.run("DELETE FROM edges WHERE source_id = ? OR target_id = ?", [row.id, row.id]);
-      this.#db.run("DELETE FROM nodes WHERE id = ?", [row.id]);
-      try { unlinkSync(`${this.#nodesPath}/${row.id}.txt`); } catch { /* skip */ }
-    }
   }
 }

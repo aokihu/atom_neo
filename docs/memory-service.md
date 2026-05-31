@@ -90,8 +90,12 @@ class MemoryService extends BaseService {
 |------|----------|
 | 新建记忆 | weight = 100 |
 | 搜索命中 | weight += 5（上限 100） |
+| 注入上下文 | weight += 5（上限 100） |
+| 上下文卸载 (count ≥ 5) | weight -= 10（下限 0） |
 | 每日衰减 | weight -= 1（下限 0） |
-| 权重 ≤ 0 | 删除记忆 + 清理文件 |
+| KEEP_MEMORY 意图 | weight += 5, access_count 重置为 0 |
+
+记忆不会被删除。weight ≤ 0 的记忆仍在数据库和文件系统中，仅搜索排名降至底部。
 
 **后台定时**：每 5 分钟 `setInterval` 执行一次衰减 + 清理。
 
@@ -152,7 +156,7 @@ LLM 回复: KEEP_MEMORY: mem:2d4bed
 
 ### 后台衰减
 
-每 5 分钟定时器：所有记忆每日 -1 权重，权重 ≤ 0 自动删除。
+每 5 分钟定时器：所有记忆每日 -1 权重。记忆不会被删除，weight ≤ 0 仅影响搜索排名。LLM 可通过 `[KEEP_MEMORY]` 重置 accessCount 并提升权重。
 
 ## 9. 记忆工具
 

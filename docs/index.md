@@ -40,6 +40,7 @@
 | [queue.md](./queue.md) | 双队列系统（ActiveQueue LIFO + WaitingQueue FIFO） | 理解任务调度 |
 | [runloop.md](./runloop.md) | TaskEngine 状态机 — Suspend/Resume/Complete 转换 | 理解任务生命周期 |
 | [future-features.md](./future-features.md) | 所有已设计但未实现的功能清单 | 设计时查，避免遗忘 |
+| **[pipelines/](./pipelines/)** | Pipeline 运行时规格文档 | 实现/调试 Pipeline |
 
 ## 通信与界面
 

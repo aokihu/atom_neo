@@ -44,16 +44,18 @@ export type ConversationPipelineDeps = {
   maxTokens?: number;
   maxSteps?: number;
   memory?: any;
+  taskIntent?: string;
+  contextRelevance?: string;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
   return pipeline("conversation")
-    .source("collect-prompts", { session: deps.session, task: deps.task })
+    .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
     .transform("load-system-prompt", {})
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
-    .transform("collect-context", { memory: deps.memory, sandbox: deps.task?.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit })
+    .transform("collect-context", { memory: deps.memory, sandbox: deps.task?.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.taskIntent })
     .transform("format-system-messages", {})
     .transform("format-user-messages", {})
     .transform("stream-llm", {
@@ -64,6 +66,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,
       maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,
+      taskIntent: deps.taskIntent,
     })
     .transform("parse-intents", {})
     .boundary("check-follow-up", { memory: deps.memory })

@@ -16,6 +16,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #maxTokens: number;
   #maxSteps: number;
   #providerOptions: Record<string, any>;
+  #taskIntent: string;
 
   constructor(params: {
     name: string;
@@ -28,6 +29,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     maxTokens?: number;
     maxSteps?: number;
     providerOptions?: Record<string, any>;
+    taskIntent?: string;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -37,6 +39,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
     this.#maxSteps = params.maxSteps ?? 10;
     this.#providerOptions = params.providerOptions ?? {};
+    this.#taskIntent = params.taskIntent ?? "conversation";
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -49,13 +52,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const userMessages = input.userMessages ?? [];
     const systemText = input.systemText ?? "";
 
-    this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: this.#tools.length });
+    const tools = this.#filterToolsByIntent();
+    this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: tools.length, taskIntent: this.#taskIntent });
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
 
     const aiTools: Record<string, any> = {};
-    for (const t of this.#tools) {
+    for (const t of tools) {
       aiTools[t.name] = tool({
         description: t.description,
         parameters: jsonSchema(t.inputSchema as any),
@@ -163,6 +167,24 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         mode: "executing",
         responseText: `Error: ${err?.message ?? String(err)}`,
       };
+    }
+  }
+
+  #filterToolsByIntent(): ToolDefinition[] {
+    switch (this.#taskIntent) {
+      case "creative_generation":
+        return [];
+      case "conversation": {
+        const excluded = new Set(["search_memory", "save_memory", "link_memory"]);
+        return this.#tools.filter(t => !excluded.has(t.name));
+      }
+      case "knowledge_retrieval": {
+        const allowed = new Set(["read", "grep", "ls", "tree", "search_memory"]);
+        return this.#tools.filter(t => allowed.has(t.name));
+      }
+      case "tool_execution":
+      default:
+        return this.#tools;
     }
   }
 }

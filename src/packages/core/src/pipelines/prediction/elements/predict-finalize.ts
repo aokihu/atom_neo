@@ -21,13 +21,15 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     const prediction = input.prediction ?? {
       toolTier: "basic",
       difficulty: "balanced",
+      taskIntent: "conversation",
+      contextRelevance: "standalone",
       reasoning: "fallback",
     };
 
     const session = input.session;
     session.pendingPrediction = prediction;
 
-    this.report(BusEvents.Element.Data, { step: "scheduling conversation", toolTier: prediction.toolTier, difficulty: prediction.difficulty });
+    this.report(BusEvents.Element.Data, { step: "scheduling conversation", toolTier: prediction.toolTier, difficulty: prediction.difficulty, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance });
 
     this.#orchestrator.scheduleConversation(
       session.sessionId,
@@ -39,7 +41,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     return {
       type: "complete",
       task: input.task,
-      output: `prediction: toolTier=${prediction.toolTier}, difficulty=${prediction.difficulty}, reasoning=${prediction.reasoning}`,
+      output: `prediction: toolTier=${prediction.toolTier}, difficulty=${prediction.difficulty}, taskIntent=${prediction.taskIntent}, contextRelevance=${prediction.contextRelevance}, reasoning=${prediction.reasoning}`,
     };
   }
 }

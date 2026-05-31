@@ -20,6 +20,8 @@ export type {
   FollowUpIntentRequest,
   ToolTier,
   DifficultyLevel,
+  TaskIntent,
+  ContextRelevance,
   IntentPredictionResult,
   MemoryNode,
   MemoryLink,

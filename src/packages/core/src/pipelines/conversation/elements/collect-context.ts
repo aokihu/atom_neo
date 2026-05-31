@@ -10,6 +10,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
   #session: any;
   #providerModel: string;
   #configContextLimit?: number;
+  #taskIntent: string;
 
   constructor(params: {
     name: string;
@@ -20,6 +21,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     session?: any;
     providerModel?: string;
     configContextLimit?: number;
+    taskIntent?: string;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#memory = params.memory;
@@ -27,6 +29,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     this.#session = params.session;
     this.#providerModel = params.providerModel ?? "";
     this.#configContextLimit = params.configContextLimit;
+    this.#taskIntent = params.taskIntent ?? "conversation";
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -40,7 +43,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     ].join("\n");
 
     let memoryCount = 0;
-    if (this.#memory) {
+    if (this.#memory && (this.#taskIntent === "tool_execution" || this.#taskIntent === "knowledge_retrieval")) {
       const text = input.task?.payload?.[0]?.data || "";
       const memories = (await this.#memory.search(text)) || [];
       for (const node of memories) {
@@ -74,7 +77,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
     }
 
-    this.report(BusEvents.Element.Data, { step: "done", memoryCount, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary });
+    this.report(BusEvents.Element.Data, { step: "done", memoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary });
     return { ...input, contextData };
   }
 }

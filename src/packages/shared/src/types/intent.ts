@@ -29,9 +29,14 @@ export type ToolTier = "basic" | "full";
 
 export type DifficultyLevel = "basic" | "balanced" | "advanced";
 
+export type TaskIntent = "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
+export type ContextRelevance = "standalone" | "follow_up" | "continuation";
+
 export type IntentPredictionResult = {
   toolTier: ToolTier;
   difficulty: DifficultyLevel;
+  taskIntent: TaskIntent;
+  contextRelevance: ContextRelevance;
   reasoning: string;
 };
 
