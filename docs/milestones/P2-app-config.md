@@ -1,4 +1,4 @@
-# P2: appConfig 接入 — 实施方案
+# P2: appConfig 接入 — 实施方案 ✅ 已完成
 
 ## 目标
 

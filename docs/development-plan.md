@@ -117,9 +117,9 @@
 
 ---
 
-## P7: TUI
+## P7: TUI ✅
 
-**预估**: 1 周 | **状态**: pending
+**预估**: 1 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
@@ -162,7 +162,7 @@
 | Spinner 数据驱动 | `src/packages/tui/src/hooks/useChat.ts` | 删 send() 中 spinner 移除 |
 | Spinner 帧率 | `src/packages/tui/src/components/ChatView.tsx` | 80ms 刷新 |
 | 单元测试 | `src/packages/core/src/pipelines/prediction/prediction.test.ts` | 预测 element 测试 |
-| 文档 | `docs/milestones/P9-intent-prediction.md` + `PLAN.md` | 详细实施方案 |
+| 文档 | `docs/milestones/P9-intent-prediction.md` | 详细实施方案 |
 
 ---
 
@@ -181,13 +181,13 @@
 | Server 注入 | `src/packages/core/src/server.ts` | 注册 evaluator pipelineBuilder；conversation builder 读 evaluatorSuggestion |
 | Session 扩展 | `src/packages/core/src/session/context.ts` + `src/packages/shared/src/types/session.ts` | evaluatorSuggestion / upgradeModel |
 | 单元测试 | `src/packages/core/src/pipelines/follow-up-evaluator/evaluator.test.ts` | evaluator element 测试 |
-| 文档 | `docs/milestones/P10-follow-up-evaluator.md` + `PLAN.md §10` | 详细设计文档 |
+| 文档 | `docs/milestones/P10-follow-up-evaluator.md` | 详细设计文档 |
 
 ---
 
-## P11: InternalTaskOrchestrator
+## P11: InternalTaskOrchestrator ✅
 
-**预估**: 0.5 周 | **状态**: planned
+**预估**: 0.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
@@ -201,9 +201,9 @@
 
 ---
 
-## P12: Context Compression Pipeline
+## P12: Context Compression Pipeline ✅
 
-**预估**: 0.5 周 | **状态**: planned
+**预估**: 0.5 周 | **状态**: completed
 
 | 任务 | 文件 | 说明 |
 |------|------|------|
@@ -233,11 +233,11 @@
 | P4 | Pipeline Builder | 7 | completed | 1.5 weeks |
 | P5 | Server & Protocol | 7 | completed | 1 week |
 | P6 | Gateway | 6 | completed | 0.5 weeks |
-| P7 | TUI | 6 | in_progress | 1 week |
+| P7 | TUI | 6 | completed | 1 week |
 | P8 | Integration | 3 | completed | 0.5 weeks |
 | P9 | Intent Prediction | 13 | completed | 1 week |
 | P10 | Follow-Up Evaluator | 10 | completed | 0.5 week |
-| P11 | InternalTaskOrchestrator | 7 | planned | 0.5 week |
-| P12 | Context Compression | 12 | planned | 0.5 week |
+| P11 | InternalTaskOrchestrator | 7 | completed | 0.5 week |
+| P12 | Context Compression | 12 | completed | 0.5 week |
 
-**Total: ~10 weeks**
+**Total: 13 phases, all completed**

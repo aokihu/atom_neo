@@ -1,4 +1,4 @@
-# P3: 拆分 format-messages + system 参数修复 — 实施方案
+# P3: 拆分 format-messages + system 参数修复 — 实施方案 ✅ 已完成
 
 ## 目标
 

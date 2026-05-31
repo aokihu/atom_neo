@@ -111,11 +111,9 @@
    25. milestones/P10-follow-up-evaluator.md → 长会话质量保障守护管道
    ✔ 已实施完成，v0.9.0
 
-⬇ P11：InternalTaskOrchestrator（计划中）
-   26. milestones/P11-internal-task-orchestrator.md → 统一管理内部 Task 创建与入队
-   ✔ 设计文档已完成，待审核
+⬇ P11：InternalTaskOrchestrator（已完成）
+    ✔ 统一管理内部 Task 创建与入队
 
-⬇ P12：Context Compression（计划中）
-   27. milestones/P12-context-compression.md → 长会话上下文自动压缩与归档
-   ✔ 设计文档已完成，待审核
+⬇ P12：Context Compression（已完成）
+    ✔ 长会话上下文自动压缩与归档
 ```

@@ -1,4 +1,4 @@
-# P1: streamText 流式输出 — 实施方案
+# P1: streamText 流式输出 — 实施方案 ✅ 已完成
 
 ## 目标
 
