@@ -14,6 +14,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #baseUrl?: string;
   #tools: ToolDefinition[];
   #maxTokens: number;
+  #maxSteps: number;
   #providerOptions: Record<string, any>;
 
   constructor(params: {
@@ -25,6 +26,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     baseUrl?: string;
     tools: ToolDefinition[];
     maxTokens?: number;
+    maxSteps?: number;
     providerOptions?: Record<string, any>;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
@@ -33,6 +35,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#baseUrl = params.baseUrl;
     this.#tools = params.tools;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
+    this.#maxSteps = params.maxSteps ?? 10;
     this.#providerOptions = params.providerOptions ?? {};
   }
 
@@ -70,7 +73,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         system: systemText || undefined,
         messages: userMessages as any,
         tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
-        maxSteps: 5,
+        maxSteps: this.#maxSteps,
         maxTokens: this.#maxTokens,
         allowSystemInMessages: true,
         providerOptions: this.#providerOptions,

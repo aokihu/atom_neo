@@ -82,6 +82,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const providerModel = `${resolved.provider}/${model}`;
   const configContextLimit: number | undefined = runtime?.appConfig?.providers?.[resolved.provider]?.contextLimit;
   const maxTokens: number = runtime?.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 5;
+  const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
   const memory = sm.get("memory");
   const getCompiledPrompt = () => {
     const compiler = sm.get<CompilerLike>("agents-compiler");
@@ -97,7 +99,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
       apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
       tools: [...basic, ...advanced],
-      getCompiledPrompt, maxTokens, memory,
+      getCompiledPrompt, maxTokens, maxSteps, memory,
     }).build(bus);
     setPipeline(chainTaskId, pipeline);
   };
@@ -143,6 +145,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         tools,
         getCompiledPrompt,
         maxTokens,
+        maxSteps,
         memory,
       }).build(bus);
     },
@@ -238,7 +241,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const taskQueue = new TaskQueue();
   const orchestrator = new InternalTaskOrchestrator(taskQueue);
 
-  const MAX_FOLLOW_UP_DEPTH = 5;
   bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: string } }) => {
     const p = e.payload;
     const session = sessionStore.get(p.sessionId);
@@ -252,7 +254,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
 
     const depth = session.chainDepth;
-    if (depth >= MAX_FOLLOW_UP_DEPTH) {
+    if (depth >= maxChainDepth) {
       logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });
       orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId);
       return;

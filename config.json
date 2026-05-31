@@ -30,5 +30,9 @@
   "log": {
     "level": "debug",
     "ignore": []
+  },
+  "conversation": {
+    "maxSteps": 10,
+    "maxChainDepth": 5
   }
 }

@@ -42,6 +42,7 @@ export type ConversationPipelineDeps = {
   toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
   maxTokens?: number;
+  maxSteps?: number;
   memory?: any;
 };
 
@@ -61,6 +62,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       baseUrl: deps.baseUrl,
       tools: deps.tools ?? [],
       maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,
+      maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,
     })
     .transform("parse-intents", {})
