@@ -19,6 +19,7 @@ export function startTui(params: {
     }).then(renderer => {
       const handleQuit = () => {
         renderer.destroy();
+        process.exit(0);
       };
 
       createRoot(renderer).render(
