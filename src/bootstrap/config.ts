@@ -46,9 +46,9 @@ const ConfigSchema = z.object({
     ignore: z.array(z.enum(["debug", "info", "warn", "error"])).default([]),
   }).default({ level: "debug", ignore: [] }),
   conversation: z.object({
-    maxSteps: z.number().int().min(1).default(10),
+    maxSteps: z.number().int().min(1).default(20),
     maxChainDepth: z.number().int().min(1).default(5),
-  }).default({ maxSteps: 10, maxChainDepth: 5 }),
+  }).default({ maxSteps: 20, maxChainDepth: 5 }),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

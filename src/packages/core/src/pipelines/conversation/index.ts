@@ -46,6 +46,8 @@ export type ConversationPipelineDeps = {
   memory?: any;
   taskIntent?: string;
   contextRelevance?: string;
+  sandbox?: string;
+  toolTier?: string;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -55,7 +57,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
-    .transform("collect-context", { memory: deps.memory, sandbox: deps.task?.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.taskIntent })
+    .transform("collect-context", { memory: deps.memory, sandbox: deps.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.taskIntent })
     .transform("format-system-messages", {})
     .transform("format-user-messages", {})
     .transform("stream-llm", {
@@ -67,6 +69,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,
       taskIntent: deps.taskIntent,
+      toolTier: deps.toolTier,
     })
     .transform("parse-intents", {})
     .boundary("check-follow-up", { memory: deps.memory })

@@ -17,6 +17,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #maxSteps: number;
   #providerOptions: Record<string, any>;
   #taskIntent: string;
+  #toolTier: string;
 
   constructor(params: {
     name: string;
@@ -30,6 +31,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     maxSteps?: number;
     providerOptions?: Record<string, any>;
     taskIntent?: string;
+    toolTier?: string;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -37,9 +39,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#baseUrl = params.baseUrl;
     this.#tools = params.tools;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
-    this.#maxSteps = params.maxSteps ?? 10;
+    this.#maxSteps = params.maxSteps ?? 20;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
+    this.#toolTier = params.toolTier ?? "basic";
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -158,7 +161,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         reasoningContent: String(reasoningContent),
         tokenUsage,
         intentRequestText,
-        chainAction: (finishReason === "length" || finishReason === "tool-calls") ? "follow_up" : undefined,
+        chainAction: finishReason === "length" ? "follow_up" : undefined,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
@@ -171,6 +174,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   }
 
   #filterToolsByIntent(): ToolDefinition[] {
+    if (this.#toolTier === "full") return this.#tools;
     switch (this.#taskIntent) {
       case "creative_generation":
         return [];

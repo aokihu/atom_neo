@@ -32,7 +32,7 @@
     "ignore": []
   },
   "conversation": {
-    "maxSteps": 10,
+    "maxSteps": 20,
     "maxChainDepth": 5
   }
 }

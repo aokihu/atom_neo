@@ -102,6 +102,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       getCompiledPrompt, maxTokens, maxSteps, memory,
       taskIntent: "tool_execution",
       contextRelevance: "continuation",
+      sandbox,
+      toolTier: "full",
     }).build(bus);
     setPipeline(chainTaskId, pipeline);
   };
@@ -153,6 +155,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         memory,
         taskIntent: prediction.taskIntent,
         contextRelevance: prediction.contextRelevance,
+        sandbox,
+        toolTier: prediction.toolTier,
       }).build(bus);
     },
 
