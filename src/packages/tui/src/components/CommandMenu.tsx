@@ -27,10 +27,10 @@ export function CommandMenu({ filter, active }: { filter: string; active: boolea
       backgroundColor={colors.bg.input}
     >
       {matches.map(cmd => (
-        <text key={cmd.name}>
+        <box key={cmd.name} flexDirection="row">
           <text fg={colors.accent.brand}>{cmd.name}</text>
           <text fg={colors.text.muted}>  {cmd.description}</text>
-        </text>
+        </box>
       ))}
     </box>
   );
