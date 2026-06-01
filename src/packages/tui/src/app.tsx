@@ -1,5 +1,5 @@
 import "@opentui/react/runtime-plugin-support";
-import { createCliRenderer } from "@opentui/core";
+import { createCliRenderer, type KeyEvent } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { App } from "./components/App";
 import type { ServerInfo } from "./types";
@@ -22,19 +22,22 @@ export function startTui(params: {
         process.exit(0);
       };
 
-      let lastSigintTime = 0;
-      let sigintTimer: ReturnType<typeof setTimeout> | null = null;
+      let lastPressTime = 0;
+      let pressTimer: ReturnType<typeof setTimeout> | null = null;
 
-      process.on("SIGINT", () => {
+      renderer.keyInput.on("keypress", (key: KeyEvent) => {
+        if (!key.ctrl || key.name !== "c") return;
+
         const now = Date.now();
-        if (lastSigintTime > 0 && now - lastSigintTime < 2000) {
-          if (sigintTimer) clearTimeout(sigintTimer);
+        if (lastPressTime > 0 && now - lastPressTime < 2000) {
+          if (pressTimer) clearTimeout(pressTimer);
           handleQuit();
           return;
         }
-        lastSigintTime = Date.now();
-        if (sigintTimer) clearTimeout(sigintTimer);
-        sigintTimer = setTimeout(() => { lastSigintTime = 0; }, 3000);
+
+        lastPressTime = Date.now();
+        if (pressTimer) clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => { lastPressTime = 0; }, 3000);
         process.stderr.write("\x1b[1m\x1b[33mPress Ctrl+C again within 2s to exit\x1b[0m\n");
       });
 
