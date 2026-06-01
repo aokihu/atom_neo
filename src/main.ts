@@ -1,10 +1,7 @@
-import { statSync, readFileSync } from "node:fs";
+import { statSync } from "node:fs";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
-
-const VERSION = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf-8")
-).version as string;
+import { VERSION } from "./version";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";

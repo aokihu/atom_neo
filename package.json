@@ -15,7 +15,7 @@
     "test": "bun test",
     "typecheck": "bun run --workspaces typecheck",
     "build": "bun run --workspaces build",
-    "build:bin": "mkdir -p dist && bun build ./src/main.ts --compile --outfile dist/atom --target bun"
+    "build:bin": "mkdir -p dist && bun -e 'const v=require(`./package.json`).version;require(`fs`).writeFileSync(`src/version.ts`,`export const VERSION = \"${v}\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun",
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",

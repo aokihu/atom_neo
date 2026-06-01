@@ -103,6 +103,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           finishReason = (chunk as any).finishReason ?? "";
           continue;
         }
+        if (chunk.type === "tool-call") {
+          const c = chunk as any;
+          this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, args: String(c.input ?? c.args).slice(0, 200) });
+          continue;
+        }
+        if (chunk.type === "tool-result") {
+          const c = chunk as any;
+          this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, result: String(c.output ?? c.result).slice(0, 300) });
+          continue;
+        }
         if (chunk.type !== "text-delta") continue;
 
         if (pastMarker) {
