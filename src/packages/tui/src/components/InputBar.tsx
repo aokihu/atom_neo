@@ -52,11 +52,11 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
   }, [onSend, onQuit]);
 
   return (
-    <box flexDirection="column-reverse">
+    <box>
       <box
-        height={showMenu ? 4 : 6}
+        height={6}
+        marginTop={1}
         marginLeft={0} marginRight={0} marginBottom={0}
-        marginTop={showMenu ? 0 : 1}
         padding={1}
         border={["left"]}
         borderColor={colors.accent.brand}
@@ -79,7 +79,18 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
           placeholderColor={colors.text.muted}
         />
       </box>
-      {showMenu && <CommandMenu filter={content} active={showMenu} />}
+      {showMenu && (
+        <box
+          position="absolute"
+          bottom={6}
+          left={0}
+          right={0}
+          zIndex={100}
+          backgroundColor={colors.bg.input}
+        >
+          <CommandMenu filter={content} active={showMenu} />
+        </box>
+      )}
     </box>
   );
 }
