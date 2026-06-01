@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useCallback } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useChat } from "../hooks/useChat";
 import { getTheme } from "../theme";
@@ -18,7 +18,7 @@ const ThemeContext = createContext<ThemeCtx>(getTheme());
 
 export function useTheme() { return useContext(ThemeContext); }
 
-export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }) {
+export function App({ url, serverInfo, onQuit }: { url: string; serverInfo: ServerInfo; onQuit?: () => void }) {
   const { width } = useTerminalDimensions();
   const { messages, send, tokenUsage } = useChat(url);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
@@ -31,7 +31,7 @@ export function App({ url, serverInfo }: { url: string; serverInfo: ServerInfo }
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" borderRight={showSidebar} borderColor={theme.colors.border.default} borderRightStyle="single">
             <ChatView messages={messages} />
-            <InputBar onSend={send} />
+            <InputBar onSend={send} onQuit={onQuit} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT} />}
         </box>

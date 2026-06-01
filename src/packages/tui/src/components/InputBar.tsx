@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useTheme } from "./App";
+import { CommandMenu } from "./CommandMenu";
 import type { TextareaRenderable, BorderCharacters } from "@opentui/core";
 
 const thinBorder: BorderCharacters = {
@@ -21,43 +22,64 @@ const keyBindings = [
   { name: "enter", shift: true, action: "newline" },
 ];
 
-export function InputBar({ onSend }: { onSend: (text: string) => void }) {
+export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; onQuit?: () => void }) {
   const { colors } = useTheme();
   const taRef = useRef<TextareaRenderable>(null);
   const [resetKey, setResetKey] = useState(0);
+  const [content, setContent] = useState("");
+
+  const showMenu = content.startsWith("/");
+
+  const handleContentChange = useCallback(() => {
+    const text = taRef.current?.plainText ?? "";
+    setContent(text);
+  }, []);
 
   const handleSubmit = useCallback(() => {
     const text = taRef.current?.plainText?.trim();
     if (!text) return;
+
+    if (text === "/quit") {
+      onQuit?.();
+      setContent("");
+      setResetKey(k => k + 1);
+      return;
+    }
+
     onSend(text);
+    setContent("");
     setResetKey(k => k + 1);
-  }, [onSend]);
+  }, [onSend, onQuit]);
 
   return (
-    <box
-      height={6}
-      marginTop={1}
-      marginLeft={0} marginRight={0} marginBottom={0}
-      padding={1}
-      border={["left"]}
-      borderColor={colors.accent.brand}
-      customBorderChars={thinBorder}
-      backgroundColor={colors.bg.input}
-    >
-      <textarea
-        key={resetKey}
-        ref={taRef}
-        placeholder="Message... (Shift+Enter for newline)"
-        initialValue=""
-        onSubmit={handleSubmit}
-        keyBindings={keyBindings}
-        focused
-        flexGrow={1}
+    <box flexDirection="column">
+      {showMenu && <CommandMenu filter={content} active={showMenu} />}
+      <box
+        height={6}
+        marginTop={1}
+        marginLeft={0} marginRight={0} marginBottom={0}
+        padding={1}
+        border={["left"]}
+        borderColor={colors.accent.brand}
+        customBorderChars={thinBorder}
         backgroundColor={colors.bg.input}
-        focusedBackgroundColor={colors.bg.input}
-        textColor={colors.text.primary}
-        placeholderColor={colors.text.muted}
-      />
+      >
+        <textarea
+          key={resetKey}
+          ref={taRef}
+          placeholder="Message... (Shift+Enter for newline)"
+          initialValue=""
+          onSubmit={handleSubmit}
+          onContentChange={handleContentChange}
+          keyBindings={keyBindings}
+          focused
+          flexGrow={1}
+          backgroundColor={colors.bg.input}
+          focusedBackgroundColor={colors.bg.input}
+          textColor={colors.text.primary}
+          placeholderColor={colors.text.muted}
+        />
+      </box>
     </box>
   );
 }

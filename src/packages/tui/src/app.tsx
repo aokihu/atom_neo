@@ -17,8 +17,12 @@ export function startTui(params: {
       backgroundColor: "#0d1117",
       onDestroy: () => resolve(),
     }).then(renderer => {
+      const handleQuit = () => {
+        renderer.destroy();
+      };
+
       createRoot(renderer).render(
-        <App url={params.url} serverInfo={params.serverInfo} />,
+        <App url={params.url} serverInfo={params.serverInfo} onQuit={handleQuit} />,
       );
     });
   });
