@@ -28,12 +28,17 @@ export function CommandMenu({ filter, active }: { filter: string; active: boolea
       borderColor={colors.decoration.subtle}
       backgroundColor={colors.bg.input}
     >
-      {matches.map(cmd => (
-        <box key={cmd.name} flexDirection="row">
-          <text fg={colors.accent.brand}>{cmd.name}</text>
-          <text fg={colors.text.muted}>  {cmd.description}</text>
-        </box>
-      ))}
+      {matches.map(cmd => {
+        const matched = cmd.name.slice(0, filter.length);
+        const rest = cmd.name.slice(filter.length);
+        return (
+          <box key={cmd.name} flexDirection="row">
+            <text fg={colors.accent.brand}>{matched}</text>
+            <text fg={colors.text.muted}>{rest}</text>
+            <text fg={colors.text.muted}>  {cmd.description}</text>
+          </box>
+        );
+      })}
     </box>
   );
 }

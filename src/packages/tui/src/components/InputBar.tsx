@@ -54,7 +54,7 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
   return (
     <box>
       <box
-        height={6}
+        height={5}
         marginTop={1}
         marginLeft={0} marginRight={0} marginBottom={0}
         padding={1}
@@ -82,7 +82,7 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
       {showMenu && (
         <box
           position="absolute"
-          bottom={6}
+          bottom={5}
           left={0}
           right={0}
           zIndex={100}
