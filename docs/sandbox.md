@@ -46,10 +46,31 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 
 | 文件/目录 | 用途 |
 |-----------|------|
-| `.atom/memory.sqlite` | 长期记忆数据库（SQLite + FTS5） |
+| `.atom/installed` | **首次运行标记** — 空文件，存在表示已完成安装向导 |
+| `.atom/memory/` | 记忆服务数据目录 |
+| `.atom/memory/memory.db` | 长期记忆数据库（SQLite + FTS5） |
+| `.atom/memory/nodes/` | 记忆节点存储（SHA256 命名） |
 | `.atom/compiled_prompts/` | 缓存的编译后提示词 |
+| `.atom/agents_meta.json` | 编译元数据追踪 |
 
 **规则**：除 `AGENTS.md` 和 `.env` 外，所有 Agent 运行时数据文件必须存储在 `.atom/` 下。
+
+### `.atom/installed` 标记文件
+
+首次启动时，若 `$SANDBOX/.atom/installed` 不存在，进入 Ink 交互式安装向导。向导完成后创建此空文件作为「已安装」标记，后续启动直接跳过向导。
+
+```typescript
+// src/bootstrap/first-run.ts
+export function isFirstRun(sandboxPath: string): boolean {
+  return !existsSync(`${sandboxPath}/.atom/installed`);
+}
+
+export function markInstalled(sandboxPath: string): void {
+  Bun.write(`${sandboxPath}/.atom/installed`, "");
+}
+```
+
+详见 [first-run-wizard.md](./first-run-wizard.md)。
 
 ## 4. `AGENTS.md` — 项目指引文件
 
@@ -91,14 +112,17 @@ src/main.ts
   ├── 2. loadEnv(args.sandbox)            → .env → process.env
   ├── 3. loadConfig(args.sandbox)         → config.json
   ├── 4. createLogger(args)               → Logger
-  ├── 5. initAtomDir(args.sandbox)        → 创建 .atom/
-  ├── 6. initAgentsMd(args.sandbox)       → 检查/创建 AGENTS.md
-  ├── 7. new RuntimeService({...})        → 统一环境入口
-  ├── 8. sm.register("runtime", runtime)  → ServiceManager 管理
-  └── 9. startCore({ port, host, logger, sm }) → HTTP 服务器
+  ├── 5. isFirstRun(args.sandbox)         → 检查 .atom/installed
+  │     ├─ 不存在 → runFirstRunWizard()   → Ink 交互向导
+  │     └─ 已存在 → 跳过
+  ├── 6. initAtomDir(args.sandbox)        → 创建 .atom/
+  ├── 7. initAgentsMd(args.sandbox)       → 检查/创建 AGENTS.md
+  ├── 8. new RuntimeService({...})        → 统一环境入口
+  ├── 9. sm.register() + sm.startAll()    → ServiceManager 管理
+  └── 10. startCore({ port, host, logger, sm }) → HTTP 服务器
 ```
 
-**v0.3.9 变化：** `setSandbox()` 已删除，sandbox 通过 `RuntimeService` 注入到工具工厂函数。
+**v0.11.x 变化：** 新增首次运行检测步骤，使用 `@atom-neo/first-run` 向导。
 
 ## 7. 模板文件
 

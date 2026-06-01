@@ -23,12 +23,17 @@ atom_neo/
 │   └── packages/
 │       ├── shared/           # Shared types, pipeline core, log system
 │       ├── core/             # Core HTTP + WebSocket server, task engine
+│       ├── setup-wizard/     # First-run Ink installation wizard (subprocess)
 │       ├── gateway/          # External gateway (auth, permission, proxy)
 │       └── tui/              # Terminal UI application
 │
 ├── sandbox/                   # Runtime workspace directory (gitignored)
 │   ├── config.json           # Model/TUI/Gateway config
 │   ├── .env                  # API keys (gitignored)
+│   ├── .atom/                # Agent runtime data
+│   │   ├── installed         # First-run marker (empty file)
+│   │   ├── memory/           # Memory service data
+│   │   └── compiled_prompts/ # Cached compiled prompts
 │   └── logs/                 # Log output
 │
 └── docs/                      # Development documentation
@@ -142,7 +147,28 @@ src/packages/core/
         └── index.ts
 ```
 
-## 4. Package: `gateway`
+## 4. Package: `setup-wizard`
+
+```text
+src/packages/setup-wizard/
+├── package.json
+├── tsconfig.json
+└── src/
+    ├── main.tsx              # Subprocess entry point (Ink render)
+    ├── components/
+    │   ├── SetupWizard.tsx   # Main state machine (step 0-5)
+    │   ├── StepProvider.tsx  # Provider selection
+    │   ├── StepApiKey.tsx    # API key input
+    │   ├── StepModel.tsx     # Model tier selection
+    │   ├── StepTheme.tsx     # TUI theme selection
+    │   ├── StepProject.tsx   # Project description
+    │   └── StepConfirm.tsx   # Summary + commit
+    └── types.ts
+```
+
+Launched as a subprocess by `src/bootstrap/first-run.ts` via `Bun.spawn`.
+
+## 5. Package: `gateway`
 
 ```text
 src/packages/gateway/
@@ -161,7 +187,7 @@ src/packages/gateway/
     └── core-proxy.ts
 ```
 
-## 5. Package: `tui`
+## 6. Package: `tui`
 
 ```text
 src/packages/tui/
@@ -182,7 +208,7 @@ src/packages/tui/
     └── status.tsx
 ```
 
-## 6. Workspace Root
+## 7. Workspace Root
 
 ```json
 // package.json (root)
@@ -192,6 +218,7 @@ src/packages/tui/
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
+    "src/packages/setup-wizard",
     "src/packages/gateway",
     "src/packages/tui"
   ],
@@ -205,7 +232,7 @@ src/packages/tui/
 }
 ```
 
-## 7. Package Dependencies
+## 8. Package Dependencies
 
 ```text
 shared/
@@ -216,6 +243,10 @@ core/
   Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/openai
   Depended on by: (none, loaded by main.ts)
 
+setup-wizard/
+  Dependencies: ink, ink-text-input, ink-select-input, react
+  Depended on by: (none, launched as subprocess by main.ts)
+
 gateway/
   Dependencies: shared
   Depended on by: (none, standalone service)
@@ -225,7 +256,7 @@ tui/
   Depended on by: (none, standalone application)
 ```
 
-## 8. Runtime Directories
+## 9. Runtime Directories
 
 ```text
 sandbox/                        # 工作目录（--sandbox 或默认 CWD）
@@ -233,8 +264,12 @@ sandbox/                        # 工作目录（--sandbox 或默认 CWD）
 ├── .env                       # API Keys（gitignored）
 ├── AGENTS.md                  # 项目开发指引（Agent 行为规范）
 ├── .atom/                     # Agent 运行时数据目录
-│   ├── memory.sqlite         # 长期记忆数据库
-│   └── compiled_prompts/     # 缓存编译后提示词
+│   ├── installed              # 首次运行标记（空文件）
+│   ├── memory/                # 记忆服务数据
+│   │   ├── memory.db          # 长期记忆数据库
+│   │   └── nodes/             # 记忆节点存储
+│   ├── compiled_prompts/      # 缓存编译后提示词
+│   └── agents_meta.json       # 编译元数据
 ├── logs/                      # 日志输出目录
 │   └── app.log
 └── ...                        # 用户项目文件

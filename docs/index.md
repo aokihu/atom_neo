@@ -13,6 +13,7 @@
 | [project-structure.md](./project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
 | [environment-setup.md](./environment-setup.md) | clone → 安装 → 启动 → 验证 | 第一天 |
 | [bootstrap.md](./bootstrap.md) | 启动序列、初始化顺序、依赖图 | 实现 server.ts |
+| [first-run-wizard.md](./first-run-wizard.md) | 首次运行 Ink 安装向导规格 | 实现首次启动流程 |
 
 ## 开发规范（编码时必查）
 

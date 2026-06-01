@@ -1,9 +1,10 @@
 {
   "name": "atom-neo",
-  "version": "0.10.6",
+  "version": "0.11.0",
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
+    "src/packages/setup-wizard",
     "src/packages/gateway",
     "src/packages/tui"
   ],
@@ -20,6 +21,7 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
     "@atom-neo/core": "workspace:*",
+    "@atom-neo/setup-wizard": "workspace:*",
     "@atom-neo/shared": "workspace:*",
     "@atom-neo/tui": "workspace:*",
     "@heroui/react": "^3.0.5",

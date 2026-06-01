@@ -7,6 +7,7 @@ import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";
 import { loadEnv } from "./bootstrap/env";
 import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
+import { isFirstRun, runFirstRunWizard, markInstalled } from "./bootstrap/first-run";
 import { RuntimeService } from "./services/runtime-service";
 import { ServiceManager } from "./services/service-manager";
 import { AgentsCompilerService } from "./services/agents-compiler";
@@ -58,14 +59,33 @@ export async function main(): Promise<void> {
   // Must set BEFORE AI SDK (via @atom-neo/core) is imported
   globalThis.AI_SDK_LOG_WARNINGS = false;
 
+  // --wizard subprocess: run setup wizard and exit
+  if (Bun.argv.includes("--wizard")) {
+    const sandboxIdx = Bun.argv.indexOf("--sandbox");
+    const wizardSandbox = sandboxIdx >= 0 ? Bun.argv[sandboxIdx + 1] ?? process.cwd() : process.cwd();
+    const { runWizard } = await import("@atom-neo/setup-wizard");
+    await runWizard(wizardSandbox);
+    return;
+  }
+
   // Bootstrap
   loadEnv(args.sandbox);
-  const appConfig = loadConfig(args.sandbox);
+  let appConfig = loadConfig(args.sandbox);
   if (!args.logLevelExplicit) args.logLevel = appConfig.log?.level ?? args.logLevel;
   if (!args.logIgnoreExplicit) args.logIgnore = appConfig.log?.ignore ?? args.logIgnore;
   const logger = createLogger(args);
   logger.info("booting", { mode: args.mode, sandbox: args.sandbox, port: args.port });
   logger.debug("log level active", { level: args.logLevel, ignore: args.logIgnore });
+
+  // First-Run Detection
+  if (isFirstRun(args.sandbox)) {
+    logger.info("first run detected, launching setup wizard");
+    await runFirstRunWizard(args.sandbox);
+    markInstalled(args.sandbox);
+    loadEnv(args.sandbox);
+    appConfig = loadConfig(args.sandbox);
+    if (!args.logLevelExplicit) args.logLevel = appConfig.log?.level ?? args.logLevel;
+  }
 
   initAtomDir(args.sandbox);
   initAgentsMd(args.sandbox);

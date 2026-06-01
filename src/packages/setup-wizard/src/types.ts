@@ -1,0 +1,58 @@
+export interface WizardState {
+  step: number;
+  provider: string;
+  apiKeyEnv: string;
+  apiKey: string;
+  models: string[];
+  customBaseUrl?: string;
+  profiles: {
+    advanced: string;
+    balanced: string;
+    basic: string;
+  };
+  theme: string;
+  projectDescription: string;
+}
+
+export const PROVIDERS: Record<string, { apiKeyEnv: string; models: string[]; baseUrl?: string }> = {
+  deepseek: {
+    apiKeyEnv: "DEEPSEEK_API_KEY",
+    models: ["deepseek-chat", "deepseek-reasoner"],
+  },
+  openai: {
+    apiKeyEnv: "OPENAI_API_KEY",
+    models: ["gpt-4o", "gpt-4o-mini", "o4-mini"],
+  },
+  custom: {
+    apiKeyEnv: "",
+    models: [],
+  },
+};
+
+export const THEMES = [
+  "github-dark",
+  "github-light",
+  "dracula",
+  "nord",
+  "tokyo-night",
+  "solarized-dark",
+  "monokai",
+] as const;
+
+export function initialState(): WizardState {
+  return {
+    step: 0,
+    provider: "deepseek",
+    apiKeyEnv: "DEEPSEEK_API_KEY",
+    apiKey: "",
+    models: ["deepseek-chat", "deepseek-reasoner"],
+    customBaseUrl: undefined,
+    profiles: {
+      advanced: "deepseek/deepseek-chat",
+      balanced: "deepseek/deepseek-chat",
+      basic: "deepseek/deepseek-chat",
+    },
+    theme: "github-dark",
+    projectDescription: "",
+  };
+}
