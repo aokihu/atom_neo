@@ -74,4 +74,4 @@ const result = await generateText({
 ### 5. 风险
 
 - `appConfig` 可选（config.json 可能不存在），默认值 1024 保持兼容
-- `transport.model` 配置当前已有生效（通过 `RuntimeService.apiKey` + server 硬编码的 `"deepseek-chat"`），后续可扩展为从 config 读取 model 选择
+- `transport.model` 配置当前已有生效（通过 `RuntimeService.apiKey` + server 硬编码的 `"deepseek-v4-flash"`），后续可扩展为从 config 读取 model 选择

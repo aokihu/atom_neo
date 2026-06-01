@@ -62,7 +62,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("format-user-messages", {})
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
-      model: deps.model ?? "deepseek-chat",
+      model: deps.model ?? "deepseek-v4-flash",
       baseUrl: deps.baseUrl,
       tools: deps.tools ?? [],
       maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,

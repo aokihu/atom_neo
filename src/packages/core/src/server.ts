@@ -71,7 +71,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const { port, host, logger, sm, runtime } = deps;
   const sandbox: string = runtime.sandbox ?? "";
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
-    provider: "deepseek", model: "deepseek-chat", apiKey: runtime?.apiKey ?? "",
+    provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
   };
   const apiKey: string = resolved.apiKey;
   const model: string = resolved.model;
@@ -135,7 +135,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         ? runtime.getResolvedModel(
             session.upgradeModel ? "advanced" : prediction.difficulty,
           )
-        : { provider: "deepseek", model: "deepseek-chat", apiKey, baseUrl, thinking: "disabled" as const };
+        : { provider: "deepseek", model: "deepseek-v4-flash", apiKey, baseUrl, thinking: "disabled" as const };
 
       return conversationPipeline({
         session,

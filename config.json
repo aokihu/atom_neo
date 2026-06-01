@@ -2,14 +2,14 @@
   "version": 2,
   "theme": "dark",
   "providerProfiles": {
-    "advanced": "deepseek/deepseek-chat",
-    "balanced": "deepseek/deepseek-chat",
-    "basic": "deepseek/deepseek-chat"
+    "advanced": "deepseek/deepseek-v4-flash",
+    "balanced": "deepseek/deepseek-v4-flash",
+    "basic": "deepseek/deepseek-v4-flash"
   },
   "providers": {
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
-      "models": ["deepseek-chat"],
+      "models": ["deepseek-v4-flash"],
       "thinking": "disabled",
       "contextLimit": 131072
     }

@@ -107,7 +107,7 @@ describe("prediction pipeline elements", () => {
       kind: "transform",
       bus,
       apiKey: "",
-      model: "deepseek-chat",
+      model: "deepseek-v4-flash",
     });
 
     const result = await el.doProcess({
@@ -131,7 +131,7 @@ describe("prediction pipeline elements", () => {
       kind: "transform",
       bus,
       apiKey: "sk-test",
-      model: "deepseek-chat",
+      model: "deepseek-v4-flash",
     });
 
     const result = await el.doProcess({
@@ -208,7 +208,7 @@ describe("prediction pipeline DSL", () => {
       session: { sessionId: "s1" },
       task: { id: "t1", payload: [{ data: "test" }] },
       apiKey: "sk-test",
-      model: "deepseek-chat",
+      model: "deepseek-v4-flash",
       orchestrator: makeMockOrchestrator(null),
     }).build(bus);
 

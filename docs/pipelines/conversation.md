@@ -106,7 +106,7 @@ LLM 输出 → text-delta chunks → fullStream 循环
 
 | 参数 | 来源 | 默认 |
 |------|------|------|
-| `model` | `runtime.getResolvedModel(difficulty).model` | `"deepseek-chat"` |
+| `model` | `runtime.getResolvedModel(difficulty).model` | `"deepseek-v4-flash"` |
 | `maxSteps` | `config.json → conversation.maxSteps` | `10` |
 | `maxTokens` | `config.json → transport.maxOutputTokens` | `4096` |
 | `tools` | prediction.toolTier 决定 basic/full | `[]` |

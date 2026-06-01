@@ -13,16 +13,16 @@
 
   // 模型档位：advanced/balanced/basic，格式 "provider/model"
   "providerProfiles": {
-    "advanced": "deepseek/deepseek-chat",
-    "balanced": "deepseek/deepseek-chat",
-    "basic": "deepseek/deepseek-reasoner"
+    "advanced": "deepseek/deepseek-v4-flash",
+    "balanced": "deepseek/deepseek-v4-flash",
+    "basic": "deepseek/deepseek-v4-pro"
   },
 
   // LLM 供应商配置
   "providers": {
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
-      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
       "baseUrl": "https://api.deepseek.com/v1",
       "thinking": "disabled",
       "contextLimit": 131072
@@ -56,7 +56,7 @@ CLI args (--port, --host, --sandbox)  >  config.json  >  默认值
 
 - CLI 只覆盖启动参数（port/host/sandbox/mode），不覆盖 config.json 内部字段
 - `.env` 用于存储 `DEEPSEEK_API_KEY` 等密钥，不参与 config 合并
-- `config.json` 不存在时，回退到默认值（deepseek/deepseek-chat）
+- `config.json` 不存在时，回退到默认值（deepseek/deepseek-v4-flash）
 
 ---
 
@@ -65,9 +65,9 @@ CLI args (--port, --host, --sandbox)  >  config.json  >  默认值
 ```typescript
 // src/bootstrap/config.ts
 const ProviderProfilesSchema = z.object({
-  advanced: z.string().default("deepseek/deepseek-chat"),
-  balanced: z.string().default("deepseek/deepseek-chat"),
-  basic: z.string().default("deepseek/deepseek-chat"),
+  advanced: z.string().default("deepseek/deepseek-v4-flash"),
+  balanced: z.string().default("deepseek/deepseek-v4-flash"),
+  basic: z.string().default("deepseek/deepseek-v4-flash"),
 });
 
 const ProviderDefinitionSchema = z.object({
@@ -98,17 +98,17 @@ export type AppConfig = z.infer<typeof ConfigSchema>;
 
 ```
 config.json
-  └─ providerProfiles.balanced = "deepseek/deepseek-chat"
+  └─ providerProfiles.balanced = "deepseek/deepseek-v4-flash"
        │
        ├─ provider = "deepseek"
-       ├─ model   = "deepseek-chat"
+       ├─ model   = "deepseek-v4-flash"
        └─ → providers["deepseek"].apiKeyEnv = "DEEPSEEK_API_KEY"
             → process.env.DEEPSEEK_API_KEY → apiKey
             → providers["deepseek"].baseUrl → baseUrl (optional)
 
 RuntimeService.getResolvedModel("balanced") → {
   provider: "deepseek",
-  model: "deepseek-chat",
+  model: "deepseek-v4-flash",
   apiKey: "sk-xxx",
   baseUrl: "https://api.deepseek.com/v1",  // optional
   thinking: "disabled",                     // "enabled" | "disabled" | "adaptive"
@@ -140,9 +140,9 @@ const providerOptions = {
   version: 2,
   theme: "dark",
   providerProfiles: {
-    advanced: "deepseek/deepseek-chat",
-    balanced: "deepseek/deepseek-chat",
-    basic: "deepseek/deepseek-chat",
+    advanced: "deepseek/deepseek-v4-flash",
+    balanced: "deepseek/deepseek-v4-flash",
+    basic: "deepseek/deepseek-v4-flash",
   },
   providers: {},
   transport: { maxOutputTokens: 4096 },
@@ -183,7 +183,7 @@ runtime.appConfig;    // 完整配置对象
 
 // 新式访问
 const m = runtime.getResolvedModel("balanced");
-// → { provider: "deepseek", model: "deepseek-chat", apiKey: "sk-xxx" }
+// → { provider: "deepseek", model: "deepseek-v4-flash", apiKey: "sk-xxx" }
 ```
 
 ---

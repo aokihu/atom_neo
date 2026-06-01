@@ -13,7 +13,7 @@ const mockRuntime = {
   host: "127.0.0.1",
   appConfig: null,
   maxTokens: 4096,
-  getResolvedModel: () => ({ provider: "deepseek", model: "deepseek-chat", apiKey: "" }),
+  getResolvedModel: () => ({ provider: "deepseek", model: "deepseek-v4-flash", apiKey: "" }),
 };
 
 const mockSm = {

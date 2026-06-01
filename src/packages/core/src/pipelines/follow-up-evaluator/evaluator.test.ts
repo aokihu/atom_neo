@@ -66,7 +66,7 @@ describe("evaluator-analyze", () => {
     const Ctor = resolveElement("evaluator-analyze");
     const el = new Ctor({
       name: "evaluator-analyze", kind: "transform", bus,
-      apiKey: "", model: "deepseek-chat",
+      apiKey: "", model: "deepseek-v4-flash",
     });
 
     const result = await el.doProcess({
@@ -84,7 +84,7 @@ describe("evaluator-analyze", () => {
     const Ctor = resolveElement("evaluator-analyze");
     const el = new Ctor({
       name: "evaluator-analyze", kind: "transform", bus,
-      apiKey: "sk-test", model: "deepseek-chat",
+      apiKey: "sk-test", model: "deepseek-v4-flash",
     });
 
     const result = await el.doProcess({
@@ -193,7 +193,7 @@ describe("follow-up-evaluator pipeline DSL", () => {
       session: { sessionId: "s1" },
       task: { id: "t1" },
       apiKey: "sk-test",
-      model: "deepseek-chat",
+      model: "deepseek-v4-flash",
       orchestrator: makeMockOrchestrator(null),
     }).build(bus);
 

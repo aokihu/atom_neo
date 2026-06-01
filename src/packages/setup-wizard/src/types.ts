@@ -17,7 +17,7 @@ export interface WizardState {
 export const PROVIDERS: Record<string, { apiKeyEnv: string; models: string[]; baseUrl?: string }> = {
   deepseek: {
     apiKeyEnv: "DEEPSEEK_API_KEY",
-    models: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
   },
   openai: {
     apiKeyEnv: "OPENAI_API_KEY",
@@ -45,12 +45,12 @@ export function initialState(): WizardState {
     provider: "deepseek",
     apiKeyEnv: "DEEPSEEK_API_KEY",
     apiKey: "",
-    models: ["deepseek-chat", "deepseek-reasoner"],
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
     customBaseUrl: undefined,
     profiles: {
-      advanced: "deepseek/deepseek-chat",
-      balanced: "deepseek/deepseek-chat",
-      basic: "deepseek/deepseek-chat",
+      advanced: "deepseek/deepseek-v4-flash",
+      balanced: "deepseek/deepseek-v4-flash",
+      basic: "deepseek/deepseek-v4-flash",
     },
     theme: "github-dark",
     projectDescription: "",

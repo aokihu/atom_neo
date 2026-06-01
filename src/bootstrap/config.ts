@@ -2,9 +2,9 @@ import { z } from "zod";
 import { readFileSync, existsSync } from "node:fs";
 
 const ProviderProfilesSchema = z.object({
-  advanced: z.string().default("deepseek/deepseek-chat"),
-  balanced: z.string().default("deepseek/deepseek-chat"),
-  basic: z.string().default("deepseek/deepseek-chat"),
+  advanced: z.string().default("deepseek/deepseek-v4-flash"),
+  balanced: z.string().default("deepseek/deepseek-v4-flash"),
+  basic: z.string().default("deepseek/deepseek-v4-flash"),
 });
 
 const ProviderDefinitionSchema = z.object({
@@ -20,9 +20,9 @@ const ConfigSchema = z.object({
   version: z.literal(2).default(2),
   theme: z.string().default("dark"),
   providerProfiles: ProviderProfilesSchema.default({
-    advanced: "deepseek/deepseek-chat",
-    balanced: "deepseek/deepseek-chat",
-    basic: "deepseek/deepseek-chat",
+    advanced: "deepseek/deepseek-v4-flash",
+    balanced: "deepseek/deepseek-v4-flash",
+    basic: "deepseek/deepseek-v4-flash",
   }),
   providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
   transport: z.object({

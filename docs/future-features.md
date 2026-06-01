@@ -42,7 +42,7 @@
 | 功能 | 说明 | 优先级 |
 |------|------|--------|
 | **多 Provider 支持** | 支持 OpenAI（reasoningEffort）、Gemini（thinkingConfig）等 provider 的动态模型选择 | 中 |
-| **模型选择从 config 读取** | `transport.model` 当前生效但 server 硬编码 `deepseek-chat`，改为从 config 读取 | 低 |
+| **模型选择从 config 读取** | `transport.model` 当前生效但 server 硬编码 `deepseek-v4-flash`，改为从 config 读取 | 低 |
 
 ---
 

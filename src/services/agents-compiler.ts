@@ -154,7 +154,7 @@ export class AgentsCompilerService extends BaseService {
 
   async #compileWithLLM(raw: string): Promise<string> {
     const provider = createDeepSeek({ apiKey: this.#runtime.apiKey });
-    const model = provider("deepseek-chat");
+    const model = provider("deepseek-v4-flash");
 
     const thinking = this.#runtime.appConfig?.providers?.deepseek?.thinking ?? "disabled";
     const providerOptions = { deepseek: { thinking: { type: thinking } } };

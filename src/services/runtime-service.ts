@@ -55,7 +55,7 @@ export class RuntimeService {
 
   getResolvedModel(level: ProfileLevel = "balanced"): ResolvedModel {
     const profiles = this.#appConfig?.providerProfiles ?? {};
-    const profileId: string = profiles[level] ?? "deepseek/deepseek-chat";
+    const profileId: string = profiles[level] ?? "deepseek/deepseek-v4-flash";
 
     const sepIndex = profileId.indexOf("/");
     const provider = sepIndex >= 0 ? profileId.slice(0, sepIndex) : "deepseek";

@@ -236,7 +236,7 @@ SetupWizard (主控组件, useReducer 管理状态)
 ```
 
 - 默认选中 DeepSeek
-- 选择 DeepSeek → `apiKeyEnv = "DEEPSEEK_API_KEY"`, models: `["deepseek-chat", "deepseek-reasoner"]`
+- 选择 DeepSeek → `apiKeyEnv = "DEEPSEEK_API_KEY"`, models: `["deepseek-v4-flash", "deepseek-v4-pro"]`
 - 选择 OpenAI → `apiKeyEnv = "OPENAI_API_KEY"`, models: `["gpt-4o", "gpt-4o-mini"]`
 - 选择 Custom → 额外要求输入 `baseUrl`，`apiKeyEnv` 和 `models` 由用户自定义
 
@@ -267,15 +267,15 @@ SetupWizard (主控组件, useReducer 管理状态)
 ║  Model Configuration                  ║
 ║                                       ║
 ║  Advanced (complex tasks):            ║
-║  ● deepseek-chat                      ║
-║    deepseek-reasoner                  ║
+║  ● deepseek-v4-flash                      ║
+║    deepseek-v4-pro                  ║
 ║                                       ║
 ║  Balanced (daily use):                ║
-║  ● deepseek-chat                      ║
-║    deepseek-reasoner                  ║
+║  ● deepseek-v4-flash                      ║
+║    deepseek-v4-pro                  ║
 ║                                       ║
 ║  Basic (quick tasks):                 ║
-║  ● deepseek-chat                      ║
+║  ● deepseek-v4-flash                      ║
 ║                                       ║
 ║  Tab to switch, Enter to confirm      ║
 ╚═══════════════════════════════════════╝
@@ -334,9 +334,9 @@ SetupWizard (主控组件, useReducer 管理状态)
 ║                                       ║
 ║  Provider:    DeepSeek                ║
 ║  API Key:     sk-****...****          ║
-║  Advanced:    deepseek-chat           ║
-║  Balanced:    deepseek-chat           ║
-║  Basic:       deepseek-chat           ║
+║  Advanced:    deepseek-v4-flash           ║
+║  Balanced:    deepseek-v4-flash           ║
+║  Basic:       deepseek-v4-flash           ║
 ║  Theme:       github-dark             ║
 ║  Project:     A React web app...      ║
 ║                                       ║
@@ -411,7 +411,7 @@ export interface WizardState {
   models: string[];             // Provider 可用模型列表
   customBaseUrl?: string;       // Custom provider 的 baseUrl
   profiles: {                   // 模型档位配置
-    advanced: string;           // "deepseek/deepseek-chat"
+    advanced: string;           // "deepseek/deepseek-v4-flash"
     balanced: string;
     basic: string;
   };
