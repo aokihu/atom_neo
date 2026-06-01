@@ -23,7 +23,9 @@ export function CommandMenu({ filter, active }: { filter: string; active: boolea
   return (
     <box
       flexDirection="column"
-      paddingLeft={2} paddingRight={1} paddingTop={0} paddingBottom={0}
+      paddingLeft={2} paddingRight={1} paddingTop={1} paddingBottom={1}
+      border={["left"]}
+      borderColor={colors.decoration.subtle}
       backgroundColor={colors.bg.input}
     >
       {matches.map(cmd => (
