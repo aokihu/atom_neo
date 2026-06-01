@@ -35,8 +35,13 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
 
+    const now = new Date();
+    const tzOffset = -now.getTimezoneOffset() / 60;
+    const tz = `UTC${tzOffset >= 0 ? '+' : ''}${tzOffset}`;
+    const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
     let contextData = [
-      `Current Time: ${new Date().toISOString()}`,
+      `Current Time: ${ts} ${tz}`,
       `cwd: ${this.#cwd}`,
       `OS: ${process.platform} ${process.arch}`,
       `All file paths are relative to cwd.`,

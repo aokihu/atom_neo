@@ -158,7 +158,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         reasoningContent: String(reasoningContent),
         tokenUsage,
         intentRequestText,
-        chainAction: finishReason === "length" ? "follow_up" : undefined,
+        chainAction: (finishReason === "length" || finishReason === "tool-calls") ? "follow_up" : undefined,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
