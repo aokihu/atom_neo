@@ -52,12 +52,11 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
   }, [onSend, onQuit]);
 
   return (
-    <box flexDirection="column">
-      {showMenu && <CommandMenu filter={content} active={showMenu} />}
+    <box flexDirection="column-reverse">
       <box
-        height={6}
-        marginTop={1}
+        height={showMenu ? 4 : 6}
         marginLeft={0} marginRight={0} marginBottom={0}
+        marginTop={showMenu ? 0 : 1}
         padding={1}
         border={["left"]}
         borderColor={colors.accent.brand}
@@ -67,7 +66,7 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
         <textarea
           key={resetKey}
           ref={taRef}
-          placeholder="Message... (Shift+Enter for newline)"
+          placeholder="Message... (Shift+Enter for newline, / for commands)"
           initialValue=""
           onSubmit={handleSubmit}
           onContentChange={handleContentChange}
@@ -80,6 +79,7 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
           placeholderColor={colors.text.muted}
         />
       </box>
+      {showMenu && <CommandMenu filter={content} active={showMenu} />}
     </box>
   );
 }

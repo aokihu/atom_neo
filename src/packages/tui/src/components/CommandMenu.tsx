@@ -23,17 +23,14 @@ export function CommandMenu({ filter, active }: { filter: string; active: boolea
   return (
     <box
       flexDirection="column"
-      marginLeft={0} marginRight={0}
-      padding={1}
-      borderStyle="single"
-      borderColor={colors.accent.brand}
-      backgroundColor={colors.bg.codeBlock}
+      paddingLeft={2} paddingRight={1} paddingTop={0} paddingBottom={0}
+      backgroundColor={colors.bg.input}
     >
       {matches.map(cmd => (
-        <box key={cmd.name} paddingLeft={1} paddingRight={2}>
+        <text key={cmd.name}>
           <text fg={colors.accent.brand}>{cmd.name}</text>
-          <text fg={colors.text.secondary}>  {cmd.description}</text>
-        </box>
+          <text fg={colors.text.muted}>  {cmd.description}</text>
+        </text>
       ))}
     </box>
   );
