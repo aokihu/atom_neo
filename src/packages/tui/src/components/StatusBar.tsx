@@ -1,6 +1,6 @@
 import { useTheme } from "./App";
 
-export function StatusBar({ hint }: { hint?: string | null }) {
+export function StatusBar() {
   const { colors } = useTheme();
 
   return (
@@ -9,11 +9,7 @@ export function StatusBar({ hint }: { hint?: string | null }) {
         <text fg={colors.accent.brand}><strong>atom</strong></text>
         <text fg={colors.text.secondary}>neo</text>
       </box>
-      {hint ? (
-        <text fg={colors.status.warning}>{hint}</text>
-      ) : (
-        <text fg={colors.status.success}>● ready</text>
-      )}
+      <text fg={colors.status.success}>● ready</text>
     </box>
   );
 }

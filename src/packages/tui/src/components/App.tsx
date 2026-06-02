@@ -5,9 +5,11 @@ import { getTheme } from "../theme";
 import type { ServerInfo, ThemeColors } from "../types";
 import { SyntaxStyle } from "@opentui/core";
 import { StatusBar } from "./StatusBar";
+import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
 import { Sidebar } from "./Sidebar";
+import type { Message } from "../types";
 
 const SIDEBAR_MIN_WIDTH = 90;
 const FALLBACK_CONTEXT_LIMIT = 131_072;
@@ -18,6 +20,10 @@ const ThemeContext = createContext<ThemeCtx>(getTheme());
 
 export function useTheme() { return useContext(ThemeContext); }
 
+function isProcessing(msgs: Message[]): boolean {
+  return msgs.some(m => m.role === "thinking" || (m.role === "tool" && m.state === "running"));
+}
+
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
   const { messages, send, tokenUsage } = useChat(url);
@@ -27,11 +33,12 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
   return (
     <ThemeContext.Provider value={theme}>
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
-        <StatusBar hint={exitHint} />
+        <StatusBar />
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" borderRight={showSidebar} borderColor={theme.colors.border.default} borderRightStyle="single">
             <ChatView messages={messages} />
             <InputBar onSend={send} onQuit={onQuit} />
+            <StatusLine hint={exitHint} processing={isProcessing(messages)} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT} />}
         </box>
