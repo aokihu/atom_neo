@@ -4,7 +4,7 @@ export function StatusLine({ hint, processing }: { hint?: string | null; process
   const { colors } = useTheme();
 
   return (
-    <box height={1} paddingLeft={2} paddingRight={2} backgroundColor={colors.bg.input}>
+    <box height={1} paddingLeft={2} paddingRight={2}>
       {processing ? (
         <text fg={colors.status.warning}>⏳ processing...</text>
       ) : hint ? (
