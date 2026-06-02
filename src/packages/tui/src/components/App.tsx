@@ -18,7 +18,7 @@ const ThemeContext = createContext<ThemeCtx>(getTheme());
 
 export function useTheme() { return useContext(ThemeContext); }
 
-export function App({ url, serverInfo, onQuit }: { url: string; serverInfo: ServerInfo; onQuit?: () => void }) {
+export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
   const { messages, send, tokenUsage } = useChat(url);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
@@ -27,7 +27,7 @@ export function App({ url, serverInfo, onQuit }: { url: string; serverInfo: Serv
   return (
     <ThemeContext.Provider value={theme}>
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
-        <StatusBar />
+        <StatusBar hint={exitHint} />
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" borderRight={showSidebar} borderColor={theme.colors.border.default} borderRightStyle="single">
             <ChatView messages={messages} />

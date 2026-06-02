@@ -1,6 +1,7 @@
 import "@opentui/react/runtime-plugin-support";
 import { createCliRenderer, type KeyEvent } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import React, { useState } from "react";
 import { App } from "./components/App";
 import type { ServerInfo } from "./types";
 
@@ -24,6 +25,7 @@ export function startTui(params: {
 
       let lastPressTime = 0;
       let pressTimer: ReturnType<typeof setTimeout> | null = null;
+      const hintSetter = { current: null as ((msg: string | null) => void) | null };
 
       renderer.keyInput.on("keypress", (key: KeyEvent) => {
         if (!key.ctrl || key.name !== "c") return;
@@ -31,19 +33,32 @@ export function startTui(params: {
         const now = Date.now();
         if (lastPressTime > 0 && now - lastPressTime < 2000) {
           if (pressTimer) clearTimeout(pressTimer);
+          hintSetter.current?.(null);
           handleQuit();
           return;
         }
 
         lastPressTime = Date.now();
         if (pressTimer) clearTimeout(pressTimer);
-        pressTimer = setTimeout(() => { lastPressTime = 0; }, 3000);
-        process.stderr.write("\x1b[1m\x1b[33mPress Ctrl+C again within 2s to exit\x1b[0m\n");
+        pressTimer = setTimeout(() => {
+          lastPressTime = 0;
+          hintSetter.current?.(null);
+        }, 3000);
+        hintSetter.current?.("Press Ctrl+C again within 2s to exit");
       });
 
-      createRoot(renderer).render(
-        <App url={params.url} serverInfo={params.serverInfo} onQuit={handleQuit} />,
-      );
+      function AppRoot() {
+        const [exitHint, setExitHint] = useState<string | null>(null);
+        hintSetter.current = setExitHint;
+        return React.createElement(App, {
+          url: params.url,
+          serverInfo: params.serverInfo,
+          onQuit: handleQuit,
+          exitHint,
+        });
+      }
+
+      createRoot(renderer).render(React.createElement(AppRoot));
     });
   });
 }
