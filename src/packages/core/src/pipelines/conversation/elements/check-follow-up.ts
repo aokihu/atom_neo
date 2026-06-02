@@ -37,12 +37,17 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
         return { ...input, mode: "ready_to_finalize", chainAction: "more_tools" };
       }
       if (intent.request === IntentRequestType.FOLLOW_UP) {
+        const p = intent.params as Record<string, string>;
         this.report(BusEvents.Element.Data, { step: "done", chainAction: "follow_up" });
         return {
           ...input,
           mode: "ready_to_finalize",
           chainAction: "follow_up",
-          followUp: { summary: "follow_up", nextPrompt: "", avoidRepeat: "" },
+          followUp: {
+            summary: p.summary ?? "follow_up",
+            nextPrompt: p.next_prompt ?? "",
+            avoidRepeat: p.avoid_repeat ?? "",
+          },
         };
       }
     }

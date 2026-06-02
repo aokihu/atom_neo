@@ -3,9 +3,12 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
+import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
 import { DEFAULT_MAX_TOKENS } from "../../../constants";
+import { IntentInputSchema } from "../../../tools/builtin/intent";
+import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState } from "./types";
 
 export class StreamLLMElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -61,16 +64,24 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
 
+    const intentSignal: { value: IntentToolInput | null } = { value: null };
+
     const aiTools: Record<string, any> = {};
     for (const t of tools) {
       aiTools[t.name] = tool({
         description: t.description,
         parameters: jsonSchema(t.inputSchema as any),
-        execute: async (args: any) => {
-          const result = await t.execute(args);
-          if (!result.ok) return `Error: ${result.error}`;
-          return result.output || JSON.stringify(result.data);
-        },
+        execute: t.name === "intent"
+          ? async (args: any) => {
+              const parsed = IntentInputSchema.safeParse(args);
+              if (parsed.success) intentSignal.value = parsed.data;
+              return "Intent received";
+            }
+          : async (args: any) => {
+              const result = await t.execute(args);
+              if (!result.ok) return `Error: ${result.error}`;
+              return result.output || JSON.stringify(result.data);
+            },
       });
     }
 
@@ -86,16 +97,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         providerOptions: this.#providerOptions,
       } as any);
 
-      const MARKER = "<<<REQUEST>>>";
-      const WINDOW = MARKER.length - 1;
-      const CHUNK_BATCH = 3;
-
       let fullText = "";
-      let buffer = "";
-      let pastMarker = false;
-      let intentRequestText = "";
-      let deltaBuffer = "";
-      let deltaCount = 0;
+      let intentData: IntentToolInput | null = null;
       let finishReason = "";
 
       for await (const chunk of streamResult.fullStream) {
@@ -105,73 +108,48 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         }
         if (chunk.type === "tool-call") {
           const c = chunk as any;
+          if (c.toolName === "intent") {
+            intentData = intentSignal.value ?? c.input;
+            break;
+          }
           this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, args: String(c.input ?? c.args).slice(0, 200) });
           continue;
         }
         if (chunk.type === "tool-result") {
           const c = chunk as any;
+          if (c.toolName === "intent") continue;
           this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, result: String(c.output ?? c.result).slice(0, 300) });
           continue;
         }
         if (chunk.type !== "text-delta") continue;
 
-        if (pastMarker) {
-          intentRequestText += chunk.textDelta;
-          continue;
-        }
-
-        buffer += chunk.textDelta;
-        const idx = buffer.indexOf(MARKER);
-
-        if (idx >= 0) {
-          if (idx > 0) {
-            fullText += buffer.slice(0, idx);
-            deltaBuffer += buffer.slice(0, idx);
-            deltaCount++;
-          }
-          intentRequestText = buffer.slice(idx + MARKER.length);
-          pastMarker = true;
-          buffer = "";
-        } else if (buffer.length > WINDOW) {
-          const emitLen = buffer.length - WINDOW;
-          const emit = buffer.slice(0, emitLen);
-          fullText += emit;
-          deltaBuffer += emit;
-          deltaCount++;
-          buffer = buffer.slice(emitLen);
-        }
-
-        if (deltaCount >= CHUNK_BATCH && deltaBuffer) {
-          this.report(BusEvents.Transport.Delta, { textDelta: deltaBuffer });
-          deltaBuffer = "";
-          deltaCount = 0;
-        }
+        fullText += chunk.textDelta;
+        this.report(BusEvents.Transport.Delta, { textDelta: chunk.textDelta });
       }
 
-      if (buffer) {
-        fullText += buffer;
-        deltaBuffer += buffer;
-      }
-      if (deltaBuffer) {
-        this.report(BusEvents.Transport.Delta, { textDelta: deltaBuffer });
-      }
+      const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
+
       const response = await streamResult.response;
       const reasoningContent = (response.messages as any[])?.find((m: any) =>
         m.role === "assistant" && m.reasoningContent
       )?.reasoningContent ?? "";
       const usage = await streamResult.usage;
-      const tokenUsage: TokenUsage = {
-        total: usage?.totalTokens ?? 0,
-      };
-      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: !!intentRequestText, finishReason });
+      const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
+      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason });
+
+      const chainAction = intents.some(i => i.request === IntentRequestType.REQUEST_MORE_TOOLS) ? "more_tools"
+        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
+        : finishReason === "length" ? "follow_up"
+        : undefined;
+
       return {
         ...input,
         mode: "executing",
         responseText: fullText,
         reasoningContent: String(reasoningContent),
         tokenUsage,
-        intentRequestText,
-        chainAction: finishReason === "length" ? "follow_up" : undefined,
+        intents,
+        chainAction,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
@@ -184,21 +162,42 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   }
 
   #filterToolsByIntent(): ToolDefinition[] {
-    if (this.#toolTier === "full") return this.#tools;
+    const nonIntent = this.#tools.filter(t => t.name !== "intent");
+    const intent = this.#tools.find(t => t.name === "intent");
+    if (this.#toolTier === "full") return intent ? [...nonIntent, intent] : nonIntent;
+    let filtered: ToolDefinition[];
     switch (this.#taskIntent) {
       case "creative_generation":
-        return [];
+        filtered = [];
+        break;
       case "conversation": {
         const excluded = new Set(["search_memory", "save_memory", "link_memory"]);
-        return this.#tools.filter(t => !excluded.has(t.name));
+        filtered = nonIntent.filter(t => !excluded.has(t.name));
+        break;
       }
       case "knowledge_retrieval": {
         const allowed = new Set(["read", "grep", "ls", "tree", "search_memory"]);
-        return this.#tools.filter(t => allowed.has(t.name));
+        filtered = nonIntent.filter(t => allowed.has(t.name));
+        break;
       }
       case "tool_execution":
       default:
-        return this.#tools;
+        filtered = nonIntent;
+        break;
     }
+    return intent ? [...filtered, intent] : filtered;
+  }
+}
+
+function toIntentRequest(input: IntentToolInput): IntentRequest {
+  switch (input.action) {
+    case "request_more_tools":
+      return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.REQUEST_MORE_TOOLS, intent: "more tools", params: input };
+    case "follow_up":
+      return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params: input };
+    case "keep_memory":
+      return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.KEEP_MEMORY, intent: "keep", params: { id: input.mem_id } };
+    default:
+      return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params: input };
   }
 }

@@ -9,6 +9,7 @@ import {
   createSearchMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool,
 } from "./builtin/memory";
+import { createIntentTool } from "./builtin/intent";
 import { createToolGuard } from "./guard";
 
 /** Create all builtin tool definitions (fs, bash, memory) for a sandbox. */
@@ -22,11 +23,12 @@ export function createAllTools(sandbox: string, memory?: any, whitelist?: string
     createSaveMemoryTool(memory as any),
     createTraverseMemoryTool(memory as any),
     createLinkMemoryTool(memory as any),
+    createIntentTool(),
   ];
   return raw.map(t => createToolGuard(t, sandbox, whitelist ?? []));
 }
 
-const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "save_memory", "link_memory"];
+const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "save_memory", "link_memory", "intent"];
 const ADVANCED_NAMES = ["cp", "mv", "bash", "traverse_memory"];
 
 export function partitionTools(all: ToolDefinition[]) {

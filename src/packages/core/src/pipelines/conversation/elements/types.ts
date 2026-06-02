@@ -28,6 +28,5 @@ export type ConversationFlowState = {
   };
   chainAction?: "more_tools" | "follow_up";
   intents?: IntentRequest[];
-  intentRequestText?: string;
   tokenUsage?: TokenUsage;
 };

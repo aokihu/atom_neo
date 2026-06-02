@@ -6,6 +6,5 @@ export { CollectContextElement } from "./collect-context";
 export { FormatSystemMessagesElement } from "./format-system-messages";
 export { FormatUserMessagesElement } from "./format-user-messages";
 export { StreamLLMElement } from "./stream-llm";
-export { ParseIntentsElement, parseIntentRequests } from "./parse-intents";
 export { CheckFollowUpElement } from "./check-follow-up";
 export { FinalizeElement } from "./finalize";

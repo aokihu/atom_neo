@@ -14,6 +14,7 @@ export type ToolDefinition = {
   execute(args: unknown): Promise<ToolResult>;
   permission?: PermissionLevel;
   requiresApproval?: boolean;
+  silent?: boolean;
 };
 
 export type ToolResult = {
