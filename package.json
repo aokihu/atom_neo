@@ -16,7 +16,7 @@
     "test": "bun test",
     "typecheck": "bun run --workspaces typecheck",
     "build": "bun run --workspaces build",
-    "build:bin": "mkdir -p dist && bun -e 'const{writeFileSync}=require(\"fs\");const pkg=require(\"./package.json\");writeFileSync(\"src/version.ts\",`export const VERSION = \\\"${pkg.version}\\\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun",
+    "build:bin": "mkdir -p dist && bun -e 'const{writeFileSync}=require(\"fs\");const pkg=require(\"./package.json\");writeFileSync(\"src/version.ts\",`export const VERSION = \\\"${pkg.version}\\\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
@@ -24,17 +24,17 @@
     "@atom-neo/setup-wizard": "workspace:*",
     "@atom-neo/shared": "workspace:*",
     "@atom-neo/tui": "workspace:*",
-    "@heroui/react": "^3.0.5",
-    "@heroui/styles": "^3.0.5",
-    "@opentui/core": "^0.2.15",
-    "@opentui/react": "^0.2.15",
-    "ai": "^6.0.191",
+    "@heroui/react": "^3.1.0",
+    "@heroui/styles": "^3.1.0",
+    "@opentui/core": "^0.3.1",
+    "@opentui/react": "^0.3.1",
+    "ai": "^6.0.194",
     "highlight.js": "^11.11.1",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "zod": "^3.24"
+    "zod": "^4.4.3"
   }
 }

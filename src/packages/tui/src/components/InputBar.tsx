@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useTheme } from "./App";
 import { CommandMenu } from "./CommandMenu";
-import type { TextareaRenderable, BorderCharacters } from "@opentui/core";
+import type { TextareaRenderable, BorderCharacters, KeyBinding } from "@opentui/core";
 
 const thinBorder: BorderCharacters = {
   topLeft: "\u2584",
@@ -17,7 +17,7 @@ const thinBorder: BorderCharacters = {
   cross: "\u2588",
 };
 
-const keyBindings = [
+const keyBindings: KeyBinding[] = [
   { name: "enter", action: "submit" },
   { name: "enter", shift: true, action: "newline" },
 ];
