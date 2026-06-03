@@ -35,7 +35,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
         <StatusBar />
         <box flexDirection="row" flexGrow={1}>
-          <box flexGrow={1} flexDirection="column" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
+          <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView messages={messages} />
             <InputBar onSend={send} onQuit={onQuit} />
             <StatusLine hint={exitHint} processing={isProcessing(messages)} />
