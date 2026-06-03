@@ -19,6 +19,7 @@ import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
 import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
 import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
+import { registerPostConversationElements, postConversationPipeline } from "./pipelines/post-conversation";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
@@ -181,6 +182,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         sandbox,
       }).build(bus);
     },
+
+    "post-conversation": (task: any) => {
+      const session = sessionStore.get(task.sessionId);
+      return postConversationPipeline({
+        session,
+        task,
+        apiKey, model, baseUrl, maxTokens,
+      }).build(bus);
+    },
   };
 
   const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx));
@@ -193,6 +203,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerFollowUpElements();
   registerFollowUpEvaluatorElements();
   registerContextCompressElements();
+  registerPostConversationElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
@@ -255,6 +266,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     const p = e.payload;
     const session = sessionStore.get(p.sessionId);
     logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
+
+    if (p.action === "post_check_retry") {
+      session.incrementChainDepth();
+      orchestrator.scheduleConversation(p.sessionId, p.chatId, p.parentTaskId, [{ type: "text", data: "" }], (task) => {
+        buildChainPipeline(task.id, p.sessionId, p.chatId);
+      });
+      return;
+    }
+
     if (p.action === "more_tools") {
       session.incrementChainDepth();
       orchestrator.scheduleConversation(p.sessionId, p.chatId, p.parentTaskId, [{ type: "text", data: "" }], (task) => {
@@ -276,6 +296,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
     session.incrementChainDepth();
     orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);
+  });
+
+  bus.on(BusEvents.Conversation.Idle as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string } }) => {
+    const p = e.payload;
+    logger.debug("conversation idle: scheduling post-conversation check", { sessionId: p.sessionId });
+    orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId);
   });
 
   const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });

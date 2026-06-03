@@ -76,4 +76,20 @@ export class InternalTaskOrchestrator {
     });
     this.#queue.enqueue(task);
   }
+
+  schedulePostConversation(
+    sessionId: string,
+    chatId: string,
+    parentTaskId: string,
+  ): void {
+    const task = createTaskItem({
+      sessionId,
+      chatId,
+      pipeline: "post-conversation",
+      source: TaskSource.INTERNAL,
+      parentTaskId,
+      payload: [],
+    });
+    this.#queue.enqueue(task);
+  }
 }

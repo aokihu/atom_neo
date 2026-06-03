@@ -23,3 +23,8 @@ export {
   registerContextCompressElements,
   contextCompressPipeline,
 } from "./context-compress";
+
+export {
+  registerPostConversationElements,
+  postConversationPipeline,
+} from "./post-conversation";

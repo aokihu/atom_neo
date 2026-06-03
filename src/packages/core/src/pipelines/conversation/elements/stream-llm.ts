@@ -65,6 +65,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const model = provider(this.#model);
 
     const intentSignal: { value: IntentToolInput | null } = { value: null };
+    const stepCounter = { count: 0 };
 
     const aiTools: Record<string, any> = {};
     for (const t of tools) {
@@ -78,17 +79,18 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               return "Intent received";
             }
           : async (args: any) => {
+              const sc = ++stepCounter.count;
               const start = Date.now();
               try {
-                this.report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, args: JSON.stringify(args).slice(0, 200) });
+                this.report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
                 const result = await t.execute(args);
                 const duration = Date.now() - start;
-                this.report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, duration, ok: result.ok });
+                this.report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: result.ok });
                 if (!result.ok) return `Error: ${result.error}`;
                 return result.output || JSON.stringify(result.data);
               } catch (err: any) {
                 const duration = Date.now() - start;
-                this.report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, duration, error: err?.message ?? String(err) });
+                this.report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error: err?.message ?? String(err) });
                 return `Tool execution error: ${err?.message ?? String(err)}`;
               }
             },
@@ -110,52 +112,103 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let fullText = "";
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
-      let stepCount = 0;
 
-      for await (const chunk of streamResult.fullStream) {
-        if (chunk.type === "step-finish") {
-          finishReason = (chunk as any).finishReason ?? "";
-          continue;
-        }
-        if (chunk.type === "tool-call") {
-          const c = chunk as any;
-          stepCount++;
-          if (c.toolName === "intent") {
-            intentData = intentSignal.value ?? c.input;
-            break;
+      const STREAM_TIMEOUT_MS = 300_000;
+      const iterator = streamResult.fullStream[Symbol.asyncIterator]();
+      let timedOut = false;
+      const timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: stepCounter.count });
+        iterator.return?.();
+      }, STREAM_TIMEOUT_MS);
+
+      try {
+        while (true) {
+          const { value: chunk, done } = await iterator.next();
+          if (done) break;
+
+          if (chunk.type === "step-start") continue;
+          if (chunk.type === "step-finish") {
+            finishReason = (chunk as any).finishReason ?? "";
+            continue;
           }
-          this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
-          continue;
+          if (chunk.type === "tool-call") {
+            const c = chunk as any;
+            if (c.toolName === "intent") {
+              intentData = intentSignal.value ?? c.input;
+              break;
+            }
+            this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
+            continue;
+          }
+          if (chunk.type === "tool-result") {
+            const c = chunk as any;
+            if (c.toolName === "intent") continue;
+            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
+            continue;
+          }
+          if (chunk.type === "text-delta") {
+            fullText += chunk.textDelta;
+            this.report(BusEvents.Transport.Delta, { textDelta: chunk.textDelta });
+            continue;
+          }
+          if (chunk.type === "finish") {
+            finishReason = (chunk as any).finishReason ?? finishReason;
+            continue;
+          }
+          this.report(BusEvents.Element.Data, { step: "unhandled-chunk", type: (chunk as any).type, raw: JSON.stringify(chunk).slice(0, 200) });
         }
-        if (chunk.type === "tool-result") {
-          const c = chunk as any;
-          if (c.toolName === "intent") continue;
-          this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
-          continue;
-        }
-        if (chunk.type !== "text-delta") continue;
+      } finally {
+        clearTimeout(timeoutTimer);
+      }
 
-        fullText += chunk.textDelta;
-        this.report(BusEvents.Transport.Delta, { textDelta: chunk.textDelta });
+      this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: stepCounter.count, fullTextLen: fullText.length });
+
+      if (!finishReason || finishReason === "tool-calls") {
+        this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
+        finishReason = "error";
       }
 
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
 
-      const response = await streamResult.response;
+      const FINALIZE_TIMEOUT = 30_000;
+      let response: any;
+      let usage: any;
+
+      try {
+        response = await Promise.race([
+          streamResult.response,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("response timeout")), FINALIZE_TIMEOUT)),
+        ]);
+      } catch {
+        this.report(BusEvents.Element.Data, { step: "response-timeout", level: "warn" });
+        response = { messages: [] };
+      }
+
+      try {
+        usage = await Promise.race([
+          streamResult.usage,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("usage timeout")), FINALIZE_TIMEOUT)),
+        ]);
+      } catch {
+        this.report(BusEvents.Element.Data, { step: "usage-timeout", level: "warn" });
+        usage = { totalTokens: 0 };
+      }
+
       const reasoningContent = (response.messages as any[])?.find((m: any) =>
         m.role === "assistant" && m.reasoningContent
       )?.reasoningContent ?? "";
-      const usage = await streamResult.usage;
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
-      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount, maxSteps: this.#maxSteps });
+      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: stepCounter.count, maxSteps: this.#maxSteps });
 
-      if (stepCount >= this.#maxSteps) {
-        this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount, maxSteps: this.#maxSteps });
+      if (stepCounter.count >= this.#maxSteps) {
+        this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: stepCounter.count, maxSteps: this.#maxSteps });
       }
 
       const chainAction = intents.some(i => i.request === IntentRequestType.REQUEST_MORE_TOOLS) ? "more_tools"
         : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
+        : finishReason === "error" ? "follow_up"
         : undefined;
 
       return {

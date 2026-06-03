@@ -30,6 +30,7 @@ export const BusEvents = {
   },
   Conversation: {
     Chain: "conversation.chain",
+    Idle: "conversation.idle",
   },
 } as const;
 

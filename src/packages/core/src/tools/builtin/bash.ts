@@ -30,26 +30,54 @@ export function createBashTool(sandbox: string): ToolDefinition {
         env: { ...process.env },
       });
 
-      const timer = timeout ? setTimeout(() => proc.kill("SIGTERM"), timeout) : null;
+      const KILL_GRACE = 3000;
+      let killer: ReturnType<typeof setTimeout> | null = null;
 
-      const [exitCode, stdout, stderr] = await Promise.all([
-        proc.exited,
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-      ]);
-      if (timer) clearTimeout(timer);
-
-      const out = stdout.trim();
-      const err = stderr.trim();
-
-      if (exitCode === 0) {
-        return { ok: true, output: out || err || "(no output)" };
+      if (timeout) {
+        killer = setTimeout(() => {
+          proc.kill(); // SIGTERM
+          setTimeout(() => proc.kill(9), KILL_GRACE); // SIGKILL if child still alive
+        }, timeout);
       }
-      return {
-        ok: false,
-        output: out || "",
-        error: err || `exit code ${exitCode}`,
+
+      const collect = async (stream: ReadableStream<Uint8Array>) => {
+        const reader = stream.getReader();
+        const chunks: string[] = [];
+        let size = 0;
+        const limit = 65536;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.length;
+          if (size <= limit) chunks.push(Buffer.from(value).toString());
+        }
+        return chunks.join("").slice(0, limit);
       };
+
+      try {
+        const [exitCode, stdout, stderr] = await Promise.all([
+          proc.exited,
+          collect(proc.stdout),
+          collect(proc.stderr),
+        ]);
+        if (killer) clearTimeout(killer);
+
+        const out = stdout.trim();
+        const err = stderr.trim();
+
+        if (exitCode === 0) {
+          return { ok: true, output: out || err || "(no output)" };
+        }
+        return {
+          ok: false,
+          output: out || "",
+          error: err || `exit code ${exitCode}`,
+        };
+      } catch {
+        try { proc.kill(9); } catch { /* already dead */ }
+        if (killer) clearTimeout(killer);
+        return { ok: false, output: "", error: `Command timed out after ${timeout}ms` };
+      }
     },
     permission: PermissionLevel.FULL,
     requiresApproval: true,

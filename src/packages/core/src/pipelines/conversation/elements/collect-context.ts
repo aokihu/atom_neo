@@ -80,9 +80,13 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         contextData += `\n\n${this.#session.conversationSummary}`;
         delete this.#session.conversationSummary;
       }
+      if (this.#session.postCheckGuidance) {
+        contextData += `\n\n${this.#session.postCheckGuidance}`;
+        delete this.#session.postCheckGuidance;
+      }
     }
 
-    this.report(BusEvents.Element.Data, { step: "done", memoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary });
+    this.report(BusEvents.Element.Data, { step: "done", memoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
     return { ...input, contextData };
   }
 }
