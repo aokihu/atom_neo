@@ -78,9 +78,19 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               return "Intent received";
             }
           : async (args: any) => {
-              const result = await t.execute(args);
-              if (!result.ok) return `Error: ${result.error}`;
-              return result.output || JSON.stringify(result.data);
+              const start = Date.now();
+              try {
+                this.report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, args: JSON.stringify(args).slice(0, 200) });
+                const result = await t.execute(args);
+                const duration = Date.now() - start;
+                this.report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, duration, ok: result.ok });
+                if (!result.ok) return `Error: ${result.error}`;
+                return result.output || JSON.stringify(result.data);
+              } catch (err: any) {
+                const duration = Date.now() - start;
+                this.report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, duration, error: err?.message ?? String(err) });
+                return `Tool execution error: ${err?.message ?? String(err)}`;
+              }
             },
       });
     }
@@ -100,6 +110,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let fullText = "";
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
+      let stepCount = 0;
 
       for await (const chunk of streamResult.fullStream) {
         if (chunk.type === "step-finish") {
@@ -108,17 +119,18 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         }
         if (chunk.type === "tool-call") {
           const c = chunk as any;
+          stepCount++;
           if (c.toolName === "intent") {
             intentData = intentSignal.value ?? c.input;
             break;
           }
-          this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
+          this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
           continue;
         }
         if (chunk.type === "tool-result") {
           const c = chunk as any;
           if (c.toolName === "intent") continue;
-          this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
+          this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
           continue;
         }
         if (chunk.type !== "text-delta") continue;
@@ -135,7 +147,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       )?.reasoningContent ?? "";
       const usage = await streamResult.usage;
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
-      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason });
+      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount, maxSteps: this.#maxSteps });
+
+      if (stepCount >= this.#maxSteps) {
+        this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount, maxSteps: this.#maxSteps });
+      }
 
       const chainAction = intents.some(i => i.request === IntentRequestType.REQUEST_MORE_TOOLS) ? "more_tools"
         : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
