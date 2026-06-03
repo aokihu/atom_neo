@@ -29,7 +29,7 @@ export type {
 } from "./memory";
 
 export { PermissionLevel } from "./tool";
-export type { ToolDefinition, ToolResult } from "./tool";
+export type { ToolDefinition, ToolResult, ToolExecuteOptions } from "./tool";
 
 export { PipelineResultType, PipelineEnqueueTransition } from "./pipeline";
 export type {

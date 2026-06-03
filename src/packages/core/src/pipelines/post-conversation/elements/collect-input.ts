@@ -20,13 +20,23 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
     const msgs: Array<{ role: string; content: string }> = this.#session?.messages ?? [];
     const prediction = this.#session?.pendingPrediction ?? {};
 
-    const assistantMsg = [...msgs].reverse().find(m => m.role === "assistant");
-    const userMsg = [...msgs].reverse().find(m => m.role === "user");
+    const lastUserIdx = [...msgs].reduce((idx, m, i) => m.role === "user" ? i : idx, -1);
+
+    const parts: string[] = [];
+    for (let i = lastUserIdx + 1; i < msgs.length; i++) {
+      if (msgs[i].role === "user") break;
+      if (msgs[i].role === "assistant" && msgs[i].content) {
+        parts.push(msgs[i].content);
+      }
+    }
+    const assistantResponse = parts.join("\n");
+    const userMessage = msgs[lastUserIdx]?.content ?? "";
 
     this.report(BusEvents.Element.Data, {
       step: "collected",
-      hasUser: !!userMsg,
-      hasAssistant: !!assistantMsg,
+      hasUser: !!userMessage,
+      hasAssistant: parts.length > 0,
+      assistantParts: parts.length,
       toolTier: prediction.toolTier ?? "basic",
       taskIntent: prediction.taskIntent ?? "conversation",
     });
@@ -35,10 +45,12 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       mode: "analyzing",
       task: null,
       session: this.#session,
-      userMessage: userMsg?.content ?? "",
-      assistantResponse: assistantMsg?.content ?? "",
+      userMessage,
+      assistantResponse,
       predictedToolTier: prediction.toolTier ?? "basic",
       predictedTaskIntent: prediction.taskIntent ?? "conversation",
+      stepCount: prediction.stepCount ?? 0,
+      assistantParts: parts.length,
     };
   }
 }

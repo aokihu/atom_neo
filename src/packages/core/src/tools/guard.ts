@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-import type { ToolDefinition, ToolResult } from "@atom-neo/shared";
+import type { ToolDefinition, ToolResult, ToolExecuteOptions } from "@atom-neo/shared";
 
 function resolveAliases(input: string, sandbox: string): string {
   return input.replace(/\$HOME\b/g, homedir()).replace(/\$SANDBOX\b/g, sandbox);
@@ -97,10 +97,10 @@ export function createToolGuard(
   return new Proxy(tool, {
     get(target, prop) {
       if (prop !== "execute") return Reflect.get(target, prop);
-      return async (args: unknown) => {
+      return async (args: unknown, opts?: ToolExecuteOptions) => {
         const blocked = preCheck(target, args, sandbox, resolvedWl);
         if (blocked) return blocked;
-        const result = await target.execute(args);
+        const result = await target.execute(args, opts);
         return postFilter(target, result);
       };
     },

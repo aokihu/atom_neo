@@ -5,21 +5,22 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import { BusEvents } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
 
-const ANALYZE_SYSTEM_PROMPT = `你是一个会话质量评估器。判断AI是否**完成了**用户的请求，而非仅仅是否**回应**了用户。
+const ANALYZE_SYSTEM_PROMPT = `你是一个会话质量评估器。判断AI是否**完成了**用户的请求。
 
 评分标准:
 - "satisfactory": AI直接回答了问题，提供了实质信息
 - "blocked": AI只表达了意图(如"让我搜索"、"我来查询"、"我需要查找")但未提供实际答案；或回复内容与用户提问完全无关；或明确表示无法完成
-- "incomplete": AI回答了问题，但明显遗漏了关键内容
 
 关键判断规则:
-- 回复较短(≤50字)且包含"搜索"、"查询"、"尝试"、"让我"、"看看"等表态词 → blocked(未实际完成任务)
+- 回复较短(≤50字)且包含"搜索"、"查询"、"尝试"、"让我"、"看看"等表态词 → blocked
 - 回复内容与用户提问无关 → blocked
-- 回复提供了实质信息但明显不完整 → incomplete
+- 其他情况 → satisfactory
 
-仅回复JSON: {"status":"satisfactory|blocked|incomplete","reason":"简短说明"}`;
+仅回复JSON: {"status":"satisfactory|blocked","reason":"简短说明"}`;
 
 const FALLBACK: AnalysisResult = { status: "satisfactory", reason: "skip" };
+
+const NON_RETRY_TASK_INTENTS = new Set(["creative_generation", "conversation"]);
 
 export class AnalyzeResultElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
   #apiKey: string;
@@ -56,6 +57,21 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       return { ...input, mode: "acting", analysis: FALLBACK };
     }
 
+    if (input.predictedToolTier === "full") {
+      this.report(BusEvents.Element.Data, { step: "skip, full tools" });
+      return { ...input, mode: "acting", analysis: FALLBACK };
+    }
+
+    if (NON_RETRY_TASK_INTENTS.has(input.predictedTaskIntent)) {
+      this.report(BusEvents.Element.Data, { step: "skip, non-retry task intent", taskIntent: input.predictedTaskIntent });
+      return { ...input, mode: "acting", analysis: FALLBACK };
+    }
+
+    if (input.stepCount === 0 && input.assistantResponse.length > 0) {
+      this.report(BusEvents.Element.Data, { step: "skip, no tools used with output" });
+      return { ...input, mode: "acting", analysis: FALLBACK };
+    }
+
     try {
       const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
       const model = provider(this.#model);
@@ -69,7 +85,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
 
       const prompt = [
         `用户请求: ${input.userMessage.slice(0, 500)}`,
-        `AI回复: ${input.assistantResponse.slice(0, 500)}`,
+        `AI回复: ${input.assistantResponse.slice(0, 3000)}`,
         `预期任务: ${TASK_INTENT_DESC[input.predictedTaskIntent] ?? "对话交流"}`,
         `可用工具级别: ${input.predictedToolTier === "full" ? "完整工具集" : "仅文件读写和搜索"}`,
       ].join("\n");
@@ -92,7 +108,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
-      const status = ["satisfactory", "blocked", "incomplete"].includes(parsed.status) ? parsed.status : "satisfactory";
+      const status = ["satisfactory", "blocked"].includes(parsed.status) ? parsed.status : "satisfactory";
       const analysis: AnalysisResult = { status, reason: parsed.reason ?? "" };
 
       this.report(BusEvents.Element.Data, { step: "analyzed", status, reason: analysis.reason });

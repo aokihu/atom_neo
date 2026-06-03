@@ -6,12 +6,16 @@ export enum PermissionLevel {
   FULL = 2,
 }
 
+export type ToolExecuteOptions = {
+  abortSignal?: AbortSignal;
+};
+
 export type ToolDefinition = {
   name: string;
   description: string;
   source: "builtin" | "plugin" | "mcp";
   inputSchema: z.ZodType<Record<string, unknown>>;
-  execute(args: unknown): Promise<ToolResult>;
+  execute(args: unknown, opts?: ToolExecuteOptions): Promise<ToolResult>;
   permission?: PermissionLevel;
   requiresApproval?: boolean;
   silent?: boolean;

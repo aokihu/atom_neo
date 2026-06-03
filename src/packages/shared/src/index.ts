@@ -30,6 +30,7 @@ export type {
   MemorySearchResult,
   ToolDefinition,
   ToolResult,
+  ToolExecuteOptions,
   PipelineResult,
   FlowState,
   PipelineEventMap,

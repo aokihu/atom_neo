@@ -1,7 +1,7 @@
 export type PostConversationMode = "initial" | "analyzing" | "acting";
 
 export type AnalysisResult = {
-  status: "satisfactory" | "blocked" | "incomplete";
+  status: "satisfactory" | "blocked";
   reason: string;
 };
 
@@ -13,5 +13,7 @@ export type PostConversationFlowState = {
   assistantResponse: string;
   predictedToolTier: string;
   predictedTaskIntent: string;
+  stepCount: number;
+  assistantParts: number;
   analysis?: AnalysisResult;
 };

@@ -78,12 +78,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               if (parsed.success) intentSignal.value = parsed.data;
               return "Intent received";
             }
-          : async (args: any) => {
+          : async (args: any, opts?: any) => {
               const sc = ++stepCounter.count;
               const start = Date.now();
               try {
                 this.report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
-                const result = await t.execute(args);
+                const result = await t.execute(args, { abortSignal: opts?.abortSignal });
                 const duration = Date.now() - start;
                 this.report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: result.ok });
                 if (!result.ok) return `Error: ${result.error}`;
@@ -98,6 +98,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
 
     try {
+      const STREAM_TIMEOUT_MS = 300_000;
+      const abortController = new AbortController();
+
       const streamResult = streamText({
         model,
         system: systemText || undefined,
@@ -107,20 +110,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         maxTokens: this.#maxTokens,
         allowSystemInMessages: true,
         providerOptions: this.#providerOptions,
+        abortSignal: abortController.signal,
       } as any);
 
       let fullText = "";
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
 
-      const STREAM_TIMEOUT_MS = 300_000;
-      const iterator = streamResult.fullStream[Symbol.asyncIterator]();
       let timedOut = false;
       const timeoutTimer = setTimeout(() => {
         timedOut = true;
         this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: stepCounter.count });
-        iterator.return?.();
+        abortController.abort();
       }, STREAM_TIMEOUT_MS);
+
+      const iterator = streamResult.fullStream[Symbol.asyncIterator]();
 
       try {
         while (true) {
@@ -165,34 +169,33 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: stepCounter.count, fullTextLen: fullText.length });
 
       if (!finishReason || finishReason === "tool-calls") {
-        this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
-        finishReason = "error";
+        if (fullText.length > 0 && stepCounter.count === 0) {
+          finishReason = "stop";
+        } else {
+          this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
+          finishReason = "error";
+        }
       }
 
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
 
-      const FINALIZE_TIMEOUT = 30_000;
       let response: any;
       let usage: any;
 
       try {
-        response = await Promise.race([
-          streamResult.response,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("response timeout")), FINALIZE_TIMEOUT)),
-        ]);
-      } catch {
-        this.report(BusEvents.Element.Data, { step: "response-timeout", level: "warn" });
+        response = await streamResult.response;
+      } catch (err: any) {
+        this.report(BusEvents.Element.Data, { step: "response-error", level: "warn", error: err?.message ?? String(err) });
         response = { messages: [] };
+        if (!finishReason) finishReason = "error";
       }
 
       try {
-        usage = await Promise.race([
-          streamResult.usage,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("usage timeout")), FINALIZE_TIMEOUT)),
-        ]);
-      } catch {
-        this.report(BusEvents.Element.Data, { step: "usage-timeout", level: "warn" });
+        usage = await streamResult.usage;
+      } catch (err: any) {
+        this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
         usage = { totalTokens: 0 };
+        if (!finishReason) finishReason = "error";
       }
 
       const reasoningContent = (response.messages as any[])?.find((m: any) =>
