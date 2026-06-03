@@ -10,7 +10,7 @@ export function MessageBubble({ message, syntaxStyle }: { message: Message; synt
       return (
         <box flexDirection="row" paddingBottom={1} paddingLeft={2} paddingRight={2}>
           <text fg={colors.decoration.subtle}>▌</text>
-          <text fg={colors.text.primary}> <span fg={colors.accent.brand}>you</span>  {message.content}</text>
+          <text selectable fg={colors.text.primary}> <span fg={colors.accent.brand}>you</span>  {message.content}</text>
         </box>
       );
     case "assistant":
@@ -32,14 +32,14 @@ export function MessageBubble({ message, syntaxStyle }: { message: Message; synt
           ) : message.state === "done" ? (
             <text fg={colors.status.success}>✓ {message.toolName}</text>
           ) : (
-            <text fg={colors.status.error}>✗ {message.toolName}: {message.detail}</text>
+            <text selectable fg={colors.status.error}>✗ {message.toolName}: {message.detail}</text>
           )}
         </box>
       );
     case "error":
       return (
         <box paddingBottom={1} paddingLeft={4}>
-          <text fg={colors.status.error}>✗ {message.content}</text>
+          <text selectable fg={colors.status.error}>✗ {message.content}</text>
         </box>
       );
   }

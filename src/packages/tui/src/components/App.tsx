@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useCallback } from "react";
+import { createContext, useContext, useMemo, useEffect } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useChat } from "../hooks/useChat";
 import { getTheme } from "../theme";
@@ -10,6 +10,7 @@ import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
 import { Sidebar } from "./Sidebar";
 import type { Message } from "../types";
+import { useInputHistory } from "../stores/inputHistory";
 
 const SIDEBAR_MIN_WIDTH = 90;
 const FALLBACK_CONTEXT_LIMIT = 131_072;
@@ -29,6 +30,8 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
   const { messages, send, tokenUsage } = useChat(url);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
+
+  useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
 
   return (
     <ThemeContext.Provider value={theme}>

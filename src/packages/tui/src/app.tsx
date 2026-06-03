@@ -2,8 +2,25 @@ import "@opentui/react/runtime-plugin-support";
 import { createCliRenderer, type KeyEvent } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import React, { useState } from "react";
+import { spawnSync } from "node:child_process";
 import { App } from "./components/App";
 import type { ServerInfo } from "./types";
+import { useCopied } from "./stores/copied";
+
+const CLIPBOARD_CMDS: [string, string[]][] = [
+  ["wl-copy", []],
+  ["xclip", ["-selection", "clipboard"]],
+  ["xsel", ["-ib"]],
+  ["pbcopy", []],
+];
+
+function copyToClipboard(text: string) {
+  for (const [cmd, args] of CLIPBOARD_CMDS) {
+    const r = spawnSync(cmd, args, { input: text, timeout: 1000 });
+    if (r.error) continue;
+    if (r.status === 0) break;
+  }
+}
 
 /** Launch the terminal UI using OpenTUI React renderer. */
 export function startTui(params: {
@@ -18,6 +35,15 @@ export function startTui(params: {
       backgroundColor: "#0d1117",
       onDestroy: () => resolve(),
     }).then(renderer => {
+      renderer.on("selection", (selection) => {
+        const text = selection.getSelectedText();
+        if (text) {
+          renderer.copyToClipboardOSC52(text);
+          copyToClipboard(text);
+          useCopied.getState().setCopied(true);
+        }
+      });
+
       const handleQuit = () => {
         renderer.destroy();
         process.exit(0);

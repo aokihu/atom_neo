@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { useTheme } from "./App";
 import { CommandMenu } from "./CommandMenu";
-import type { TextareaRenderable, BorderCharacters, KeyBinding } from "@opentui/core";
+import { useInputHistory } from "../stores/inputHistory";
+import type { TextareaRenderable, BorderCharacters, KeyBinding, KeyEvent } from "@opentui/core";
 
 const thinBorder: BorderCharacters = {
   topLeft: "\u2584",
@@ -25,15 +26,17 @@ const keyBindings: KeyBinding[] = [
 export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; onQuit?: () => void }) {
   const { colors } = useTheme();
   const taRef = useRef<TextareaRenderable>(null);
-  const [resetKey, setResetKey] = useState(0);
   const [content, setContent] = useState("");
+  const navigatingRef = useRef(false);
+  const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
   const showMenu = content.startsWith("/");
 
   const handleContentChange = useCallback(() => {
-    const text = taRef.current?.plainText ?? "";
-    setContent(text);
-  }, []);
+    setContent(taRef.current?.plainText ?? "");
+    if (navigatingRef.current) return;
+    resetIndex();
+  }, [resetIndex]);
 
   const handleSubmit = useCallback(() => {
     const text = taRef.current?.plainText?.trim();
@@ -41,15 +44,41 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
 
     if (text === "/quit") {
       onQuit?.();
+      taRef.current?.setText("");
       setContent("");
-      setResetKey(k => k + 1);
       return;
     }
 
+    push(text.trim());
     onSend(text);
+    taRef.current?.setText("");
     setContent("");
-    setResetKey(k => k + 1);
-  }, [onSend, onQuit]);
+  }, [onSend, onQuit, push]);
+
+  const handleKeyDown = useCallback((event: KeyEvent) => {
+    if (event.ctrl || event.meta) return;
+
+    if (event.name === "up") {
+      event.preventDefault();
+      const ta = taRef.current;
+      if (!ta) return;
+      const result = navigateUp();
+      if (result.idx === 0) setDraft(ta.plainText);
+      if (result.idx >= 0) {
+        navigatingRef.current = true;
+        ta.replaceText(result.prev);
+        navigatingRef.current = false;
+      }
+    } else if (event.name === "down") {
+      event.preventDefault();
+      const ta = taRef.current;
+      if (!ta) return;
+      const result = navigateDown();
+      navigatingRef.current = true;
+      ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
+      navigatingRef.current = false;
+    }
+  }, [navigateUp, navigateDown, setDraft]);
 
   return (
     <box flexShrink={0}>
@@ -64,12 +93,11 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
         backgroundColor={colors.bg.input}
       >
         <textarea
-          key={resetKey}
           ref={taRef}
-          placeholder="Message... (Shift+Enter for newline, / for commands)"
-          initialValue=""
+          placeholder="Message... (Shift+Enter for newline, ↑↓ for history, / for commands)"
           onSubmit={handleSubmit}
           onContentChange={handleContentChange}
+          onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused
           flexGrow={1}

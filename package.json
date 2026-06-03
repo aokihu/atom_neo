@@ -31,7 +31,8 @@
     "ai": "^6.0.194",
     "highlight.js": "^11.11.1",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

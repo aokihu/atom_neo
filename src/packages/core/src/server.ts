@@ -82,7 +82,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const providerModel = `${resolved.provider}/${model}`;
   const configContextLimit: number | undefined = runtime?.appConfig?.providers?.[resolved.provider]?.contextLimit;
   const maxTokens: number = runtime?.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 5;
+  const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 50;
   const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
   const memory = sm.get("memory");
   const getCompiledPrompt = () => {

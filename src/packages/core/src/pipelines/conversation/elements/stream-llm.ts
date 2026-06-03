@@ -42,7 +42,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#baseUrl = params.baseUrl;
     this.#tools = params.tools;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
-    this.#maxSteps = params.maxSteps ?? 20;
+    this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#toolTier = params.toolTier ?? "basic";
@@ -112,13 +112,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             intentData = intentSignal.value ?? c.input;
             break;
           }
-          this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, args: String(c.input ?? c.args).slice(0, 200) });
+          this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
           continue;
         }
         if (chunk.type === "tool-result") {
           const c = chunk as any;
           if (c.toolName === "intent") continue;
-          this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, result: String(c.output ?? c.result).slice(0, 300) });
+          this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
           continue;
         }
         if (chunk.type !== "text-delta") continue;
