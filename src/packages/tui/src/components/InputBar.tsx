@@ -52,7 +52,7 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
   }, [onSend, onQuit]);
 
   return (
-    <box>
+    <box flexShrink={0}>
       <box
         height={5}
         marginTop={1}

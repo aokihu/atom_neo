@@ -7,7 +7,7 @@ export function ChatView({ messages }: { messages: Message[] }) {
 
   if (messages.length === 0) {
     return (
-      <scrollbox flexGrow={1} stickyScroll stickyStart="bottom">
+      <scrollbox flexGrow={1} flexBasis={0} stickyScroll stickyStart="bottom">
         <box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
           <text fg={colors.accent.brand}><strong>atom neo</strong></text>
           <text fg={colors.text.secondary}>AI-driven development platform</text>
@@ -19,7 +19,7 @@ export function ChatView({ messages }: { messages: Message[] }) {
   }
 
   return (
-    <scrollbox flexGrow={1} stickyScroll stickyStart="bottom" paddingTop={1}>
+    <scrollbox flexGrow={1} flexBasis={0} stickyScroll stickyStart="bottom" paddingTop={1}>
       {messages.map(msg =>
         msg.role === "thinking"
           ? <SpinnerBubble key={msg.id} />
