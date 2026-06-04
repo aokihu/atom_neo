@@ -187,3 +187,63 @@ export function createMvTool(sb: Sandbox): ToolDefinition {
     permission: PermissionLevel.FILE_WRITE,
   };
 }
+
+export function createGlobTool(sb: Sandbox): ToolDefinition {
+  const schema = z.object({
+    pattern: z.string().describe("Glob pattern, e.g. '**/*.ts' or 'src/**/*.test.ts'"),
+    path: z.string().optional().default("."),
+  });
+  return {
+    name: "glob", description: "Find files matching a glob pattern.",
+    source: "builtin", inputSchema: schema,
+    execute: async (args) => {
+      const p = parse(schema, args);
+      if (!p) return { ok: false, output: "", error: "Invalid input" };
+      try {
+        const glob = new Bun.Glob(p.pattern);
+        const results: string[] = [];
+        const MAX_RESULTS = 500;
+        const target = sb.sp(p.path);
+        for await (const filepath of glob.scan({ cwd: target, absolute: false })) {
+          if (results.length >= MAX_RESULTS) break;
+          results.push(p.path === "." ? filepath : `${p.path}/${filepath}`);
+        }
+        results.sort();
+        return { ok: true, output: results.join("\n") || "No matches", data: { matchCount: results.length } };
+      } catch (err) { return { ok: false, output: "", error: String(err) }; }
+    },
+    permission: PermissionLevel.READ_ONLY,
+  };
+}
+
+export function createEditTool(sb: Sandbox): ToolDefinition {
+  const schema = z.object({
+    filepath: z.string(),
+    oldString: z.string(),
+    newString: z.string(),
+  });
+  return {
+    name: "edit", description: "Find and replace exact string in a file. Only replaces first occurrence. Returns error if string not found or found multiple times.",
+    source: "builtin", inputSchema: schema,
+    execute: async (args) => {
+      const p = parse(schema, args);
+      if (!p) return { ok: false, output: "", error: "Invalid input" };
+      try {
+        const resolved = sb.sp(p.filepath);
+        const content = readFileSync(resolved, "utf-8");
+        const idx = content.indexOf(p.oldString);
+        if (idx === -1) {
+          return { ok: false, output: "", error: "oldString not found in file" };
+        }
+        const secondIdx = content.indexOf(p.oldString, idx + 1);
+        if (secondIdx !== -1) {
+          return { ok: false, output: "", error: "oldString found multiple times in file. Provide larger string with more surrounding context to disambiguate." };
+        }
+        const edited = content.slice(0, idx) + p.newString + content.slice(idx + p.oldString.length);
+        writeFileSync(resolved, edited, "utf-8");
+        return { ok: true, output: `Replaced 1 occurrence in ${p.filepath}` };
+      } catch (err) { return { ok: false, output: "", error: String(err) }; }
+    },
+    permission: PermissionLevel.FILE_WRITE,
+  };
+}

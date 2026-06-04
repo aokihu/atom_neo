@@ -2,9 +2,10 @@ import { ToolRegistry } from "./registry";
 import type { ToolDefinition } from "@atom-neo/shared";
 import {
   createReadTool, createWriteTool, createLsTool, createTreeTool,
-  createGrepTool, createCpTool, createMvTool, createSandbox,
+  createGrepTool, createCpTool, createMvTool, createGlobTool, createEditTool, createSandbox,
 } from "./builtin/fs";
 import { createBashTool } from "./builtin/bash";
+import { createWebFetchTool } from "./builtin/webfetch";
 import {
   createSearchMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool,
@@ -24,11 +25,13 @@ export function createAllTools(sandbox: string, memory?: any, whitelist?: string
     createTraverseMemoryTool(memory as any),
     createLinkMemoryTool(memory as any),
     createIntentTool(),
+    createWebFetchTool(),
+    createGlobTool(sb), createEditTool(sb),
   ];
   return raw.map(t => createToolGuard(t, sandbox, whitelist ?? []));
 }
 
-const BASIC_NAMES = ["read", "write", "ls", "grep", "tree", "search_memory", "save_memory", "link_memory", "intent"];
+const BASIC_NAMES = ["read", "write", "edit", "ls", "grep", "tree", "glob", "webfetch", "search_memory", "save_memory", "link_memory", "intent"];
 const ADVANCED_NAMES = ["cp", "mv", "bash", "traverse_memory"];
 
 export function partitionTools(all: ToolDefinition[]) {

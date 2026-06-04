@@ -174,6 +174,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         } else {
           this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
           finishReason = "error";
+          setTimeout(() => {
+            if (!abortController.signal.aborted) abortController.abort();
+          }, 60_000);
         }
       }
 
@@ -248,7 +251,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         break;
       }
       case "knowledge_retrieval": {
-        const allowed = new Set(["read", "grep", "ls", "tree", "search_memory"]);
+        const allowed = new Set(["read", "grep", "ls", "tree", "glob", "webfetch", "search_memory"]);
         filtered = nonIntent.filter(t => allowed.has(t.name));
         break;
       }

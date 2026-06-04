@@ -33,8 +33,10 @@ function extractArg(args: unknown, key: string): string | undefined {
 const PATH_ARGS: Record<string, string[]> = {
   read: ["filepath"],
   write: ["filepath"],
+  edit: ["filepath"],
   ls: ["path"],
   tree: ["path"],
+  glob: ["path"],
   grep: ["path"],
   cp: ["source", "dest"],
   mv: ["source", "dest"],
