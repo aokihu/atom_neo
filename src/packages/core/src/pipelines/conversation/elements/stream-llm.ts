@@ -263,11 +263,11 @@ function getActiveToolNames(taskIntent: string): string[] {
 
   switch (taskIntent) {
     case "creative_generation":
-      return [INTENT];
+      return ["todowrite", INTENT];
     case "conversation":
       return [...ALL_FS, ...ALL_OTHER, INTENT];
     case "knowledge_retrieval":
-      return ["read", "grep", "ls", "tree", "glob", "webfetch", "search_memory", INTENT];
+      return ["read", "grep", "ls", "tree", "glob", "webfetch", "search_memory", "todowrite", INTENT];
     case "tool_execution":
     default:
       return [...ALL_FS, ...ALL_MEMORY, ...ALL_OTHER, INTENT];

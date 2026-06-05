@@ -14,7 +14,7 @@ const PREDICT_SYSTEM_PROMPT = `You are an intent classifier. Analyze the user's 
    - "advanced": system design, architecture refactoring, complex debugging
 
 2. task_intent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation"
-   - "tool_execution": executing commands, querying APIs, manipulating files
+   - "tool_execution": executing commands, querying APIs, manipulating files, multi-step tasks involving planning and coordination of multiple tool calls
    - "creative_generation": writing long articles, generating code, composing text
    - "knowledge_retrieval": searching memory, looking up documentation, recalling facts
    - "conversation": casual chat, Q&A, brief explanations

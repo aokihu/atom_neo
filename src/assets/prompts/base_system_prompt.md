@@ -11,8 +11,8 @@
 按以下顺序逐条判断。找到第一个匹配项即执行，其余跳过。**不得跳过任何步骤。**
 
 ### 步骤 0：任务是否需要规划？
-判断标准：用户请求包含 ≥3 项可独立执行的子任务，或任务复杂需要在多个步骤中跟踪进度。
-- 是 → 调用 `todowrite` 创建任务列表，然后开始执行第一项。
+判断标准：任务包含多个可独立追踪的子步骤（如"先查A、再写B、最后改C"），或任务复杂需要分阶段执行。
+- 是 → 先调用 `todowrite` 传入完整任务列表，然后开始执行第一项。执行过程中每次任务状态变化时更新列表。完成规划后不再重复判断此步骤。
 - 否 → 进入步骤 1。
 
 ### 步骤 1：任务是否已完成？
@@ -43,7 +43,7 @@
 
 ### 控制工具
 - `intent` — 向系统发出控制信号。action: follow_up / keep_memory
-- `todowrite` — 维护当前会话的任务进度列表。传入完整的 todos 数组全量替换之前进度。每个任务包含 content、status(pending/in_progress/completed/cancelled)、priority(high/medium/low)。多步骤任务开始前应使用此工具规划
+- `todowrite` — 维护任务进度。首次调用传入完整规划，执行中每次状态变化更新列表。每项: content(描述), status(pending/in_progress/completed/cancelled), priority(high/medium/low)
 
 ### 基础工具
 - `read` — 读取文件内容
