@@ -20,6 +20,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #maxSteps: number;
   #providerOptions: Record<string, any>;
   #taskIntent: string;
+  #session: any;
 
   constructor(params: {
     name: string;
@@ -33,6 +34,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     maxSteps?: number;
     providerOptions?: Record<string, any>;
     taskIntent?: string;
+    session?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -43,6 +45,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
+    this.#session = params.session;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -83,6 +86,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
                 const result = await t.execute(args, { abortSignal: opts?.abortSignal });
                 const duration = Date.now() - start;
                 this.report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: result.ok });
+                if (t.name === "todowrite" && result.ok && this.#session?.setTodoState) {
+                  this.#session.setTodoState((args as any).todos ?? []);
+                }
                 if (!result.ok) return `Error: ${result.error}`;
                 return result.output || JSON.stringify(result.data);
               } catch (err: any) {

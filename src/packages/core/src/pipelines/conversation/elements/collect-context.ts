@@ -84,6 +84,13 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         contextData += `\n\n${this.#session.postCheckGuidance}`;
         delete this.#session.postCheckGuidance;
       }
+
+      const todos = this.#session.todoState;
+      if (todos && todos.length > 0) {
+        const icons: Record<string, string> = { pending: "⬜", in_progress: "🔄", completed: "✅", cancelled: "❌" };
+        const lines = todos.map((t: any) => `- ${icons[t.status] ?? "⬜"} [${t.priority}] ${t.content}`);
+        contextData += `\n\n当前任务进度:\n${lines.join("\n")}`;
+      }
     }
 
     this.report(BusEvents.Element.Data, { step: "done", memoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
