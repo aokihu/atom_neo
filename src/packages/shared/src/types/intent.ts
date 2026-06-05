@@ -1,6 +1,5 @@
 export enum IntentRequestType {
   FOLLOW_UP = "follow_up",
-  REQUEST_MORE_TOOLS = "request_more_tools",
   KEEP_MEMORY = "keep_memory",
 }
 
@@ -25,15 +24,12 @@ export type FollowUpIntentRequest = IntentRequest & {
   };
 };
 
-export type ToolTier = "basic" | "full";
-
 export type DifficultyLevel = "basic" | "balanced" | "advanced";
 
 export type TaskIntent = "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
 export type ContextRelevance = "standalone" | "follow_up" | "continuation";
 
 export type IntentPredictionResult = {
-  toolTier: ToolTier;
   difficulty: DifficultyLevel;
   taskIntent: TaskIntent;
   contextRelevance: ContextRelevance;

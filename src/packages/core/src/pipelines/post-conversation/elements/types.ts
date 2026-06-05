@@ -11,7 +11,6 @@ export type PostConversationFlowState = {
   session: any;
   userMessage: string;
   assistantResponse: string;
-  predictedToolTier: string;
   predictedTaskIntent: string;
   stepCount: number;
   assistantParts: number;

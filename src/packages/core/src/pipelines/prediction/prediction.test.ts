@@ -119,7 +119,6 @@ describe("prediction pipeline elements", () => {
 
     expect(result.mode).toBe("routing");
     expect(result.prediction).toBeDefined();
-    expect(result.prediction!.toolTier).toBe("basic");
     expect(result.prediction!.difficulty).toBe("balanced");
   });
 
@@ -142,7 +141,7 @@ describe("prediction pipeline elements", () => {
     });
 
     expect(result.mode).toBe("routing");
-    expect(result.prediction!.toolTier).toBe("basic");
+    expect(result.prediction!.difficulty).toBe("balanced");
   });
 
   test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
@@ -163,12 +162,11 @@ describe("prediction pipeline elements", () => {
       task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
       userMessage: "hello",
-      prediction: { toolTier: "full", difficulty: "advanced", reasoning: "needs shell" },
+      prediction: { difficulty: "advanced", reasoning: "needs shell" },
     });
 
     expect(result.type).toBe("complete");
     expect(session.pendingPrediction).toBeDefined();
-    expect(session.pendingPrediction.toolTier).toBe("full");
     expect(session.pendingPrediction.difficulty).toBe("advanced");
     expect(capture.enqueued).not.toBeNull();
     expect(capture.enqueued.pipeline).toBe("conversation");
@@ -195,7 +193,6 @@ describe("prediction pipeline elements", () => {
       userMessage: "hello",
     });
 
-    expect(session.pendingPrediction.toolTier).toBe("basic");
     expect(session.pendingPrediction.difficulty).toBe("balanced");
     expect(capture.enqueued.pipeline).toBe("conversation");
   });

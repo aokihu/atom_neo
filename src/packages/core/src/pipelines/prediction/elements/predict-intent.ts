@@ -8,23 +8,18 @@ import type { PredictionFlowState } from "./types";
 
 const PREDICT_SYSTEM_PROMPT = `You are an intent classifier. Analyze the user's message and classify:
 
-1. tool_tier: "basic" or "full"
-   - "full": requires shell commands (bash), network access (curl/wget),
-             batch file operations (cp/mv), or memory recall (traverse_memory)
-   - "basic": only needs file read/write, search, directory listing
-
-2. difficulty: "basic", "balanced", or "advanced"
+1. difficulty: "basic", "balanced", or "advanced"
    - "basic": single-step read/search/edit
    - "balanced": multi-step tasks, code generation, moderate changes
    - "advanced": system design, architecture refactoring, complex debugging
 
-3. task_intent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation"
+2. task_intent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation"
    - "tool_execution": executing commands, querying APIs, manipulating files
    - "creative_generation": writing long articles, generating code, composing text
    - "knowledge_retrieval": searching memory, looking up documentation, recalling facts
    - "conversation": casual chat, Q&A, brief explanations
 
-4. context_relevance: "standalone" | "follow_up" | "continuation"
+3. context_relevance: "standalone" | "follow_up" | "continuation"
    - "standalone": new topic, unrelated to conversation history
    - "follow_up": follows up on the previous response, needs full context
    - "continuation": explicitly continuing a previously interrupted task
@@ -34,10 +29,9 @@ context_relevance. A standalone message in a multi-turn conversation may still b
 "standalone" if it switches to a completely new topic.
 
 Reply ONLY with JSON in this exact format:
-{"tool_tier":"...","difficulty":"...","task_intent":"...","context_relevance":"...","reasoning":"brief explanation"}`;
+{"difficulty":"...","task_intent":"...","context_relevance":"...","reasoning":"brief explanation"}`;
 
 const FALLBACK: IntentPredictionResult = {
-  toolTier: "basic",
   difficulty: "balanced",
   taskIntent: "conversation",
   contextRelevance: "standalone",
@@ -105,13 +99,12 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
 
       const parsed = JSON.parse(jsonMatch[0]);
       const prediction: IntentPredictionResult = {
-        toolTier: parsed.tool_tier === "full" ? "full" : "basic",
         difficulty: (["basic", "balanced", "advanced"].includes(parsed.difficulty) ? parsed.difficulty : "balanced") as IntentPredictionResult["difficulty"],
         taskIntent: (["tool_execution", "creative_generation", "knowledge_retrieval", "conversation"].includes(parsed.task_intent) ? parsed.task_intent : "conversation") as IntentPredictionResult["taskIntent"],
         contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
         reasoning: parsed.reasoning ?? "",
       };
-      this.report(BusEvents.Element.Data, { step: "done", toolTier: prediction.toolTier, difficulty: prediction.difficulty, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance, reasoning: prediction.reasoning });
+      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance, reasoning: prediction.reasoning });
       return { ...input, mode: "routing", prediction };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });

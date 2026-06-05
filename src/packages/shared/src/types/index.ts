@@ -13,7 +13,6 @@ export { IntentRequestType, IntentRequestSource } from "./intent";
 export type {
   IntentRequest,
   FollowUpIntentRequest,
-  ToolTier,
   DifficultyLevel,
   TaskIntent,
   ContextRelevance,

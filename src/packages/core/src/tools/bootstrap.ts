@@ -31,16 +31,6 @@ export function createAllTools(sandbox: string, memory?: any, whitelist?: string
   return raw.map(t => createToolGuard(t, sandbox, whitelist ?? []));
 }
 
-const BASIC_NAMES = ["read", "write", "edit", "ls", "grep", "tree", "glob", "webfetch", "search_memory", "save_memory", "link_memory", "intent"];
-const ADVANCED_NAMES = ["cp", "mv", "bash", "traverse_memory"];
-
-export function partitionTools(all: ToolDefinition[]) {
-  return {
-    basic: all.filter(t => BASIC_NAMES.includes(t.name)),
-    advanced: all.filter(t => ADVANCED_NAMES.includes(t.name)),
-  };
-}
-
 export function registerBuiltinTools(registry: ToolRegistry, sandbox: string, whitelist?: string[]): void {
   for (const t of createAllTools(sandbox, undefined, whitelist)) {
     registry.register(t);

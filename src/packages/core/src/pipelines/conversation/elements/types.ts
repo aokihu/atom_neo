@@ -26,7 +26,7 @@ export type ConversationFlowState = {
     nextPrompt: string;
     avoidRepeat: string;
   };
-  chainAction?: "more_tools" | "follow_up";
+  chainAction?: "follow_up";
   intents?: IntentRequest[];
   tokenUsage?: TokenUsage;
 };

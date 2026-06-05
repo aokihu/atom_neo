@@ -192,7 +192,7 @@ src/main.ts (入口)
 **关键变化（v0.7.x）：**
 - `setSandbox()` / `setBashSandbox()` 已删除。sandbox 路径通过 `RuntimeService` 的 factory 函数注入到 tools
 - `CoreDeps` 精简为 `{ port, host, logger, sm }`，sandbox/apiKey/getCompiledPrompt 全通过 `sm.get("runtime")` 获取
-- tools 改为工厂函数：`createAllTools(sandbox)` → `partitionTools(all)` 拆分 basic/advanced
+- tools 改为工厂函数：`createAllTools(sandbox)` 创建全部工具，启动时一次性传递给 conversation pipeline
 
 ### Startup Code Template
 

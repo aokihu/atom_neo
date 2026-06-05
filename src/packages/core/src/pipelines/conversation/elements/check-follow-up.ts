@@ -32,10 +32,6 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
     }
 
     for (const intent of intents) {
-      if (intent.request === IntentRequestType.REQUEST_MORE_TOOLS) {
-        this.report(BusEvents.Element.Data, { step: "done", chainAction: "more_tools" });
-        return { ...input, mode: "ready_to_finalize", chainAction: "more_tools" };
-      }
       if (intent.request === IntentRequestType.FOLLOW_UP) {
         const p = intent.params as Record<string, string>;
         this.report(BusEvents.Element.Data, { step: "done", chainAction: "follow_up" });

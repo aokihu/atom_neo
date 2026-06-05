@@ -43,7 +43,7 @@ collect-prompts    (source:    初始→streaming)
 
 **关键变化（v0.5.1）：**
 - `parse-intents` 加回 — 纯正则解析 `responseText` → `FlowState.intents[]`
-- `check-follow-up` 简化 — 消费 `input.intents[]`，按类型分派（FOLLOW_UP / KEEP_MEMORY / REQUEST_MORE_TOOLS）
+- `check-follow-up` 简化 — 消费 `input.intents[]`，按类型分派（FOLLOW_UP / KEEP_MEMORY）
 - 不影响流式设计 — parse-intents 在 stream-llm 完成后执行，不切换 mode
 
 ---
@@ -174,9 +174,7 @@ function parseIntentRequests(text: string): IntentRequest[] {
       if (k && v) params[k.trim()] = v.trim();
     }
 
-    if (type === "REQUEST_MORE_TOOLS")
-      intents.push({ ... });
-    else if (type === "KEEP_MEMORY" && validateKeepMemory(params))
+    if (type === "KEEP_MEMORY" && validateKeepMemory(params))
       intents.push({ ... });
     else if (type === "FOLLOW_UP" && validateFollowUp(params))
       intents.push({ ... });
@@ -190,7 +188,6 @@ function parseIntentRequests(text: string): IntentRequest[] {
 
 | TYPE | 必须参数 | 规则 |
 |------|---------|------|
-| `REQUEST_MORE_TOOLS` | 无 | 直接通过 |
 | `KEEP_MEMORY` | `mem_id` | 非空字符串 |
 | `FOLLOW_UP` | `next_prompt` 或 `history_abstract` 或 `summary` | 至少一个非空 |
 | 其他 | — | **跳过**，不产生 intent |
@@ -233,20 +230,14 @@ class CheckFollowUpElement extends BaseElement {
 **kind**: `sink`，最后元素 — 消费 `chainAction` 并创建链任务
 
 **职责**: 根据 `chainAction` 值创建对应链任务
-- `"more_tools"` → 工具链任务（tools: basic+advanced, payload: 空）
 - `"follow_up"` → 续写任务（payload: "请从上次中断处继续"）
 
 ```typescript
 class FinalizeElement extends BaseElement {
   #queue: TaskQueue;
-  #buildChainPipeline: (taskId, sessionId, chatId) => void;
 
   async doProcess(input): Promise {
-    if (input.chainAction === "more_tools") {
-      const task = createTaskItem({ source: INTERNAL, ... });
-      this.#buildChainPipeline(task.id, input.task.sessionId, input.task.chatId);
-      this.#queue.enqueue(task);
-    } else if (input.chainAction === "follow_up") {
+    if (input.chainAction === "follow_up") {
       const task = createTaskItem({
         source: INTERNAL,
         payload: [{ type: "text", data: "请从上次中断处继续" }],

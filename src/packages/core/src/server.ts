@@ -13,7 +13,7 @@ import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, setPipeline } from "./api/tasks";
 import { ToolRegistry } from "./tools/registry";
-import { registerBuiltinTools, createAllTools, partitionTools } from "./tools/bootstrap";
+import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -92,22 +92,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   };
 
   const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
-  const { basic, advanced } = partitionTools(allTools);
-
-  const buildChainPipeline = (chainTaskId: string, sessionId: string, chatId: string) => {
-    const pipeline = conversationPipeline({
-      session: sessionStore.get(sessionId),
-      task: { id: chainTaskId, sessionId, chatId, sandbox, payload: [] },
-      apiKey, model, baseUrl, providerModel, configContextLimit, providerOptions,
-      tools: [...basic, ...advanced],
-      getCompiledPrompt, maxTokens, maxSteps, memory,
-      taskIntent: "tool_execution",
-      contextRelevance: "continuation",
-      sandbox,
-      toolTier: "full",
-    }).build(bus);
-    setPipeline(chainTaskId, pipeline);
-  };
 
   const pipelineBuilders: Record<string, (task: any) => any> = {
     prediction: (task: any) => {
@@ -123,14 +107,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     conversation: (task: any) => {
       const session = sessionStore.get(task.sessionId);
       const prediction = session.pendingPrediction ?? {
-        toolTier: "basic",
         difficulty: "balanced",
         taskIntent: "conversation",
         contextRelevance: "standalone",
         reasoning: "default",
       };
-
-      const tools = prediction.toolTier === "full" ? [...basic, ...advanced] : basic;
 
       const resolvedModel = runtime.getResolvedModel
         ? runtime.getResolvedModel(
@@ -149,7 +130,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         providerOptions: {
           deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
         },
-        tools,
+        tools: allTools,
         getCompiledPrompt,
         maxTokens,
         maxSteps,
@@ -157,7 +138,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         taskIntent: prediction.taskIntent,
         contextRelevance: prediction.contextRelevance,
         sandbox,
-        toolTier: prediction.toolTier,
       }).build(bus);
     },
 
@@ -269,17 +249,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
     if (p.action === "post_check_retry") {
       session.incrementChainDepth();
-      orchestrator.scheduleConversation(p.sessionId, p.chatId, p.parentTaskId, [{ type: "text", data: "" }], (task) => {
-        buildChainPipeline(task.id, p.sessionId, p.chatId);
-      });
-      return;
-    }
-
-    if (p.action === "more_tools") {
-      session.incrementChainDepth();
-      orchestrator.scheduleConversation(p.sessionId, p.chatId, p.parentTaskId, [{ type: "text", data: "" }], (task) => {
-        buildChainPipeline(task.id, p.sessionId, p.chatId);
-      });
+      orchestrator.scheduleConversation(p.sessionId, p.chatId, p.parentTaskId, [{ type: "text", data: "" }]);
       return;
     }
 
@@ -359,5 +329,5 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   logger.info("core ready", { port: server.port, address: host });
-  return { port: server.port!, tools: basic.map(t => t.name), stop: () => { taskEngine.stop(); server.stop(); } };
+  return { port: server.port!, tools: allTools.map((t: any) => t.name), stop: () => { taskEngine.stop(); server.stop(); } };
 }

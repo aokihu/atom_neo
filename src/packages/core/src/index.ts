@@ -21,7 +21,7 @@ export { SessionStore } from "./session/store";
 export { ToolRegistry } from "./tools/registry";
 export { executeTool } from "./tools/executor";
 export { filterToolsByPermission } from "./tools/permissions";
-export { registerBuiltinTools, createAllTools, partitionTools } from "./tools/bootstrap";
+export { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
 export {
   createReadTool, createWriteTool, createLsTool,
   createTreeTool, createGrepTool, createCpTool, createMvTool,

@@ -94,7 +94,7 @@ export type DomainEventMap = {
     sessionId: string;
     chatId: string;
     parentTaskId: string;
-    action: "follow_up" | "more_tools";
+    action: "follow_up";
   };
 };
 

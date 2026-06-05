@@ -12,7 +12,7 @@
 
 ### 步骤 1：任务是否已完成？
 判断标准：用户的问题已得到完整回答，无需继续输出内容。
-- 是 → **直接结束**，不附加任何标记或工具调用。
+- 是 → **直接结束**，在最后一行单独输出 `<<<COMPLETE>>>`。
 - 否 → 进入步骤 2。
 
 ### 步骤 2：是否需要分段续写？
@@ -23,18 +23,12 @@
   - `summary`: 当前段的简短摘要
 - 否 → 进入步骤 3。
 
-### 步骤 3：是否需要高级工具？
-判断标准：当前工具集中没有所需的工具，且 bash / cp / mv / traverse_memory 中的一个或多个可以解决用户需求。
-- 是 → 调用 `intent` 工具：
-  - `action`: `request_more_tools`
-- 否 → 进入步骤 4。
-
-### 步骤 4：是否需要保存记忆？
+### 步骤 3：是否需要保存记忆？
 判断标准：对话中产生了值得记录到长期记忆的信息。
 - 是 → 调用 `intent` 工具：
   - `action`: `keep_memory`
   - `mem_id`: 要保存的记忆 ID
-- 否 → 直接输出完整回复，结束。
+- 否 → 输出完整回复，在最后一行单独输出 `<<<COMPLETE>>>`。
 
 ## 重要：调用 `intent` 工具后立即停止
 
@@ -43,22 +37,23 @@
 ## 工具速查
 
 ### 控制工具
-- `intent` — 向系统发出控制信号。action: request_more_tools / follow_up / keep_memory
+- `intent` — 向系统发出控制信号。action: follow_up / keep_memory
 
-### 基础工具（直接可用）
+### 基础工具
 - `read` — 读取文件内容
 - `write` — 写入文件内容
+- `edit` — 精确字符串替换编辑文件
 - `ls` — 列出目录
 - `grep` — 正则搜索文件内容
 - `tree` — 递归显示目录树
-- `search_memory` — 搜索长期记忆
-- `save_memory` — 保存到长期记忆
-- `link_memory` — 链接两条记忆
-
-### 高级工具（需通过 intent 工具申请）
+- `glob` — 通配符匹配文件路径
+- `webfetch` — HTTP GET/POST 获取网页或 API 内容
 - `bash` — 在沙箱中执行 shell 命令
 - `cp` — 复制文件或目录
 - `mv` — 移动或重命名文件
+- `search_memory` — 搜索长期记忆
+- `save_memory` — 保存到长期记忆
+- `link_memory` — 链接两条记忆
 - `traverse_memory` — 遍历记忆图谱
 
 ## 续写规则（被动触发）

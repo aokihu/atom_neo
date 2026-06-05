@@ -37,7 +37,6 @@ export type ConversationPipelineDeps = {
   providerModel?: string;
   configContextLimit?: number;
   tools: any[];
-  toolTier?: "basic" | "advanced";
   getCompiledPrompt?: () => string;
   maxTokens?: number;
   maxSteps?: number;
@@ -45,7 +44,6 @@ export type ConversationPipelineDeps = {
   taskIntent?: string;
   contextRelevance?: string;
   sandbox?: string;
-  toolTier?: string;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -67,7 +65,6 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,
       taskIntent: deps.taskIntent,
-      toolTier: deps.toolTier,
     })
     .boundary("check-follow-up", { memory: deps.memory })
     .sink("finalize", {});

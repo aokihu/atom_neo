@@ -20,7 +20,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #maxSteps: number;
   #providerOptions: Record<string, any>;
   #taskIntent: string;
-  #toolTier: string;
 
   constructor(params: {
     name: string;
@@ -34,7 +33,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     maxSteps?: number;
     providerOptions?: Record<string, any>;
     taskIntent?: string;
-    toolTier?: string;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -45,7 +43,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
-    this.#toolTier = params.toolTier ?? "basic";
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -211,8 +208,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: stepCounter.count, maxSteps: this.#maxSteps });
       }
 
-      const chainAction = intents.some(i => i.request === IntentRequestType.REQUEST_MORE_TOOLS) ? "more_tools"
-        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
+      const chainAction = intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
         : finishReason === "error" ? "follow_up"
         : undefined;
@@ -239,7 +235,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #filterToolsByIntent(): ToolDefinition[] {
     const nonIntent = this.#tools.filter(t => t.name !== "intent");
     const intent = this.#tools.find(t => t.name === "intent");
-    if (this.#toolTier === "full") return intent ? [...nonIntent, intent] : nonIntent;
     let filtered: ToolDefinition[];
     switch (this.#taskIntent) {
       case "creative_generation":
@@ -257,7 +252,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       }
       case "tool_execution":
       default:
-        filtered = nonIntent;
+        filtered = nonIntent.filter(t => t.name !== "todowrite" || this.#taskIntent === "tool_execution");
         break;
     }
     return intent ? [...filtered, intent] : filtered;
@@ -266,8 +261,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
 function toIntentRequest(input: IntentToolInput): IntentRequest {
   switch (input.action) {
-    case "request_more_tools":
-      return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.REQUEST_MORE_TOOLS, intent: "more tools", params: input };
     case "follow_up":
       return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params: input };
     case "keep_memory":

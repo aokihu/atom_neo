@@ -1,20 +1,16 @@
 # TaskEngine Runloop — 任务状态机
 
-> **版本**: v0.5.3 → FinalizeElement 统一收口 + chainAction 扩展
+> **版本**: v0.6.0 → 移除 tool tier 分层，所有工具一次性加载
 
 ---
 
-## 问题
-
-当前 `needMoreTools` 链式续接逻辑散落在 `server.ts` 的 `bus.on("task.completed")` handler 中，跨越 TaskEngine → server.ts 两个文件的回调跳转。每新增一种链任务类型（续写、记忆检索等）都需要加新的 boolean 字段和 server.ts 代码。
-
 ## 方案：FinalizeElement 统一收口 + chainAction
 
-将链任务创建逻辑从 `server.ts` 内聚到 `FinalizeElement`，用单一 `chainAction` 字段表达所有链类型：
+链任务创建逻辑内聚在 `FinalizeElement`，用单一 `chainAction` 字段表达链类型：
 
 ```
 ConversationFlowState {
-  chainAction?: "more_tools" | "follow_up";  // 可扩展
+  chainAction?: "follow_up";  // 可扩展
 }
 ```
 
@@ -23,14 +19,11 @@ ConversationFlowState {
 | Element | 设置 | 条件 | 优先级 |
 |---------|------|------|--------|
 | stream-llm | `chainAction = "follow_up"` | `finishReason === "length"` (输出被截断) | 低 |
-| check-follow-up | `chainAction = "more_tools"` | intent 中检测到 REQUEST_MORE_TOOLS | 高（覆盖） |
 
 ### FinalizeElement 消费
 
 ```typescript
 FinalizeElement.doProcess():
-  if chainAction === "more_tools":
-    → 创建链任务 (tools: basic+advanced, payload: 空)
   if chainAction === "follow_up":
     → 创建续写任务 (payload: "请从上次中断处继续")
   → enqueue → ActiveQueue (LIFO)
@@ -45,13 +38,11 @@ FinalizeElement.doProcess():
 
 ```
 TaskEngine.#processNext()
-  └─ pipeline 执行 (10 elements)
+  └─ pipeline 执行 (9 elements)
        │
        ├─ stream-llm:      chainAction = "follow_up" (if truncated)
-       ├─ parse-intents:   (只解析)
-       ├─ check-follow-up: chainAction = "more_tools" (覆盖)
+       ├─ check-follow-up: 处理 intent (FOLLOW_UP, KEEP_MEMORY)
        └─ FinalizeElement:
-            ├─ "more_tools" → 创建工具链任务 → ActiveQueue
             ├─ "follow_up"  → 创建续写任务   → ActiveQueue
             └─ return complete
 ```
@@ -59,8 +50,7 @@ TaskEngine.#processNext()
 ## server.ts 简化
 
 - 只负责日志、广播、session 存储
-- 不再知道 needMoreTools / chainAction / tool 层级
-- `buildChainPipeline` 回调传给 FinalizeElement
+- 不再需要 tool 层级或 buildChainPipeline
 
 ## 关键约束
 
@@ -74,13 +64,10 @@ TaskEngine.#processNext()
 MAX_FOLLOW_UP_DEPTH = 5
 
 Task (depth=0) → pipeline 执行 → FinalizeElement
-  ├─ depth >= 5 ? → 停止，标记 COMPLETED
+  ├─ depth >= 5 ? → 停止
   └─ depth < 5  ? → 创建链任务 (depth+1) → ActiveQueue
-
-链式调用: request_more_tools → request_more_tools → ...
-           depth 0             depth 1              depth 5 → STOP
 ```
 
-- `depth` 存储在 ConversationPipelineDeps 中，每个 pipeline 实例固定
-- FinalizeElement 创建链任务时传递 `depth + 1`
-- 上限可配置：`MAX_FOLLOW_UP_DEPTH` 常量
+- `depth` 存储在每个 pipeline 实例的 deps 中，由 server.ts 维护
+- FinalizeElement 创建链任务时通过 orchestrator 自动递增 depth
+- 上限可配置：`maxChainDepth` 常量

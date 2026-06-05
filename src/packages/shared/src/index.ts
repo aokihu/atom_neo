@@ -18,7 +18,6 @@ export type {
   ToolReportFact,
   IntentRequest,
   FollowUpIntentRequest,
-  ToolTier,
   DifficultyLevel,
   TaskIntent,
   ContextRelevance,

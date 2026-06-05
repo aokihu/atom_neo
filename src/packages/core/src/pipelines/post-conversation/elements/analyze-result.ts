@@ -57,21 +57,6 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       return { ...input, mode: "acting", analysis: FALLBACK };
     }
 
-    if (input.predictedToolTier === "full") {
-      this.report(BusEvents.Element.Data, { step: "skip, full tools" });
-      return { ...input, mode: "acting", analysis: FALLBACK };
-    }
-
-    if (NON_RETRY_TASK_INTENTS.has(input.predictedTaskIntent)) {
-      this.report(BusEvents.Element.Data, { step: "skip, non-retry task intent", taskIntent: input.predictedTaskIntent });
-      return { ...input, mode: "acting", analysis: FALLBACK };
-    }
-
-    if (input.stepCount === 0 && input.assistantResponse.length > 0) {
-      this.report(BusEvents.Element.Data, { step: "skip, no tools used with output" });
-      return { ...input, mode: "acting", analysis: FALLBACK };
-    }
-
     try {
       const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
       const model = provider(this.#model);
@@ -87,7 +72,6 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
         `用户请求: ${input.userMessage.slice(0, 500)}`,
         `AI回复: ${input.assistantResponse.slice(0, 3000)}`,
         `预期任务: ${TASK_INTENT_DESC[input.predictedTaskIntent] ?? "对话交流"}`,
-        `可用工具级别: ${input.predictedToolTier === "full" ? "完整工具集" : "仅文件读写和搜索"}`,
       ].join("\n");
 
       this.report(BusEvents.Element.Data, { step: "analyzing", userMsgLen: input.userMessage.length, assistantMsgLen: input.assistantResponse.length });

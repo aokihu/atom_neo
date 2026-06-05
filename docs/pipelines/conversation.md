@@ -2,7 +2,7 @@
 
 ## 职责
 
-核心对话管道。加载系统提示词和 Agent 指令、收集消息上下文、调用 LLM 流式生成、解析意图请求、处理链式续写。
+核心对话管道。加载系统提示词和 Agent 指令、收集消息上下文、调用 LLM 流式生成、解析意图请求、处理链式续写。所有工具在 pipeline 启动时一次性加载。
 
 ## 触发方式
 
@@ -12,9 +12,7 @@ prediction pipeline → predict-finalize → orchestrator.scheduleConversation()
   → conversationPipeline(deps).build(bus)
 ```
 
-也通过 `BusEvents.Conversation.Chain` 事件（`more_tools` 路径）由 `buildChainPipeline` 触发。
-
-## Element 链（10 个元素）
+## Element 链（9 个元素）
 
 ```
 collect-prompts (source)
@@ -24,7 +22,6 @@ collect-prompts (source)
   → format-system-messages (transform)
   → format-user-messages (transform)
   → stream-llm (transform)
-  → parse-intents (transform)
   → check-follow-up (boundary)
   → finalize (sink)
 ```
@@ -38,9 +35,8 @@ collect-prompts (source)
 | 5 | `format-system-messages` | transform | 合并 system prompt + agent prompt + context |
 | 6 | `format-user-messages` | transform | 组装 user message 数组，切换 mode → `formatted` |
 | 7 | `stream-llm` | transform | **核心：调用 LLM 流式生成** |
-| 8 | `parse-intents` | transform | 解析 LLM 输出中的 `[TYPE,...]` 意图请求 |
-| 9 | `check-follow-up` | boundary | 根据意图和 finishReason 决定 chainAction |
-| 10 | `finalize` | sink | 发出 `Conversation.Chain` 事件 → server.ts 统一调度 |
+| 8 | `check-follow-up` | boundary | 根据意图和 finishReason 决定 chainAction |
+| 9 | `finalize` | sink | 发出 `Conversation.Chain` 事件 → server.ts 统一调度 |
 
 ## FlowState
 
@@ -64,9 +60,8 @@ type ConversationFlowState = {
   responseText?: string;
   reasoningContent?: string;
   followUp?: { summary: string; nextPrompt: string; avoidRepeat: string };
-  chainAction?: "more_tools" | "follow_up";
+  chainAction?: "follow_up";
   intents?: IntentRequest[];
-  intentRequestText?: string;
   tokenUsage?: TokenUsage;
 };
 ```
@@ -81,10 +76,9 @@ initial
   → collect-context:      构建环境上下文                    → streaming
   → format-system-messages: 合并 system + agent + context   → streaming
   → format-user-messages: 组装 user messages, mode 切换     → formatted
-  → stream-llm:           调用 LLM, 提取意图文本             → executing
-  → parse-intents:        解析意图括号                      → executing
+  → stream-llm:           调用 LLM, 处理 intent 工具调用     → executing
   → check-follow-up:      决定 chainAction                  → ready_to_finalize
-  → finalize:             发出 Chain 事件                   → PipelineResult
+  → finalize:             发出 Chain 或 Idle 事件           → PipelineResult
 ```
 
 ## stream-llm 详解
@@ -93,9 +87,11 @@ initial
 
 ```
 LLM 输出 → text-delta chunks → fullStream 循环
-  ├── 检测 <<<REQUEST>>> 标记 → 分离 responseText / intentRequestText
-  ├── 每 CHUNK_BATCH=3 批 → this.report(Transport.Delta) → WebSocket 广播
-  ├── step-finish 事件 → 记录 finishReason
+  ├── text-delta:    实时 Transport.Delta → WebSocket 广播
+  ├── tool-call:     检测 intent 信号 → 捕获意图数据
+  ├── tool-result:   记录工具执行结果
+  ├── finish:        记录 finishReason
+  ├── <<<COMPLETE>>>: 过滤标记, 发 Transport.Complete 结构信号
   └── 最终:
        ├── response: 提取 reasoningContent
        ├── usage: 提取 tokenUsage
@@ -107,35 +103,21 @@ LLM 输出 → text-delta chunks → fullStream 循环
 | 参数 | 来源 | 默认 |
 |------|------|------|
 | `model` | `runtime.getResolvedModel(difficulty).model` | `"deepseek-v4-flash"` |
-| `maxSteps` | `config.json → conversation.maxSteps` | `10` |
+| `maxSteps` | `config.json → conversation.maxSteps` | `50` |
 | `maxTokens` | `config.json → transport.maxOutputTokens` | `4096` |
-| `tools` | prediction.toolTier 决定 basic/full | `[]` |
+| `tools` | 全部工具（启动时一次性加载） | `createAllTools()` |
 | `providerOptions` | `{ deepseek: { thinking: { type: ... } } }` | thinking=disabled |
 
-### 意图检测
+### Intent 工具
 
-LLM 通过 `<<>>` 文本标记输出意图请求：
+LLM 通过调用 `intent` 工具发出控制信号：
 
-```
-用户可见的回复内容...
+| action | 用途 |
+|--------|------|
+| `follow_up` | 请求分段续写（需 `next_prompt` + `summary` 或 `history_abstract`） |
+| `keep_memory` | 保存记忆（需 `mem_id`） |
 
-<<<REQUEST>>>
-[FOLLOW_UP,next_prompt=继续输出下一段,summary=当前段摘要]
-```
-
-stream-llm 将文本分为 `responseText`（给用户看）和 `intentRequestText`（给 parse-intents 解析）。
-
-## parse-intents 意图类型
-
-| 类型 | 格式 | 用途 |
-|------|------|------|
-| `REQUEST_MORE_TOOLS` | `[REQUEST_MORE_TOOLS]` | 申请高级工具（bash、cp、mv 等） |
-| `FOLLOW_UP` | `[FOLLOW_UP,next_prompt=...,summary=...]` | 请求分段续写 |
-| `KEEP_MEMORY` | `[KEEP_MEMORY,mem_id=xxx]` | 保留长期记忆 |
-
-必须参数：
-- `FOLLOW_UP` 至少需要 `next_prompt`、`summary` 或 `history_abstract` 之一
-- `KEEP_MEMORY` 必须包含 `mem_id`
+stream-llm 通过 `intentSignal` 闭包捕获 intent 工具调用参数。
 
 ## chainAction → 链式续写
 
@@ -143,7 +125,7 @@ finalize element 发出 `BusEvents.Conversation.Chain` 事件，server.ts 统一
 
 ```
 Conversation.Chain handler:
-  ├── more_tools → incrementChainDepth + buildChainPipeline(full tools)
+  ├── post_check_retry → incrementChainDepth + scheduleConversation
   ├── follow_up + depth >= maxChainDepth → scheduleEvaluator
   ├── follow_up + depth >= 3 && depth % 3 === 0 → scheduleEvaluator
   └── follow_up → incrementChainDepth + scheduleFollowUp
@@ -161,11 +143,14 @@ type ConversationPipelineDeps = {
   providerOptions?: Record<string, any>;  // → stream-llm
   providerModel?: string;    // → collect-context
   configContextLimit?: number; // → collect-context
-  tools: any[];              // → stream-llm
+  tools: any[];              // → stream-llm (全量工具)
   getCompiledPrompt?: () => string;  // → fetch-agents-prompt
   maxTokens?: number;        // → stream-llm
   maxSteps?: number;         // → stream-llm
   memory?: any;              // → collect-context, check-follow-up
+  taskIntent?: string;       // → stream-llm (filter by intent type)
+  contextRelevance?: string; // → collect-prompts
+  sandbox?: string;          // → collect-context
 };
 ```
 
@@ -184,7 +169,6 @@ src/packages/core/src/pipelines/conversation/
     format-system-messages.ts
     format-user-messages.ts
     stream-llm.ts
-    parse-intents.ts
     check-follow-up.ts
     finalize.ts
 ```
