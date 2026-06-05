@@ -21,6 +21,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #providerOptions: Record<string, any>;
   #taskIntent: string;
   #stepCounter = { count: 0 };
+  #session: any;
 
   constructor(params: {
     name: string;
@@ -34,6 +35,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     maxSteps?: number;
     providerOptions?: Record<string, any>;
     taskIntent?: string;
+    session?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -43,7 +45,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
-    this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter);
+    this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
+    this.#session = params.session;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -220,7 +223,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   }
 }
 
-function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }): Record<string, any> {
+function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }, session?: any): Record<string, any> {
   const result: Record<string, any> = {};
   for (const t of tools) {
     result[t.name] = tool({
@@ -233,11 +236,14 @@ function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payloa
             const start = Date.now();
             try {
               report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
-              const result = await t.execute(args, { abortSignal: opts?.abortSignal });
+              const r = await t.execute(args, { abortSignal: opts?.abortSignal });
               const duration = Date.now() - start;
-              report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: result.ok });
-              if (!result.ok) return `Error: ${result.error}`;
-              return result.output || JSON.stringify(result.data);
+              report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: r.ok });
+              if (t.name === "todowrite" && r.ok && session?.setTodoState) {
+                session.setTodoState((args as any).todos ?? []);
+              }
+              if (!r.ok) return `Error: ${r.error}`;
+              return r.output || JSON.stringify(r.data);
             } catch (err: any) {
               const duration = Date.now() - start;
               report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error: err?.message ?? String(err) });

@@ -11,6 +11,7 @@ import {
   createTraverseMemoryTool, createLinkMemoryTool,
 } from "./builtin/memory";
 import { createIntentTool } from "./builtin/intent";
+import { createTodoWriteTool } from "./builtin/todowrite";
 import { createToolGuard } from "./guard";
 
 /** Create all builtin tool definitions (fs, bash, memory) for a sandbox. */
@@ -25,6 +26,7 @@ export function createAllTools(sandbox: string, memory?: any, whitelist?: string
     createTraverseMemoryTool(memory as any),
     createLinkMemoryTool(memory as any),
     createIntentTool(),
+    createTodoWriteTool(),
     createWebFetchTool(),
     createGlobTool(sb), createEditTool(sb),
   ];

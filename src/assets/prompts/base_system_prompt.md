@@ -38,6 +38,7 @@
 
 ### 控制工具
 - `intent` — 向系统发出控制信号。action: follow_up / keep_memory
+- `todowrite` — 维护当前会话的任务进度列表。传入完整的 todos 数组全量替换之前进度。每个任务包含 content、status(pending/in_progress/completed/cancelled)、priority(high/medium/low)。多步骤任务开始前应使用此工具规划
 
 ### 基础工具
 - `read` — 读取文件内容

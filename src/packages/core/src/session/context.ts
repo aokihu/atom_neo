@@ -10,6 +10,12 @@ import type {
 
 export type TokenUsage = { total: number };
 
+export type TodoItem = {
+  content: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  priority: "high" | "medium" | "low";
+};
+
 export class SessionContext {
   readonly sessionId: string;
 
@@ -36,6 +42,7 @@ export class SessionContext {
   #continuationContext: ContinuationContext | null = null;
   #tokenUsage: TokenUsage = { total: 0 };
   #chainDepth: number = 0;
+  #todoState: TodoItem[] = [];
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -115,6 +122,14 @@ export class SessionContext {
 
   addTokenUsage(total: number): void {
     this.#tokenUsage.total += total;
+  }
+
+  get todoState(): readonly TodoItem[] {
+    return this.#todoState;
+  }
+
+  setTodoState(items: TodoItem[]): void {
+    this.#todoState = items;
   }
 
   toJSON(): Record<string, unknown> {

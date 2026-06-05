@@ -65,6 +65,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,
       taskIntent: deps.taskIntent,
+      session: deps.session,
     })
     .boundary("check-follow-up", { memory: deps.memory })
     .sink("finalize", {});
