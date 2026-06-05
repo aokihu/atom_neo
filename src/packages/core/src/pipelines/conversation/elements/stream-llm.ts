@@ -94,7 +94,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
         prepareStep: ({ stepNumber }: { stepNumber: number }) => {
-          if (stepNumber === 0 && activeNames.length < tools.length) {
+          if (activeNames.length < tools.length) {
             return { activeTools: activeNames };
           }
         },
