@@ -15,11 +15,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
-  #tools: ToolDefinition[];
+  #aiTools: Record<string, any>;
   #maxTokens: number;
   #maxSteps: number;
   #providerOptions: Record<string, any>;
   #taskIntent: string;
+  #stepCounter = { count: 0 };
 
   constructor(params: {
     name: string;
@@ -38,11 +39,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
-    this.#tools = params.tools;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
     this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
+    this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter);
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -54,44 +55,25 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
     const userMessages = input.userMessages ?? [];
     const systemText = input.systemText ?? "";
-
-    const tools = this.#filterToolsByIntent();
-    this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: tools.length, taskIntent: this.#taskIntent });
+    const activeNames = getActiveToolNames(this.#taskIntent);
+    const tools = Object.keys(this.#aiTools);
+    this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: tools.length, activeCount: activeNames.length, taskIntent: this.#taskIntent });
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
 
     const intentSignal: { value: IntentToolInput | null } = { value: null };
-    const stepCounter = { count: 0 };
+    this.#stepCounter.count = 0;
 
-    const aiTools: Record<string, any> = {};
-    for (const t of tools) {
-      aiTools[t.name] = tool({
-        description: t.description,
-        parameters: jsonSchema(t.inputSchema as any),
-        execute: t.name === "intent"
-          ? async (args: any) => {
-              const parsed = IntentInputSchema.safeParse(args);
-              if (parsed.success) intentSignal.value = parsed.data;
-              return "Intent received";
-            }
-          : async (args: any, opts?: any) => {
-              const sc = ++stepCounter.count;
-              const start = Date.now();
-              try {
-                this.report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
-                const result = await t.execute(args, { abortSignal: opts?.abortSignal });
-                const duration = Date.now() - start;
-                this.report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: result.ok });
-                if (!result.ok) return `Error: ${result.error}`;
-                return result.output || JSON.stringify(result.data);
-              } catch (err: any) {
-                const duration = Date.now() - start;
-                this.report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error: err?.message ?? String(err) });
-                return `Tool execution error: ${err?.message ?? String(err)}`;
-              }
-            },
-      });
+    // Wire intentSignal into the pre-built intent tool
+    const intentAITool = this.#aiTools["intent"];
+    if (intentAITool) {
+      const origExecute = intentAITool.execute;
+      intentAITool.execute = async (args: any) => {
+        const parsed = IntentInputSchema.safeParse(args);
+        if (parsed.success) intentSignal.value = parsed.data;
+        return origExecute(args);
+      };
     }
 
     try {
@@ -102,12 +84,17 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         model,
         system: systemText || undefined,
         messages: userMessages as any,
-        tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
+        tools: tools.length > 0 ? this.#aiTools : undefined,
         maxSteps: this.#maxSteps,
         maxTokens: this.#maxTokens,
         allowSystemInMessages: true,
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
+        prepareStep: ({ stepNumber }: { stepNumber: number }) => {
+          if (stepNumber === 0 && activeNames.length < tools.length) {
+            return { activeTools: activeNames };
+          }
+        },
       } as any);
 
       let fullText = "";
@@ -117,7 +104,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let timedOut = false;
       const timeoutTimer = setTimeout(() => {
         timedOut = true;
-        this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: stepCounter.count });
+        this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: this.#stepCounter.count });
         abortController.abort();
       }, STREAM_TIMEOUT_MS);
 
@@ -139,13 +126,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               intentData = intentSignal.value ?? c.input;
               break;
             }
-            this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
+            this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
             continue;
           }
           if (chunk.type === "tool-result") {
             const c = chunk as any;
             if (c.toolName === "intent") continue;
-            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
+            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
             continue;
           }
           if (chunk.type === "text-delta") {
@@ -163,10 +150,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         clearTimeout(timeoutTimer);
       }
 
-      this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: stepCounter.count, fullTextLen: fullText.length });
+      this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
 
       if (!finishReason || finishReason === "tool-calls") {
-        if (fullText.length > 0 && stepCounter.count === 0) {
+        if (fullText.length > 0 && this.#stepCounter.count === 0) {
           finishReason = "stop";
         } else {
           this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
@@ -202,10 +189,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         m.role === "assistant" && m.reasoningContent
       )?.reasoningContent ?? "";
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
-      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: stepCounter.count, maxSteps: this.#maxSteps });
+      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
 
-      if (stepCounter.count >= this.#maxSteps) {
-        this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: stepCounter.count, maxSteps: this.#maxSteps });
+      if (this.#stepCounter.count >= this.#maxSteps) {
+        this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
       }
 
       const chainAction = intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
@@ -231,31 +218,53 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       };
     }
   }
+}
 
-  #filterToolsByIntent(): ToolDefinition[] {
-    const nonIntent = this.#tools.filter(t => t.name !== "intent");
-    const intent = this.#tools.find(t => t.name === "intent");
-    let filtered: ToolDefinition[];
-    switch (this.#taskIntent) {
-      case "creative_generation":
-        filtered = [];
-        break;
-      case "conversation": {
-        const excluded = new Set(["search_memory", "save_memory", "link_memory"]);
-        filtered = nonIntent.filter(t => !excluded.has(t.name));
-        break;
-      }
-      case "knowledge_retrieval": {
-        const allowed = new Set(["read", "grep", "ls", "tree", "glob", "webfetch", "search_memory"]);
-        filtered = nonIntent.filter(t => allowed.has(t.name));
-        break;
-      }
-      case "tool_execution":
-      default:
-        filtered = nonIntent.filter(t => t.name !== "todowrite" || this.#taskIntent === "tool_execution");
-        break;
-    }
-    return intent ? [...filtered, intent] : filtered;
+function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const t of tools) {
+    result[t.name] = tool({
+      description: t.description,
+      parameters: jsonSchema(t.inputSchema as any),
+      execute: t.name === "intent"
+        ? async () => "Intent received"
+        : async (args: any, opts?: any) => {
+            const sc = ++stepCounter.count;
+            const start = Date.now();
+            try {
+              report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
+              const result = await t.execute(args, { abortSignal: opts?.abortSignal });
+              const duration = Date.now() - start;
+              report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: result.ok });
+              if (!result.ok) return `Error: ${result.error}`;
+              return result.output || JSON.stringify(result.data);
+            } catch (err: any) {
+              const duration = Date.now() - start;
+              report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error: err?.message ?? String(err) });
+              return `Tool execution error: ${err?.message ?? String(err)}`;
+            }
+          },
+    });
+  }
+  return result;
+}
+
+function getActiveToolNames(taskIntent: string): string[] {
+  const ALL_FS = ["read", "write", "edit", "ls", "grep", "tree", "glob", "cp", "mv"];
+  const ALL_MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
+  const ALL_OTHER = ["bash", "webfetch", "todowrite"];
+  const INTENT = "intent";
+
+  switch (taskIntent) {
+    case "creative_generation":
+      return [INTENT];
+    case "conversation":
+      return [...ALL_FS, ...ALL_OTHER, INTENT];
+    case "knowledge_retrieval":
+      return ["read", "grep", "ls", "tree", "glob", "webfetch", "search_memory", INTENT];
+    case "tool_execution":
+    default:
+      return [...ALL_FS, ...ALL_MEMORY, ...ALL_OTHER, INTENT];
   }
 }
 
