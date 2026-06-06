@@ -253,6 +253,21 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       return;
     }
 
+    if (session.pendingPrediction) {
+      session.pendingPrediction.contextRelevance = "continuation";
+    }
+
+    const hasActiveTodos = session.todoState?.some(
+      (t: any) => t.status !== "completed" && t.status !== "cancelled",
+    );
+
+    if (hasActiveTodos) {
+      logger.debug("conversation chain: active todos, skipping evaluator, scheduling follow-up", { chainDepth: session.chainDepth });
+      session.incrementChainDepth();
+      orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);
+      return;
+    }
+
     const depth = session.chainDepth;
     if (depth >= maxChainDepth) {
       logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });
