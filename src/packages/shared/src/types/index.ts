@@ -14,6 +14,7 @@ export type {
   IntentRequest,
   FollowUpIntentRequest,
   DifficultyLevel,
+  ModelProfile,
   TaskIntent,
   ContextRelevance,
   IntentPredictionResult,

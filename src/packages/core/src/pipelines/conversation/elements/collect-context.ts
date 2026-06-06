@@ -91,6 +91,22 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         const lines = todos.map((t: any) => `- ${icons[t.status] ?? "⬜"} [${t.priority}] ${t.content}`);
         contextData += `\n\n当前任务进度:\n${lines.join("\n")}`;
       }
+
+      const difficulty: string = this.#session?.pendingPrediction?.difficulty ?? "medium";
+      if (difficulty === "hard" || difficulty === "mygod") {
+        const verifyRule = difficulty === "mygod"
+          ? "\n5.  每完成一步必须验证结果后再进入下一步"
+          : "";
+        contextData += [
+          `\n\n[任务难度: ${difficulty}]`,
+          "你正在执行一个困难任务，必须严格遵守以下规则：",
+          "1. 使用 `todowrite` 创建完整的任务计划，每次只执行当前 in_progress 项",
+          "2. 完成一项后，调用 `todowrite` 更新状态（已完成项标记 completed、下一项 pending 置为 in_progress）",
+          "3. 调用 `intent`（action: follow_up）进入下一项",
+          "4. 不要在同一回复中执行多项任务" + verifyRule,
+          "6. 所有任务 completed 后方可进入决策协议步骤 1",
+        ].join("\n");
+      }
     }
 
     this.report(BusEvents.Element.Data, { step: "done", memoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });

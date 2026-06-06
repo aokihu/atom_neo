@@ -2,7 +2,7 @@
 
 ## 职责
 
-在正式会话之前，用 basic 模型对用户意图做轻量级分类，输出工具需求、任务类型、上下文关联度，供 conversation pipeline 优化执行。
+在正式会话之前，用 basic 模型对用户意图做轻量级分类，输出任务复杂度、所需模型级别、任务类型、上下文关联度，供 conversation pipeline 优化执行。
 
 ## 触发方式
 
@@ -52,8 +52,8 @@ initial
 
 ```typescript
 type IntentPredictionResult = {
-  toolTier: "basic" | "full";
-  difficulty: "basic" | "balanced" | "advanced";
+  difficulty: "easy" | "medium" | "hard" | "mygod";      // 任务复杂度 → 执行策略
+  modelProfile: "basic" | "balanced" | "advanced";        // 所需推理能力 → 模型选择
   taskIntent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
   contextRelevance: "standalone" | "follow_up" | "continuation";
   reasoning: string;
@@ -62,37 +62,46 @@ type IntentPredictionResult = {
 
 ## 分类维度详解
 
-### toolTier
+### difficulty（任务复杂度）
+
+| 值 | 含义 | 执行策略 |
+|-----|------|---------|
+| `easy` | 单步问答 | 直接回答，无需 todo |
+| `medium` | 中等复杂度 | 视情况判断是否用 `todowrite` |
+| `hard` | 复杂多步任务 | 必须用 `todowrite` 逐项执行，每项完成后更新进度并调用 intent(follow_up) |
+| `mygod` | 超大规模任务 | 同 hard，且每步完成后必须验证结果 |
+
+### modelProfile（模型选择）
 
 | 值 | 含义 |
 |-----|------|
-| `basic` | 仅需读写文件、搜索、目录列表、基础记忆 |
-| `full` | 需要 shell 命令、网络访问、批量文件操作、记忆图谱遍历 |
+| `basic` | 轻度推理足够（简单问答、短文本） |
+| `balanced` | 中等推理深度（代码生成、多文件变更） |
+| `advanced` | 深度推理（复杂调试、架构分析） |
 
-### difficulty
+### taskIntent（任务类型）
 
-| 值 | 含义 |
-|-----|------|
-| `basic` | 单步操作 |
-| `balanced` | 多步任务、代码生成 |
-| `advanced` | 系统设计、架构重构、复杂调试 |
+| 值 | 场景示例 | 可用工具 |
+|-----|---------|---------|
+| `tool_execution` | 执行命令、查天气、读写文件 | 全量工具 |
+| `creative_generation` | 写长文、编代码、翻译 | `todowrite` + `intent` |
+| `knowledge_retrieval` | 搜索知识库、查记忆 | 搜索类工具 + memory |
+| `conversation` | 闲聊、问答、解释 | fs + other 工具 |
 
-### taskIntent（P9 扩展）
-
-| 值 | 场景示例 | conversation 行为 |
-|-----|---------|-----------------|
-| `tool_execution` | 执行命令、查天气、读写文件 | 传 full 工具集，开启 memory search，保留全部上下文 |
-| `creative_generation` | 写长文、编代码、翻译 | **不传任何工具**，关闭 memory search，保留全部上下文 |
-| `knowledge_retrieval` | 搜索知识库、查记忆 | 传搜索类工具，开启 memory search，保留全部上下文 |
-| `conversation` | 闲聊、问答、解释 | 传 basic 工具（不含 search_memory），关闭 memory search |
-
-### contextRelevance（P9 扩展）
+### contextRelevance（上下文关联）
 
 | 值 | 含义 | collect-prompts 行为 |
 |-----|------|---------------------|
 | `standalone` | 新话题，不需要历史 | 只保留最近 2 轮消息 |
 | `follow_up` | 基于上一轮的追问 | 保留全部可见消息 |
 | `continuation` | 明示继续之前任务 | 保留全部可见消息 + 不 reset chainDepth |
+
+### difficulty 与 modelProfile 分离
+
+两个字段独立判断，互不绑定：
+- "写 20 段历史文章" → `difficulty: hard`（范围大）但 `modelProfile: balanced`（无需深度推理）
+- "调试并发死锁" → `difficulty: medium`（一个问题）但 `modelProfile: advanced`（需要深度推理）
+- "2+2 等于几" → `difficulty: easy`, `modelProfile: basic`
 
 ## Deps
 
@@ -105,7 +114,6 @@ type PredictionPipelineDeps = {
   baseUrl?: string;       // → predict-intent
   maxTokens?: number;     // → predict-intent
   orchestrator: InternalTaskOrchestrator;  // → predict-finalize
-  logger?: Logger;        // → 内部 debug
 };
 ```
 
@@ -113,7 +121,7 @@ type PredictionPipelineDeps = {
 
 | 场景 | 行为 |
 |------|------|
-| 预测 LLM 调用失败 | `catch` → fallback `{ toolTier: "basic", difficulty: "balanced" }` |
+| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced" }` |
 | 空用户消息 | fallback 同上 |
 | 无 apiKey | fallback 同上 |
 | 无 JSON 响应 | fallback 同上 |

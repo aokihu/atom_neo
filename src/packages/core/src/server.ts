@@ -107,7 +107,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     conversation: (task: any) => {
       const session = sessionStore.get(task.sessionId);
       const prediction = session.pendingPrediction ?? {
-        difficulty: "balanced",
+        difficulty: "medium",
+        modelProfile: "balanced",
         taskIntent: "conversation",
         contextRelevance: "standalone",
         reasoning: "default",
@@ -115,7 +116,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
       const resolvedModel = runtime.getResolvedModel
         ? runtime.getResolvedModel(
-            session.upgradeModel ? "advanced" : prediction.difficulty,
+            session.upgradeModel ? "advanced" : prediction.modelProfile,
           )
         : { provider: "deepseek", model: "deepseek-v4-flash", apiKey, baseUrl, thinking: "disabled" as const };
 

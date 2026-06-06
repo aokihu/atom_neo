@@ -19,7 +19,8 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
 
   async doProcess(input: PredictionFlowState): Promise<PipelineResult> {
     const prediction = input.prediction ?? {
-      difficulty: "balanced",
+      difficulty: "medium",
+      modelProfile: "balanced",
       taskIntent: "conversation",
       contextRelevance: "standalone",
       reasoning: "fallback",
@@ -28,7 +29,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     const session = input.session;
     session.pendingPrediction = prediction;
 
-    this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: prediction.difficulty, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance });
+    this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance });
 
     this.#orchestrator.scheduleConversation(
       session.sessionId,
@@ -40,7 +41,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     return {
       type: "complete",
       task: input.task,
-      output: `prediction: difficulty=${prediction.difficulty}, taskIntent=${prediction.taskIntent}, contextRelevance=${prediction.contextRelevance}, reasoning=${prediction.reasoning}`,
+      output: `prediction: difficulty=${prediction.difficulty}, modelProfile=${prediction.modelProfile}, taskIntent=${prediction.taskIntent}, contextRelevance=${prediction.contextRelevance}, reasoning=${prediction.reasoning}`,
     };
   }
 }

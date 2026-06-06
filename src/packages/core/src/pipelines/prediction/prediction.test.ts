@@ -119,7 +119,7 @@ describe("prediction pipeline elements", () => {
 
     expect(result.mode).toBe("routing");
     expect(result.prediction).toBeDefined();
-    expect(result.prediction!.difficulty).toBe("balanced");
+    expect(result.prediction!.difficulty).toBe("medium");
   });
 
   test("predict-intent falls back on empty message", async () => {
@@ -141,7 +141,7 @@ describe("prediction pipeline elements", () => {
     });
 
     expect(result.mode).toBe("routing");
-    expect(result.prediction!.difficulty).toBe("balanced");
+    expect(result.prediction!.difficulty).toBe("medium");
   });
 
   test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
@@ -162,12 +162,13 @@ describe("prediction pipeline elements", () => {
       task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
       userMessage: "hello",
-      prediction: { difficulty: "advanced", reasoning: "needs shell" },
+      prediction: { difficulty: "mygod", modelProfile: "advanced", reasoning: "needs shell" },
     });
 
     expect(result.type).toBe("complete");
     expect(session.pendingPrediction).toBeDefined();
-    expect(session.pendingPrediction.difficulty).toBe("advanced");
+    expect(session.pendingPrediction.difficulty).toBe("mygod");
+    expect(session.pendingPrediction.modelProfile).toBe("advanced");
     expect(capture.enqueued).not.toBeNull();
     expect(capture.enqueued.pipeline).toBe("conversation");
     expect(capture.enqueued.parentTaskId).toBe("t1");
@@ -193,7 +194,7 @@ describe("prediction pipeline elements", () => {
       userMessage: "hello",
     });
 
-    expect(session.pendingPrediction.difficulty).toBe("balanced");
+    expect(session.pendingPrediction.difficulty).toBe("medium");
     expect(capture.enqueued.pipeline).toBe("conversation");
   });
 });
