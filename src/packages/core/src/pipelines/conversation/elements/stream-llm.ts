@@ -118,12 +118,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           const { value: chunk, done } = await iterator.next();
           if (done) break;
 
-          if (chunk.type === "step-start") continue;
-          if (chunk.type === "step-finish") {
+          const ctype = (chunk as any).type;
+          if (ctype === "step-start" || ctype === "start-step") continue;
+          if (ctype === "step-finish" || ctype === "finish-step") {
             finishReason = (chunk as any).finishReason ?? "";
             continue;
           }
-          if (chunk.type === "tool-call") {
+          if (ctype === "tool-call") {
             const c = chunk as any;
             if (c.toolName === "intent") {
               intentData = intentSignal.value ?? c.input;
@@ -132,22 +133,23 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
             continue;
           }
-          if (chunk.type === "tool-result") {
+          if (ctype === "tool-result") {
             const c = chunk as any;
             if (c.toolName === "intent") continue;
             this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
             continue;
           }
-          if (chunk.type === "text-delta") {
-            fullText += chunk.textDelta;
-            this.report(BusEvents.Transport.Delta, { textDelta: chunk.textDelta });
+          if (ctype === "text-delta") {
+            const text = (chunk as any).textDelta ?? (chunk as any).text ?? "";
+            fullText += text;
+            this.report(BusEvents.Transport.Delta, { textDelta: text });
             continue;
           }
-          if (chunk.type === "finish") {
+          if (ctype === "finish") {
             finishReason = (chunk as any).finishReason ?? finishReason;
             continue;
           }
-          this.report(BusEvents.Element.Data, { step: "unhandled-chunk", type: (chunk as any).type, raw: JSON.stringify(chunk).slice(0, 200) });
+          this.report(BusEvents.Element.Data, { step: "unhandled-chunk", type: ctype, raw: JSON.stringify(chunk).slice(0, 200) });
         }
       } finally {
         clearTimeout(timeoutTimer);
@@ -156,8 +158,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
 
       if (!finishReason || finishReason === "tool-calls") {
-        if (fullText.length > 0 && this.#stepCounter.count === 0) {
-          finishReason = "stop";
+        if (fullText.length > 0) {
+          finishReason = finishReason || "stop";
         } else {
           this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
           finishReason = "error";
@@ -173,7 +175,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let usage: any;
 
       try {
-        response = await streamResult.response;
+        response = await Promise.race([
+          streamResult.response,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("streamResult.response timeout")), 30_000)
+          ),
+        ]);
       } catch (err: any) {
         this.report(BusEvents.Element.Data, { step: "response-error", level: "warn", error: err?.message ?? String(err) });
         response = { messages: [] };
@@ -200,6 +207,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       const chainAction = intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
+        : finishReason === "tool-calls" ? "follow_up"
         : finishReason === "error" ? "follow_up"
         : undefined;
 
