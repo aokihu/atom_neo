@@ -86,6 +86,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
 
       const todos = this.#session.todoState;
+      this.report(BusEvents.Element.Data, { step: "todo-check", todoLen: todos?.length ?? 0, hasSession: !!this.#session });
       if (todos && todos.length > 0) {
         const icons: Record<string, string> = { pending: "⬜", in_progress: "🔄", completed: "✅", cancelled: "❌" };
         const lines = todos.map((t: any) => `- ${icons[t.status] ?? "⬜"} [${t.priority}] ${t.content}`);
@@ -93,6 +94,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
 
       const difficulty: string = this.#session?.pendingPrediction?.difficulty ?? "medium";
+      this.report(BusEvents.Element.Data, { step: "diff-check", difficulty, hasPrediction: !!this.#session?.pendingPrediction });
       if (difficulty === "hard" || difficulty === "mygod") {
         const verifyRule = difficulty === "mygod"
           ? "\n5.  每完成一步必须验证结果后再进入下一步"
