@@ -42,6 +42,7 @@
 | [runloop.md](./runloop.md) | TaskEngine 状态机 — Suspend/Resume/Complete 转换 | 理解任务生命周期 |
 | [future-features.md](./future-features.md) | 所有已设计但未实现的功能清单 | 设计时查，避免遗忘 |
 | **[pipelines/](./pipelines/)** | Pipeline 运行时规格文档 | 实现/调试 Pipeline |
+| **[pipelines/topic.md](./pipelines/topic.md)** | Topic 系统 — 主题跟踪与状态管理 | 理解 topic 切换机制 |
 
 ## 通信与界面
 

@@ -85,6 +85,11 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         delete this.#session.postCheckGuidance;
       }
 
+      const topic = this.#session.currentTopic;
+      if (topic) {
+        contextData += `\n\n[主题约束]\n当前主题: ${topic}\n- 所有输出和工具调用必须服务于当前主题目标\n- 不要主动偏离或切换主题\n- 主题切换由系统自动管理，对你透明`;
+      }
+
       const todos = this.#session.todoState;
       this.report(BusEvents.Element.Data, { step: "todo-check", todoLen: todos?.length ?? 0, hasSession: !!this.#session });
       if (todos && todos.length > 0) {

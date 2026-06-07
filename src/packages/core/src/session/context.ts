@@ -43,6 +43,7 @@ export class SessionContext {
   #tokenUsage: TokenUsage = { total: 0 };
   #chainDepth: number = 0;
   #todoState: TodoItem[] = [];
+  #currentTopic: string | null = null;
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -130,6 +131,22 @@ export class SessionContext {
 
   setTodoState(items: TodoItem[]): void {
     this.#todoState = items;
+  }
+
+  get currentTopic(): string | null {
+    return this.#currentTopic;
+  }
+
+  resetForNewTopic(topic: string): void {
+    this.#currentTopic = topic || null;
+    this.#todoState = [];
+    this.#chainDepth = 0;
+    this.#toolContext = { mode: "idle", results: [] };
+    this.#continuationContext = null;
+    this.evaluatorSuggestion = undefined;
+    this.upgradeModel = undefined;
+    this.conversationSummary = undefined;
+    (this as any).postCheckGuidance = undefined;
   }
 
   toJSON(): Record<string, unknown> {

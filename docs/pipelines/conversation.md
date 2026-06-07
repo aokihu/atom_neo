@@ -31,7 +31,7 @@ collect-prompts (source)
 | 1 | `collect-prompts` | source | 从 session 提取可见消息 |
 | 2 | `load-system-prompt` | transform | 加载 `base_system_prompt.md` |
 | 3 | `fetch-agents-prompt` | transform | 获取 Agent 编译器输出的指令 |
-| 4 | `collect-context` | transform | 构建环境上下文（cwd、OS、记忆、token 使用） |
+| 4 | `collect-context` | transform | 构建环境上下文（cwd、OS、记忆、token 使用、主题约束、任务进度、难度规则） |
 | 5 | `format-system-messages` | transform | 合并 system prompt + agent prompt + context |
 | 6 | `format-user-messages` | transform | 组装 user message 数组，切换 mode → `formatted` |
 | 7 | `stream-llm` | transform | **核心：调用 LLM 流式生成** |

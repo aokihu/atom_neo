@@ -79,11 +79,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       };
     }
 
-    try {
-      const STREAM_TIMEOUT_MS = 300_000;
-      const abortController = new AbortController();
+      let fullText = "";
+      let intentData: IntentToolInput | null = null;
+      let finishReason = "";
 
-      const streamResult = streamText({
+      try {
+        const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
+        const STREAM_TIMEOUT_MS = resolveTimeout(difficulty);
+        const abortController = new AbortController();
+
+        const streamResult = streamText({
         model,
         system: systemText || undefined,
         messages: userMessages as any,
@@ -99,10 +104,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
         },
       } as any);
-
-      let fullText = "";
-      let intentData: IntentToolInput | null = null;
-      let finishReason = "";
 
       let timedOut = false;
       const timeoutTimer = setTimeout(() => {
@@ -210,6 +211,17 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
+      if (fullText.length > 0) {
+        return {
+          ...input,
+          mode: "executing",
+          responseText: fullText,
+          reasoningContent: "",
+          tokenUsage: { total: 0 },
+          intents: [],
+          chainAction: "follow_up",
+        };
+      }
       return {
         ...input,
         mode: "executing",
@@ -267,6 +279,15 @@ function getActiveToolNames(taskIntent: string): string[] {
     case "tool_execution":
     default:
       return [...ALL_FS, ...ALL_MEMORY, ...ALL_OTHER, INTENT];
+  }
+}
+
+function resolveTimeout(difficulty: string): number {
+  switch (difficulty) {
+    case "mygod": return 1_800_000;
+    case "hard":  return 900_000;
+    case "medium": return 600_000;
+    default:      return 300_000;
   }
 }
 

@@ -56,6 +56,7 @@ type IntentPredictionResult = {
   modelProfile: "basic" | "balanced" | "advanced";        // 所需推理能力 → 模型选择
   taskIntent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
   contextRelevance: "standalone" | "follow_up" | "continuation";
+  topic: string;                                          // 主题标签 → 会话状态管理
   reasoning: string;
 };
 ```
@@ -95,6 +96,20 @@ type IntentPredictionResult = {
 | `standalone` | 新话题，不需要历史 | 只保留最近 2 轮消息 |
 | `follow_up` | 基于上一轮的追问 | 保留全部可见消息 |
 | `continuation` | 明示继续之前任务 | 保留全部可见消息 + 不 reset chainDepth |
+
+### topic（主题标签）
+
+| 格式 | 示例 | 用途 |
+|------|------|------|
+| `<category>.<domain>.<specific>` | `creative.history.ancient`, `tools.filesystem.explore` | 会话状态管理 |
+
+Topic 由 predict-intent LLM 生成，在 predict-finalize 阶段与 session 已有 topic 比对：
+
+- **相同** → 保持上下文（todoState, chainDepth, toolContext 等）
+- **不同** → `session.resetForNewTopic(newTopic)` — 清空 todoState/chainDepth/toolContext/continuationContext，但保留 messages/inferenceFacts/memoryScopes/tokenUsage
+- **首次** → 设置 topic，无状态可清
+
+design: [topic.md](./topic.md)
 
 ### difficulty 与 modelProfile 分离
 

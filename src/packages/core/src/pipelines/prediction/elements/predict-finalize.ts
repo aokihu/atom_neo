@@ -23,13 +23,23 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
       modelProfile: "balanced",
       taskIntent: "conversation",
       contextRelevance: "standalone",
+      topic: "",
       reasoning: "fallback",
     };
 
     const session = input.session;
+
+    const newTopic = prediction.topic || "";
+    if (newTopic && newTopic !== session.currentTopic) {
+      this.report(BusEvents.Element.Data, { step: "topic-changed", from: session.currentTopic, to: newTopic });
+    }
+    if (!session.currentTopic || (newTopic && newTopic !== session.currentTopic)) {
+      session.resetForNewTopic(newTopic);
+    }
+
     session.pendingPrediction = prediction;
 
-    this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance });
+    this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance, topic: prediction.topic });
 
     this.#orchestrator.scheduleConversation(
       session.sessionId,
@@ -41,7 +51,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     return {
       type: "complete",
       task: input.task,
-      output: `prediction: difficulty=${prediction.difficulty}, modelProfile=${prediction.modelProfile}, taskIntent=${prediction.taskIntent}, contextRelevance=${prediction.contextRelevance}, reasoning=${prediction.reasoning}`,
+      output: `prediction: difficulty=${prediction.difficulty}, modelProfile=${prediction.modelProfile}, taskIntent=${prediction.taskIntent}, contextRelevance=${prediction.contextRelevance}, topic=${prediction.topic}, reasoning=${prediction.reasoning}`,
     };
   }
 }

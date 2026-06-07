@@ -30,6 +30,14 @@ const PREDICT_SYSTEM_PROMPT = `You are an intent classifier. Analyze the user's 
    - "follow_up": follows up on the previous response, needs full context
    - "continuation": explicitly continuing a previously interrupted task
 
+5. topic: a stable dot-separated label for the conversation subject
+   Format: "<category>.<domain>.<specific>" (e.g., "creative.history.ancient", "tools.filesystem.explore")
+   Categories: creative | tools | code | knowledge | chat
+   - Be specific enough to distinguish different tasks
+   - Be stable: similar follow-up messages should produce the SAME topic
+   - When user switches to a completely new subject → output NEW topic
+   - Empty string "" if the message is too vague to classify
+
 When recent conversation history is provided in the prompt, use it to determine
 context_relevance. A standalone message in a multi-turn conversation may still be
 "standalone" if it switches to a completely new topic.
@@ -45,13 +53,14 @@ When difficulty is "hard" or "mygod", the assistant will be instructed to use a 
 to plan and execute step by step. This is an execution strategy, not a model requirement.
 
 Reply ONLY with JSON in this exact format:
-{"difficulty":"...","model_profile":"...","task_intent":"...","context_relevance":"...","reasoning":"brief explanation"}`;
+{"difficulty":"...","model_profile":"...","task_intent":"...","context_relevance":"...","topic":"...","reasoning":"brief explanation"}`;
 
 const FALLBACK: IntentPredictionResult = {
   difficulty: "medium",
   modelProfile: "balanced",
   taskIntent: "conversation",
   contextRelevance: "standalone",
+  topic: "",
   reasoning: "prediction skipped or failed, fallback to defaults",
 };
 
@@ -120,9 +129,10 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
         modelProfile: (["basic", "balanced", "advanced"].includes(parsed.model_profile) ? parsed.model_profile : "balanced") as ModelProfile,
         taskIntent: (["tool_execution", "creative_generation", "knowledge_retrieval", "conversation"].includes(parsed.task_intent) ? parsed.task_intent : "conversation") as IntentPredictionResult["taskIntent"],
         contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
+        topic: typeof parsed.topic === "string" ? parsed.topic : "",
         reasoning: parsed.reasoning ?? "",
       };
-      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance, reasoning: prediction.reasoning });
+      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance, topic: prediction.topic, reasoning: prediction.reasoning });
       return { ...input, mode: "routing", prediction };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });

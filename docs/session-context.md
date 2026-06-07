@@ -32,8 +32,17 @@ export class SessionContext {
   // Continuation context (for follow-up)
   #continuationContext: ContinuationContext | null = null;
 
+  // Topic tracking
+  #currentTopic: string | null = null;
+
   // Token usage
   #tokenUsage: TokenUsage = { total: 0 };
+
+  // Chain depth (prevents infinite continuations)
+  #chainDepth: number = 0;
+
+  // TODO state for multi-step task execution
+  #todoState: TodoItem[] = [];
 
   get tokenUsage(): Readonly<TokenUsage> { return this.#tokenUsage; }
   addTokenUsage(total: number): void {
@@ -48,7 +57,38 @@ export class SessionContext {
 }
 ```
 
-## 2. Session Store
+## 2. Topic Tracking + Context Reset
+
+每个 SessionContext 维护一个 `currentTopic` 字段，由 prediction pipeline 在每次用户输入时更新。当 topic 变化时，重置任务相关状态，但保留历史和记忆。
+
+```typescript
+get currentTopic(): string | null { return this.#currentTopic; }
+
+resetForNewTopic(topic: string): void {
+  this.#currentTopic = topic || null;
+  this.#todoState = [];
+  this.#chainDepth = 0;
+  this.#toolContext = { mode: "idle", results: [] };
+  this.#continuationContext = null;
+  this.evaluatorSuggestion = undefined;
+  this.upgradeModel = undefined;
+  this.conversationSummary = undefined;
+  this.postCheckGuidance = undefined;
+  // 保留: #messages, #inferenceFacts, #memoryScopes, #tokenUsage, sessionId
+}
+```
+
+| 重置的字段 | 保留的字段 |
+|-----------|-----------|
+| `#todoState` — 任务进度 | `#messages` — 完整历史 |
+| `#chainDepth` — 链深度 | `#inferenceFacts` — 推理事实 |
+| `#toolContext` — 工具状态 | `#memoryScopes` — 记忆范围 |
+| `#continuationContext` — 续写上下文 | `#tokenUsage` — 累积令牌 |
+| 所有 transient 字段 | `sessionId` |
+
+design: [pipelines/topic.md](./pipelines/topic.md)
+
+## 3. Session Store
 
 ```typescript
 // src/packages/core/src/session/store.ts
@@ -90,7 +130,7 @@ export class SessionStore {
 }
 ```
 
-## 3. Key Types
+## 4. Key Types
 
 ```typescript
 type ChatMessage = {
@@ -131,7 +171,7 @@ type TokenUsage = {
 const TOKEN_BUDGET = 1_000_000;
 ```
 
-## 4. Orchestrator Integration
+## 5. Orchestrator Integration
 
 ```typescript
 // src/packages/core/src/runtime/orchestrator.ts
@@ -156,7 +196,7 @@ export class ConversationOrchestrator {
 }
 ```
 
-## 5. MCP Connection Management (Per-Session)
+## 6. MCP Connection Management (Per-Session)
 
 ```typescript
 // src/packages/core/src/session/mcp-connections.ts
@@ -194,7 +234,7 @@ export class SessionMCPManager {
 }
 ```
 
-## 6. Memory Scope Lifecycle
+## 7. Memory Scope Lifecycle
 
 ```typescript
 // Memory scopes in SessionContext follow this lifecycle:
@@ -209,7 +249,7 @@ ctx.setMemoryScopeStatus("long", "loaded", "user query about project structure")
 // When session ends:
 ctx.resetMemoryScopes();  // All go back to idle
 
-## 7. Token Usage Tracking
+## 8. Token Usage Tracking
 
 ```
 AI SDK streamResult.usage

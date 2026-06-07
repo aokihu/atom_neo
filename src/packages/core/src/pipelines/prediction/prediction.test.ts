@@ -146,7 +146,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
     const bus = makeBus();
-    const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }] };
+    const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }], currentTopic: null, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
@@ -162,7 +162,7 @@ describe("prediction pipeline elements", () => {
       task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
       userMessage: "hello",
-      prediction: { difficulty: "mygod", modelProfile: "advanced", reasoning: "needs shell" },
+      prediction: { difficulty: "mygod", modelProfile: "advanced", topic: "code.test", reasoning: "needs shell" },
     });
 
     expect(result.type).toBe("complete");
@@ -176,7 +176,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-finalize uses fallback when no prediction", async () => {
     const bus = makeBus();
-    const session = { sessionId: "s1" };
+    const session = { sessionId: "s1", currentTopic: null, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");

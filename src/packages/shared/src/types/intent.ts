@@ -35,6 +35,7 @@ export type IntentPredictionResult = {
   modelProfile: ModelProfile;
   taskIntent: TaskIntent;
   contextRelevance: ContextRelevance;
+  topic: string;
   reasoning: string;
 };
 
