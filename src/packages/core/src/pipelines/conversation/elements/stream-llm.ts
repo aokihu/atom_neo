@@ -112,6 +112,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         abortController.abort();
       }, STREAM_TIMEOUT_MS);
 
+      const COMPLETE_MARKER = "<<<COMPLETE>>>";
+      const MARKER_LEN = COMPLETE_MARKER.length;
+      let textBuffer = "";
+      let completeDetected = false;
+
       try {
         for await (const chunk of streamResult.fullStream) {
           const ctype = (chunk as any).type;
@@ -137,8 +142,30 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
           if (ctype === "text-delta") {
             const text = (chunk as any).textDelta ?? (chunk as any).text ?? "";
-            fullText += text;
-            this.report(BusEvents.Transport.Delta, { textDelta: text });
+            if (completeDetected) continue;
+
+            textBuffer += text;
+            const markerIdx = textBuffer.indexOf(COMPLETE_MARKER);
+
+            if (markerIdx >= 0) {
+              const safe = textBuffer.slice(0, markerIdx);
+              if (safe.length > 0) {
+                fullText += safe;
+                this.report(BusEvents.Transport.Delta, { textDelta: safe });
+              }
+              completeDetected = true;
+              this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
+              textBuffer = "";
+              continue;
+            }
+
+            if (textBuffer.length > MARKER_LEN * 3) {
+              const sendLen = textBuffer.length - MARKER_LEN + 1;
+              const safe = textBuffer.slice(0, sendLen);
+              fullText += safe;
+              this.report(BusEvents.Transport.Delta, { textDelta: safe });
+              textBuffer = textBuffer.slice(-MARKER_LEN);
+            }
             continue;
           }
           if (ctype === "finish") {
@@ -149,6 +176,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         }
       } finally {
         clearTimeout(timeoutTimer);
+      }
+
+      if (!completeDetected && textBuffer.length > 0) {
+        fullText += textBuffer;
+        this.report(BusEvents.Transport.Delta, { textDelta: textBuffer });
       }
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
@@ -194,13 +226,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
       }
 
-      const isComplete = fullText.includes("<<<COMPLETE>>>");
-      if (isComplete) {
-        fullText = fullText.replace(/<<<COMPLETE>>>/g, "").trim();
-        this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
-      }
-
-      const chainAction = isComplete ? undefined
+      const chainAction = completeDetected ? undefined
+        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
         : finishReason === "tool-calls" ? "follow_up"
