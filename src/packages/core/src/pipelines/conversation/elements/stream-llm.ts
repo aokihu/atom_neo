@@ -45,8 +45,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
-    this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
     this.#session = params.session;
+    this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
