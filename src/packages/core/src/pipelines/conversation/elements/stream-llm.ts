@@ -111,14 +111,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         abortController.abort();
       }, STREAM_TIMEOUT_MS);
 
-      const iterator = streamResult.fullStream[Symbol.asyncIterator]();
-
       try {
-        while (true) {
-          const { value: chunk, done } = await iterator.next();
-          if (done) break;
-
+        for await (const chunk of streamResult.fullStream) {
           const ctype = (chunk as any).type;
+
           if (ctype === "step-start" || ctype === "start-step") continue;
           if (ctype === "step-finish" || ctype === "finish-step") {
             finishReason = (chunk as any).finishReason ?? "";
@@ -126,9 +122,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
           if (ctype === "tool-call") {
             const c = chunk as any;
-            if (c.toolName === "intent") {
+            if (c.toolName === "intent" && !intentData) {
               intentData = intentSignal.value ?? c.input;
-              break;
             }
             this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
             continue;
@@ -157,18 +152,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
 
-      if (!finishReason || finishReason === "tool-calls") {
-        if (fullText.length > 0) {
-          finishReason = finishReason || "stop";
-        } else {
-          this.report(BusEvents.Element.Data, { step: "stream-aborted", level: "warn", timedOut, finishReason: finishReason || "none" });
-          finishReason = "error";
-          setTimeout(() => {
-            if (!abortController.signal.aborted) abortController.abort();
-          }, 60_000);
-        }
-      }
-
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
 
       let response: any;
@@ -188,7 +171,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       }
 
       try {
-        usage = await streamResult.usage;
+        usage = await Promise.race([
+          streamResult.usage,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("streamResult.usage timeout")), 30_000)
+          ),
+        ]);
       } catch (err: any) {
         this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
         usage = { totalTokens: 0 };

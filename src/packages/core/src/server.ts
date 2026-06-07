@@ -114,10 +114,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         reasoning: "default",
       };
 
+      const DIFFICULTY_PROFILE: Record<string, string> = { mygod: "advanced", hard: "balanced" };
+      const effectiveProfile = session.upgradeModel
+        ? "advanced"
+        : DIFFICULTY_PROFILE[prediction.difficulty] ?? prediction.modelProfile;
+
       const resolvedModel = runtime.getResolvedModel
-        ? runtime.getResolvedModel(
-            session.upgradeModel ? "advanced" : prediction.modelProfile,
-          )
+        ? runtime.getResolvedModel(effectiveProfile)
         : { provider: "deepseek", model: "deepseek-v4-flash", apiKey, baseUrl, thinking: "disabled" as const };
 
       return conversationPipeline({
