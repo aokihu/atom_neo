@@ -49,7 +49,7 @@ export type ConversationPipelineDeps = {
 export function conversationPipeline(deps: ConversationPipelineDeps) {
   return pipeline("conversation")
     .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
-    .transform("load-system-prompt", {})
+    .transform("load-system-prompt", { providerModel: deps.providerModel })
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })

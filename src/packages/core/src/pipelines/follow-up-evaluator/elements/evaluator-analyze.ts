@@ -2,23 +2,8 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
-
-const ANALYZE_SYSTEM_PROMPT = `You are a conversation health monitor. Analyze the recent conversation flow and classify:
-
-1. health: "healthy" | "looping" | "stuck" | "degrading"
-   - healthy: making genuine progress toward the goal
-   - looping: repeating similar outputs or tool calls without progress
-   - stuck: unable to proceed (persistent tool failures, dead ends)
-   - degrading: output quality declining, losing coherence or focus
-
-2. suggestion: concise advice to help the assistant break out of bad patterns.
-   Empty string if healthy. Otherwise, a brief guidance (1 sentence).
-
-3. upgradeModel: true if a more powerful model may help resolve the situation.
-
-Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false, "reason":"brief"}`;
 
 const FALLBACK: EvaluatorResult = {
   health: "healthy",
@@ -71,7 +56,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
 
       const result = await generateText({
         model,
-        system: ANALYZE_SYSTEM_PROMPT,
+        system: resolvePrompt(PromptKey.EVALUATOR_ANALYZE),
         prompt,
         maxTokens: this.#maxTokens,
         temperature: 0,

@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 
@@ -33,9 +33,10 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     this.report(BusEvents.Element.Data, { step: "decision", health, suggestion, upgradeModel, reason, summaryLen: input.recentSummary.length });
 
     if (health === "stuck") {
+      const tmpl = resolvePrompt(PromptKey.EVALUATE_STUCK);
       const termMsg = reason
-        ? `(任务过长，已自动中断。原因: ${reason})`
-        : "(任务过长，已自动中断。)";
+        ? tmpl.replace("%s", reason)
+        : tmpl.replace("%s", "").replace(/(原因|Reason):\s*/g, "").replace(/\s+/g, " ").trim();
       input.session.addMessage
         ? input.session.addMessage({ role: "assistant", content: termMsg, visible: true, pipeline: "follow-up-evaluator", timestamp: Date.now() })
         : null;

@@ -84,3 +84,7 @@ export { normalizeError, errorMessage, truncate, slugify, sleep, debounce } from
 
 // ── Constants ──
 export { BusEvents, WsMessages } from "./constants";
+
+// ── Prompts ──
+export { PromptKey, initPromptRegistry, resolvePrompt, getRegistry } from "./prompts";
+export type { PromptRegistry } from "./prompts";

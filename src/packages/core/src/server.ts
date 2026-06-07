@@ -3,6 +3,7 @@ import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
 import { BusEvents, WsMessages } from "@atom-neo/shared";
+import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
 import { TaskQueue } from "./task-queue";
@@ -182,6 +183,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerBuiltinTools(toolRegistry, sandbox, runtime?.appConfig?.permission?.whitelist ?? []);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
+  initPromptRegistry();
   registerConversationElements();
   registerPredictionElements();
   registerFollowUpElements();

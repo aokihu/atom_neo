@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { PostConversationFlowState } from "./types";
 
 export class CollectInputElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
@@ -29,7 +29,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       if (msgs[i].role === "assistant" && msgs[i].content) {
         const content = msgs[i].content;
         parts.push(content.length > MAX_PART_CHARS
-          ? content.slice(0, MAX_PART_CHARS) + `... [截断, 完整长度 ${content.length}]`
+          ? content.slice(0, MAX_PART_CHARS) + resolvePrompt(PromptKey.TRUNCATION_MARKER).replace("%d", String(content.length))
           : content);
       }
     }

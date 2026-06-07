@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 import { resolveContextLimit } from "../../../constants";
 
@@ -32,6 +32,10 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     this.#taskIntent = params.taskIntent ?? "conversation";
   }
 
+  #resolve(key: PromptKey): string {
+    return resolvePrompt(key, this.#providerModel);
+  }
+
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
 
@@ -40,12 +44,11 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     const tz = `UTC${tzOffset >= 0 ? '+' : ''}${tzOffset}`;
     const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    let contextData = [
-      `Current Time: ${ts} ${tz}`,
-      `cwd: ${this.#cwd}`,
-      `OS: ${process.platform} ${process.arch}`,
-      `All file paths are relative to cwd.`,
-    ].join("\n");
+    let contextData = this.#resolve(PromptKey.CONTEXT_ENV_INFO)
+      .replace("%s", ts + " " + tz)
+      .replace("%s", this.#cwd)
+      .replace("%s", process.platform)
+      .replace("%s", process.arch);
 
     let memoryCount = 0;
     if (this.#memory && (this.#taskIntent === "tool_execution" || this.#taskIntent === "knowledge_retrieval")) {
@@ -69,11 +72,11 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       contextData += `\nSession Token Usage:\n  Total: ${tu.total} / ${limit} (${pct}%)`;
 
       if (this.#session.evaluatorSuggestion) {
-        contextData += `\n\n[评估建议] ${this.#session.evaluatorSuggestion}`;
+        contextData += `\n\n${this.#resolve(PromptKey.CONTEXT_EVALUATOR_HINT).replace("%s", this.#session.evaluatorSuggestion)}`;
         delete this.#session.evaluatorSuggestion;
       }
       if (this.#session.upgradeModel) {
-        contextData += `\n\n[模型提示] 已切换为更高级别的模型处理此任务。`;
+        contextData += `\n\n${this.#resolve(PromptKey.CONTEXT_MODEL_UPGRADE)}`;
         delete this.#session.upgradeModel;
       }
       if (this.#session.conversationSummary) {
@@ -87,7 +90,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
 
       const topic = this.#session.currentTopic;
       if (topic) {
-        contextData += `\n\n[主题约束]\n当前主题: ${topic}\n- 所有输出和工具调用必须服务于当前主题目标\n- 不要主动偏离或切换主题\n- 主题切换由系统自动管理，对你透明`;
+        contextData += `\n\n${this.#resolve(PromptKey.CONTEXT_TOPIC_CONSTRAINT).replace("%s", topic)}`;
       }
 
       const todos = this.#session.todoState;
@@ -104,15 +107,8 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         const verifyRule = difficulty === "mygod"
           ? "\n5.  每完成一步必须验证结果后再进入下一步"
           : "";
-        contextData += [
-          `\n\n[任务难度: ${difficulty}]`,
-          "你正在执行一个困难任务，必须严格遵守以下规则：",
-          "1. 使用 `todowrite` 创建完整的任务计划，每次只执行当前 in_progress 项",
-          "2. 完成一项后，调用 `todowrite` 更新状态（已完成项标记 completed、下一项 pending 置为 in_progress）",
-          "3. 调用 `intent`（action: follow_up）进入下一项",
-          "4. 不要在同一回复中执行多项任务" + verifyRule,
-          "6. 所有任务 completed 后方可进入决策协议步骤 1",
-        ].join("\n");
+        const tmpl = this.#resolve(PromptKey.CONTEXT_DIFFICULTY_RULES);
+        contextData += `\n\n${tmpl.replace("%s", difficulty).replace("%s", verifyRule)}`;
       }
     }
 

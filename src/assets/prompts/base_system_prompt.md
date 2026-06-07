@@ -1,3 +1,6 @@
+<!-- DEPRECATED: v1.0.0 起已迁移至 src/packages/shared/src/prompts/variants/lang/zh.ts -->
+<!-- 此文件不再被引用，保留仅作参考。新提示词通过 PromptRegistry 多语言/多模型解析。 -->
+
 # 行为准则
 
 ## 安全边界

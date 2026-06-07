@@ -2,21 +2,8 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
-
-const ANALYZE_SYSTEM_PROMPT = `你是一个会话质量评估器。判断AI是否**完成了**用户的请求。
-
-评分标准:
-- "satisfactory": AI直接回答了问题，提供了实质信息
-- "blocked": AI只表达了意图(如"让我搜索"、"我来查询"、"我需要查找")但未提供实际答案；或回复内容与用户提问完全无关；或明确表示无法完成
-
-关键判断规则:
-- 回复较短(≤50字)且包含"搜索"、"查询"、"尝试"、"让我"、"看看"等表态词 → blocked
-- 回复内容与用户提问无关 → blocked
-- 其他情况 → satisfactory
-
-仅回复JSON: {"status":"satisfactory|blocked","reason":"简短说明"}`;
 
 const FALLBACK: AnalysisResult = { status: "satisfactory", reason: "skip" };
 
@@ -78,7 +65,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
 
       const result = await generateText({
         model,
-        system: ANALYZE_SYSTEM_PROMPT,
+        system: resolvePrompt(PromptKey.ANALYZE_RESULT),
         prompt,
         maxTokens: this.#maxTokens,
         temperature: 0,

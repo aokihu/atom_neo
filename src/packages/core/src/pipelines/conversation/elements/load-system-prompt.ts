@@ -1,17 +1,25 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
-import baseSystemPrompt from "@assets/prompts/base_system_prompt.md";
 
 export class LoadSystemPromptElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
-  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
+  #providerModel: string;
+
+  constructor(params: {
+    name: string;
+    kind: string;
+    bus: PipelineEventBus<PipelineEventMap>;
+    providerModel?: string;
+  }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
+    this.#providerModel = params.providerModel ?? "deepseek/deepseek-v4-pro";
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "streaming") return input;
-    this.report(BusEvents.Element.Data, { step: "done", promptLen: baseSystemPrompt.length });
-    return { ...input, systemPrompt: baseSystemPrompt };
+    const prompt = resolvePrompt(PromptKey.BASE_SYSTEM, this.#providerModel);
+    this.report(BusEvents.Element.Data, { step: "done", promptLen: prompt.length });
+    return { ...input, systemPrompt: prompt };
   }
 }

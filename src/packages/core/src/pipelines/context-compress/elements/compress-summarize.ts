@@ -2,10 +2,8 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { generateText } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
-
-const SUMMARIZE_PROMPT = `将以下对话历史总结为 500 字以内的摘要，保留关键信息、决策和进展。`;
 
 export class CompressSummarizeElement extends BaseElement<CompressFlowState, CompressFlowState> {
   #apiKey: string;
@@ -40,7 +38,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
 
       const result = await generateText({
         model,
-        system: SUMMARIZE_PROMPT,
+        system: resolvePrompt(PromptKey.COMPRESS_SUMMARIZE),
         prompt: input.summaryText,
         maxTokens: 600,
         temperature: 0,
