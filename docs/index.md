@@ -43,6 +43,7 @@
 | [future-features.md](./future-features.md) | 所有已设计但未实现的功能清单 | 设计时查，避免遗忘 |
 | **[pipelines/](./pipelines/)** | Pipeline 运行时规格文档 | 实现/调试 Pipeline |
 | **[pipelines/prompts.md](./pipelines/prompts.md)** | Prompt Registry — 提示词统一管理、多语言、模型精细化 | 修改/新增提示词 |
+| **[pipelines/session-lifecycle.md](./pipelines/session-lifecycle.md)** | 会话生命周期 — TUI spinner/processing 状态管理 | 理解 TUI 会话状态指示 |
 | **[pipelines/topic.md](./pipelines/topic.md)** | Topic 系统 — 主题跟踪与状态管理 | 理解 topic 切换机制 |
 
 ## 通信与界面

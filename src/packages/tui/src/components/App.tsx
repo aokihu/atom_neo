@@ -22,12 +22,12 @@ const ThemeContext = createContext<ThemeCtx>(getTheme());
 export function useTheme() { return useContext(ThemeContext); }
 
 function isProcessing(msgs: Message[]): boolean {
-  return msgs.some(m => m.role === "thinking" || (m.role === "tool" && m.state === "running"));
+  return msgs.some(m => m.role === "tool" && m.state === "running");
 }
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { messages, send, tokenUsage } = useChat(url);
+  const { messages, send, tokenUsage, sessionBusy } = useChat(url);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
 
@@ -41,7 +41,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView messages={messages} />
             <InputBar onSend={send} onQuit={onQuit} />
-            <StatusLine hint={exitHint} processing={isProcessing(messages)} />
+            <StatusLine hint={exitHint} processing={sessionBusy || isProcessing(messages)} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT} />}
         </box>

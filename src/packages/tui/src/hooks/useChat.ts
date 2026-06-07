@@ -5,6 +5,7 @@ import type { Message } from "../types";
 export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
+  const [sessionBusy, setSessionBusy] = useState(false);
   const clientRef = useRef<TuiClient | null>(null);
   const thinkingIdRef = useRef<string | null>(null);
   const counterRef = useRef(0);
@@ -73,6 +74,7 @@ export function useChat(url: string, sessionId?: string) {
       { role: "user", content: text, id: userMsgId },
       { role: "thinking", id: thinkingId },
     ]);
+    setSessionBusy(true);
 
     try {
       const client = clientRef.current;
@@ -86,12 +88,18 @@ export function useChat(url: string, sessionId?: string) {
         }
         return prev;
       });
+      if (thinkingIdRef.current) {
+        setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
+        thinkingIdRef.current = null;
+      }
+      setSessionBusy(false);
     } catch (err: any) {
       thinkingIdRef.current = null;
       setMessages(prev => prev.filter(m => m.id !== thinkingId));
       setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId() }]);
+      setSessionBusy(false);
     }
   }, []);
 
-  return { messages, send, tokenUsage };
+  return { messages, send, tokenUsage, sessionBusy };
 }

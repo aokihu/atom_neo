@@ -16,6 +16,7 @@ Atom Neo 的运行时由 5 个 Pipeline 组成，每个 Pipeline 是一组按序
 |------|------|
 | [topic](./topic.md) | 会话主题跟踪与状态管理 |
 | [prompts](./prompts.md) | 提示词统一管理、多语言、模型级精细化 |
+| [session-lifecycle](./session-lifecycle.md) | 会话生命周期 — TUI 状态指示器管理 |
 | [follow-up-evaluator](./follow-up-evaluator.md) | 3 | 链式续写每 3 步 / 深度超限 | 评估对话健康度，必要时干预或升级模型 |
 | [context-compress](./context-compress.md) | 3 | Token 使用超 80% 阈值 | 压缩旧对话历史：归档 → LLM 摘要 → 清理消息 |
 | [follow-up](./follow-up.md) | 2 | **未使用（死代码）** | 早期续写处理桩，已被 conversation + Conversation.Chain 替代 |
