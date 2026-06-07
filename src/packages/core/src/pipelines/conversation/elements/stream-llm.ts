@@ -194,7 +194,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
       }
 
-      const chainAction = intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
+      const isComplete = fullText.includes("<<<COMPLETE>>>");
+      if (isComplete) {
+        fullText = fullText.replace(/<<<COMPLETE>>>/g, "").trim();
+        this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
+      }
+
+      const chainAction = isComplete ? undefined
+        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
         : finishReason === "tool-calls" ? "follow_up"
         : finishReason === "error" ? "follow_up"

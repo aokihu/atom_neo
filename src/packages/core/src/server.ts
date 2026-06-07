@@ -275,6 +275,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       return;
     }
 
+    if (session.todoState && session.todoState.length > 0) {
+      logger.debug("conversation chain: all todos completed, ending chain", { todoCount: session.todoState.length });
+      return;
+    }
+
     const depth = session.chainDepth;
     if (depth >= maxChainDepth) {
       logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });

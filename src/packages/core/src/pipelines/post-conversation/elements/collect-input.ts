@@ -22,11 +22,15 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
 
     const lastUserIdx = [...msgs].reduce((idx, m, i) => m.role === "user" ? i : idx, -1);
 
+    const MAX_PART_CHARS = 1500;
     const parts: string[] = [];
     for (let i = lastUserIdx + 1; i < msgs.length; i++) {
       if (msgs[i].role === "user") break;
       if (msgs[i].role === "assistant" && msgs[i].content) {
-        parts.push(msgs[i].content);
+        const content = msgs[i].content;
+        parts.push(content.length > MAX_PART_CHARS
+          ? content.slice(0, MAX_PART_CHARS) + `... [截断, 完整长度 ${content.length}]`
+          : content);
       }
     }
     const assistantResponse = parts.join("\n");
