@@ -9,7 +9,7 @@
     "src/packages/tui"
   ],
   "scripts": {
-    "dev": "bun run src/main.ts --sandbox ./sandbox --log=pipe --log-level=debug --log-pipepath=/tmp/atom-debug",
+    "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
     "docs": "bun run --watch docs/server.tsx",
     "docs:dev": "bun run docs/server.tsx",
