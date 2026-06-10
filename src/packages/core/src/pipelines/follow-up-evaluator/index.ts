@@ -31,5 +31,6 @@ export function followUpEvaluatorPipeline(deps: {
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
     })
+    .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .sink("evaluate-finalize", { orchestrator: deps.orchestrator, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }

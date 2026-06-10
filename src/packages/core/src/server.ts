@@ -21,6 +21,7 @@ import { registerFollowUpElements } from "./pipelines/follow-up";
 import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
 import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
 import { registerPostConversationElements, postConversationPipeline } from "./pipelines/post-conversation";
+import { registerSharedElements } from "./pipelines/shared";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
@@ -103,6 +104,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
+        configContextLimit: resolvedContextLimit,
       }).build(bus);
     },
 
@@ -167,6 +169,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         apiKey, model, baseUrl,
         orchestrator,
         sandbox,
+        configContextLimit: resolvedContextLimit,
+        maxTokens,
       }).build(bus);
     },
 
@@ -176,6 +180,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
+        configContextLimit: resolvedContextLimit,
       }).build(bus);
     },
   };
@@ -192,6 +197,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerFollowUpEvaluatorElements();
   registerContextCompressElements();
   registerPostConversationElements();
+  registerSharedElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));

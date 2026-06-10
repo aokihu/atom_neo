@@ -22,5 +22,6 @@ export function predictionPipeline(deps: PredictionPipelineDeps) {
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
     })
+    .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .sink("predict-finalize", { orchestrator: deps.orchestrator });
 }
