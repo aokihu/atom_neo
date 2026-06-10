@@ -242,6 +242,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         msgCount: session.messages.length,
         lastSafeMsgCount: session.lastSafeMsgCount,
       });
+      session.pendingCompressRatio = 1.0;
       orchestrator.scheduleCompress(sid, p.task.chatId, p.task.parentTaskId ?? p.task.id);
     }
   });

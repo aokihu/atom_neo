@@ -7,4 +7,5 @@ export type CompressFlowState = {
   archiveMessages: Array<{ role: string; content: string; timestamp: number }>;
   summaryText: string;
   summary?: string;
+  summaryMaxTokens: number;
 };

@@ -24,6 +24,7 @@ export class SessionContext {
   upgradeModel?: boolean;
   pendingPrediction?: any;
   conversationSummary?: string;
+  pendingCompressRatio?: number;
 
   #messages: SessionMessage[] = [];
 

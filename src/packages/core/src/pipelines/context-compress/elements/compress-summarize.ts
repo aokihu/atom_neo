@@ -40,7 +40,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
         model,
         system: resolvePrompt(PromptKey.COMPRESS_SUMMARIZE),
         prompt: input.summaryText,
-        maxTokens: 600,
+        maxTokens: input.summaryMaxTokens || 600,
         temperature: 0,
       });
 

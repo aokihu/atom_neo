@@ -31,5 +31,5 @@ export function followUpEvaluatorPipeline(deps: {
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
     })
-    .sink("evaluate-finalize", { orchestrator: deps.orchestrator, configContextLimit: deps.configContextLimit });
+    .sink("evaluate-finalize", { orchestrator: deps.orchestrator, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }
