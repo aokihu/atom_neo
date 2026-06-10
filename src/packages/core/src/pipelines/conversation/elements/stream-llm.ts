@@ -86,6 +86,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
       let tokenOverflow = false;
+      let streamErrorCode = 0;
 
       try {
         const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -178,6 +179,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
           if (ctype === "error") {
             const err = (chunk as any).error ?? {};
+            if (err.statusCode) streamErrorCode = err.statusCode;
             this.report(BusEvents.Element.Data, { step: "stream-llm-error", errorName: err.name, statusCode: err.statusCode, message: (err.message ?? "").slice(0, 500), responseBody: (err.responseBody ?? "").slice(0, 500) });
             continue;
           }
@@ -253,6 +255,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         m.role === "assistant" && m.reasoningContent
       )?.reasoningContent ?? "";
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
+
+      fullText = sanitizeHexEscapes(fullText);
       this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
 
       if (this.#stepCounter.count >= this.#maxSteps) {
@@ -261,10 +265,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       const chainAction = completeDetected ? undefined
         : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
-        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
         : finishReason === "tool-calls" ? "follow_up"
-        : finishReason === "error" ? "follow_up"
+        : finishReason === "error" && streamErrorCode < 400 ? "follow_up"
         : undefined;
 
       return {
@@ -276,6 +279,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         intents,
         chainAction,
         tokenOverflow,
+        errorStatusCode: streamErrorCode,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
@@ -283,19 +287,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         return {
           ...input,
           mode: "executing",
-          responseText: fullText,
+          responseText: sanitizeHexEscapes(fullText),
           reasoningContent: "",
           tokenUsage: { total: 0 },
           intents: [],
           chainAction: "follow_up",
           tokenOverflow: false,
+          errorStatusCode: err.statusCode ?? 0,
         };
       }
       return {
         ...input,
         mode: "executing",
-        responseText: `Error: ${err?.message ?? String(err)}`,
+        responseText: sanitizeHexEscapes(`Error: ${err?.message ?? String(err)}`),
         tokenOverflow,
+        errorStatusCode: err.statusCode ?? 0,
       };
     }
   }
@@ -371,4 +377,12 @@ function toIntentRequest(input: IntentToolInput): IntentRequest {
     default:
       return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params: input };
   }
+}
+
+function sanitizeHexEscapes(text: string): string {
+  return text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => {
+    const cp = parseInt(hex, 16);
+    if (cp >= 0xD800 && cp <= 0xDFFF) return "";
+    return String.fromCharCode(cp);
+  });
 }

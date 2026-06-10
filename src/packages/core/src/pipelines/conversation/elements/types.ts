@@ -30,4 +30,5 @@ export type ConversationFlowState = {
   intents?: IntentRequest[];
   tokenUsage?: TokenUsage;
   tokenOverflow?: boolean;
+  errorStatusCode?: number;
 };
