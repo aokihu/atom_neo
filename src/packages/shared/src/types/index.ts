@@ -15,7 +15,7 @@ export type {
   FollowUpIntentRequest,
   DifficultyLevel,
   ModelProfile,
-  TaskIntent,
+  IntentClass,
   ContextRelevance,
   IntentPredictionResult,
 } from "./intent";

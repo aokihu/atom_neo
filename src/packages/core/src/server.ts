@@ -110,7 +110,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       const prediction = session.pendingPrediction ?? {
         difficulty: "medium",
         modelProfile: "balanced",
-        taskIntent: "conversation",
+        intent: "conversation",
         contextRelevance: "standalone",
         reasoning: "default",
       };
@@ -140,7 +140,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         maxTokens,
         maxSteps,
         memory,
-        taskIntent: prediction.taskIntent,
+        intent: prediction.intent,
         contextRelevance: prediction.contextRelevance,
         sandbox,
       }).build(bus);

@@ -51,7 +51,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       .replace("%s", process.arch);
 
     let memoryCount = 0;
-    if (this.#memory && (this.#taskIntent === "tool_execution" || this.#taskIntent === "knowledge_retrieval")) {
+    if (this.#memory && (this.#taskIntent === "instruction" || this.#taskIntent === "question")) {
       const text = input.task?.payload?.[0]?.data || "";
       const memories = (await this.#memory.search(text)) || [];
       for (const node of memories) {

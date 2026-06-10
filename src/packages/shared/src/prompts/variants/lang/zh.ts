@@ -120,11 +120,11 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
    - "balanced": 中等推理深度（代码生成、多文件修改）
    - "advanced": 需要深度推理、复杂调试或架构分析
 
-3. task_intent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation"
-   - "tool_execution": 执行命令、查询 API、操作文件、涉及规划与多步工具调用的任务
-   - "creative_generation": 写长文章、生成代码、创作文本
-   - "knowledge_retrieval": 搜索记忆、查找文档、回忆事实
-   - "conversation": 闲聊、问答、简短解释
+3. intent: "instruction" | "question" | "creative" | "conversation"
+   - "instruction": 执行任务型指示 (写代码、重构、部署、操作文件)
+   - "question": 信息询问 (怎么实现、这个是什么、查找文档)
+   - "creative": 创作生成 (写文章、设计架构、生成内容)
+   - "conversation": 对话讨论、闲聊、简短问答
 
 4. context_relevance: "standalone" | "follow_up" | "continuation"
    - "standalone": 新话题，与历史无关
@@ -152,7 +152,7 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 这是执行策略，不是模型要求。
 
 仅回复 JSON，格式如下：
-{"difficulty":"...","model_profile":"...","task_intent":"...","context_relevance":"...","topic":"...","reasoning":"简短解释"}`,
+{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","topic":"...","reasoning":"简短解释"}`,
 
   [PromptKey.ANALYZE_RESULT]: `你是一个会话质量评估器。判断AI是否**完成了**用户的请求。
 

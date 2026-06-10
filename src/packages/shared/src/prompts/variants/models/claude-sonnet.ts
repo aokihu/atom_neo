@@ -10,7 +10,7 @@ You are running on Claude. Leverage its strengths:
 - Be mindful of safety boundaries while remaining practical and helpful`,
 
   [PromptKey.PREDICT_INTENT]: `[Claude Sonnet Hint]
-Claude Sonnet prefers structured, nuanced thinking. It classifies "creative_generation"
-and "knowledge_retrieval" tasks particularly well. Context_relevance assessments
+Claude Sonnet prefers structured, nuanced thinking. It classifies "creative"
+and "question" tasks particularly well. context_relevance assessments
 are generally accurate due to strong attention to conversation history.`,
 };

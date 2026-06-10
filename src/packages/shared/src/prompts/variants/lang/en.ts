@@ -120,11 +120,11 @@ If the system truncated your reply due to length, you will receive a continuatio
    - "balanced": moderate reasoning depth needed (code generation, multi-file changes)
    - "advanced": deep reasoning, complex debugging, or architectural analysis required
 
-3. task_intent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation"
-   - "tool_execution": executing commands, querying APIs, manipulating files, multi-step tasks involving planning and coordination of multiple tool calls
-   - "creative_generation": writing long articles, generating code, composing text
-   - "knowledge_retrieval": searching memory, looking up documentation, recalling facts
-   - "conversation": casual chat, Q&A, brief explanations
+3. intent: "instruction" | "question" | "creative" | "conversation"
+   - "instruction": task-oriented (write code, refactor, deploy, manipulate files)
+   - "question": information inquiry (how to implement, what is this, look up docs)
+   - "creative": generative creation (write articles, design architecture, generate content)
+   - "conversation": discussion, casual chat, brief Q&A
 
 4. context_relevance: "standalone" | "follow_up" | "continuation"
    - "standalone": new topic, unrelated to conversation history
@@ -154,7 +154,7 @@ When difficulty is "hard" or "mygod", the assistant will be instructed to use a 
 to plan and execute step by step. This is an execution strategy, not a model requirement.
 
 Reply ONLY with JSON in this exact format:
-{"difficulty":"...","model_profile":"...","task_intent":"...","context_relevance":"...","topic":"...","reasoning":"brief explanation"}`,
+{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","topic":"...","reasoning":"brief explanation"}`,
 
   [PromptKey.ANALYZE_RESULT]: `You are a conversation quality evaluator. Determine whether the AI **completed** the user's request.
 

@@ -41,7 +41,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       hasUser: !!userMessage,
       hasAssistant: parts.length > 0,
       assistantParts: parts.length,
-      taskIntent: prediction.taskIntent ?? "conversation",
+      taskIntent: prediction.intent ?? "conversation",
     });
 
     return {
@@ -50,7 +50,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       session: this.#session,
       userMessage,
       assistantResponse,
-      predictedTaskIntent: prediction.taskIntent ?? "conversation",
+      predictedTaskIntent: prediction.intent ?? "conversation",
       stepCount: prediction.stepCount ?? 0,
       assistantParts: parts.length,
     };
