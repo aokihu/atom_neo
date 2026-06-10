@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import { DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 
 const FALLBACK: EvaluatorResult = {
@@ -24,7 +25,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
-    this.#configContextLimit = params.configContextLimit ?? 131072;
+    this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<PipelineResult> {
@@ -50,7 +51,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     }
 
     const tu = input.session?.tokenUsage?.total ?? 0;
-    const limit = this.#configContextLimit ?? 131072;
+    const limit = this.#configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     if (tu > limit * 0.8 && health !== "stuck") {
       this.report(BusEvents.Element.Data, { step: "token usage high, scheduling compress", total: tu, limit });
       this.#orchestrator.scheduleCompress(

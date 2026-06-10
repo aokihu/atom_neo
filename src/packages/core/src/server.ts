@@ -24,7 +24,7 @@ import { registerPostConversationElements, postConversationPipeline } from "./pi
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
-import { DEFAULT_MAX_TOKENS } from "./constants";
+import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -83,6 +83,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   };
   const providerModel = `${resolved.provider}/${model}`;
   const configContextLimit: number | undefined = runtime?.appConfig?.providers?.[resolved.provider]?.contextLimit;
+  const resolvedContextLimit = resolveContextLimit(providerModel, configContextLimit);
   const maxTokens: number = runtime?.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 50;
   const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
@@ -153,7 +154,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
-        configContextLimit,
+        configContextLimit: resolvedContextLimit,
       }).build(bus);
     },
 
