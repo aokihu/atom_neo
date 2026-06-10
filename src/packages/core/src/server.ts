@@ -233,8 +233,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   bus.on(BusEvents.Pipeline.Result as any, (p: { task: any; result: any }) => {
     if (p.result.type === PipelineResultType.Retry) {
-      logger.debug("pipeline retry signal, scheduling compress", { taskId: p.task.id, reason: p.result.reason });
-      orchestrator.scheduleCompress(p.task.sessionId, p.task.chatId, p.task.parentTaskId ?? p.task.id);
+      const sid = p.task.sessionId;
+      const session = sessionStore.get(sid);
+      logger.debug("token overflow — compressing context", {
+        taskId: p.task.id,
+        sessionId: sid,
+        msgCount: session.messages.length,
+        lastSafeMsgCount: session.lastSafeMsgCount,
+      });
+      orchestrator.scheduleCompress(sid, p.task.chatId, p.task.parentTaskId ?? p.task.id);
     }
   });
 

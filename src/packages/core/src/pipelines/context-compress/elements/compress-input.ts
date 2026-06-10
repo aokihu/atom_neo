@@ -42,7 +42,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
       .map(m => `${m.role}: ${m.content}`)
       .join("\n");
 
-    this.report(BusEvents.Element.Data, { step: "done", totalMsgs: dialog.length, toCompress: toCompress.length, keep: keepCount });
+    this.report(BusEvents.Element.Data, { step: "done", totalMsgs: dialog.length, toCompress: toCompress.length, keep: keepCount, safeCount, mode: safeCount > 0 ? "safe_boundary" : "default" });
     return {
       mode: "summarizing",
       task: input.task,

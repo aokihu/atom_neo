@@ -188,6 +188,19 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
 
+      if (tokenOverflow) {
+        this.report(BusEvents.Element.Data, { step: "token-overflow-detected", taskIntent: this.#taskIntent, msgCount: userMessages.length, toolCount: tools.length });
+        return {
+          ...input,
+          mode: "executing",
+          responseText: "",
+          reasoningContent: "",
+          tokenUsage: { total: 0 },
+          intents: [],
+          tokenOverflow: true,
+        };
+      }
+
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
 
       let response: any;
