@@ -24,8 +24,12 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
       this.#session?.messages ?? [];
     const dialog = msgs.filter(m => m.role === "user" || m.role === "assistant");
 
-    const keepCount = Math.min(KEEP_COUNT, dialog.length);
-    const toCompress = dialog.slice(0, -keepCount);
+    const safeCount = this.#session?.lastSafeMsgCount ?? 0;
+    const keepFromSafe = safeCount > 0 ? dialog.slice(safeCount) : [];
+    const keepCount = keepFromSafe.length > 0
+      ? keepFromSafe.length
+      : Math.min(KEEP_COUNT, dialog.length);
+    const toCompress = dialog.slice(0, dialog.length - keepCount);
     const toKeep = dialog.slice(-keepCount);
 
     for (const m of toKeep) {

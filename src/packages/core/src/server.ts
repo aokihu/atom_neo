@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
-import { BusEvents, WsMessages } from "@atom-neo/shared";
+import { BusEvents, WsMessages, PipelineResultType } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -213,6 +213,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       };
       sessionStore.get(sid).addMessage(msg);
       logger.debug("task completed: message added to session", { sessionId: sid, msgCount: sessionStore.get(sid).messages.length, pipeline: p.task.pipeline });
+      if (p.task.pipeline === "conversation") {
+        sessionStore.get(sid).markSafeMessageCount();
+      }
     }
     if (sid && result.tokenUsage) {
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
@@ -226,6 +229,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
+  });
+
+  bus.on(BusEvents.Pipeline.Result as any, (p: { task: any; result: any }) => {
+    if (p.result.type === PipelineResultType.Retry) {
+      logger.debug("pipeline retry signal, scheduling compress", { taskId: p.task.id, reason: p.result.reason });
+      orchestrator.scheduleCompress(p.task.sessionId, p.task.chatId, p.task.parentTaskId ?? p.task.id);
+    }
   });
 
   bus.on(BusEvents.Pipeline.ElementStarted, (p) => {

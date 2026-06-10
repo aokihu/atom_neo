@@ -82,6 +82,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let fullText = "";
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
+      let tokenOverflow = false;
 
       try {
         const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -185,6 +186,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
 
+      tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
+
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
 
       let response: any;
@@ -242,6 +245,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         tokenUsage,
         intents,
         chainAction,
+        tokenOverflow,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
@@ -254,12 +258,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           tokenUsage: { total: 0 },
           intents: [],
           chainAction: "follow_up",
+          tokenOverflow: false,
         };
       }
       return {
         ...input,
         mode: "executing",
         responseText: `Error: ${err?.message ?? String(err)}`,
+        tokenOverflow,
       };
     }
   }

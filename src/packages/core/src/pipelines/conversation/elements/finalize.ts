@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
@@ -11,6 +11,14 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
   async doProcess(input: ConversationFlowState): Promise<any> {
     if (input.mode !== "ready_to_finalize") {
       throw new Error("FinalizeElement: expected ready_to_finalize");
+    }
+
+    if (input.tokenOverflow) {
+      return {
+        type: PipelineResultType.Retry,
+        task: input.task,
+        reason: "token_overflow",
+      };
     }
 
     if (!input.chainAction) {

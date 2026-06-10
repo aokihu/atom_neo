@@ -4,6 +4,7 @@ import type { PipelineEventBus } from "@atom-neo/shared";
 import type { TaskQueue } from "./task-queue";
 import { getPipeline, removePipeline, setPipeline } from "./api/tasks";
 import type { Pipeline } from "./pipeline/builder";
+import { PipelineResultType } from "@atom-neo/shared";
 
 type PipelineBuilder = (task: TaskItem) => Pipeline | undefined;
 
@@ -64,6 +65,15 @@ export class TaskEngine {
 
     try {
       const result = await this.#executeTask(task);
+
+      if (result.type === PipelineResultType.Retry) {
+        this.#queue.reEnqueue(task);
+        task.state = TaskState.PENDING;
+        task.updatedAt = Date.now();
+        this.#bus.emit(BusEvents.Pipeline.Result as any, { task, result });
+        this.#onTaskEnqueued();
+        return;
+      }
 
       this.#queue.markDone(task.id);
       task.state = TaskState.COMPLETED;

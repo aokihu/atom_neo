@@ -49,6 +49,14 @@ export class SessionContext {
     this.sessionId = sessionId;
   }
 
+  #lastSafeMsgCount: number = 0;
+
+  get lastSafeMsgCount(): number { return this.#lastSafeMsgCount; }
+
+  markSafeMessageCount(): void {
+    this.#lastSafeMsgCount = this.#messages.length;
+  }
+
   get chainDepth(): number { return this.#chainDepth; }
   incrementChainDepth(): void { this.#chainDepth++; }
   resetChainDepth(): void { this.#chainDepth = 0; }

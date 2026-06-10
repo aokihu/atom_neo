@@ -5,6 +5,7 @@ export enum PipelineResultType {
   Enqueue = "enqueue",
   SuspendAndEnqueueChild = "suspend_and_enqueue_child",
   ResumeParentAndEnqueue = "resume_parent_and_enqueue",
+  Retry = "retry",
 }
 
 export enum PipelineEnqueueTransition {
@@ -30,6 +31,11 @@ export type PipelineResult =
       task: TaskItem;
       parentTaskId: string;
       nextTask: TaskItem;
+    }
+  | {
+      type: typeof PipelineResultType.Retry;
+      task: TaskItem;
+      reason: string;
     };
 
 export type FlowState = { mode: string };
