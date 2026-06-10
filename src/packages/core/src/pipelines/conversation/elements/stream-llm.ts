@@ -298,12 +298,23 @@ function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payloa
 }
 
 function getActiveToolNames(taskIntent: string): string[] {
-  const ALL_FS = ["read", "write", "edit", "ls", "grep", "tree", "glob", "cp", "mv"];
-  const ALL_MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
-  const ALL_OTHER = ["bash", "webfetch", "todowrite"];
-  const INTENT = "intent";
+  const FS_RO = ["read", "grep", "ls", "tree", "glob"];
+  const FS_RW = ["write", "edit", "cp", "mv"];
+  const MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
+  const CONTROL = ["todowrite", "intent"];
+  const EXTRA = ["webfetch", "bash"];
 
-  return [...ALL_FS, ...ALL_MEMORY, ...ALL_OTHER, INTENT];
+  switch (taskIntent) {
+    case "instruction":
+      return [...FS_RO, ...FS_RW, ...MEMORY, ...CONTROL, ...EXTRA];
+    case "question":
+      return [...FS_RO, ...MEMORY, ...CONTROL, "webfetch"];
+    case "creative":
+      return [...FS_RO, ...FS_RW, ...CONTROL, "webfetch"];
+    case "conversation":
+    default:
+      return [...FS_RO, ...CONTROL, "webfetch"];
+  }
 }
 
 function resolveTimeout(difficulty: string): number {

@@ -65,29 +65,6 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 所有任务标记为 completed 后方可进入决策协议步骤 1 判断是否需要结束
 - 若 todo 列表存在但当前回复与列表中的任务无关，先更新进度再继续
 
-## 工具速查
-
-### 控制工具
-- \`intent\` — 向系统发出控制信号。action: follow_up / keep_memory
-- \`todowrite\` — 维护任务进度。首次调用传入完整规划，执行中每次状态变化更新列表。每项: content(描述), status(pending/in_progress/completed/cancelled), priority(high/medium/low)
-
-### 基础工具
-- \`read\` — 读取文件内容
-- \`write\` — 写入文件内容
-- \`edit\` — 精确字符串替换编辑文件
-- \`ls\` — 列出目录
-- \`grep\` — 正则搜索文件内容
-- \`tree\` — 递归显示目录树
-- \`glob\` — 通配符匹配文件路径
-- \`webfetch\` — HTTP GET/POST 获取网页或 API 内容
-- \`bash\` — 在沙箱中执行 shell 命令
-- \`cp\` — 复制文件或目录
-- \`mv\` — 移动或重命名文件
-- \`search_memory\` — 搜索长期记忆
-- \`save_memory\` — 保存到长期记忆
-- \`link_memory\` — 链接两条记忆
-- \`traverse_memory\` — 遍历记忆图谱
-
 ## 续写规则（被动触发）
 
 若系统因长度限制截断了你的回复，你会收到续写指令。请：

@@ -223,7 +223,7 @@ export function createEditTool(sb: Sandbox): ToolDefinition {
     newString: z.string(),
   });
   return {
-    name: "edit", description: "Find and replace exact string in a file. Only replaces first occurrence. Returns error if string not found or found multiple times.",
+    name: "edit", description: "Exact string replacement in a file. Returns error if oldString not found or appears multiple times.",
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
