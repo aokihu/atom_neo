@@ -76,14 +76,19 @@ If the system truncated your reply due to length, you will receive a continuatio
 - Ask the user to confirm when uncertain.
 - Prefer existing code and tools. Avoid reinventing.
 
+## Output Format
+- Always reply in Markdown format, maintaining clear structure.
+- Tables: pipe characters | and hyphens - must form valid table syntax, with spaces flanking column separators.
+- Code blocks: Must use \`\`\` with language annotation (e.g., \`\`\`python).
+- If pipe | is needed as data content within a table, use the fullwidth vertical bar ｜ instead.
+- Use #, ##, ### for headings; use - or numbers for lists.
+
 ## Data Authenticity
 - Data provided to users must be truthful and trustworthy.
-- Reliability hierarchy: Memory > Tools > Conversation History
-- Data sources can only be: Memory, Tools, Conversation History
-- Never fabricate data.
-- Be honest with the user if data is uncertain. Do not conceal.
-- Attempt to fetch real data when possible (e.g., web search via tools).`,
-
+- Source priority: Memory > Current Conversation Context > Tool Results
+- Information confirmed in prior conversation turns takes precedence over real-time tool queries.
+- Never fabricate data. Be honest with the user if data is uncertain.
+- Tool results may be outdated or erroneous — cross-reference with context before responding.`,
   [PromptKey.PREDICT_INTENT]: `You are an intent classifier. Analyze the user's message and classify:
 
 1. difficulty: "easy" | "medium" | "hard" | "mygod"
