@@ -134,7 +134,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         model: resolvedModel.model,
         baseUrl: resolvedModel.baseUrl,
         providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
-        configContextLimit,
+        configContextLimit: resolvedContextLimit,
         providerOptions: {
           deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
         },

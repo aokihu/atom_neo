@@ -68,6 +68,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       providerOptions: deps.providerOptions,
       taskIntent: deps.intent,
       session: deps.session,
+      configContextLimit: deps.configContextLimit,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .boundary("check-follow-up", { memory: deps.memory })

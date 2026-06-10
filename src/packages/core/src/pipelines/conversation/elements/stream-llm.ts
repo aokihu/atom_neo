@@ -6,7 +6,7 @@ import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
-import { DEFAULT_MAX_TOKENS } from "../../../constants";
+import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState } from "./types";
@@ -22,6 +22,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #taskIntent: string;
   #stepCounter = { count: 0 };
   #session: any;
+  #configContextLimit: number;
 
   constructor(params: {
     name: string;
@@ -36,6 +37,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     providerOptions?: Record<string, any>;
     taskIntent?: string;
     session?: any;
+    configContextLimit?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -46,6 +48,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#session = params.session;
+    this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
   }
 
@@ -189,16 +192,25 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
 
       if (tokenOverflow) {
-        this.report(BusEvents.Element.Data, { step: "token-overflow-detected", taskIntent: this.#taskIntent, msgCount: userMessages.length, toolCount: tools.length });
-        return {
-          ...input,
-          mode: "executing",
-          responseText: "",
-          reasoningContent: "",
-          tokenUsage: { total: 0 },
-          intents: [],
-          tokenOverflow: true,
-        };
+        const tu = (this.#session?.tokenUsage?.total ?? 0) + (input.tokenUsage?.total ?? 0);
+        const effectiveLimit = this.#configContextLimit - this.#maxTokens;
+        const ratio = effectiveLimit > 0 ? tu / effectiveLimit : 0;
+
+        if (ratio <= 0.8) {
+          tokenOverflow = false;
+          this.report(BusEvents.Element.Data, { step: "stream-error-not-overflow", ratio: +ratio.toFixed(3), tu, effectiveLimit });
+        } else {
+          this.report(BusEvents.Element.Data, { step: "token-overflow-detected", taskIntent: this.#taskIntent, msgCount: userMessages.length, toolCount: tools.length, ratio: +ratio.toFixed(3), tu, effectiveLimit });
+          return {
+            ...input,
+            mode: "executing",
+            responseText: "",
+            reasoningContent: "",
+            tokenUsage: { total: 0 },
+            intents: [],
+            tokenOverflow: true,
+          };
+        }
       }
 
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
