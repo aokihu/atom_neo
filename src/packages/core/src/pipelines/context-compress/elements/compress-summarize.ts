@@ -48,6 +48,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
       this.report(BusEvents.Element.Data, { step: "generated", summaryLen: summary.length });
       return { ...input, mode: "finalizing", summary };
     } catch (err: any) {
+      input.session.compressRatio = Math.min(2.0, (input.session.compressRatio ?? 0.5) + 0.4);
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err.message });
       return { ...input, mode: "finalizing", summary: "" };
     }

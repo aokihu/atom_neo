@@ -25,6 +25,9 @@ export class SessionContext {
   pendingPrediction?: any;
   conversationSummary?: string;
   pendingCompressRatio?: number;
+  compressing: boolean = false;
+  compressRetry: number = 0;
+  compressRatio: number = 0;
 
   #messages: SessionMessage[] = [];
 

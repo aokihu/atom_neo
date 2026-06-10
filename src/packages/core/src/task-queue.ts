@@ -39,11 +39,6 @@ export class TaskQueue {
     this.#processing.delete(taskId);
   }
 
-  reEnqueue(task: TaskItem): void {
-    this.#processing.delete(task.id);
-    this.#activeQueue.push(task);
-  }
-
   isProcessing(taskId: string): boolean {
     return this.#processing.has(taskId);
   }

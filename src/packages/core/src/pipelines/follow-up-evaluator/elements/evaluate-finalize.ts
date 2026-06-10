@@ -56,10 +56,27 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     const tu = input.session?.tokenUsage?.total ?? 0;
     const effectiveLimit = (this.#configContextLimit ?? DEFAULT_CONTEXT_LIMIT) - this.#maxTokens;
     if (tu > effectiveLimit * 0.8 && health !== "stuck") {
-      const usageRatio = tu / effectiveLimit;
-      const compressRatio = Math.max(0, (usageRatio - 0.8) * 5);
-      input.session.pendingCompressRatio = compressRatio;
-      this.report(BusEvents.Element.Data, { step: "token usage high, scheduling compress", total: tu, effectiveLimit, usageRatio: usageRatio.toFixed(3), compressRatio: compressRatio.toFixed(3) });
+      if (input.session.compressing) {
+        this.report(BusEvents.Element.Data, { step: "compress already in progress, skipping" });
+        return { type: "complete", task: input.task, output: `evaluator: compress already in progress` };
+      }
+
+      if (input.session.compressRetry === 0) {
+        const usageRatio = tu / effectiveLimit;
+        input.session.compressRatio = Math.max(0, (usageRatio - 0.8) * 5);
+      }
+      input.session.compressRetry++;
+      if (input.session.compressRetry > 1) {
+        input.session.compressRatio = Math.min(2.0, input.session.compressRatio + 0.4);
+      }
+      input.session.compressing = true;
+
+      this.report(BusEvents.Element.Data, {
+        step: "token usage high, scheduling compress",
+        total: tu, effectiveLimit,
+        compressRetry: input.session.compressRetry,
+        compressRatio: input.session.compressRatio.toFixed(3),
+      });
       this.#orchestrator.scheduleCompress(
         input.session.sessionId,
         input.task.chatId,

@@ -32,7 +32,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
       this.#session?.messages ?? [];
     const dialog = msgs.filter(m => m.role === "user" || m.role === "assistant");
 
-    const ratio = this.#session?.pendingCompressRatio ?? 0.5;
+    const ratio = this.#session?.compressRatio ?? 0.5;
     const strategy = resolveStrategy(ratio);
 
     const safeCount = this.#session?.lastSafeMsgCount ?? 0;

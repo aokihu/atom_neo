@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
-import { BusEvents, WsMessages, PipelineResultType } from "@atom-neo/shared";
+import { BusEvents, WsMessages } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -144,6 +144,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         intent: prediction.intent,
         contextRelevance: prediction.contextRelevance,
         sandbox,
+        orchestrator,
       }).build(bus);
     },
 
@@ -230,21 +231,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
-  });
-
-  bus.on(BusEvents.Pipeline.Result as any, (p: { task: any; result: any }) => {
-    if (p.result.type === PipelineResultType.Retry) {
-      const sid = p.task.sessionId;
-      const session = sessionStore.get(sid);
-      logger.debug("token overflow — compressing context", {
-        taskId: p.task.id,
-        sessionId: sid,
-        msgCount: session.messages.length,
-        lastSafeMsgCount: session.lastSafeMsgCount,
-      });
-      session.pendingCompressRatio = 1.0;
-      orchestrator.scheduleCompress(sid, p.task.chatId, p.task.parentTaskId ?? p.task.id);
-    }
   });
 
   bus.on(BusEvents.Pipeline.ElementStarted, (p) => {
