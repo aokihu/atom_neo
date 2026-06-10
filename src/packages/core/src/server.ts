@@ -76,6 +76,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
     provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
   };
+  const compressResolved = runtime?.getResolvedModel?.("basic") ?? resolved;
   const apiKey: string = resolved.apiKey;
   const model: string = resolved.model;
   const baseUrl: string | undefined = resolved.baseUrl;
@@ -166,7 +167,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       return contextCompressPipeline({
         session,
         task,
-        apiKey, model, baseUrl,
+        apiKey: compressResolved.apiKey,
+        model: compressResolved.model,
+        baseUrl: compressResolved.baseUrl,
         orchestrator,
         sandbox,
         configContextLimit: resolvedContextLimit,
