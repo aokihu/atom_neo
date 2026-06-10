@@ -85,7 +85,13 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       this.report(BusEvents.Element.Data, { step: "analyzed", status, reason: analysis.reason });
       return { ...input, mode: "acting", analysis };
     } catch (err: any) {
-      this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });
+      this.report(BusEvents.Element.Data, {
+        step: "error, fallback",
+        error: err?.message?.slice(0, 300),
+        errorName: err?.name,
+        statusCode: err?.statusCode,
+        responseBody: (err?.responseBody ?? "").slice(0, 200),
+      });
       return { ...input, mode: "acting", analysis: FALLBACK };
     }
   }

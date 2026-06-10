@@ -1,6 +1,6 @@
 {
   "name": "@atom-neo/setup-wizard",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "main": "./src/main.tsx",
   "types": "./src/main.tsx",

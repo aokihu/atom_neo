@@ -176,6 +176,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             finishReason = (chunk as any).finishReason ?? finishReason;
             continue;
           }
+          if (ctype === "error") {
+            const err = (chunk as any).error ?? {};
+            this.report(BusEvents.Element.Data, { step: "stream-llm-error", errorName: err.name, statusCode: err.statusCode, message: (err.message ?? "").slice(0, 500), responseBody: (err.responseBody ?? "").slice(0, 500) });
+            continue;
+          }
           this.report(BusEvents.Element.Data, { step: "unhandled-chunk", type: ctype, raw: JSON.stringify(chunk).slice(0, 200) });
         }
       } finally {
