@@ -4,7 +4,7 @@
 
 ---
 
-# Part 1: Coding Conventions
+## Part 1: Coding Conventions
 
 ## 1. Core Principle: Less Code, More Power
 
@@ -129,7 +129,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 ---
 
-# Part 2: Naming Conventions
+## Part 2: Naming Conventions
 
 ## 1. Files
 
@@ -223,7 +223,7 @@ describe("PipelineRunner", () => { ... })
 
 ---
 
-# Part 3: Type System
+## Part 3: Type System
 
 ## 1. Type File Layout
 

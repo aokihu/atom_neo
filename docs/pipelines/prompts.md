@@ -197,4 +197,4 @@ src/packages/core/src/pipelines/conversation/index.ts 传递 providerModel 到 L
 | 文档 | 说明 |
 |------|------|
 | [conversation.md](./conversation.md) | 各 Element 如何通过 resolvePrompt() 获取提示词 |
-| [agents-compiler.md](../subsystems/agents-compiler.md) | AGENTS.md 编译器 — 另一个提示词生成源 |```
+| [agents-compiler.md](../subsystems/agents-compiler.md) | AGENTS.md 编译器 — 另一个提示词生成源 |

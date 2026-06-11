@@ -4,7 +4,7 @@
 
 ---
 
-# Part 1: Element Design
+## Part 1: Element Design
 
 ## 1. Element Interface
 
@@ -171,7 +171,7 @@ test("processes and transitions on matching mode", async () => {
 
 ---
 
-# Part 2: Pipeline Builder
+## Part 2: Pipeline Builder
 
 ## 1. API
 
@@ -256,7 +256,7 @@ export class PipelineManager {
 
 ---
 
-# Part 3: Event Bus
+## Part 3: Event Bus
 
 ## 1. 核心实现
 

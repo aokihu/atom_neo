@@ -4,7 +4,7 @@
 
 ---
 
-# Part 1: SessionContext
+## Part 1: SessionContext
 
 ## 1. Data Model
 
@@ -115,7 +115,7 @@ StreamLLMElement → sessionContext.addTokenUsage(totalTokens)
 
 ---
 
-# Part 2: Topic System
+## Part 2: Topic System
 
 ## 1. 设计原则
 
@@ -169,7 +169,7 @@ resetForNewTopic(topic: string): void {
 
 ---
 
-# Part 3: Session Lifecycle (TUI)
+## Part 3: Session Lifecycle (TUI)
 
 ## 1. 问题
 
