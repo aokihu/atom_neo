@@ -1,5 +1,7 @@
 # Prompt Registry — 提示词统一管理
 
+> **Purpose**: 所有 LLM 提示词集中管理 — 多语言、模型级精细化追加、惰性合成缓存。
+
 ## 职责
 
 所有 LLM 提示词集中管理、多语言支持、模型级精细化调优、惰性合成缓存。
@@ -119,6 +121,26 @@ server.ts 启动
 | `TASK_INTENT_DESC` | (不在 registry 中 — 内联映射) | analyze-result.ts |
 | `TRUNCATION_MARKER` | 消息截断标记文本 | collect-input.ts |
 
+## 输出安全
+
+### sanatizeForJSON（共享工具函数）
+
+所有 LLM 输出在存储到 session 之前经过双层净化，定义在 `@atom-neo/shared` (`src/packages/shared/src/utils/sanitize.ts`):
+
+| 层 | 技术 | 激活点 |
+|----|------|-------|
+| `String.toWellFormed()` | ES2024 标准，修复孤立代理对 | stream-llm.ts (源头) |
+| 正则 `\\u[0-9a-fA-F]{0,4}` | 剥离字面量 hex escape 文本 | server.ts (防线) |
+
+### TODO 执行提示词变化
+
+| 位置 | 变化 | 版本 |
+|------|------|------|
+| Step 0 / 任务执行规则 | 新增 "todowrite 工具会拒绝多个 in_progress" 威慑声明 | v1.0.8 |
+| CONTEXT_DIFFICULTY_RULES | 强化 "一次只能执行一个任务" 表述 | v1.0.8 |
+| collect-context banner | TODO 列表上方注入醒目横幅提醒 | v1.0.8 |
+| 执行规则 / intent 说明 | 禁止进度叙述/自我对话（"第X步完成"等） | v1.1.0 |
+
 ## 模型级精细化示例
 
 ```ts
@@ -157,6 +179,13 @@ src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluator-analyze.t
 src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluate-finalize.ts  改用 resolvePrompt()
 src/packages/core/src/pipelines/context-compress/elements/compress-summarize.ts    改用 resolvePrompt()
 src/packages/core/src/server.ts                      registerAllPrompts() 调用
-src/assets/prompts/base_system_prompt.md             保留弃用标记（varaints/lang/zh.ts 替代）
+src/assets/prompts/base_system_prompt.md             保留弃用标记（variants/lang/zh.ts 替代）
 src/packages/core/src/pipelines/conversation/index.ts 传递 providerModel 到 LoadSystemPrompt + CollectContext
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [conversation.md](./conversation.md) | 各 Element 如何通过 resolvePrompt() 获取提示词 |
+| [agents-compiler.md](../subsystems/agents-compiler.md) | AGENTS.md 编译器 — 另一个提示词生成源 |```

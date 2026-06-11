@@ -10,7 +10,7 @@
 ## 1. Tool Definition Interface
 
 ```typescript
-// src/src/packages/shared/src/types/tool.ts
+// src/packages/shared/src/types/tool.ts
 
 import type { z } from "zod";
 
@@ -119,7 +119,7 @@ export const myTool: ToolDefinition = {
 // All file operations are sandboxed to config.sandboxPath.
 // Paths that escape the sandbox are rejected.
 
-import { readFile, writeFile, readdir, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { PermissionLevel } from "@atom-neo/shared/types";
 
 export const readTool: ToolDefinition = {
@@ -134,7 +134,7 @@ export const readTool: ToolDefinition = {
   execute: async (args) => {
     const { filepath, offset, limit } = readInputSchema.parse(args);
     try {
-      const content = await readFile(filepath, "utf-8");
+      const content = await Bun.file(filepath).text();
       const lines = content.split("\n");
       const start = (offset ?? 1) - 1;
       const end = limit ? start + limit : undefined;
@@ -311,3 +311,11 @@ export const bashTool: ToolDefinition = {
   requiresApproval: true,  // flagged in UI
 };
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [sandbox.md](./sandbox.md) | ToolGuard 沙箱路径隔离规则 |
+| [memory-service.md](./memory-service.md) | Memory 工具（search/save/traverse/link）的实现参考 |
+| [session.md](../core/session.md) | SessionContext 中 toolContext 状态管理 |

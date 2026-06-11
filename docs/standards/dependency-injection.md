@@ -253,10 +253,18 @@ function validateDeps(deps: RuntimeDeps): void {
   }
 
   // Check file paths exist
-  if (!fs.existsSync(deps.config.memoryDbPath)) {
+  const dbFile = Bun.file(deps.config.memoryDbPath);
+  if (!(await dbFile.exists())) {
     logger.warn("database file does not exist, will create", {
       path: deps.config.memoryDbPath,
     });
   }
 }
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [coding.md](./coding.md) | DI 代码风格约束 |
+| [bootstrap.md](../overview/bootstrap.md) | 实际构造链和注入顺序 |

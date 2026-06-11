@@ -217,3 +217,10 @@ test("receives transport.delta events via WebSocket", async () => {
 | HTTP handlers | 90%+ (happy path + error cases) |
 | Gateway auth | 100% |
 | Replay system | 100% |
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [pipeline-dev.md](../core/pipeline-dev.md) | Element 测试模板和模式 |
+| [coding.md](./coding.md) | 测试代码风格约束 |

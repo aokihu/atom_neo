@@ -40,24 +40,34 @@ Options:
 
 ## 3. Config File (`$SANDBOX/config.json`)
 
-```json
+```jsonc
 {
+  "version": 2,
+  "theme": "dark",
+  "providerProfiles": {
+    "advanced": "deepseek/deepseek-v4-flash",
+    "balanced": "deepseek/deepseek-v4-flash",
+    "basic": "deepseek/deepseek-v4-pro"
+  },
+  "providers": {
+    "deepseek": {
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+      "baseUrl": "https://api.deepseek.com/v1",
+      "thinking": "disabled",
+      "contextLimit": 131072
+    }
+  },
   "transport": { "maxOutputTokens": 4096 },
   "gateway": { "port": 3000, "jwtSecret": "..." },
   "tui": { "theme": "dark" },
   "permission": {
     "whitelist": ["/home/user/other-project", "/tmp/shared"]
-  },
-  "log": {
-    "level": "debug",
-    "ignore": []
   }
 }
 ```
 
-不含 server 配置（port/host 走 CLI）。文件缺失时使用默认值。
-
-`permission.whitelist` 用于 ToolGuard 白名单：沙箱外路径默认禁止访问，仅白名单中的路径可被 Agent 的工具操作访问（详见 [sandbox.md](./sandbox.md)）。
+不含 server 配置（port/host 走 CLI）。文件缺失时使用默认值。完整 schema 见 [configuration.md](../subsystems/configuration.md)。
 
 ---
 
@@ -74,75 +84,21 @@ API key 不在 config.json 中，通过 env 变量名引用。
 
 ## 5. First-Run Detection
 
-### 检测机制
-
 启动时检查 `$SANDBOX/.atom/installed` 标记文件是否存在：
 
 ```typescript
 // src/bootstrap/first-run.ts
-export function isFirstRun(sandboxPath: string): boolean {
-  return !existsSync(`${sandboxPath}/.atom/installed`);
+export async function isFirstRun(sandboxPath: string): Promise<boolean> {
+  return !(await Bun.file(`${sandboxPath}/.atom/installed`).exists());
 }
 ```
 
 | 检测结果 | 行为 |
 |---------|------|
-| `.atom/installed` 不存在 | 进入**首次运行交互式安装向导**，通过自孵化子进程启动 Ink 交互 UI |
+| `.atom/installed` 不存在 | 通过 `Bun.spawn` 自孵化 Ink 安装向导子进程，完成 Provider/Model/Theme 配置 |
 | `.atom/installed` 已存在 | 跳过向导，直接进入正常启动流程 |
 
-### 自孵化子进程
-
-SetupWizard 通过 `Bun.spawn` 以**自孵化**方式启动，利用 Bun 编译后二进制内置 Bun 运行时的特性：
-
-```typescript
-// 开发模式 vs 编译模式自适应
-function spawnWizard(sandbox: string): Bun.Subprocess {
-  const isDev = existsSync(import.meta.path);
-  if (isDev) {
-    return Bun.spawn([process.execPath, "run", import.meta.path, "--wizard", "--sandbox", sandbox],
-      { stdio: ["inherit", "inherit", "inherit"] });
-  }
-  return Bun.spawn([process.execPath, "--wizard", "--sandbox", sandbox],
-    { stdio: ["inherit", "inherit", "inherit"] });
-}
-```
-
-### 安装向导交互流程
-
-向导使用 **Ink** (React for CLI) 实现终端交互式 UI，共 6 个步骤：
-
-```
-┌────────────────────────────────────────┐
-│ Step 1 — Provider 选择                  │
-│  deepseek / openai / 自定义             │
-├────────────────────────────────────────┤
-│ Step 2 — API Key 输入                   │
-│  按 provider 分别输入，*号遮罩           │
-│  未提供 Key → 阻止继续                   │
-├────────────────────────────────────────┤
-│ Step 3 — Model 选择                     │
-│  advanced / balanced / basic 三个档位    │
-│  每个档位独立选择模型                    │
-├────────────────────────────────────────┤
-│ Step 4 — TUI 主题                       │
-│  从 7 种主题中预览选择                   │
-├────────────────────────────────────────┤
-│ Step 5 — 项目描述 (可选)                │
-│  多行文本输入，写入 AGENTS.md            │
-│  可跳过                                 │
-├────────────────────────────────────────┤
-│ Step 6 — 确认总结                       │
-│  展示所有配置汇总，确认后写入文件          │
-└────────────────────────────────────────┘
-```
-
-**写入文件**（向导确认后批量写入）：
-- `$SANDBOX/config.json` — Provider/Model/Theme 配置
-- `$SANDBOX/.env` — API Key（追加写入，不覆盖已有变量）
-- `$SANDBOX/AGENTS.md` — 项目描述（若用户填写）
-- `$SANDBOX/.atom/installed` — 标记文件（空文件）
-
-完整规格见 [first-run-wizard.md](./first-run-wizard.md)。
+完整规格详见 [first-run-wizard.md](../subsystems/first-run-wizard.md)。
 
 ---
 
@@ -189,7 +145,7 @@ src/main.ts (入口)
         └── "full" → startCore + startGateway + startTui
 ```
 
-**关键变化（v0.7.x）：**
+**历史变化：**
 - `setSandbox()` / `setBashSandbox()` 已删除。sandbox 路径通过 `RuntimeService` 的 factory 函数注入到 tools
 - `CoreDeps` 精简为 `{ port, host, logger, sm }`，sandbox/apiKey/getCompiledPrompt 全通过 `sm.get("runtime")` 获取
 - tools 改为工厂函数：`createAllTools(sandbox)` 创建全部工具，启动时一次性传递给 conversation pipeline
@@ -396,6 +352,14 @@ Client → GET /api/health
       sessions: 42,
       memory: { connected: true, size: "12MB" },
       tools: { registered: 15, builtin: 12, mcp: 3 },
-      version: "0.1.0"
+      version: "0.13.0"
     }
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [configuration.md](../subsystems/configuration.md) | 配置加载机制和 JSON Schema |
+| [sandbox.md](../subsystems/sandbox.md) | 沙箱初始化和 `.atom/` 目录结构 |
+| [first-run-wizard.md](../subsystems/first-run-wizard.md) | 首次运行向导完整规格 |

@@ -11,20 +11,19 @@
 两种触发路径：
 
 ```
-1. follow-up-evaluator pipeline → evaluate-finalize
-     ├── tokenUsage.total > contextLimit * 80% && health !== "stuck"
+1. conversation pipeline → finalize (tokenOverflow)
+     ├── 计算 compressRatio = max(0, (tu/effectiveLimit - 0.8) * 5)
+     ├── session.compressing = true (单锁，防重复压缩)
      └── → orchestrator.scheduleCompress() → TaskEngine
          → pipelineBuilders["context-compress"] → contextCompressPipeline().build(bus)
 
-2. conversation pipeline → stream-llm token overflow → finalize (Retry)
-     ├── 检测条件: stepCount===0 && fullTextLen===0 && !timedOut
-     └── → TaskEngine.reEnqueue(conversation) + orchestrator.scheduleCompress() → TaskEngine
-         → compress 先执行 (activeQueue.pop LIFO) → conversation 再执行 (拿到压缩后的 session)
+2. follow-up-evaluator pipeline → evaluate-finalize
+     ├── tokenUsage.total > contextLimit * 80% && health !== "stuck"
+     └── → orchestrator.scheduleCompress() → TaskEngine
+         → compress 先执行 → conversation 再执行 (拿到压缩后的 session)
 ```
 
-> **安全边界模式**：由 token overflow 触发的压缩使用 `SessionContext.lastSafeMsgCount`。
-> 只压缩上次成功会话之前的旧消息，保留成功边界之后的新消息。
-> 这确保压缩 LLM 不会二次溢出（输入量已知在可控范围内）。
+> **去重机制**：使用 `session.compressing` 单锁，压缩期间全周期覆盖（compressing=true）。conversation finalize 和 evaluator finalize 如果在 `compressing===true` 时触发压缩会被跳过。
 
 ## Element 链
 
@@ -34,9 +33,9 @@ compress-input (source) → compress-summarize (transform) → compress-finalize
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `compress-input` | source | 分割对话消息。普通模式：保留最近 20 条；安全边界模式：保留 `lastSafeMsgCount` 之后的消息，仅压缩之前的旧消息 |
-| 2 | `compress-summarize` | transform | 调用 LLM 生成 500 字以内的对话摘要 |
-| 3 | `compress-finalize` | sink | 归档旧消息到磁盘、清理 session、调度续写 |
+| 1 | `compress-input` | source | 读取 `session.compressRatio` 确定 5 档策略，分割对话消息。保留最近 N 条，归档旧消息并拼接为 summaryText |
+| 2 | `compress-summarize` | transform | 调用 LLM（**独立 basic profile 模型**）生成 500 字以内摘要。失败时 `compressRatio += 0.4` 自动升级 |
+| 3 | `compress-finalize` | sink | 归档旧消息到磁盘、调用 `replaceEarlyMessages(keepCount)` 清理 session、设置 `compressing=false`、调度续写 |
 
 ## FlowState
 
@@ -46,7 +45,7 @@ type CompressMode = "initial" | "summarizing" | "finalizing";
 type CompressFlowState = {
   mode: CompressMode;
   task: any;
-  session: any;
+  session: any;             // 含 compressRatio, compressing, compressRetry
   archiveMessages: Array<{ role: string; content: string; timestamp: number }>;
   summaryText: string;
   summary?: string;
@@ -63,6 +62,38 @@ initial
 ```
 
 ## 关键行为
+
+### 压缩比策略
+
+`compressRatio` 由触发方（conversation/evaluator finalize）计算，存储在 `session.compressRatio`。`compress-input` 读取 ratio 选择策略：
+
+```typescript
+compressRatio = max(0, (tokenUsage / effectiveLimit - 0.8) * 5);
+// effectiveLimit = configContextLimit - maxTokens (保留输出空间)
+```
+
+**5 档策略表**：
+
+| compressRatio | keepCount | maxSummaryTokens | 说明 |
+|---------------|-----------|------------------|------|
+| < 0.3 | 20 | 400 | 轻度压缩 |
+| 0.3 – 0.6 | 10 | 600 | 中度压缩 |
+| 0.6 – 0.9 | 5 | 800 | 强力压缩 |
+| 0.9 – 1.2 | 2 | 1200 | 激进压缩 |
+| ≥ 1.2 | 1 | 1600 | 极限压缩 |
+
+**自动升级**：`compress-summarize` LLM 调用失败时 `compressRatio += 0.4`（上限 2.0），`compressRetry > 1` 时同样升级，逐步加大压缩力度。
+
+### 独立模型配置
+
+压缩使用独立的 **`basic` profile** 模型，不与 conversation 共享 balanced 配置：
+
+```typescript
+const compressResolved = runtime.getResolvedModel("basic") ?? resolved;
+// 使用独立的 apiKey / model / baseUrl
+```
+
+未配置 `basic` profile 时回退到 `resolved`（当前 conversation 模型）。此举避免 thinking 参数兼容性问题，且降低成本。
 
 ### 消息分割（compress-input）
 
@@ -94,10 +125,10 @@ archiveMessages > 0
 
 ```typescript
 {
-  session: any;         // → compress-input
+  session: any;         // → compress-input (含 compressRatio 等压缩参数)
   task: any;
-  apiKey: string;       // → compress-summarize
-  model: string;        // → compress-summarize
+  apiKey: string;       // → compress-summarize (basic profile 独立 key)
+  model: string;        // → compress-summarize (basic profile 独立模型)
   baseUrl?: string;     // → compress-summarize
   orchestrator;         // → compress-finalize
   sandbox: string;      // → compress-finalize (归档路径)

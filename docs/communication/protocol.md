@@ -8,7 +8,7 @@
 ## 1. Transport
 
 - **Core Side**: WebSocket server at `ws://host:port/ws/:sessionId`
-- **Gateway Side**: Proxies WebSocket connections, verifies JWT in initial handshake
+- **Gateway Side**: HTTP reverse proxy. Verifies JWT for `/api/*` routes, validates Client Token for `/gateway/*` routes. Forwards authenticated requests to Core. WebSocket connections bypass Gateway and connect directly to Core.
 - **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
 - **Message Format**: JSON, one message per frame
 
@@ -290,7 +290,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 ## 6. Event Type Registry (Do Not Edit Manually)
 
 ```typescript
-// src/src/packages/shared/src/protocol.ts
+// src/packages/shared/src/protocol.ts
 
 export const ClientEventTypes = [
   "task.submit",
@@ -322,20 +322,39 @@ export type ServerEventType = (typeof ServerEventTypes)[number];
 
 ## 7. Gateway Authentication
 
-```typescript
-// Gateway validates JWT during WebSocket upgrade:
-// Request: GET ws://gateway:3000/ws/:sessionId
-// Headers: Authorization: Bearer <jwt>
+Gateway 提供两类路由，使用不同的验证机制：
+
+### 7.1 `/api/*` — JWT Bearer Token
+
+外部用户（TUI、HTTP API 调用者）通过 JWT Bearer Token 访问：
+
+```
+POST /api/tasks
+Authorization: Bearer eyJhbG...
 
 // JWT payload:
 {
   sub: "user-id",
-  sessionId: "session-id",
-  permissions: 0 | 1 | 2,   // PermissionLevel
+  permissionLevel: 0 | 1 | 2,
   exp: 1700000000,
   iat: 1699996400,
 }
 ```
+
+### 7.2 `/gateway/*` — Client Token
+
+内部 Client 子进程通过 Gateway 启动时分配的一次性随机 Token 验证：
+
+```
+POST /gateway/status
+Authorization: Bearer 550e8400-e29b-41d4-a716-446655440000
+```
+
+Token 由 `crypto.randomUUID()` 在 Client 子进程启动时生成，仅存在于 Gateway 内存。Client 崩溃重启时自动轮换。
+
+### 7.3 WebSocket
+
+WebSocket 连接不经过 Gateway。TUI 客户端直接连接 Core 的 `/ws/:sessionId` 端点。Gateway 仅代理 HTTP API 调用。
 
 ---
 
@@ -350,3 +369,11 @@ export type ServerEventType = (typeof ServerEventTypes)[number];
 "SESSION_NOT_FOUND"         // Invalid session ID
 "INVALID_PAYLOAD"           // Message fails validation
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [error-handling.md](./error-handling.md) | 错误跨层传播模型 |
+| [pipeline-dev.md](../core/pipeline-dev.md#part-3-event-bus) | 事件类型与 WebSocket 消息的映射 |
+| [architecture.md](../overview/architecture.md) | WebSocket 在系统架构中的位置 |

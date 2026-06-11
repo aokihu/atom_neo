@@ -159,6 +159,7 @@ a:hover { text-decoration: underline; }
 .card p { font-size: 13px; color: var(--muted); margin: 0; }
 
 .index-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.index-cat-title { font-size: 18px; font-weight: 600; margin: 32px 0 12px; color: var(--foreground); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .index-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; transition: border-color .15s; text-decoration: none; display: block; }
 .index-card:hover { border-color: var(--accent); text-decoration: none; }
 .index-card h3 { font-size: 16px; margin: 0 0 6px; color: var(--foreground); display: flex; align-items: center; gap: 8px; }

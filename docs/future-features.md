@@ -1,17 +1,15 @@
 # Future Features — 未来功能清单
 
-> 集中记录所有已设计但尚未实现的功能。按模块分类。
-> 新功能设计时如产生扩展点想法，统一记录到此文档，避免遗忘。
+> **Purpose**: 集中记录所有已设计但尚未实现的功能。按模块分类。新功能设计时如产生扩展点想法，统一记录到此文档，避免遗忘。
 
 ---
 
 ## Evaluator Pipeline
 
-> 来源： [P10 Follow-Up Evaluator](milestones/P10-follow-up-evaluator.md)
+> 来源： [Follow-Up Evaluator](pipelines/follow-up-evaluator.md)
 
 | 功能 | 说明 | 优先级 | 触发时机 |
 |------|------|--------|----------|
-| **上下文压缩** | 长对话消息接近 token 上限时，对早期消息做摘要压缩，释放上下文空间 | 高 | chainDepth ≥ 6 或 token usage > 80% |
 | **阶段性 checkpoint** | 每 N 轮将当前进度摘要存入 memory（traverse_memory 可读取），防止断点丢失 | 中 | 每 5 轮 |
 | **话题漂移检测** | 检测对话是否偏离原始任务，偏离时提示 | 中 | 每次 evaluator 触发 |
 | **自动 fallback** | 连续失败时自动降级到更简单模型 | 中 | evaluator 判断 stuck 时 |
@@ -25,7 +23,7 @@
 
 ## Conversation Pipeline
 
-> 来源： [Message Organization](message-organization.md)
+> 来源： [Conversation Pipeline](pipelines/conversation.md)
 
 | 功能 | 说明 | 优先级 |
 |------|------|--------|
@@ -37,7 +35,7 @@
 
 ## Configuration & Providers
 
-> 来源： [Configuration](configuration.md)
+> 来源： [Configuration](subsystems/configuration.md)
 
 | 功能 | 说明 | 优先级 |
 |------|------|--------|
@@ -48,7 +46,7 @@
 
 ## Pipeline Chain
 
-> 来源： [Run Loop](runloop.md)、[Message Organization](message-organization.md)
+> 来源： [Task Execution](core/task-execution.md)、[Conversation Pipeline](pipelines/conversation.md)
 
 | 功能 | 说明 | 优先级 |
 |------|------|--------|
@@ -83,3 +81,10 @@
   - **高**：下一版本应当实现
   - **中**：3 个版本内有望实现
   - **低**：方向性想法，暂无计划
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [pipelines/conversation.md](./pipelines/conversation.md) | 核心对话管线（实现的功能基线） |
+| [configuration.md](./subsystems/configuration.md) | 配置系统（Provider 扩展入口） |

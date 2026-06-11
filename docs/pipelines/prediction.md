@@ -1,5 +1,7 @@
 # Prediction Pipeline
 
+> **Purpose**: 用户意图预分类 — 用 basic 模型做轻量级分类，输出任务复杂度、模型级别、任务类型、上下文关联度。
+
 ## 职责
 
 在正式会话之前，用 basic 模型对用户意图做轻量级分类，输出任务复杂度、所需模型级别、任务类型、上下文关联度，供 conversation pipeline 优化执行。
@@ -54,7 +56,7 @@ initial
 type IntentPredictionResult = {
   difficulty: "easy" | "medium" | "hard" | "mygod";      // 任务复杂度 → 执行策略
   modelProfile: "basic" | "balanced" | "advanced";        // 所需推理能力 → 模型选择
-  taskIntent: "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
+  intent: "instruction" | "question" | "creative" | "conversation";  // 任务意图 (Anthropic 风格)
   contextRelevance: "standalone" | "follow_up" | "continuation";
   topic: string;                                          // 主题标签 → 会话状态管理
   reasoning: string;
@@ -80,14 +82,18 @@ type IntentPredictionResult = {
 | `balanced` | 中等推理深度（代码生成、多文件变更） |
 | `advanced` | 深度推理（复杂调试、架构分析） |
 
-### taskIntent（任务类型）
+### intent（任务意图 — Anthropic 风格）
 
-| 值 | 场景示例 | 可用工具 |
-|-----|---------|---------|
-| `tool_execution` | 执行命令、查天气、读写文件 | 全量工具 |
-| `creative_generation` | 写长文、编代码、翻译 | `todowrite` + `intent` |
-| `knowledge_retrieval` | 搜索知识库、查记忆 | 搜索类工具 + memory |
-| `conversation` | 闲聊、问答、解释 | fs + other 工具 |
+重命名为 Anthropic 标准意图分类，与工具白名单直接关联：
+
+| 值 | 场景示例 | 可用工具数 |
+|-----|---------|-----------|
+| `instruction` | 执行命令、写代码、重构、操作文件 | 17 (全量) |
+| `question` | 信息询问、查天气、查记忆、文档搜索 | 12 |
+| `creative` | 写长文、设计架构、生成内容 | 11 |
+| `conversation` | 闲聊、简短问答、讨论 | 8 |
+
+每个 intent 通过 `getActiveToolNames()` 控制工具可见性，减少无关工具 token 开销。
 
 ### contextRelevance（上下文关联）
 
@@ -109,7 +115,7 @@ Topic 由 predict-intent LLM 生成，在 predict-finalize 阶段与 session 已
 - **不同** → `session.resetForNewTopic(newTopic)` — 清空 todoState/chainDepth/toolContext/continuationContext，但保留 messages/inferenceFacts/memoryScopes/tokenUsage
 - **首次** → 设置 topic，无状态可清
 
-design: [topic.md](./topic.md)
+design: [session.md](../core/session.md#part-2-topic-system)
 
 ### difficulty 与 modelProfile 分离
 
@@ -136,7 +142,8 @@ type PredictionPipelineDeps = {
 
 | 场景 | 行为 |
 |------|------|
-| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced" }` |
+| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced", intent: "conversation", topic: "" }` |
+| API 400 错误 (如消息损坏) | fallback 同上，不阻塞对话 |
 | 空用户消息 | fallback 同上 |
 | 无 apiKey | fallback 同上 |
 | 无 JSON 响应 | fallback 同上 |
@@ -155,3 +162,11 @@ src/packages/core/src/pipelines/prediction/
     predict-intent.ts               调用 LLM 分类
     predict-finalize.ts             写入 session + 调度
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [conversation.md](./conversation.md) | Prediction 结果如何触发 Conversation Pipeline |
+| [session.md](../core/session.md#part-2-topic-system) | predict-intent 生成的 topic 标签 |
+| [prompts.md](./prompts.md) | predict-intent 使用的提示词 |

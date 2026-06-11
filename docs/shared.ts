@@ -18,9 +18,9 @@ export const CATEGORIES: CategoryMap = {
 };
 
 export function categorize(filename: string): string {
-  if (["architecture", "development-plan", "project-structure", "index"].includes(filename)) return "overview";
-  if (["coding-conventions", "naming-conventions", "type-system", "testing"].includes(filename)) return "conventions";
-  if (["element-design", "pipeline-builder", "event-bus", "tool-plugin", "session-context", "memory-service", "message-organization", "sandbox"].includes(filename)) return "subsystems";
+  if (["architecture", "project-structure", "index"].includes(filename)) return "overview";
+  if (["coding-conventions", "naming-conventions", "type-system", "testing", "dependency-injection"].includes(filename)) return "conventions";
+  if (["element-design", "pipeline-builder", "event-bus", "tool-plugin", "session-context", "memory-service", "sandbox"].includes(filename)) return "subsystems";
   if (["protocol", "error-handling"].includes(filename)) return "integration";
   return "guide";
 }
@@ -41,8 +41,7 @@ export function priority(filename: string): number {
   const order: Record<string, number> = {
     index: 0,
     architecture: 1,
-    "development-plan": 2,
-    "project-structure": 3,
+  "project-structure": 2,
     "environment-setup": 4,
     bootstrap: 5,
     "coding-conventions": 10,
@@ -57,8 +56,7 @@ export function priority(filename: string): number {
     "tool-plugin": 23,
     "session-context": 24,
   "memory-service": 25,
-  "message-organization": 26,
-  sandbox: 27,
+  sandbox: 26,
   protocol: 30,
     "error-handling": 31,
   };

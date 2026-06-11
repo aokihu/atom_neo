@@ -250,3 +250,11 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [bootstrap.md](./bootstrap.md) | 启动流程 |
+| [project-structure.md](./project-structure.md) | 目录结构 |
+| [testing.md](../standards/testing.md) | 测试命令和规范 |

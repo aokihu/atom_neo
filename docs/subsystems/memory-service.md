@@ -167,9 +167,9 @@ LLM 回复: KEEP_MEMORY: mem:2d4bed
 | `traverse_memory` | 从 key 开始图谱遍历 |
 | `link_memory` | 建立记忆关联 |
 
-## 9. 相关文档
+## 10. 相关文档
 
 | 文档 | 说明 |
 |------|------|
-| [message-organization.md](./message-organization.md) | 消息组装（context 中注入记忆） |
-| [element-design.md](./element-design.md) | collect-context Element |
+| [conversation.md](../pipelines/conversation.md) | 消息组装（context 中注入记忆） |
+| [pipeline-dev.md](../core/pipeline-dev.md) | collect-context Element |

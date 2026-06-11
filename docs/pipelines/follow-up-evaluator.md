@@ -1,5 +1,7 @@
 # Follow-Up Evaluator Pipeline
 
+> **Purpose**: 链式续写检查点 — 每 3 轮或深度超限时评估对话健康度，分类为 healthy/looping/stuck/degrading，必要时干预。
+
 ## 职责
 
 在链式续写的检查点（每 3 轮或达到深度上限）评估对话健康度，分类为 healthy/looping/stuck/degrading，干预不健康的对话。
@@ -121,3 +123,11 @@ src/packages/core/src/pipelines/follow-up-evaluator/
     evaluator-analyze.ts
     evaluate-finalize.ts
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [conversation.md](./conversation.md) | evaluator 如何在 chainAction 链中触发 |
+| [context-compress.md](./context-compress.md) | evaluator 触发压缩的阈值条件 |
+| [prompts.md](./prompts.md) | evaluator-analyze 使用的提示词 |

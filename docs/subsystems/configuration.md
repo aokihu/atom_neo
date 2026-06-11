@@ -1,6 +1,6 @@
 # Configuration System
 
-> **版本**: v2 — 采用 `version: 2` 的 config.json 格式
+> **Purpose**: 配置加载优先级、格式、自动创建和热重载机制。
 
 ---
 
@@ -40,6 +40,10 @@
 
   "tui": {
     "theme": "dracula"
+  },
+
+  "permission": {
+    "whitelist": ["$HOME/Projects", "$SANDBOX/../shared", "/tmp/build"]
   }
 }
 ```
@@ -197,3 +201,11 @@ OPENAI_API_KEY=sk-xxx
 ```
 
 密钥绝不写入 config.json。config.json 中的 `apiKeyEnv` 字段声明读取哪个环境变量。
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [bootstrap.md](../overview/bootstrap.md) | 配置自动创建流程 |
+| [sandbox.md](./sandbox.md) | 沙箱目录中的 config.json 位置 |
+| [architecture.md](../overview/architecture.md) | 配置在系统架构中的角色 |

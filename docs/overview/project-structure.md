@@ -131,20 +131,35 @@ src/packages/core/
     ├── conversation/
     │   ├── index.ts
     │   ├── types.ts
-        │   └── elements/index.ts
-        │       /* 7 elements:
-        │        * collect-prompts (source)
-        │        * load-system-prompt (transform)
-        │        * collect-context (transform)
-        │        * format-messages (transform)
-        │        * stream-llm (transform)
-        │        * check-follow-up (boundary)
-        │        * finalize (sink)
-        │        */
+    │   ├── elements/index.ts
+    │   │   /* 9 elements:
+    │   │    * collect-prompts (source)
+    │   │    * load-system-prompt (transform)
+    │   │    * fetch-agents-prompt (transform)
+    │   │    * collect-context (transform)
+    │   │    * format-system-messages (transform)
+    │   │    * format-user-messages (transform)
+    │   │    * stream-llm (transform)
+    │   │    * check-follow-up (boundary)
+    │   │    * finalize (sink)
+    │   │    */
     ├── prediction/
     │   └── index.ts
-    └── follow-up/
-        └── index.ts
+    ├── follow-up/
+    │   ├── index.ts
+    │   └── elements/
+    ├── follow-up-evaluator/
+    │   ├── index.ts
+    │   └── elements/
+    ├── context-compress/
+    │   ├── index.ts
+    │   └── elements/
+    ├── post-conversation/
+    │   ├── index.ts
+    │   └── elements/
+    └── shared/
+        ├── index.ts
+        └── token-ratio.ts
 ```
 
 ## 4. Package: `setup-wizard`
@@ -277,3 +292,10 @@ sandbox/                        # 工作目录（--sandbox 或默认 CWD）
 
 **隔离规则**：Agent 所有操作默认限定在 SANDBOX 内。访问外部目录需用户授权。
 
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [architecture.md](./architecture.md) | 模块在系统架构中的角色 |
+| [bootstrap.md](./bootstrap.md) | 入口点和启动顺序 |
+| [sandbox.md](../subsystems/sandbox.md) | 运行时目录结构 |
