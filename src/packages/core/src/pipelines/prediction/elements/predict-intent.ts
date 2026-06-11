@@ -9,7 +9,7 @@ import type { PredictionFlowState } from "./types";
 const FALLBACK: IntentPredictionResult = {
   difficulty: "medium",
   modelProfile: "balanced",
-  taskIntent: "conversation",
+  intent: "conversation",
   contextRelevance: "standalone",
   topic: "",
   reasoning: "prediction skipped or failed, fallback to defaults",
@@ -78,12 +78,12 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
       const prediction: IntentPredictionResult = {
         difficulty: (["easy", "medium", "hard", "mygod"].includes(parsed.difficulty) ? parsed.difficulty : "medium") as DifficultyLevel,
         modelProfile: (["basic", "balanced", "advanced"].includes(parsed.model_profile) ? parsed.model_profile : "balanced") as ModelProfile,
-        taskIntent: (["tool_execution", "creative_generation", "knowledge_retrieval", "conversation"].includes(parsed.task_intent) ? parsed.task_intent : "conversation") as IntentPredictionResult["taskIntent"],
+        intent: (["instruction", "question", "creative", "conversation"].includes(parsed.intent) ? parsed.intent : "conversation") as IntentPredictionResult["intent"],
         contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
         topic: typeof parsed.topic === "string" ? parsed.topic : "",
         reasoning: parsed.reasoning ?? "",
       };
-      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, taskIntent: prediction.taskIntent, contextRelevance: prediction.contextRelevance, topic: prediction.topic, reasoning: prediction.reasoning });
+      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, intent: prediction.intent, contextRelevance: prediction.contextRelevance, topic: prediction.topic, reasoning: prediction.reasoning });
       return { ...input, mode: "routing", prediction };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });

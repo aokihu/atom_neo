@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 
 const FALLBACK: EvaluatorResult = {
@@ -14,6 +15,7 @@ const FALLBACK: EvaluatorResult = {
 export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
   #configContextLimit: number;
+  #maxTokens: number;
 
   constructor(params: {
     name: string;
@@ -21,10 +23,12 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator: InternalTaskOrchestrator;
     configContextLimit?: number;
+    maxTokens?: number;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
-    this.#configContextLimit = params.configContextLimit ?? 131072;
+    this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
+    this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<PipelineResult> {
@@ -50,9 +54,29 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     }
 
     const tu = input.session?.tokenUsage?.total ?? 0;
-    const limit = this.#configContextLimit ?? 131072;
-    if (tu > limit * 0.8 && health !== "stuck") {
-      this.report(BusEvents.Element.Data, { step: "token usage high, scheduling compress", total: tu, limit });
+    const effectiveLimit = (this.#configContextLimit ?? DEFAULT_CONTEXT_LIMIT) - this.#maxTokens;
+    if (tu > effectiveLimit * 0.8 && health !== "stuck") {
+      if (input.session.compressing) {
+        this.report(BusEvents.Element.Data, { step: "compress already in progress, skipping" });
+        return { type: "complete", task: input.task, output: `evaluator: compress already in progress` };
+      }
+
+      if (input.session.compressRetry === 0) {
+        const usageRatio = tu / effectiveLimit;
+        input.session.compressRatio = Math.max(0, (usageRatio - 0.8) * 5);
+      }
+      input.session.compressRetry++;
+      if (input.session.compressRetry > 1) {
+        input.session.compressRatio = Math.min(2.0, input.session.compressRatio + 0.4);
+      }
+      input.session.compressing = true;
+
+      this.report(BusEvents.Element.Data, {
+        step: "token usage high, scheduling compress",
+        total: tu, effectiveLimit,
+        compressRetry: input.session.compressRetry,
+        compressRatio: input.session.compressRatio.toFixed(3),
+      });
       this.#orchestrator.scheduleCompress(
         input.session.sessionId,
         input.task.chatId,

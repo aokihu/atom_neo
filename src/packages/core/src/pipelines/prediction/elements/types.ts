@@ -21,4 +21,5 @@ export type PredictionPipelineDeps = {
   baseUrl?: string;
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
+  configContextLimit?: number;
 };

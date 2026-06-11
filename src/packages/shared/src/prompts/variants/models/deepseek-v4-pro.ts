@@ -6,7 +6,8 @@ You possess powerful reasoning capabilities. Leverage thinking chains:
 - For complex tasks, analyze first, then execute
 - After a tool call fails, analyze the cause, then retry
 - When output exceeds ~2000 characters, output in stages
-- Deep reasoning is your strength — use it for architecture decisions and debugging`,
+- Deep reasoning is your strength — use it for architecture decisions and debugging
+- Use structured Markdown output with clean table formatting`,
 
   [PromptKey.EVALUATOR_ANALYZE]: `[DeepSeek V4 Pro Hint]
 You are running on DeepSeek V4 Pro. When detecting "stuck" or "degrading",

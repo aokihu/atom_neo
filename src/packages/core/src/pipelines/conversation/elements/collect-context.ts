@@ -51,7 +51,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       .replace("%s", process.arch);
 
     let memoryCount = 0;
-    if (this.#memory && (this.#taskIntent === "tool_execution" || this.#taskIntent === "knowledge_retrieval")) {
+    if (this.#memory && (this.#taskIntent === "instruction" || this.#taskIntent === "question")) {
       const text = input.task?.payload?.[0]?.data || "";
       const memories = (await this.#memory.search(text)) || [];
       for (const node of memories) {
@@ -98,7 +98,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       if (todos && todos.length > 0) {
         const icons: Record<string, string> = { pending: "⬜", in_progress: "🔄", completed: "✅", cancelled: "❌" };
         const lines = todos.map((t: any) => `- ${icons[t.status] ?? "⬜"} [${t.priority}] ${t.content}`);
-        contextData += `\n\n当前任务进度:\n${lines.join("\n")}`;
+        contextData += `\n\n⚠️  一次只能执行一个任务。完成当前任务后需调用 todowrite 更新进度，再调用 intent(action: follow_up) 继续。\n当前任务进度:\n${lines.join("\n")}`;
       }
 
       const difficulty: string = this.#session?.pendingPrediction?.difficulty ?? "medium";

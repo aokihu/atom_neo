@@ -24,6 +24,10 @@ export class SessionContext {
   upgradeModel?: boolean;
   pendingPrediction?: any;
   conversationSummary?: string;
+  pendingCompressRatio?: number;
+  compressing: boolean = false;
+  compressRetry: number = 0;
+  compressRatio: number = 0;
 
   #messages: SessionMessage[] = [];
 
@@ -47,6 +51,14 @@ export class SessionContext {
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
+  }
+
+  #lastSafeMsgCount: number = 0;
+
+  get lastSafeMsgCount(): number { return this.#lastSafeMsgCount; }
+
+  markSafeMessageCount(): void {
+    this.#lastSafeMsgCount = this.#messages.length;
   }
 
   get chainDepth(): number { return this.#chainDepth; }

@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
-import { BusEvents, WsMessages } from "@atom-neo/shared";
+import { BusEvents, WsMessages, sanitizeForJSON } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -21,10 +21,11 @@ import { registerFollowUpElements } from "./pipelines/follow-up";
 import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
 import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
 import { registerPostConversationElements, postConversationPipeline } from "./pipelines/post-conversation";
+import { registerSharedElements } from "./pipelines/shared";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
-import { DEFAULT_MAX_TOKENS } from "./constants";
+import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -75,6 +76,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
     provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
   };
+  const compressResolved = runtime?.getResolvedModel?.("basic") ?? resolved;
   const apiKey: string = resolved.apiKey;
   const model: string = resolved.model;
   const baseUrl: string | undefined = resolved.baseUrl;
@@ -83,6 +85,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   };
   const providerModel = `${resolved.provider}/${model}`;
   const configContextLimit: number | undefined = runtime?.appConfig?.providers?.[resolved.provider]?.contextLimit;
+  const resolvedContextLimit = resolveContextLimit(providerModel, configContextLimit);
   const maxTokens: number = runtime?.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 50;
   const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
@@ -102,6 +105,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
+        configContextLimit: resolvedContextLimit,
       }).build(bus);
     },
 
@@ -110,7 +114,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       const prediction = session.pendingPrediction ?? {
         difficulty: "medium",
         modelProfile: "balanced",
-        taskIntent: "conversation",
+        intent: "conversation",
         contextRelevance: "standalone",
         reasoning: "default",
       };
@@ -131,7 +135,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         model: resolvedModel.model,
         baseUrl: resolvedModel.baseUrl,
         providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
-        configContextLimit,
+        configContextLimit: resolvedContextLimit,
         providerOptions: {
           deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
         },
@@ -140,9 +144,10 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         maxTokens,
         maxSteps,
         memory,
-        taskIntent: prediction.taskIntent,
+        intent: prediction.intent,
         contextRelevance: prediction.contextRelevance,
         sandbox,
+        orchestrator,
       }).build(bus);
     },
 
@@ -153,7 +158,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
-        configContextLimit,
+        configContextLimit: resolvedContextLimit,
       }).build(bus);
     },
 
@@ -162,9 +167,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       return contextCompressPipeline({
         session,
         task,
-        apiKey, model, baseUrl,
+        apiKey: compressResolved.apiKey,
+        model: compressResolved.model,
+        baseUrl: compressResolved.baseUrl,
         orchestrator,
         sandbox,
+        configContextLimit: resolvedContextLimit,
+        maxTokens,
       }).build(bus);
     },
 
@@ -174,6 +183,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
+        configContextLimit: resolvedContextLimit,
       }).build(bus);
     },
   };
@@ -190,6 +200,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerFollowUpEvaluatorElements();
   registerContextCompressElements();
   registerPostConversationElements();
+  registerSharedElements();
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
@@ -200,7 +211,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       output: result.output?.slice(0, LOG_OUTPUT_MAX_LEN),
     });
     const sid = p.task.sessionId;
-    const output = result.responseText || result.output || "";
+    const output = sanitizeForJSON(result.responseText || result.output || "");
     const reasoningContent = result.reasoningContent || "";
     if (sid && output) {
       const msg = {
@@ -213,6 +224,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       };
       sessionStore.get(sid).addMessage(msg);
       logger.debug("task completed: message added to session", { sessionId: sid, msgCount: sessionStore.get(sid).messages.length, pipeline: p.task.pipeline });
+      if (p.task.pipeline === "conversation") {
+        sessionStore.get(sid).markSafeMessageCount();
+      }
     }
     if (sid && result.tokenUsage) {
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
@@ -254,6 +268,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
 
     if (p.action === "post_check_retry") {
+      const depth = session.chainDepth;
+      if (depth >= maxChainDepth) {
+        logger.debug("conversation chain: post_check_retry depth exceeded, ending chain", { depth, maxChainDepth });
+        return;
+      }
       if (session.pendingPrediction) {
         session.pendingPrediction.contextRelevance = "continuation";
       }

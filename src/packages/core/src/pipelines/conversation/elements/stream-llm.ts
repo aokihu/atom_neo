@@ -1,4 +1,4 @@
-import { BaseElement } from "@atom-neo/shared";
+import { BaseElement, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
@@ -6,7 +6,7 @@ import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
-import { DEFAULT_MAX_TOKENS } from "../../../constants";
+import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState } from "./types";
@@ -22,6 +22,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #taskIntent: string;
   #stepCounter = { count: 0 };
   #session: any;
+  #configContextLimit: number;
 
   constructor(params: {
     name: string;
@@ -36,6 +37,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     providerOptions?: Record<string, any>;
     taskIntent?: string;
     session?: any;
+    configContextLimit?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -46,6 +48,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#providerOptions = params.providerOptions ?? {};
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#session = params.session;
+    this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
   }
 
@@ -82,6 +85,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let fullText = "";
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
+      let tokenOverflow = false;
+      let streamErrorCode = 0;
 
       try {
         const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -172,6 +177,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             finishReason = (chunk as any).finishReason ?? finishReason;
             continue;
           }
+          if (ctype === "error") {
+            const err = (chunk as any).error ?? {};
+            if (err.statusCode) streamErrorCode = err.statusCode;
+            this.report(BusEvents.Element.Data, { step: "stream-llm-error", errorName: err.name, statusCode: err.statusCode, message: (err.message ?? "").slice(0, 500), responseBody: (err.responseBody ?? "").slice(0, 500) });
+            continue;
+          }
           this.report(BusEvents.Element.Data, { step: "unhandled-chunk", type: ctype, raw: JSON.stringify(chunk).slice(0, 200) });
         }
       } finally {
@@ -184,6 +195,30 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       }
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
+
+      tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
+
+      if (tokenOverflow) {
+        const tu = (this.#session?.tokenUsage?.total ?? 0) + (input.tokenUsage?.total ?? 0);
+        const effectiveLimit = this.#configContextLimit - this.#maxTokens;
+        const ratio = effectiveLimit > 0 ? tu / effectiveLimit : 0;
+
+        if (ratio <= 0.8) {
+          tokenOverflow = false;
+          this.report(BusEvents.Element.Data, { step: "stream-error-not-overflow", ratio: +ratio.toFixed(3), tu, effectiveLimit });
+        } else {
+          this.report(BusEvents.Element.Data, { step: "token-overflow-detected", taskIntent: this.#taskIntent, msgCount: userMessages.length, toolCount: tools.length, ratio: +ratio.toFixed(3), tu, effectiveLimit });
+          return {
+            ...input,
+            mode: "executing",
+            responseText: "",
+            reasoningContent: "",
+            tokenUsage: { total: 0 },
+            intents: [],
+            tokenOverflow: true,
+          };
+        }
+      }
 
       const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
 
@@ -220,6 +255,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         m.role === "assistant" && m.reasoningContent
       )?.reasoningContent ?? "";
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
+
+      fullText = sanitizeForJSON(fullText);
       this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
 
       if (this.#stepCounter.count >= this.#maxSteps) {
@@ -228,10 +265,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       const chainAction = completeDetected ? undefined
         : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
-        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
         : finishReason === "tool-calls" ? "follow_up"
-        : finishReason === "error" ? "follow_up"
+        : finishReason === "error" && streamErrorCode < 400 ? "follow_up"
         : undefined;
 
       return {
@@ -242,6 +278,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         tokenUsage,
         intents,
         chainAction,
+        tokenOverflow,
+        errorStatusCode: streamErrorCode,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
@@ -249,17 +287,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         return {
           ...input,
           mode: "executing",
-          responseText: fullText,
+          responseText: sanitizeForJSON(fullText),
           reasoningContent: "",
           tokenUsage: { total: 0 },
           intents: [],
           chainAction: "follow_up",
+          tokenOverflow: false,
+          errorStatusCode: err.statusCode ?? 0,
         };
       }
       return {
         ...input,
         mode: "executing",
-        responseText: `Error: ${err?.message ?? String(err)}`,
+        responseText: sanitizeForJSON(`Error: ${err?.message ?? String(err)}`),
+        tokenOverflow,
+        errorStatusCode: err.statusCode ?? 0,
       };
     }
   }
@@ -298,21 +340,22 @@ function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payloa
 }
 
 function getActiveToolNames(taskIntent: string): string[] {
-  const ALL_FS = ["read", "write", "edit", "ls", "grep", "tree", "glob", "cp", "mv"];
-  const ALL_MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
-  const ALL_OTHER = ["bash", "webfetch", "todowrite"];
-  const INTENT = "intent";
+  const FS_RO = ["read", "grep", "ls", "tree", "glob"];
+  const FS_RW = ["write", "edit", "cp", "mv"];
+  const MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
+  const CONTROL = ["todowrite", "intent"];
+  const EXTRA = ["webfetch", "bash"];
 
   switch (taskIntent) {
-    case "creative_generation":
-      return ["todowrite", INTENT];
+    case "instruction":
+      return [...FS_RO, ...FS_RW, ...MEMORY, ...CONTROL, ...EXTRA];
+    case "question":
+      return [...FS_RO, ...MEMORY, ...CONTROL, "webfetch"];
+    case "creative":
+      return [...FS_RO, ...FS_RW, ...CONTROL, "webfetch"];
     case "conversation":
-      return [...ALL_FS, ...ALL_OTHER, INTENT];
-    case "knowledge_retrieval":
-      return ["read", "grep", "ls", "tree", "glob", "webfetch", "search_memory", "todowrite", INTENT];
-    case "tool_execution":
     default:
-      return [...ALL_FS, ...ALL_MEMORY, ...ALL_OTHER, INTENT];
+      return [...FS_RO, ...CONTROL, "webfetch"];
   }
 }
 

@@ -29,4 +29,6 @@ export type ConversationFlowState = {
   chainAction?: "follow_up";
   intents?: IntentRequest[];
   tokenUsage?: TokenUsage;
+  tokenOverflow?: boolean;
+  errorStatusCode?: number;
 };

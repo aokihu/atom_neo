@@ -40,12 +40,16 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     }
     const removed = before - (session.messages?.length ?? 0);
 
-    this.report(BusEvents.Element.Data, { step: "messages cleaned", removed });
+    this.report(BusEvents.Element.Data, { step: "messages cleaned", removed, hasSummary: !!input.summary, summaryLen: input.summary?.length ?? 0 });
 
     if (input.summary) {
       const label = "[对话历史摘要]";
       session.conversationSummary = `${label}\n${input.summary}`;
     }
+
+    this.report(BusEvents.Element.Data, { step: "scheduling retry conversation", sessionId, parentTaskId: input.task.parentTaskId });
+
+    input.session.compressing = false;
 
     this.#orchestrator.scheduleConversation(
       sessionId,

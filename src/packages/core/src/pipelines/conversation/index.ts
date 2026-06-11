@@ -13,6 +13,7 @@ import {
 } from "./elements";
 
 import { DEFAULT_MAX_TOKENS } from "../../constants";
+import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement);
@@ -41,9 +42,10 @@ export type ConversationPipelineDeps = {
   maxTokens?: number;
   maxSteps?: number;
   memory?: any;
-  taskIntent?: string;
+  intent?: string;
   contextRelevance?: string;
   sandbox?: string;
+  orchestrator?: InternalTaskOrchestrator;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -53,7 +55,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
-    .transform("collect-context", { memory: deps.memory, sandbox: deps.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.taskIntent })
+    .transform("collect-context", { memory: deps.memory, sandbox: deps.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.intent })
     .transform("format-system-messages", {})
     .transform("format-user-messages", {})
     .transform("stream-llm", {
@@ -64,9 +66,11 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,
       maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,
-      taskIntent: deps.taskIntent,
+      taskIntent: deps.intent,
       session: deps.session,
+      configContextLimit: deps.configContextLimit,
     })
+    .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .boundary("check-follow-up", { memory: deps.memory })
-    .sink("finalize", {});
+    .sink("finalize", { orchestrator: deps.orchestrator, session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }

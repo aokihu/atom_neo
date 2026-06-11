@@ -27,13 +27,13 @@ export type FollowUpIntentRequest = IntentRequest & {
 export type DifficultyLevel = "easy" | "medium" | "hard" | "mygod";
 export type ModelProfile = "basic" | "balanced" | "advanced";
 
-export type TaskIntent = "tool_execution" | "creative_generation" | "knowledge_retrieval" | "conversation";
+export type IntentClass = "instruction" | "question" | "creative" | "conversation";
 export type ContextRelevance = "standalone" | "follow_up" | "continuation";
 
 export type IntentPredictionResult = {
   difficulty: DifficultyLevel;
   modelProfile: ModelProfile;
-  taskIntent: TaskIntent;
+  intent: IntentClass;
   contextRelevance: ContextRelevance;
   topic: string;
   reasoning: string;

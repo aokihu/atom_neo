@@ -20,7 +20,7 @@ export type {
   FollowUpIntentRequest,
   DifficultyLevel,
   ModelProfile,
-  TaskIntent,
+  IntentClass,
   ContextRelevance,
   IntentPredictionResult,
   MemoryNode,
@@ -80,7 +80,7 @@ export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";
 export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
-export { normalizeError, errorMessage, truncate, slugify, sleep, debounce } from "./utils";
+export { normalizeError, errorMessage, truncate, slugify, sanitizeForJSON, sleep, debounce } from "./utils";
 
 // ── Constants ──
 export { BusEvents, WsMessages } from "./constants";

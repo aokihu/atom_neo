@@ -15,7 +15,7 @@ export function createWebFetchTool(): ToolDefinition {
 
   return {
     name: "webfetch",
-    description: "Fetch content from a URL via HTTP GET or POST. Returns response body text (up to 64KB). Use for web search, API calls, and fetching online content.",
+    description: "Fetch URL content via HTTP GET or POST. Returns response body (up to 64KB).",
     source: "builtin",
     inputSchema: schema,
     execute: async (args, opts?: ToolExecuteOptions) => {

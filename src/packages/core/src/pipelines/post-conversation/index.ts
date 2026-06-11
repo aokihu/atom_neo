@@ -19,6 +19,7 @@ export function postConversationPipeline(deps: {
   model: string;
   baseUrl?: string;
   maxTokens?: number;
+  configContextLimit?: number;
 }) {
   return pipeline("post-conversation")
     .source("post-collect-input", { session: deps.session })
@@ -28,5 +29,6 @@ export function postConversationPipeline(deps: {
       baseUrl: deps.baseUrl,
       maxTokens: deps.maxTokens,
     })
+    .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .sink("post-finalize", {});
 }

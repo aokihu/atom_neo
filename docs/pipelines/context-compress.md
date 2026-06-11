@@ -1,17 +1,30 @@
 # Context Compress Pipeline
 
+> **Purpose**: Token 超限自动压缩 — 归档旧消息到磁盘、生成 LLM 摘要、清理 session、恢复对话。
+
 ## 职责
 
 当对话上下文接近 token 上限时，将旧消息归档到磁盘、生成 LLM 摘要、清理 session 消息，然后恢复对话。
 
 ## 触发方式
 
+两种触发路径：
+
 ```
-follow-up-evaluator pipeline → evaluate-finalize
-  ├── tokenUsage.total > contextLimit * 80% && health !== "stuck"
-  └── → orchestrator.scheduleCompress() → TaskEngine
-      → pipelineBuilders["context-compress"] → contextCompressPipeline().build(bus)
+1. follow-up-evaluator pipeline → evaluate-finalize
+     ├── tokenUsage.total > contextLimit * 80% && health !== "stuck"
+     └── → orchestrator.scheduleCompress() → TaskEngine
+         → pipelineBuilders["context-compress"] → contextCompressPipeline().build(bus)
+
+2. conversation pipeline → stream-llm token overflow → finalize (Retry)
+     ├── 检测条件: stepCount===0 && fullTextLen===0 && !timedOut
+     └── → TaskEngine.reEnqueue(conversation) + orchestrator.scheduleCompress() → TaskEngine
+         → compress 先执行 (activeQueue.pop LIFO) → conversation 再执行 (拿到压缩后的 session)
 ```
+
+> **安全边界模式**：由 token overflow 触发的压缩使用 `SessionContext.lastSafeMsgCount`。
+> 只压缩上次成功会话之前的旧消息，保留成功边界之后的新消息。
+> 这确保压缩 LLM 不会二次溢出（输入量已知在可控范围内）。
 
 ## Element 链
 
@@ -21,7 +34,7 @@ compress-input (source) → compress-summarize (transform) → compress-finalize
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `compress-input` | source | 分割对话消息：保留最近 20 条，标记其余为归档候选 |
+| 1 | `compress-input` | source | 分割对话消息。普通模式：保留最近 20 条；安全边界模式：保留 `lastSafeMsgCount` 之后的消息，仅压缩之前的旧消息 |
 | 2 | `compress-summarize` | transform | 调用 LLM 生成 500 字以内的对话摘要 |
 | 3 | `compress-finalize` | sink | 归档旧消息到磁盘、清理 session、调度续写 |
 
@@ -111,3 +124,11 @@ src/packages/core/src/pipelines/context-compress/
     compress-summarize.ts
     compress-finalize.ts
 ```
+
+## 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| [conversation.md](./conversation.md) | Token 使用统计和压缩触发条件 |
+| [follow-up-evaluator.md](./follow-up-evaluator.md) | evaluator 如何触发 context-compress |
+| [prompts.md](./prompts.md) | compress-summarize 使用的提示词 |

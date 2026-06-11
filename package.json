@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.0.1",
+  "version": "1.2.0",
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
@@ -9,7 +9,7 @@
     "src/packages/tui"
   ],
   "scripts": {
-    "dev": "bun run src/main.ts --sandbox ./sandbox --log=pipe --log-level=debug --log-pipepath=/tmp/atom-debug",
+    "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
     "docs": "bun run --watch docs/server.tsx",
     "docs:dev": "bun run docs/server.tsx",

@@ -40,7 +40,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
         model,
         system: resolvePrompt(PromptKey.COMPRESS_SUMMARIZE),
         prompt: input.summaryText,
-        maxTokens: 600,
+        maxTokens: input.summaryMaxTokens || 600,
         temperature: 0,
       });
 
@@ -48,7 +48,15 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
       this.report(BusEvents.Element.Data, { step: "generated", summaryLen: summary.length });
       return { ...input, mode: "finalizing", summary };
     } catch (err: any) {
-      this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err.message });
+      input.session.compressRatio = Math.min(2.0, (input.session.compressRatio ?? 0.5) + 0.4);
+      this.report(BusEvents.Element.Data, {
+        step: "error",
+        level: "warn",
+        error: err.message?.slice(0, 300),
+        errorName: err.name,
+        statusCode: err.statusCode,
+        responseBody: (err.responseBody ?? "").slice(0, 300),
+      });
       return { ...input, mode: "finalizing", summary: "" };
     }
   }

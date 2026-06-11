@@ -7,7 +7,7 @@ import type { PostConversationFlowState, AnalysisResult } from "./types";
 
 const FALLBACK: AnalysisResult = { status: "satisfactory", reason: "skip" };
 
-const NON_RETRY_TASK_INTENTS = new Set(["creative_generation", "conversation"]);
+const NON_RETRY_TASK_INTENTS = new Set(["creative", "conversation"]);
 
 export class AnalyzeResultElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
   #apiKey: string;
@@ -49,9 +49,9 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       const model = provider(this.#model);
 
       const TASK_INTENT_DESC: Record<string, string> = {
-        tool_execution: "应执行文件操作、命令或其他工具任务",
-        knowledge_retrieval: "应搜索信息、查询知识并提供答案",
-        creative_generation: "应生成文章、代码等创作内容",
+        instruction: "应执行文件操作、命令或其他工具任务",
+        question: "应搜索信息、查询知识并提供答案",
+        creative: "应生成文章、代码等创作内容",
         conversation: "应进行对话交流、解答疑问",
       };
 
@@ -85,7 +85,13 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       this.report(BusEvents.Element.Data, { step: "analyzed", status, reason: analysis.reason });
       return { ...input, mode: "acting", analysis };
     } catch (err: any) {
-      this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });
+      this.report(BusEvents.Element.Data, {
+        step: "error, fallback",
+        error: err?.message?.slice(0, 300),
+        errorName: err?.name,
+        statusCode: err?.statusCode,
+        responseBody: (err?.responseBody ?? "").slice(0, 200),
+      });
       return { ...input, mode: "acting", analysis: FALLBACK };
     }
   }
