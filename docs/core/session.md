@@ -49,7 +49,6 @@ export class SessionContext {
 | `upgradeModel` | follow-up-evaluator pipeline (evaluate-finalize) | collect-context (通过 CONTEXT_MODEL_UPGRADE 注入) | 触发下一轮对话使用更高阶模型 |
 | `conversationSummary` | context-compress pipeline (compress-finalize) | collect-context (作为原始文本追加) | LLM 生成的对话历史摘要 |
 | `postCheckGuidance` | post-conversation pipeline (post-finalize) | collect-context (作为原始文本追加) | 当 status=blocked 时的重试引导文本 |
-```
 
 ## 2. Session Store
 

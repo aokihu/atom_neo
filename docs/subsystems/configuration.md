@@ -124,7 +124,6 @@ const providerOptions = {
 };
 // → 透传至 StreamLLMElement，直接注入 streamText()
 ```
-```
 
 **Provider 处理逻辑**：
 - `deepseek` → `createDeepSeek({ apiKey, baseURL })`  — 使用 `@ai-sdk/deepseek`

@@ -355,7 +355,7 @@ function errorCodeToHttpStatus(code: APIErrorCode): number {
 }
 ```
 
-## 6. Structured Diagnostic Logging
+## 11. Structured Diagnostic Logging
 
 ### BusEvents.Element.Data
 
