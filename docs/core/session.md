@@ -29,7 +29,26 @@ export class SessionContext {
   #compressRetry: number = 0;          // 压缩重试计数
   #compressRatio: number = 0;          // 动态压缩比
   #lastSafeMsgCount: number = 0;       // 安全边界：上次成功前的消息数
+  // Pipeline-consumed transient fields (set by pipeline elements, consumed by collect-context)
+  pendingPrediction?: any;              // IntentPredictionResult (prediction pipeline)
+  evaluatorSuggestion?: string;         // 健康评估建议 (follow-up-evaluator pipeline)
+  upgradeModel?: boolean;               // 是否升级模型 (follow-up-evaluator pipeline)
+  conversationSummary?: string;         // 压缩摘要 (context-compress pipeline)
+  postCheckGuidance?: string;           // 重试引导文本 (post-conversation pipeline)
 }
+```
+
+### Transient 字段说明
+
+这些字段由不同 pipeline 在运行中设置和消费，不在 `toJSON()` 中序列化，`resetForNewTopic()` 时会清空：
+
+| 字段 | 写入者 | 消费者 | 说明 |
+|------|--------|--------|------|
+| `pendingPrediction` | prediction pipeline (predict-finalize) | collect-context (读取 difficulty 注入难度规则) | 存储意图预分类结果 |
+| `evaluatorSuggestion` | follow-up-evaluator pipeline (evaluate-finalize) | collect-context (通过 CONTEXT_EVALUATOR_HINT 注入) | 当 health=looping/degrading 时的建议文本 |
+| `upgradeModel` | follow-up-evaluator pipeline (evaluate-finalize) | collect-context (通过 CONTEXT_MODEL_UPGRADE 注入) | 触发下一轮对话使用更高阶模型 |
+| `conversationSummary` | context-compress pipeline (compress-finalize) | collect-context (作为原始文本追加) | LLM 生成的对话历史摘要 |
+| `postCheckGuidance` | post-conversation pipeline (post-finalize) | collect-context (作为原始文本追加) | 当 status=blocked 时的重试引导文本 |
 ```
 
 ## 2. Session Store

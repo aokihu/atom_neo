@@ -42,6 +42,7 @@
 | [pipelines/conversation.md](./pipelines/conversation.md) | 核心对话管线 — 9-Element 链、FlowState、流式生成、链式续写、TODO 顺序执行、Unicode 净化 | 理解核心流程 |
 | [pipelines/prediction.md](./pipelines/prediction.md) | 意图预测管线 — 输入分类、难度评估、主题检测 | 理解意图分析 |
 | [pipelines/follow-up-evaluator.md](./pipelines/follow-up-evaluator.md) | 跟进评估管线 — 长会话质量保障、循环检测 | 理解质量守护 |
+| [pipelines/follow-up.md](./pipelines/follow-up.md) | 链式续写管线 — 轻量 source/sink 转换、continuation payload 注入 | 理解链式续写 |
 | [pipelines/context-compress.md](./pipelines/context-compress.md) | 上下文压缩管线 — Token 超限自动压缩与归档 | 理解压缩机制 |
 | [pipelines/post-conversation.md](./pipelines/post-conversation.md) | 对话后分析管线 — 每轮后分析回复质量，判定是否重试 | 理解质量判定 |
 | [pipelines/prompts.md](./pipelines/prompts.md) | Prompt Registry — 多语言提示词统一管理、模型精细化追加、输出安全 | 修改提示词 |

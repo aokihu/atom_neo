@@ -143,6 +143,15 @@ server.ts 启动
 
 ## 模型级精细化示例
 
+每个模型可通过对应文件选择性地对特定 PromptKey 进行追加调优。未定义的 Key 不追加，空字符串不追加。
+
+| 模型文件 | 追加的 PromptKey |
+|----------|-----------------|
+| `deepseek-v4-pro.ts` | `BASE_SYSTEM`, `EVALUATOR_ANALYZE` |
+| `deepseek-v4-flash.ts` | `BASE_SYSTEM` |
+| `gpt-4o.ts` | `BASE_SYSTEM`, `PREDICT_INTENT` |
+| `claude-sonnet.ts` | `BASE_SYSTEM`, `PREDICT_INTENT` |
+
 ```ts
 // models/deepseek-v4-pro.ts — 追加到 BASE_SYSTEM 末尾
 export default {

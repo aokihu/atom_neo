@@ -93,9 +93,11 @@ class CollectContextElement extends BaseElement {
     // Memory injection with <Memory> tags
     const memories = this.#memory?.search(input.task?.payload?.[0]?.data) || [];
     for (const node of memories) {
-      if (node.accessCount >= 5) continue;
-      const aging = node.accessCount >= 3 ? ' aging="true"' : "";
+      if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }  // 高频记忆衰减
+      const aging = node.accessCount >= 3 ? ' aging="true"' : "";                     // 中等频率标记老化
       contextData += `\n<Memory id="${node.id.slice(0,6)}" tags="${node.tags}"${aging}>\n${node.content}\n</Memory>`;
+      this.#memory.incrementAccess(node.id);
+      this.#memory.boostWeight(node.id);
     }
 
     return { ...input, contextData };
@@ -328,6 +330,16 @@ initial
 
 **溢出检测**：`stepCount===0 && fullTextLen===0 && ratio > 0.8` 才判定 token 溢出，ratio ≤ 0.8 时报 `stream-error-not-overflow` 避免误判。
 
+**400 错误捕获**：`stream-llm.ts` 在 `type === "error"` 的 chunk 处理中提取 `err.statusCode` 存入 `streamErrorCode`。该变量在流循环结束后用于 `chainAction` 决策：
+
+```
+finishReason === "error" && streamErrorCode < 400 → chainAction: "follow_up" (可恢复)
+finishReason === "error" && streamErrorCode >= 400 → chainAction: undefined (参数错误，不可恢复)
+outer catch block → err.statusCode ?? 0 → errorStatusCode 字段
+```
+
+`errorStatusCode` 通过 `ConversationFlowState` 传至 `finalize.ts`，≥400 时跳过 `Conversation.Idle` 发射，阻断 post-conversation 对空输出的分析。
+
 ## 8. chainAction → 链式续写
 
 finalize element 发出 `BusEvents.Conversation.Chain` 事件，server.ts 统一处理：
@@ -365,6 +377,34 @@ LLM 调用 todowrite (1个 in_progress) → 执行当前任务 → 完成
 ### `post_check_retry` 链深度限制
 
 post-conversation 判定 `blocked` 时触发 `post_check_retry`。server.ts 中该分支新增 `chainDepth >= maxChainDepth` 门控，防止消息损坏导致的无限重试循环。
+
+### todowrite 工具 Schema
+
+`todowrite` 工具定义在 `src/packages/core/src/tools/builtin/todowrite.ts`。
+
+```typescript
+TodoWriteInputSchema = z.object({
+  todos: z.array(TodoItemSchema).describe("Full task list to replace current state"),
+});
+
+TodoItemSchema = z.object({
+  content: z.string().describe("Task description"),
+  status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+  priority: z.enum(["high", "medium", "low"]),
+});
+```
+
+**全量替换模式**：LLM 每次调用必须传入完整 todo 数组（包括已完成和待处理项），彻底替换 `session.todoState`。现有状态由 `stream-llm.ts` 在工具执行成功后自动同步：
+
+```typescript
+if (t.name === "todowrite" && r.ok && session?.setTodoState) {
+    session.setTodoState((args as any).todos ?? []);
+}
+```
+
+**工具级验证**：`execute` 函数统计 `in_progress === "in_progress"` 的数量，> 1 时返回 `{ ok: false, error: "..." }`。`r.ok === false` 时不会同步到 session。
+
+**formatProgress() 输出**：使用 Unicode 图标格式化进度（⬜/🔄/✅/❌），包含编号和优先级，末尾显示"下一步"提示。
 
 ## 10. Unicode 净化（sanitizeForJSON）
 
@@ -423,7 +463,79 @@ src/packages/core/src/pipelines/conversation/
     finalize.ts
 ```
 
-## 13. 相关文档
+## 13. Token Ratio 共享边界
+
+`TokenRatioElement`（kind: `boundary`）定义在 `src/packages/core/src/pipelines/shared/token-ratio.ts`，通过 `registerSharedElements()` 在 `server.ts` 启动时统一挂载到 5 条 pipeline：
+
+| Pipeline | 用途 |
+|----------|------|
+| conversation | 每轮对话结束后计算 token 占用比 |
+| prediction | 意图分类后更新 token 统计 |
+| follow-up-evaluator | 评估时检查是否需要压缩 |
+| context-compress | 压缩流程中的 token 追踪 |
+| post-conversation | 分析时的 token 统计 |
+
+**计算公式**：
+
+```typescript
+const tu = session.tokenUsage.total + (input.tokenUsage?.total ?? 0);
+const effectiveLimit = configContextLimit - maxTokens;
+const ratio = effectiveLimit > 0 ? tu / effectiveLimit : 0;
+```
+
+`effectiveLimit` 为真实可用 token 上限（配置的 contextLimit 减去 maxTokens 输出预留空间）。ratio 值通过 `BusEvents.Element.Data` 上报，供日志和下游元素消费。
+
+**日志格式**：`token-ratio: token-ratio {"tu": N, "effectiveLimit": N, "ratio": X.XXXX}`
+
+## 14. intent 工具 Schema
+
+`intent` 工具定义在 `src/packages/core/src/tools/builtin/intent.ts`，是 LLM 与系统之间的信令通道。
+
+### Schema
+
+```typescript
+IntentInputSchema = z.object({
+  action: z.enum(["follow_up", "keep_memory"]),
+  mem_id: z.string().optional(),           // keep_memory 时指定目标记忆 ID
+  next_prompt: z.string().optional(),      // follow_up 时指定下一个片段的提示
+  summary: z.string().optional(),          // 当前片段的简短摘要
+  history_abstract: z.string().optional(), // 对话历史概要
+  avoid_repeat: z.string().optional(),     // 要避免重复的已输出内容
+});
+```
+
+### 字段说明
+
+| 字段 | action | 说明 |
+|------|--------|------|
+| `action` | 两者 | `follow_up`（分段续写）或 `keep_memory`（保存记忆） |
+| `mem_id` | `keep_memory` | 要保存的记忆 ID（来自 `search_memory` 返回的 `node.id`） |
+| `next_prompt` | `follow_up` | 下一段续写的方向提示（如 "继续输出第3段"） |
+| `summary` | `follow_up` | 当前段的摘要，供下次续写时上下文注入 |
+| `history_abstract` | 两者 | 对话历史的简短概括 |
+| `avoid_repeat` | `follow_up` | 提示续写时不要重复已输出的内容 |
+
+### 工具属性
+
+| 属性 | 值 | 说明 |
+|------|-----|------|
+| `silent` | `true` | 工具输出不向用户展示（仅系统内传播） |
+| `permission` | `READ_ONLY` | 无需审批 |
+| `execute` | 返回 `"信号已收到"` | 空操作 — 真正逻辑在 stream-llm.ts 和 check-follow-up.ts 中 |
+
+### 处理链路
+
+```
+LLM 调用 intent → stream-llm 捕获 (intentSignal)
+  → toIntentRequest() → intents[]
+    → check-follow-up:
+      ├── KEEP_MEMORY → memory.keep(mem_id)
+      └── FOLLOW_UP  → chainAction: "follow_up" + followUp data
+```
+
+**注意**：`intent` 调用后 LLM 应**立即停止输出**。在对话决策协议中，调用 intent 是终结点。
+
+## 15. 相关文档
 
 | 文档 | 说明 |
 |------|------|
