@@ -1,4 +1,4 @@
-import { BaseElement } from "@atom-neo/shared";
+import { BaseElement, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { streamText, tool, jsonSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
@@ -256,7 +256,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       )?.reasoningContent ?? "";
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
 
-      fullText = sanitizeHexEscapes(fullText);
+      fullText = sanitizeForJSON(fullText);
       this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
 
       if (this.#stepCounter.count >= this.#maxSteps) {
@@ -287,7 +287,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         return {
           ...input,
           mode: "executing",
-          responseText: sanitizeHexEscapes(fullText),
+          responseText: sanitizeForJSON(fullText),
           reasoningContent: "",
           tokenUsage: { total: 0 },
           intents: [],
@@ -299,7 +299,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       return {
         ...input,
         mode: "executing",
-        responseText: sanitizeHexEscapes(`Error: ${err?.message ?? String(err)}`),
+        responseText: sanitizeForJSON(`Error: ${err?.message ?? String(err)}`),
         tokenOverflow,
         errorStatusCode: err.statusCode ?? 0,
       };
@@ -377,12 +377,4 @@ function toIntentRequest(input: IntentToolInput): IntentRequest {
     default:
       return { source: IntentRequestSource.CONVERSATION, request: IntentRequestType.FOLLOW_UP, intent: "follow up", params: input };
   }
-}
-
-function sanitizeHexEscapes(text: string): string {
-  return text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => {
-    const cp = parseInt(hex, 16);
-    if (cp >= 0xD800 && cp <= 0xDFFF) return "";
-    return String.fromCharCode(cp);
-  });
 }

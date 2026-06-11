@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
-import { BusEvents, WsMessages } from "@atom-neo/shared";
+import { BusEvents, WsMessages, sanitizeForJSON } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -211,7 +211,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       output: result.output?.slice(0, LOG_OUTPUT_MAX_LEN),
     });
     const sid = p.task.sessionId;
-    const output = sanitizeHexEscapes(result.responseText || result.output || "");
+    const output = sanitizeForJSON(result.responseText || result.output || "");
     const reasoningContent = result.reasoningContent || "";
     if (sid && output) {
       const msg = {
@@ -378,12 +378,4 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   logger.info("core ready", { port: server.port, address: host });
   return { port: server.port!, tools: allTools.map((t: any) => t.name), stop: () => { taskEngine.stop(); server.stop(); } };
-}
-
-function sanitizeHexEscapes(text: string): string {
-  return text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => {
-    const cp = parseInt(hex, 16);
-    if (cp >= 0xD800 && cp <= 0xDFFF) return "";
-    return String.fromCharCode(cp);
-  });
 }
