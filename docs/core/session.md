@@ -145,7 +145,7 @@ categories: creative | tools | code | knowledge | chat
     ├─ newTopic !== session.currentTopic → resetForNewTopic(newTopic)
     └─ newTopic === session.currentTopic → 保持上下文
   → collect-context: 注入 [主题约束] 到 context
-  → stream-llm: activeTools 由 taskIntent 独立控制
+  → stream-llm: activeTools 由 intent 独立控制
 ```
 
 ## 4. resetForNewTopic()
@@ -166,7 +166,7 @@ resetForNewTopic(topic: string): void {
 | 边界层 | 实现 | 效果 |
 |--------|------|------|
 | 主题约束 | context 注入 + activeTools | LLM 被约束在主题范围内 |
-| 工具过滤 | taskIntent → getActiveToolNames() | creative→2工具, tool_execution→全工具 |
+| 工具过滤 | intent → getActiveToolNames() | instruction→17工具, question→12工具, creative→11工具, conversation→8工具 |
 
 ---
 

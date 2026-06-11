@@ -50,7 +50,7 @@
 
 | 功能 | 说明 | 优先级 |
 |------|------|--------|
-| **新链类型扩展** | chainAction 目前有 `more_tools` / `follow_up`，预留接口支持新类型（如 `summary`、`checkpoint`） | 中 |
+| **新链类型扩展** | chainAction 目前有 `follow_up` / `post_check_retry`，预留接口支持新类型（如 `summary`、`checkpoint`） | 中 |
 | **链深度可视化** | 在 TUI 中显示当前 chainDepth / 链状态 | 低 |
 
 ---

@@ -64,7 +64,7 @@ initial
 
 - 读取 `session.messages`，找到最后一个 `role: "user"` 的消息
 - 收集其后所有助手消息，截断每段至 1500 字符（`PromptKey.TRUNCATION_MARKER`）
-- 读取 `session.pendingPrediction` 获取 `taskIntent` 和 `stepCount`
+- 读取 `session.pendingPrediction` 获取 `intent` 和 `stepCount`
 
 ### post-analyze-result
 

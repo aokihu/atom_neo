@@ -110,23 +110,25 @@ class TaskEngine {
 
 ## 4.5. Token Overflow Recovery
 
-当 LLM 调用因上下文过大返回错误时，`stream-llm` 检测到 `stepCount===0 && fullTextLen===0 && !timedOut`，标记 `tokenOverflow: true`。
+当 LLM 调用因上下文过大返回空结果时，`stream-llm` 检测到 `stepCount===0 && fullTextLen===0 && ratio > 0.8`，标记 `tokenOverflow: true`。
 
-`finalize` 收到该标记后返回 `{ type: "retry", reason: "token_overflow" }`。
-TaskEngine 不标记任务完成，而是：
-1. `TaskQueue.reEnqueue(task)` — 同一 Task 重新入队
-2. `orchestrator.scheduleCompress()` — 触发上下文压缩
+`finalize` 收到该标记后计算动态压缩比并通过 `orchestrator.scheduleCompress()` 触发上下文压缩：
 
-压缩管线使用 `SessionContext.lastSafeMsgCount` 识别安全边界，仅压缩上次成功会话之前的消息。
-压缩完成后，conversation task 重新执行，拿到压缩后的上下文。
+```typescript
+compressRatio = max(0, (tokenUsage / effectiveLimit - 0.8) * 5);
+session.compressing = true;  // 单锁防重复
+```
+
+压缩管线使用 5 档策略表（ratio → keepCount/maxSummaryTokens），优先使用独立的 `basic` profile 模型（成本更低，无 thinking 参数兼容性问题）。压缩失败时 `compressRatio` 自动升级（+0.4），逐步加大压缩力度。压缩完成后 conversation task 重新执行，拿到压缩后的上下文。
 
 ```
-stream-llm → overflow detected
-  → finalize → Retry signal
-    → TaskEngine reEnqueue + scheduleCompress
-    → compress (LIFO 栈式先执行)
+stream-llm → overflow detected (ratio > 0.8)
+  → finalize → 计算 compressRatio → scheduleCompress
+    → context-compress pipeline (basic model)
     → conversation retry (压缩后的 session)
 ```
+
+**ratio 门控防误判**：ratio ≤ 0.8 时（如零输出由 400 错误导致）不触发压缩，报 `stream-error-not-overflow`，避免正常 token 使用被误判为溢出。
 
 ---
 
@@ -352,6 +354,38 @@ function errorCodeToHttpStatus(code: APIErrorCode): number {
   }
 }
 ```
+
+## 6. Structured Diagnostic Logging
+
+### BusEvents.Element.Data
+
+所有 Element 通过 `this.report(BusEvents.Element.Data, payload)` 发射结构化诊断数据，统一日志格式 `{ step: string, ... }` 。不经过异常层，直接写入 debug 日志。
+
+### 关键 step 值
+
+| step 值 | 发射位置 | 关键字段 |
+|---------|---------|---------|
+| `starting LLM call` | stream-llm | `model`, `msgCount`, `toolCount`, `activeCount`, `taskIntent` |
+| `stream-llm-error` | stream-llm (error chunk) | `errorName`, `statusCode`, `message`(500 chars), `responseBody`(500 chars) |
+| `stream-error-not-overflow` | stream-llm | `ratio`, `tu`, `effectiveLimit` |
+| `token-overflow-detected` | stream-llm | `ratio`, `tu`, `effectiveLimit`, `msgCount`, `taskIntent` |
+| `done` | stream-llm | `outputLen`, `tokens`, `hasIntents`, `finishReason`, `stepCount` |
+| `token-ratio` | TokenRatioElement (shared) | `tu`, `effectiveLimit`, `ratio` |
+| `complete` | finalize | `chainAction` |
+| `skip post-check, non-recoverable error` | finalize | `errorStatusCode` |
+| `token-overflow, scheduling compress` | finalize | `compressRetry`, `compressRatio`, `tu`, `effectiveLimit` |
+| `error, fallback` (predict/analyze) | predict-intent, post-analyze | `errorName`, `statusCode`, `responseBody`(200 chars) |
+| `generated` (compress) | compress-summarize | `summaryLen` |
+| `error` (compress) | compress-summarize | `errorName`, `statusCode`, `responseBody`(300 chars) |
+| `conversation chain: post_check_retry depth exceeded` | server.ts | `depth`, `maxChainDepth` |
+| `conversation chain: all todos completed` | server.ts | `todoCount` |
+
+### 日志格式约定
+
+- 错误类 step 携带 `errorName` / `statusCode` / `message`(≤500 char) / `responseBody`(≤500 char) — 不截断原始 JSON
+- 状态类 step 携带 `tu`(tokenUsage) / `effectiveLimit` / `ratio`
+- 控制类 step 携带 `chainAction` / `chainDepth` / `compressRetry`
+- 所有 step 按 `{step, ...fields}` 格式输出到 FileSink（路径 `/tmp/atom-log-{timestamp}.log`）
 
 ## 相关文档
 
