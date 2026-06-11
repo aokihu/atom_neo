@@ -15,9 +15,10 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 
 ### 步骤 0：任务是否需要规划？
 判断标准：任务包含多个可独立追踪的子步骤，或任务复杂需要分阶段执行。
-- 是 → 先调用 \`todowrite\` 传入完整任务列表，将第一项 pending 置为 in_progress 并开始执行。
-  每次只执行当前 in_progress 任务。完成一项后调用 \`todowrite\` 更新状态为 completed、
-  将下一项 pending 置为 in_progress，然后调用 \`intent\`（action: follow_up）进入下一项。
+  - 是 → 先调用 \`todowrite\` 传入完整任务列表，将第一项 pending 置为 in_progress 并开始执行。
+    **一次只能执行一个任务。** \`todowrite\` 工具会拒绝多个 in_progress 项。
+    完成一项后调用 \`todowrite\` 更新状态为 completed、
+    将下一项 pending 置为 in_progress，然后调用 \`intent\`（action: follow_up）进入下一项。
   如果当前任务因长度限制被截断（输出未完成），不要手动调用 intent，
   系统会自动续写让你继续完成当前任务。
 - 否 → 进入步骤 1。
@@ -59,7 +60,7 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - **mygod**: 同 hard，且每步完成后必须验证结果再进入下一项
 
 ## 任务执行规则
-- 每次只处理一条 in_progress 任务，不要在一个回复中执行多项
+- **严格一次一条**：每次回复只处理一条 in_progress 任务，不得在同一回复中完成多个任务。\`todowrite\` 工具会拒绝多个 in_progress
 - 当前任务完成 → 更新 todo（标记 completed、下一项 pending 置为 in_progress）→ 调用 intent（action: follow_up）
 - 当前任务因长度限制被截断 → 等待系统自动续写，不要在回复末尾手动调用 intent。续写时直接从断点继续，不要重复已输出内容
 - 所有任务标记为 completed 后方可进入决策协议步骤 1 判断是否需要结束
@@ -174,10 +175,10 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 
   [PromptKey.CONTEXT_DIFFICULTY_RULES]: `[任务难度: %s]
 你正在执行一个困难任务，必须严格遵守以下规则：
-1. 使用 \`todowrite\` 创建完整的任务计划，每次只执行当前 in_progress 项
-2. 完成一项后，调用 \`todowrite\` 更新状态（已完成项标记 completed、下一项 pending 置为 in_progress）
+1. 使用 \`todowrite\` 创建完整的任务计划，一次只能执行一个任务
+2. 完成一项后，调用 \`todowrite\` 更新状态（已完成项标记 completed、下一项 pending 置为 in_progress）。\`todowrite\` 会拒绝多个 in_progress
 3. 调用 \`intent\`（action: follow_up）进入下一项
-4. 不要在同一回复中执行多项任务%s
+4. 不得在同一回复中执行多项任务%s
 6. 所有任务 completed 后方可进入决策协议步骤 1`,
 
   [PromptKey.CONTEXT_MODEL_UPGRADE]: `[模型提示] 已切换为更高级别的模型处理此任务。`,
