@@ -41,11 +41,15 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
 
     if (!input.chainAction) {
       this.report(BusEvents.Element.Data, { step: "complete", chainAction: "none" });
-      this.report(BusEvents.Conversation.Idle, {
-        sessionId: input.task.sessionId,
-        chatId: input.task.chatId,
-        parentTaskId: input.task.parentTaskId ?? input.task.id,
-      });
+      if (input.errorStatusCode && input.errorStatusCode >= 400) {
+        this.report(BusEvents.Element.Data, { step: "skip post-check, non-recoverable error", errorStatusCode: input.errorStatusCode });
+      } else {
+        this.report(BusEvents.Conversation.Idle, {
+          sessionId: input.task.sessionId,
+          chatId: input.task.chatId,
+          parentTaskId: input.task.parentTaskId ?? input.task.id,
+        });
+      }
       return this.#complete(input);
     }
 

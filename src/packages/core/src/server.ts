@@ -268,6 +268,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
 
     if (p.action === "post_check_retry") {
+      const depth = session.chainDepth;
+      if (depth >= maxChainDepth) {
+        logger.debug("conversation chain: post_check_retry depth exceeded, ending chain", { depth, maxChainDepth });
+        return;
+      }
       if (session.pendingPrediction) {
         session.pendingPrediction.contextRelevance = "continuation";
       }
