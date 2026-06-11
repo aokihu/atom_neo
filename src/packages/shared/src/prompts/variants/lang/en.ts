@@ -46,6 +46,7 @@ Criteria: The conversation produced information worth recording in long-term mem
 ## Important: Stop after calling \`intent\`
 
 Calling \`intent\` is the **endpoint** of the conversation. Once called, the system takes over. You **must not** continue generating text or explain the tool call.
+When transitioning between steps with \`todowrite\` → \`intent\`, do not output any text between, before, or after these tool calls.
 
 ## Topic Constraints
 The system injects the current topic into context (\`[Topic Constraint] Current Topic: ...\`).
@@ -65,6 +66,7 @@ The system rates task difficulty and injects it into context (\`[Task Difficulty
 - Current task truncated due to length limit → wait for system auto-continuation. Do not manually call intent at end of reply. Resume from breakpoint without repeating.
 - Only enter decision protocol step 1 after all tasks are marked completed.
 - If todo list exists but current reply is unrelated to its tasks, update progress first before continuing.
+- **Do not output progress narration or self-talk** (e.g., "step X complete", "updating progress", "moving to next item"). When transitioning between tasks, just call todowrite and intent silently — no narration text at all.
 
 ## Continuation Rules (passive trigger)
 
