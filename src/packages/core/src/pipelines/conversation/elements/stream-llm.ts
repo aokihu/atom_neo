@@ -156,8 +156,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             if (markerIdx >= 0) {
               const safe = textBuffer.slice(0, markerIdx);
               if (safe.length > 0) {
+                const offset = fullText.length;
                 fullText += safe;
-                this.report(BusEvents.Transport.Delta, { textDelta: safe });
+                this.report(BusEvents.Transport.Delta, { textDelta: safe, offset });
               }
               completeDetected = true;
               this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
@@ -168,9 +169,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             if (textBuffer.length > MARKER_LEN * 3) {
               const sendLen = textBuffer.length - MARKER_LEN + 1;
               const safe = textBuffer.slice(0, sendLen);
+              const offset = fullText.length;
               fullText += safe;
-              this.report(BusEvents.Transport.Delta, { textDelta: safe });
-              textBuffer = textBuffer.slice(-MARKER_LEN);
+              this.report(BusEvents.Transport.Delta, { textDelta: safe, offset });
+              textBuffer = textBuffer.slice(-(MARKER_LEN - 1));
             }
             continue;
           }
@@ -191,8 +193,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       }
 
       if (!completeDetected && textBuffer.length > 0) {
+        const offset = fullText.length;
         fullText += textBuffer;
-        this.report(BusEvents.Transport.Delta, { textDelta: textBuffer });
+        this.report(BusEvents.Transport.Delta, { textDelta: textBuffer, offset });
       }
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });

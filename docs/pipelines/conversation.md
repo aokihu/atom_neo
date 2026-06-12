@@ -168,11 +168,9 @@ const streamResult = streamText({
 
 ```typescript
 const MARKER = "<<<COMPLETE>>>";
-const WINDOW = MARKER.length - 1;   // 始终保留最后 16 个字符
-const TEXT_BUFFER_MAX = 3;          // 缓冲 N 个 chunk 再发送
-
+const WINDOW = MARKER.length - 1;   // 始终保留最后 N-1 个字符
 let buffer = "";                     // 滑动窗口缓冲区
-let textBuffer = "";                 // TUI 发送缓冲
+let fullText = "";                   // 完整累计文本，用于计算 offset
 let pastMarker = false;
 
 for await (const chunk of streamResult.fullStream) {
@@ -185,28 +183,29 @@ for await (const chunk of streamResult.fullStream) {
 
   if (idx >= 0) {
     if (idx > 0) {
-      textBuffer += buffer.slice(0, idx);
+      const offset = fullText.length;
+      const textDelta = buffer.slice(0, idx);
+      fullText += textDelta;
+      bus.emit("transport.delta", { textDelta, offset });
     }
     pastMarker = true;
-    // 发送标记前的文本，日志记录 "complete-marker-detected"
-    bus.emit("transport.delta", { textDelta: textBuffer });
     buffer = "";
-    textBuffer = "";
-  } else if (buffer.length > WINDOW) {
-    const emitLen = buffer.length - WINDOW;
-    textBuffer += buffer.slice(0, emitLen);
-    buffer = buffer.slice(emitLen);
-
-    if (textBuffer.length >= TEXT_BUFFER_MAX) {
-      bus.emit("transport.delta", { textDelta: textBuffer });
-      textBuffer = "";
-    }
+    // 日志记录 "complete-marker-detected"
+  } else if (buffer.length > MARKER.length * 3) {
+    const sendLen = buffer.length - WINDOW;
+    const textDelta = buffer.slice(0, sendLen);
+    const offset = fullText.length;
+    fullText += textDelta;
+    bus.emit("transport.delta", { textDelta, offset });
+    buffer = buffer.slice(-WINDOW);  // 保留 WINDOW 个字符，不与已发送内容重叠
   }
 }
 
 // 流结束后刷新残留缓冲区
-if (textBuffer || buffer) {
-  bus.emit("transport.delta", { textDelta: textBuffer + buffer });
+if (!pastMarker && buffer.length > 0) {
+  const offset = fullText.length;
+  fullText += buffer;
+  bus.emit("transport.delta", { textDelta: buffer, offset });
 }
 ```
 
@@ -214,8 +213,8 @@ if (textBuffer || buffer) {
 
 | 机制 | 说明 |
 |------|------|
-| `WINDOW = 16` | 滑动窗口始终保留最后 16 个字符，用于检测 `<<<COMPLETE>>>`（17 字符）标记，确保标记不会被部分发送给 TUI |
-| `TEXT_BUFFER_MAX = 3` | 缓冲 3 个 text-delta 后再发送 TUI，减少 WebSocket 消息量 |
+| `WINDOW = MARKER.length - 1` | 滑动窗口始终保留最后 N-1 个字符，用于跨 chunk 检测 `<<<COMPLETE>>>` 标记。使用 `slice(-WINDOW)` 而非 `slice(-MARKER.length)` 避免与已发送内容产生 1 字符重叠 |
+| `offset` | 每个 `transport.delta` 消息携带 `offset` 字段，表示该 delta 在完整文本中的起始位置。TUI 使用 `content.substring(0, offset) + textDelta` 组装消息，避免因消息乱序或 buffer 边界问题导致的字符重复 |
 | **Buffer 刷新** | 流结束后必须将 `buffer` 中残留字符刷新，否则末尾 ≤WINDOW 个字符会丢失 |
 | **标记检测** | 命中 `<<<COMPLETE>>>` 后，发送标记前文本、丢弃后续内容、日志记录 `complete-marker-detected` |
 

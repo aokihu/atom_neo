@@ -79,6 +79,7 @@ export type ElementFinishedPayload = {
 export type TransportDeltaPayload = {
   taskId: string;
   textDelta: string;
+  offset: number;
 };
 
 export type ToolStartedPayload = {

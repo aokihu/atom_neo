@@ -330,10 +330,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
   // BaseElement.report() wraps payload in { name, payload } — FullEventMap doesn't reflect this yet
-  bus.on(BusEvents.Transport.Delta as any, (ev: { name: string; payload: { textDelta: string } }) => {
+  bus.on(BusEvents.Transport.Delta as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
     const textDelta = ev.payload.textDelta;
+    const offset = ev.payload.offset ?? 0;
     if (textDelta) {
-      broadcaster.broadcast({ type: WsMessages.Server.TransportDelta, ts: Date.now(), seq: 0, payload: { textDelta } });
+      broadcaster.broadcast({ type: WsMessages.Server.TransportDelta, ts: Date.now(), seq: 0, payload: { textDelta, offset } });
     }
   });
 

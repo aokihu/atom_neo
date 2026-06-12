@@ -1,4 +1,4 @@
-type DeltaCallback = (delta: string) => void;
+type DeltaCallback = (delta: string, offset: number) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type TokenUsageCallback = (total: number) => void;
 
@@ -44,10 +44,11 @@ export class TuiClient {
             resolve();
           } else if (msg.type === WsMessages.Server.TransportDelta) {
             const delta = msg.payload?.textDelta ?? "";
+            const offset = msg.payload?.offset ?? 0;
             if (delta) {
               const head = this.#pending[0];
               if (head) head.text += delta;
-              this.#onDelta?.(delta);
+              this.#onDelta?.(delta, offset);
             }
           } else if (msg.type === WsMessages.Server.TransportToolStarted) {
             this.#onTool?.({

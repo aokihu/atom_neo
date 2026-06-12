@@ -77,7 +77,7 @@ export type DomainEventMap = {
     safeCount: number;
     rejectedCount: number;
   };
-  "transport.delta": { textDelta: string };
+  "transport.delta": { textDelta: string; offset: number };
   "transport.tool.started": {
     toolName: string;
     toolCallId: string;

@@ -20,7 +20,7 @@ export function useChat(url: string, sessionId?: string) {
       setTokenUsage(total);
     });
 
-    client.onDelta((delta) => {
+    client.onDelta((delta, offset) => {
       if (thinkingIdRef.current) {
         setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
         thinkingIdRef.current = null;
@@ -28,9 +28,10 @@ export function useChat(url: string, sessionId?: string) {
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
+          const content = last.content.substring(0, offset) + delta;
           return [
             ...prev.slice(0, -1),
-            { ...last, content: last.content + delta },
+            { ...last, content },
           ];
         }
         const id = nextId();

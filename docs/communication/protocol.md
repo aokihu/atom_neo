@@ -148,9 +148,19 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
   payload: {
     taskId: string;
     textDelta: string;       // Incremental visible text
+    offset: number;          // Position in the full message text where this delta starts
   }
 }
 ```
+
+TUI 使用 `offset` 进行位置感知组装：
+
+```typescript
+// 替代简单的 content + textDelta
+content = content.substring(0, offset) + textDelta;
+```
+
+这确保即使消息乱序到达或 server 端 buffer 切片产生边界重叠，TUI 也能正确拼接完整文本。
 
 ### 4.6 `transport.tool.started`
 
