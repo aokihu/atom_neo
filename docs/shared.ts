@@ -18,10 +18,10 @@ export const CATEGORIES: CategoryMap = {
 };
 
 export function categorize(filename: string): string {
-  if (["architecture", "project-structure", "index"].includes(filename)) return "overview";
-  if (["coding-conventions", "naming-conventions", "type-system", "testing", "dependency-injection"].includes(filename)) return "conventions";
-  if (["element-design", "pipeline-builder", "event-bus", "tool-plugin", "session-context", "memory-service", "sandbox"].includes(filename)) return "subsystems";
-  if (["protocol", "error-handling"].includes(filename)) return "integration";
+  if (["architecture", "project-structure", "index", "bootstrap", "development-setup"].includes(filename)) return "overview";
+  if (["coding", "testing", "dependency-injection"].includes(filename)) return "conventions";
+  if (["pipeline-dev", "tool-plugin", "session", "memory-service", "sandbox", "task-execution", "configuration", "first-run-wizard", "agents-compiler"].includes(filename)) return "subsystems";
+  if (["protocol", "error-handling", "gateway"].includes(filename)) return "integration";
   return "guide";
 }
 
@@ -41,24 +41,25 @@ export function priority(filename: string): number {
   const order: Record<string, number> = {
     index: 0,
     architecture: 1,
-  "project-structure": 2,
-    "environment-setup": 4,
+    "project-structure": 2,
+    "development-setup": 4,
     bootstrap: 5,
-    "coding-conventions": 10,
-    "naming-conventions": 11,
-    "type-system": 12,
+    coding: 10,
     testing: 13,
     "dependency-injection": 14,
     configuration: 15,
-    "element-design": 20,
-    "pipeline-builder": 21,
-    "event-bus": 22,
+    "pipeline-dev": 20,
     "tool-plugin": 23,
-    "session-context": 24,
-  "memory-service": 25,
-  sandbox: 26,
-  protocol: 30,
+    session: 24,
+    "memory-service": 25,
+    sandbox: 26,
+    "task-execution": 27,
+    protocol: 30,
     "error-handling": 31,
+    gateway: 32,
+    "first-run-wizard": 33,
+    "agents-compiler": 34,
+    "future-features": 50,
   };
   return order[filename] ?? 99;
 }
