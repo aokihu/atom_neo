@@ -4,6 +4,7 @@ import { BusEvents } from "@atom-neo/shared";
 import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ConversationFlowState } from "./types";
+import { calcTokenRatio, applyCompressRatio } from "../../shared";
 
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
   #orchestrator?: InternalTaskOrchestrator;
@@ -69,16 +70,10 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     }
 
     const tu = this.#session?.tokenUsage?.total ?? 0;
+    const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
     const effectiveLimit = this.#configContextLimit - this.#maxTokens;
 
-    if (this.#session.compressRetry === 0) {
-      this.#session.compressRatio = Math.max(0, (tu / effectiveLimit - 0.8) * 5);
-    }
-    this.#session.compressRetry++;
-    if (this.#session.compressRetry > 1) {
-      this.#session.compressRatio = Math.min(2.0, this.#session.compressRatio + 0.4);
-    }
-    this.#session.compressing = true;
+    applyCompressRatio(this.#session, ratio);
 
     this.report(BusEvents.Element.Data, {
       step: "token-overflow, scheduling compress",

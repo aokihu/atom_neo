@@ -10,6 +10,7 @@ import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState } from "./types";
+import { calcTokenUsage, calcTokenRatio } from "../../shared";
 
 export class StreamLLMElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #apiKey: string;
@@ -199,9 +200,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
 
       if (tokenOverflow) {
-        const tu = (this.#session?.tokenUsage?.total ?? 0) + (input.tokenUsage?.total ?? 0);
+        const tu = calcTokenUsage(this.#session?.tokenUsage?.total ?? 0, input.tokenUsage);
+        const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
         const effectiveLimit = this.#configContextLimit - this.#maxTokens;
-        const ratio = effectiveLimit > 0 ? tu / effectiveLimit : 0;
 
         if (ratio <= 0.8) {
           tokenOverflow = false;

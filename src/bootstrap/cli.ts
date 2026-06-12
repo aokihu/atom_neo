@@ -100,16 +100,18 @@ EXAMPLES
 }
 
 function validateMode(v: string): Mode {
-  if (["core", "tui", "full"].includes(v)) return v as Mode;
-  throw new Error(`Invalid mode: ${v}. Expected core | tui | full`);
+  return validateEnum(v, ["core", "tui", "full"] as const, "mode");
 }
 
 function validateLogLevel(v: string): LogLevel {
-  if (["debug", "info", "warn", "error"].includes(v)) return v as LogLevel;
-  throw new Error(`Invalid --log-level: ${v}. Expected debug | info | warn | error`);
+  return validateEnum(v, ["debug", "info", "warn", "error"] as const, "--log-level");
 }
 
 function validateLogMode(v: string): LogMode {
-  if (["console", "pipe", "file"].includes(v)) return v as LogMode;
-  throw new Error(`Invalid --log: ${v}. Expected console | pipe | file`);
+  return validateEnum(v, ["console", "pipe", "file"] as const, "--log");
+}
+
+function validateEnum<T extends string>(v: string, valid: readonly T[], label: string): T {
+  if (valid.includes(v as T)) return v as T;
+  throw new Error(`Invalid ${label}: ${v}. Expected ${valid.join(" | ")}`);
 }

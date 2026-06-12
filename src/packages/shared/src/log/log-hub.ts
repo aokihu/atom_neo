@@ -1,4 +1,5 @@
 import type { LogEntry, LogSink } from "./types";
+import { errorMessage } from "../utils/error";
 
 export class LogHub {
   #sinks: Set<LogSink> = new Set();
@@ -13,7 +14,7 @@ export class LogHub {
       try {
         sink.write(entry);
       } catch (err) {
-        console.error("[log-hub] sink write failed:", err instanceof Error ? err.message : String(err));
+        console.error("[log-hub] sink write failed:", errorMessage(err));
       }
     }
   }

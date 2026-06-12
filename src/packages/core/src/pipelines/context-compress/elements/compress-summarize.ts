@@ -1,9 +1,8 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { generateText } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BusEvents, PromptKey } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
+import { callLLM } from "../../shared";
 
 export class CompressSummarizeElement extends BaseElement<CompressFlowState, CompressFlowState> {
   #apiKey: string;
@@ -33,18 +32,14 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
     }
 
     try {
-      const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
-      const model = provider(this.#model);
-
-      const result = await generateText({
-        model,
-        system: resolvePrompt(PromptKey.COMPRESS_SUMMARIZE),
+      const summary = await callLLM({
+        apiKey: this.#apiKey,
+        model: this.#model,
+        baseUrl: this.#baseUrl,
+        systemKey: PromptKey.COMPRESS_SUMMARIZE,
         prompt: input.summaryText,
         maxTokens: input.summaryMaxTokens || 600,
-        temperature: 0,
       });
-
-      const summary = result.text.trim();
       this.report(BusEvents.Element.Data, { step: "generated", summaryLen: summary.length });
       return { ...input, mode: "finalizing", summary };
     } catch (err: any) {

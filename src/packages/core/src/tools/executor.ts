@@ -1,5 +1,5 @@
 import type { ToolDefinition, ToolResult } from "@atom-neo/shared";
-import { PermissionLevel } from "@atom-neo/shared";
+import { PermissionLevel, errorMessage } from "@atom-neo/shared";
 
 export async function executeTool(
   tool: ToolDefinition,
@@ -30,7 +30,7 @@ export async function executeTool(
     return {
       ok: false,
       output: "",
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
       metadata: { durationMs: performance.now() - start },
     };
   }

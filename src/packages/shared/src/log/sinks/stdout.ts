@@ -1,9 +1,8 @@
 import type { LogSink, LogEntry } from "../types";
+import { formatLogLine } from "./format";
 
 export class StdoutSink implements LogSink {
   write(entry: LogEntry): void {
-    const ts = new Date(entry.timestamp).toISOString();
-    const ctx = entry.context ? ` ${JSON.stringify(entry.context)}` : "";
-    console.log(`[${ts}] ${entry.level.toUpperCase()}: ${entry.message}${ctx}`);
+    console.log(formatLogLine(entry));
   }
 }

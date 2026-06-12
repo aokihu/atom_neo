@@ -17,79 +17,44 @@ export class InternalTaskOrchestrator {
     payload?: TaskPayload[],
     onEnqueue?: (task: { id: string }) => void,
   ): void {
-    const task = createTaskItem({
-      sessionId,
-      chatId,
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      parentTaskId,
-      payload: payload ?? [],
-    });
-    if (onEnqueue) onEnqueue(task);
-    this.#queue.enqueue(task);
+    this.#schedule("conversation", { sessionId, chatId, parentTaskId, payload, onEnqueue });
   }
 
-  scheduleEvaluator(
-    sessionId: string,
-    chatId: string,
-    parentTaskId: string,
-  ): void {
-    const task = createTaskItem({
-      sessionId,
-      chatId,
-      pipeline: "follow-up-evaluator",
-      source: TaskSource.INTERNAL,
-      parentTaskId,
-      payload: [],
-    });
-    this.#queue.enqueue(task);
+  scheduleEvaluator(sessionId: string, chatId: string, parentTaskId: string): void {
+    this.#schedule("follow-up-evaluator", { sessionId, chatId, parentTaskId });
   }
 
-  scheduleCompress(
-    sessionId: string,
-    chatId: string,
-    parentTaskId: string,
-  ): void {
-    const task = createTaskItem({
-      sessionId,
-      chatId,
-      pipeline: "context-compress",
-      source: TaskSource.INTERNAL,
-      parentTaskId,
-      payload: [],
-    });
-    this.#queue.enqueue(task);
+  scheduleCompress(sessionId: string, chatId: string, parentTaskId: string): void {
+    this.#schedule("context-compress", { sessionId, chatId, parentTaskId });
   }
 
-  scheduleFollowUp(
-    sessionId: string,
-    chatId: string,
-    parentTaskId: string,
-  ): void {
-    const task = createTaskItem({
-      sessionId,
-      chatId,
-      pipeline: "conversation",
-      source: TaskSource.INTERNAL,
-      parentTaskId,
+  scheduleFollowUp(sessionId: string, chatId: string, parentTaskId: string): void {
+    this.#schedule("conversation", {
+      sessionId, chatId, parentTaskId,
       payload: [{ type: "text", data: "请从上次中断处继续，不要重复已输出的内容。" }],
     });
-    this.#queue.enqueue(task);
   }
 
-  schedulePostConversation(
-    sessionId: string,
-    chatId: string,
-    parentTaskId: string,
-  ): void {
+  schedulePostConversation(sessionId: string, chatId: string, parentTaskId: string): void {
+    this.#schedule("post-conversation", { sessionId, chatId, parentTaskId });
+  }
+
+  #schedule(pipeline: string, opts: {
+    sessionId: string;
+    chatId: string;
+    parentTaskId: string;
+    payload?: TaskPayload[];
+    onEnqueue?: (task: { id: string }) => void;
+  }): void {
     const task = createTaskItem({
-      sessionId,
-      chatId,
-      pipeline: "post-conversation",
+      sessionId: opts.sessionId,
+      chatId: opts.chatId,
+      pipeline,
       source: TaskSource.INTERNAL,
-      parentTaskId,
-      payload: [],
+      parentTaskId: opts.parentTaskId,
+      payload: opts.payload ?? [],
     });
+    opts.onEnqueue?.(task);
     this.#queue.enqueue(task);
   }
 }

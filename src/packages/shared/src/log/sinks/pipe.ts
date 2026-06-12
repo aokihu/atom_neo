@@ -1,5 +1,6 @@
 import type { LogSink, LogEntry } from "../types";
 import { openSync, writeSync, closeSync } from "node:fs";
+import { formatLogLine } from "./format";
 
 const O_WRONLY = 1;
 const O_NONBLOCK = 0o4000;
@@ -21,9 +22,7 @@ export class PipeSink implements LogSink {
       }
     }
 
-    const ts = new Date(entry.timestamp).toISOString();
-    const ctx = entry.context ? ` ${JSON.stringify(entry.context)}` : "";
-    const line = `[${ts}] ${entry.level.toUpperCase()}: ${entry.message}${ctx}\n`;
+    const line = formatLogLine(entry) + "\n";
 
     try {
       writeSync(this.#fd, line);

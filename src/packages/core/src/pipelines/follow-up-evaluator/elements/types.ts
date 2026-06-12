@@ -7,6 +7,13 @@ export type EvaluatorResult = {
   reason: string;
 };
 
+export const FALLBACK_EVALUATOR: EvaluatorResult = {
+  health: "healthy",
+  suggestion: "",
+  upgradeModel: false,
+  reason: "analysis skipped, continuing",
+};
+
 export type EvaluatorFlowState = {
   mode: EvaluatorMode;
   task: any;

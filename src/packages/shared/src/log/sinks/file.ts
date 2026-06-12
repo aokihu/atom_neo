@@ -1,5 +1,6 @@
 import type { LogSink, LogEntry } from "../types";
 import { appendFileSync } from "node:fs";
+import { formatLogLine } from "./format";
 
 export class FileSink implements LogSink {
   #path: string;
@@ -9,9 +10,6 @@ export class FileSink implements LogSink {
   }
 
   write(entry: LogEntry): void {
-    const ts = new Date(entry.timestamp).toISOString();
-    const ctx = entry.context ? ` ${JSON.stringify(entry.context)}` : "";
-    const line = `[${ts}] ${entry.level.toUpperCase()}: ${entry.message}${ctx}\n`;
-    appendFileSync(this.#path, line);
+    appendFileSync(this.#path, formatLogLine(entry) + "\n");
   }
 }

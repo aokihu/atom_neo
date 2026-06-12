@@ -1,10 +1,9 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { generateText } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BusEvents, PromptKey } from "@atom-neo/shared";
 import type { IntentPredictionResult, DifficultyLevel, ModelProfile } from "@atom-neo/shared";
 import type { PredictionFlowState } from "./types";
+import { callLLM, parseJsonFromLLMResponse } from "../../shared";
 
 const FALLBACK: IntentPredictionResult = {
   difficulty: "medium",
@@ -52,34 +51,30 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
     }
 
     try {
-      const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
-      const model = provider(this.#model);
-
       this.report(BusEvents.Element.Data, { step: "classifying", userMsgLen: text.length });
 
-      const result = await generateText({
-        model,
-        system: resolvePrompt(PromptKey.PREDICT_INTENT),
+      const raw = await callLLM({
+        apiKey: this.#apiKey,
+        model: this.#model,
+        baseUrl: this.#baseUrl,
+        systemKey: PromptKey.PREDICT_INTENT,
         prompt: input.contextMessages
           ? `Recent conversation:\n${input.contextMessages}\n\nCurrent user message: "${text}"`
           : `User message: "${text}"`,
         maxTokens: this.#maxTokens,
-        temperature: 0,
       });
 
-      const raw = result.text.trim();
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
+      const parsed = parseJsonFromLLMResponse<Record<string, any>>(raw);
+      if (!parsed) {
         this.report(BusEvents.Element.Data, { step: "no JSON in response, fallback" });
         return { ...input, mode: "routing", prediction: FALLBACK };
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
       const prediction: IntentPredictionResult = {
-        difficulty: (["easy", "medium", "hard", "mygod"].includes(parsed.difficulty) ? parsed.difficulty : "medium") as DifficultyLevel,
-        modelProfile: (["basic", "balanced", "advanced"].includes(parsed.model_profile) ? parsed.model_profile : "balanced") as ModelProfile,
-        intent: (["instruction", "question", "creative", "conversation"].includes(parsed.intent) ? parsed.intent : "conversation") as IntentPredictionResult["intent"],
-        contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
+        difficulty: (["easy", "medium", "hard", "mygod"].includes(parsed.difficulty as string) ? parsed.difficulty : "medium") as DifficultyLevel,
+        modelProfile: (["basic", "balanced", "advanced"].includes(parsed.model_profile as string) ? parsed.model_profile : "balanced") as ModelProfile,
+        intent: (["instruction", "question", "creative", "conversation"].includes(parsed.intent as string) ? parsed.intent : "conversation") as IntentPredictionResult["intent"],
+        contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance as string) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
         topic: typeof parsed.topic === "string" ? parsed.topic : "",
         reasoning: parsed.reasoning ?? "",
       };

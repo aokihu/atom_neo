@@ -1,27 +1,13 @@
 import { describe, test, expect, beforeAll } from "bun:test";
-import { PipelineEventBus } from "@atom-neo/shared";
-import type { FullEventMap } from "@atom-neo/shared";
 import { registerContextCompressElements, contextCompressPipeline } from "../index";
+import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
+import { makeBus, makeMockOrchestrator } from "../test-helpers";
 
 beforeAll(() => {
   registerContextCompressElements();
+  registerSharedElements();
 });
-
-function makeBus() {
-  return new PipelineEventBus<FullEventMap>();
-}
-
-function makeMockOrchestrator(capture: { enqueued: any } | null) {
-  return {
-    scheduleConversation: (sid: string, cid: string, ptid: string, payload?: any[], onEnqueue?: any) => {
-      if (capture) capture.enqueued = { pipeline: "conversation", parentTaskId: ptid };
-    },
-    scheduleEvaluator: () => {},
-    scheduleCompress: () => {},
-    scheduleFollowUp: () => {},
-  };
-}
 
 describe("compress-input", () => {
   test("extracts early messages, keeps last 20", async () => {
@@ -39,7 +25,7 @@ describe("compress-input", () => {
     const result = await el.doProcess({ mode: "initial", task: { id: "t1" } });
 
     expect(result.mode).toBe("summarizing");
-    expect(result.archiveMessages.length).toBe(10);  // 30 messages, keep 20 → compress 10
+    expect(result.archiveMessages.length).toBe(20);  // 30 messages, strategy keeps 10 → compress 20
     expect(result.summaryText).toContain("message 0");
     expect(result.summaryText).toContain("message 9");
   });
@@ -131,6 +117,6 @@ describe("context-compress DSL", () => {
     }).build(bus);
 
     expect(pipeline.name).toBe("context-compress");
-    expect(pipeline.elements.length).toBe(3);
+    expect(pipeline.elements.length).toBe(4);
   });
 });

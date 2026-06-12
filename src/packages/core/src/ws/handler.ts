@@ -1,10 +1,9 @@
 import type { ServerWebSocket } from "bun";
 import type { Broadcaster } from "./broadcaster";
 import type { TaskQueue } from "../task-queue";
-import type { PipelineEventBus } from "@atom-neo/shared";
+import type { PipelineEventBus, Logger } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
-import type { Logger } from "@atom-neo/shared";
-import { TaskSource, BusEvents, WsMessages } from "@atom-neo/shared";
+import { TaskSource, BusEvents, WsMessages, errorMessage } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
 
 type ServerContext = {
@@ -21,7 +20,7 @@ export function createWsHandlers(ctx: ServerContext) {
     try {
       ws.send(JSON.stringify({ type, seq: ++seq, ts: Date.now(), payload }));
     } catch (err) {
-      ctx.logger?.error("ws send failed", { error: String(err) });
+      ctx.logger?.error("ws send failed", { error: errorMessage(err) });
     }
   }
 
@@ -60,7 +59,7 @@ export function createWsHandlers(ctx: ServerContext) {
           send(ws, WsMessages.Control.Pong, {});
         }
       } catch (err) {
-        ctx.logger?.error("ws message parse failed", { error: String(err) });
+        ctx.logger?.error("ws message parse failed", { error: errorMessage(err) });
         send(ws, WsMessages.Control.Error, { message: "Invalid message format" });
       }
     },

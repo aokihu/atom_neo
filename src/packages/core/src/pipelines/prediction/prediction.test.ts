@@ -1,27 +1,13 @@
 import { describe, test, expect, beforeAll } from "bun:test";
-import { PipelineEventBus } from "@atom-neo/shared";
-import type { FullEventMap } from "@atom-neo/shared";
 import { registerPredictionElements, predictionPipeline } from "../index";
+import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
+import { makeBus, makeMockOrchestrator } from "../test-helpers";
 
 beforeAll(() => {
   registerPredictionElements();
+  registerSharedElements();
 });
-
-function makeBus() {
-  return new PipelineEventBus<FullEventMap>();
-}
-
-function makeMockOrchestrator(capture: { enqueued: any } | null) {
-  return {
-    scheduleConversation: (sid: string, cid: string, ptid: string, payload?: any[]) => {
-      if (capture) capture.enqueued = { pipeline: "conversation", parentTaskId: ptid, payload };
-    },
-    scheduleEvaluator: () => {},
-    scheduleCompress: () => {},
-    scheduleFollowUp: () => {},
-  };
-}
 
 describe("prediction pipeline elements", () => {
   test("predict-input extracts user message from task payload", async () => {
@@ -211,9 +197,10 @@ describe("prediction pipeline DSL", () => {
     }).build(bus);
 
     expect(pipeline.name).toBe("prediction");
-    expect(pipeline.elements.length).toBe(3);
+    expect(pipeline.elements.length).toBe(4);
     expect(pipeline.elements[0].kind).toBe("source");
     expect(pipeline.elements[1].kind).toBe("transform");
-    expect(pipeline.elements[2].kind).toBe("sink");
+    expect(pipeline.elements[2].kind).toBe("boundary");
+    expect(pipeline.elements[3].kind).toBe("sink");
   });
 });

@@ -3,14 +3,9 @@ import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-n
 import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
-import type { EvaluatorFlowState, EvaluatorResult } from "./types";
-
-const FALLBACK: EvaluatorResult = {
-  health: "healthy",
-  suggestion: "",
-  upgradeModel: false,
-  reason: "fallback",
-};
+import type { EvaluatorFlowState } from "./types";
+import { FALLBACK_EVALUATOR } from "./types";
+import { calcTokenRatio, applyCompressRatio } from "../../shared";
 
 export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
@@ -32,7 +27,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<PipelineResult> {
-    const { health, suggestion, upgradeModel, reason } = input.evaluation ?? FALLBACK;
+    const { health, suggestion, upgradeModel, reason } = input.evaluation ?? FALLBACK_EVALUATOR;
 
     this.report(BusEvents.Element.Data, { step: "decision", health, suggestion, upgradeModel, reason, summaryLen: input.recentSummary.length });
 
@@ -54,6 +49,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     }
 
     const tu = input.session?.tokenUsage?.total ?? 0;
+    const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
     const effectiveLimit = (this.#configContextLimit ?? DEFAULT_CONTEXT_LIMIT) - this.#maxTokens;
     if (tu > effectiveLimit * 0.8 && health !== "stuck") {
       if (input.session.compressing) {
@@ -61,15 +57,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
         return { type: "complete", task: input.task, output: `evaluator: compress already in progress` };
       }
 
-      if (input.session.compressRetry === 0) {
-        const usageRatio = tu / effectiveLimit;
-        input.session.compressRatio = Math.max(0, (usageRatio - 0.8) * 5);
-      }
-      input.session.compressRetry++;
-      if (input.session.compressRetry > 1) {
-        input.session.compressRatio = Math.min(2.0, input.session.compressRatio + 0.4);
-      }
-      input.session.compressing = true;
+      applyCompressRatio(input.session, ratio);
 
       this.report(BusEvents.Element.Data, {
         step: "token usage high, scheduling compress",

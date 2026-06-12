@@ -5,6 +5,8 @@ export type AnalysisResult = {
   reason: string;
 };
 
+export const FALLBACK_ANALYSIS: AnalysisResult = { status: "satisfactory", reason: "analysis skipped, continuing" };
+
 export type PostConversationFlowState = {
   mode: PostConversationMode;
   task: any;

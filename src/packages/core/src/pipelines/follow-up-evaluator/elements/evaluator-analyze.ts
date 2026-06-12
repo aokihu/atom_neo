@@ -1,16 +1,9 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { generateText } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BusEvents, PromptKey } from "@atom-neo/shared";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
-
-const FALLBACK: EvaluatorResult = {
-  health: "healthy",
-  suggestion: "",
-  upgradeModel: false,
-  reason: "analysis skipped, continuing",
-};
+import { FALLBACK_EVALUATOR } from "./types";
+import { callLLM, parseJsonFromLLMResponse } from "../../shared";
 
 export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, EvaluatorFlowState> {
   #apiKey: string;
@@ -39,52 +32,48 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
 
     if (!input.recentSummary) {
       this.report(BusEvents.Element.Data, { step: "empty summary, fallback to healthy" });
-      return { ...input, mode: "intervening", evaluation: FALLBACK };
+      return { ...input, mode: "intervening", evaluation: FALLBACK_EVALUATOR };
     }
 
     if (!this.#apiKey) {
       this.report(BusEvents.Element.Data, { step: "no apiKey, fallback to healthy" });
-      return { ...input, mode: "intervening", evaluation: FALLBACK };
+      return { ...input, mode: "intervening", evaluation: FALLBACK_EVALUATOR };
     }
 
     try {
-      const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
-      const model = provider(this.#model);
-
       const prompt = `Recent conversation:\n${input.recentSummary}`;
       this.report(BusEvents.Element.Data, { step: "classifying", summaryLen: input.recentSummary.length, promptPreview: prompt.slice(0, 200) });
 
-      const result = await generateText({
-        model,
-        system: resolvePrompt(PromptKey.EVALUATOR_ANALYZE),
+      const raw = await callLLM({
+        apiKey: this.#apiKey,
+        model: this.#model,
+        baseUrl: this.#baseUrl,
+        systemKey: PromptKey.EVALUATOR_ANALYZE,
         prompt,
         maxTokens: this.#maxTokens,
-        temperature: 0,
       });
 
-      const raw = result.text.trim();
       this.report(BusEvents.Element.Data, { step: "LLM response", raw: raw.slice(0, 500) });
 
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
+      const parsed = parseJsonFromLLMResponse<Record<string, any>>(raw);
+      if (!parsed) {
         this.report(BusEvents.Element.Data, { step: "no JSON in response, fallback", level: "warn" });
-        return { ...input, mode: "intervening", evaluation: FALLBACK };
+        return { ...input, mode: "intervening", evaluation: FALLBACK_EVALUATOR };
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
-      const evaluation = {
-        health: ["healthy", "looping", "stuck", "degrading"].includes(parsed.health)
-          ? parsed.health : "healthy",
-        suggestion: parsed.suggestion ?? "",
+      const evaluation: EvaluatorResult = {
+        health: ["healthy", "looping", "stuck", "degrading"].includes(parsed.health as string)
+          ? (parsed.health as EvaluatorResult["health"]) : "healthy",
+        suggestion: (parsed.suggestion as string) ?? "",
         upgradeModel: parsed.upgradeModel === true,
-        reason: parsed.reason ?? "",
+        reason: (parsed.reason as string) ?? "",
       };
 
       this.report(BusEvents.Element.Data, { step: "classified", evaluation });
       return { ...input, mode: "intervening", evaluation };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error, fallback", level: "warn", error: err.message });
-      return { ...input, mode: "intervening", evaluation: FALLBACK };
+      return { ...input, mode: "intervening", evaluation: FALLBACK_EVALUATOR };
     }
   }
 
