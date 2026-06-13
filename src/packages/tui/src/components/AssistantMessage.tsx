@@ -1,7 +1,6 @@
 import type { Message } from "../types";
 import { SyntaxStyle } from "@opentui/core";
 import { useTheme } from "./App";
-import { fmtTime } from "./MessageBubble";
 
 export function AssistantMessage({ message, syntaxStyle }: { message: Message & { role: "assistant" }; syntaxStyle: SyntaxStyle }) {
   const { colors } = useTheme();
@@ -17,7 +16,6 @@ export function AssistantMessage({ message, syntaxStyle }: { message: Message & 
         syntaxStyle={syntaxStyle}
         conceal
       />
-      <text fg={colors.text.muted}>{fmtTime(message.timestamp)}</text>
     </box>
   );
 }
