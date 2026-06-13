@@ -1,24 +1,43 @@
-import { useState, useEffect } from "react";
+import type { ServerInfo } from "../types";
 import { useTheme } from "./App";
-import { useCopied } from "../stores/copied";
 
-export function StatusBar() {
+function gauge(used: number, limit: number, width = 8): string {
+  const r = Math.min(used / Math.max(limit, 1), 1);
+  const f = Math.round(r * width);
+  return '█'.repeat(f) + '░'.repeat(width - f);
+}
+
+function pct(used: number, limit: number): string {
+  return Math.round((used / Math.max(limit, 1)) * 100) + '%';
+}
+
+interface StatusBarProps {
+  serverInfo: ServerInfo;
+  tokenUsage: number;
+  contextLimit: number;
+}
+
+export function StatusBar({ serverInfo, tokenUsage, contextLimit }: StatusBarProps) {
   const { colors } = useTheme();
-  const { copied, setCopied } = useCopied();
-
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(t);
-  }, [copied, setCopied]);
+  const ratioStr = 'tokens ' + gauge(tokenUsage, contextLimit) + ' ' + pct(tokenUsage, contextLimit);
+  const sep = <text fg={colors.decoration.subtle}> ▎ </text>;
 
   return (
-    <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-      <box flexDirection="row" gap={1}>
-        <text fg={colors.accent.brand}><strong>atom</strong></text>
-        <text fg={colors.text.secondary}>neo</text>
+    <box flexShrink={0}>
+      <text fg={colors.decoration.subtle}>{'─'.repeat(80)}</text>
+      <box height={1} flexDirection="row" paddingLeft={2} paddingRight={2} gap={1}>
+        <text fg={colors.accent.brand}>atom neo</text>
+        {sep}
+        <text fg={colors.status.success}>●</text>
+        <text fg={colors.text.secondary}>connected</text>
+        {sep}
+        <text fg={colors.text.secondary}>{serverInfo.model}</text>
+        {sep}
+        <text fg={colors.text.secondary}>{ratioStr}</text>
+        {sep}
+        <text fg={colors.text.muted}>v{serverInfo.version}</text>
       </box>
-      <text fg={copied ? colors.status.success : colors.text.muted}>{copied ? "● copied" : "● ready"}</text>
+      <text fg={colors.decoration.subtle}>{'─'.repeat(80)}</text>
     </box>
   );
 }

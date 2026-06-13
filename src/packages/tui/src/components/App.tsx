@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useEffect } from "react";
+import { createContext, useContext, useMemo, useEffect, useCallback } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useChat } from "../hooks/useChat";
 import { getTheme } from "../theme";
@@ -25,25 +25,49 @@ function isProcessing(msgs: Message[]): boolean {
   return msgs.some(m => m.role === "tool" && m.state === "running");
 }
 
+const HELP_TEXT = `Available commands:
+  /quit   Exit Atom Neo
+  /help   Show this help message
+  /clear  Clear chat history
+
+Keyboard shortcuts:
+  Ctrl+C      Exit (press twice)
+  Up/Down     Navigate input history
+  /           Open command menu
+  Tab         Autocomplete command
+  Esc         Dismiss command menu
+  Shift+Enter New line`;
+
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { messages, send, tokenUsage, sessionBusy } = useChat(url);
+  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy } = useChat(url);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
+  const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
 
   useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
+
+  const nextIdRef = useCallback(() => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
+
+  const handleHelp = useCallback(() => {
+    addMessage({ role: "info", content: HELP_TEXT, id: nextIdRef(), timestamp: Date.now() });
+  }, [addMessage, nextIdRef]);
+
+  const handleClear = useCallback(() => {
+    clearMessages();
+  }, [clearMessages]);
 
   return (
     <ThemeContext.Provider value={theme}>
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
-        <StatusBar />
+        <StatusBar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={contextLimit} />
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView messages={messages} />
-            <InputBar onSend={send} onQuit={onQuit} />
+            <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} sessionBusy={sessionBusy} />
             <StatusLine hint={exitHint} processing={sessionBusy || isProcessing(messages)} />
           </box>
-          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT} />}
+          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={contextLimit} />}
         </box>
       </box>
     </ThemeContext.Provider>

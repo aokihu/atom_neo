@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
 import type { Message } from "../types";
 
+function now() { return Date.now(); }
+
 export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
@@ -35,7 +37,7 @@ export function useChat(url: string, sessionId?: string) {
           ];
         }
         const id = nextId();
-        return [...prev, { role: "assistant", content: delta, id, streaming: true }];
+        return [...prev, { role: "assistant", content: delta, id, streaming: true, timestamp: now() }];
       });
     });
 
@@ -49,15 +51,15 @@ export function useChat(url: string, sessionId?: string) {
               ? { ...m, state: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? "") }
               : m);
           }
-          return [...prev, { role: "tool", toolName: event.name, state: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? ""), id }];
+          return [...prev, { role: "tool", toolName: event.name, state: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? ""), id, timestamp: now() }];
         });
       } else {
-        setMessages(prev => [...prev, { role: "tool", toolName: event.name, state: "running", id }]);
+        setMessages(prev => [...prev, { role: "tool", toolName: event.name, state: "running", id, timestamp: now() }]);
       }
     });
 
     client.connect().catch(() => {
-      setMessages(prev => [...prev, { role: "error", content: "Connection failed", id: nextId() }]);
+      setMessages(prev => [...prev, { role: "error", content: "Connection failed", id: nextId(), timestamp: now() }]);
     });
 
     return () => {
@@ -66,14 +68,24 @@ export function useChat(url: string, sessionId?: string) {
     };
   }, [url, sessionId]);
 
+  const clearMessages = useCallback(() => {
+    thinkingIdRef.current = null;
+    setMessages([]);
+  }, []);
+
+  const addMessage = useCallback((msg: Message) => {
+    setMessages(prev => [...prev, msg]);
+  }, []);
+
   const send = useCallback(async (text: string) => {
     const userMsgId = nextId();
     const thinkingId = nextId();
+    const ts = now();
     thinkingIdRef.current = thinkingId;
     setMessages(prev => [
       ...prev,
-      { role: "user", content: text, id: userMsgId },
-      { role: "thinking", id: thinkingId },
+      { role: "user", content: text, id: userMsgId, timestamp: ts },
+      { role: "thinking", id: thinkingId, timestamp: ts },
     ]);
     setSessionBusy(true);
 
@@ -97,10 +109,10 @@ export function useChat(url: string, sessionId?: string) {
     } catch (err: any) {
       thinkingIdRef.current = null;
       setMessages(prev => prev.filter(m => m.id !== thinkingId));
-      setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId() }]);
+      setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId(), timestamp: now() }]);
       setSessionBusy(false);
     }
   }, []);
 
-  return { messages, send, tokenUsage, sessionBusy };
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy };
 }

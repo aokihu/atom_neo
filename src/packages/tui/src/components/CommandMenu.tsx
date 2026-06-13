@@ -1,40 +1,59 @@
-import { useMemo } from "react";
 import { useTheme } from "./App";
 
-interface Command {
+export interface Command {
   name: string;
   description: string;
 }
 
-const CMDS: Command[] = [
+export const CMDS: Command[] = [
   { name: "/quit", description: "Exit Atom Neo" },
+  { name: "/help", description: "Show help message" },
+  { name: "/clear", description: "Clear chat history" },
 ];
 
-export function CommandMenu({ filter, active }: { filter: string; active: boolean }) {
+function matchCommands(filter: string): Command[] {
+  return CMDS
+    .filter(c => c.name.includes(filter))
+    .sort((a, b) => a.name.indexOf(filter) - b.name.indexOf(filter));
+}
+
+export { matchCommands };
+
+export function CommandMenu({ filter, matches, selectedIndex }: { filter: string; matches: Command[]; selectedIndex: number }) {
   const { colors } = useTheme();
 
-  const matches = useMemo(() => {
-    if (!active) return [];
-    return CMDS.filter(c => c.name.startsWith(filter));
-  }, [filter, active]);
-
-  if (matches.length === 0) return null;
+  if (matches.length === 0) {
+    return (
+      <box flexDirection="column"
+           paddingLeft={2} paddingRight={1} paddingTop={1} paddingBottom={1}
+           border={["left"]} borderColor={colors.decoration.subtle}
+           backgroundColor={colors.bg.popup}>
+        <text fg={colors.text.muted}>No matching commands</text>
+      </box>
+    );
+  }
 
   return (
-    <box
-      flexDirection="column"
-      paddingLeft={2} paddingRight={1} paddingTop={1} paddingBottom={1}
-      border={["left"]}
-      borderColor={colors.decoration.subtle}
-      backgroundColor={colors.bg.input}
-    >
-      {matches.map(cmd => {
-        const matched = cmd.name.slice(0, filter.length);
-        const rest = cmd.name.slice(filter.length);
+    <box flexDirection="column"
+         paddingLeft={2} paddingRight={1} paddingTop={1} paddingBottom={1}
+         border={["left"]} borderColor={colors.decoration.subtle}
+         backgroundColor={colors.bg.popup}>
+      {matches.map((cmd, i) => {
+        const idx = cmd.name.indexOf(filter);
+        const before = cmd.name.slice(0, idx);
+        const matched = cmd.name.slice(idx, idx + filter.length);
+        const after = cmd.name.slice(idx + filter.length);
+        const isSelected = i === selectedIndex;
         return (
-          <box key={cmd.name} flexDirection="row">
+          <box key={cmd.name} flexDirection="row"
+               backgroundColor={isSelected ? colors.decoration.subtle : undefined}
+               paddingRight={1}>
+            <box width={2}>
+              {isSelected && <text fg={colors.accent.brand}>{'\u25B8'}</text>}
+            </box>
+            <text fg={colors.text.secondary}>{before}</text>
             <text fg={colors.accent.brand}>{matched}</text>
-            <text fg={colors.text.muted}>{rest}</text>
+            <text fg={colors.text.secondary}>{after}</text>
             <text fg={colors.text.muted}>  {cmd.description}</text>
           </box>
         );

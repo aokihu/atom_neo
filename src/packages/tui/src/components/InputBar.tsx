@@ -1,36 +1,50 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { useTheme } from "./App";
-import { CommandMenu } from "./CommandMenu";
+import { CommandMenu, CMDS, matchCommands } from "./CommandMenu";
+import type { Command } from "./CommandMenu";
 import { useInputHistory } from "../stores/inputHistory";
-import type { TextareaRenderable, BorderCharacters, KeyBinding, KeyEvent } from "@opentui/core";
-
-const thinBorder: BorderCharacters = {
-  topLeft: "\u2584",
-  topRight: "\u2584",
-  bottomLeft: "\u2580",
-  bottomRight: "\u2580",
-  horizontal: "\u2580",
-  vertical: "\u258F",
-  topT: "\u2584",
-  bottomT: "\u2580",
-  leftT: "\u258F",
-  rightT: "\u258F",
-  cross: "\u2588",
-};
+import type { TextareaRenderable, KeyBinding, KeyEvent } from "@opentui/core";
 
 const keyBindings: KeyBinding[] = [
   { name: "enter", action: "submit" },
   { name: "enter", shift: true, action: "newline" },
 ];
 
-export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; onQuit?: () => void }) {
+function resolveCommand(text: string): Command | null {
+  return CMDS.find(c => c.name === text) ?? null;
+}
+
+interface InputBarProps {
+  onSend: (text: string) => void;
+  onQuit?: () => void;
+  onHelp?: () => void;
+  onClear?: () => void;
+  sessionBusy: boolean;
+}
+
+export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: InputBarProps) {
   const { colors } = useTheme();
   const taRef = useRef<TextareaRenderable>(null);
   const [content, setContent] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const navigatingRef = useRef(false);
+  const selectedIndexRef = useRef(0);
   const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
   const showMenu = content.startsWith("/");
+  const borderColor = sessionBusy ? colors.status.warning : colors.decoration.subtle;
+
+  const cmdMatches = useMemo(() => {
+    if (!showMenu || content.length < 1) return [];
+    return matchCommands(content);
+  }, [content, showMenu]);
+
+  useEffect(() => { selectedIndexRef.current = selectedIndex; }, [selectedIndex]);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+    selectedIndexRef.current = 0;
+  }, [content]);
 
   const handleContentChange = useCallback(() => {
     setContent(taRef.current?.plainText ?? "");
@@ -38,24 +52,76 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
     resetIndex();
   }, [resetIndex]);
 
+  const doAutocomplete = useCallback((matches: Command[]) => {
+    const idx = Math.min(selectedIndexRef.current, matches.length - 1);
+    const cmd = matches[idx];
+    taRef.current?.setText(cmd.name);
+  }, []);
+
+  const doCommand = useCallback((cmd: Command) => {
+    switch (cmd.name) {
+      case "/quit":
+        onQuit?.();
+        break;
+      case "/help":
+        onHelp?.();
+        break;
+      case "/clear":
+        onClear?.();
+        break;
+    }
+    taRef.current?.setText("");
+    setContent("");
+  }, [onQuit, onHelp, onClear]);
+
   const handleSubmit = useCallback(() => {
-    const text = taRef.current?.plainText?.trim();
+    const text = (taRef.current?.plainText ?? "").trim();
     if (!text) return;
 
-    if (text === "/quit") {
-      onQuit?.();
+    const cmd = resolveCommand(text);
+    if (cmd) {
+      doCommand(cmd);
+      return;
+    }
+
+    if (showMenu && cmdMatches.length > 0) {
+      doAutocomplete(cmdMatches);
+      return;
+    }
+
+    push(text);
+    onSend(text);
+    taRef.current?.setText("");
+    setContent("");
+  }, [showMenu, cmdMatches, onSend, push, doCommand, doAutocomplete]);
+
+  const handleKeyDown = useCallback((event: KeyEvent) => {
+    if (event.name === "escape" && showMenu) {
+      event.preventDefault();
       taRef.current?.setText("");
       setContent("");
       return;
     }
 
-    push(text.trim());
-    onSend(text);
-    taRef.current?.setText("");
-    setContent("");
-  }, [onSend, onQuit, push]);
+    if (showMenu && cmdMatches.length > 0) {
+      if (event.name === "tab") {
+        event.preventDefault();
+        doAutocomplete(cmdMatches);
+        return;
+      }
+      if (event.name === "up") {
+        event.preventDefault();
+        setSelectedIndex(prev => Math.max(0, prev - 1));
+        return;
+      }
+      if (event.name === "down") {
+        event.preventDefault();
+        setSelectedIndex(prev => Math.min(cmdMatches.length - 1, prev + 1));
+        return;
+      }
+      return;
+    }
 
-  const handleKeyDown = useCallback((event: KeyEvent) => {
     if (event.ctrl || event.meta) return;
 
     if (event.name === "up") {
@@ -78,23 +144,27 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
       ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
       navigatingRef.current = false;
     }
-  }, [navigateUp, navigateDown, setDraft]);
+  }, [showMenu, cmdMatches, navigateUp, navigateDown, setDraft, doAutocomplete]);
 
   return (
     <box flexShrink={0}>
       <box
-        height={5}
+        height={6}
         marginTop={1}
-        marginLeft={0} marginRight={0} marginBottom={0}
-        padding={1}
-        border={["left"]}
-        borderColor={colors.accent.brand}
-        customBorderChars={thinBorder}
+        marginLeft={1}
+        marginRight={1}
+        border
+        borderColor={borderColor}
         backgroundColor={colors.bg.input}
+        flexDirection="column"
       >
+        <box height={1} paddingLeft={2} paddingRight={2}>
+          <text fg={colors.text.muted}>Message</text>
+          <text fg={colors.decoration.subtle}>  ─  ↑↓ history  / commands  ↩ send</text>
+        </box>
         <textarea
           ref={taRef}
-          placeholder="Message... (Shift+Enter for newline, ↑↓ for history, / for commands)"
+          placeholder="Type a message..."
           onSubmit={handleSubmit}
           onContentChange={handleContentChange}
           onKeyDown={handleKeyDown}
@@ -110,13 +180,12 @@ export function InputBar({ onSend, onQuit }: { onSend: (text: string) => void; o
       {showMenu && (
         <box
           position="absolute"
-          bottom={5}
-          left={0}
-          right={0}
+          bottom={7}
+          left={1}
+          right={1}
           zIndex={100}
-          backgroundColor={colors.bg.input}
         >
-          <CommandMenu filter={content} active={showMenu} />
+          <CommandMenu filter={content} matches={cmdMatches} selectedIndex={selectedIndex} />
         </box>
       )}
     </box>
