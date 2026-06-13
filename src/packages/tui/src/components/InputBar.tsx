@@ -32,7 +32,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
   const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
   const showMenu = content.startsWith("/");
-  const borderColor = sessionBusy ? colors.status.warning : colors.decoration.subtle;
+  const borderColor = sessionBusy ? colors.status.warning : colors.status.success;
 
   const cmdMatches = useMemo(() => {
     if (!showMenu || content.length < 1) return [];
@@ -153,9 +153,13 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
         marginTop={1}
         marginLeft={1}
         marginRight={1}
-        border
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        border={["left"]}
         borderColor={borderColor}
-        backgroundColor={colors.bg.input}
+        borderStyle="heavy"
+        backgroundColor={colors.bg.codeBlock}
         flexDirection="column"
       >
         <box height={1} paddingLeft={2} paddingRight={2}>
@@ -171,8 +175,8 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
           keyBindings={keyBindings}
           focused
           flexGrow={1}
-          backgroundColor={colors.bg.input}
-          focusedBackgroundColor={colors.bg.input}
+          backgroundColor={colors.bg.codeBlock}
+          focusedBackgroundColor={colors.bg.codeBlock}
           textColor={colors.text.primary}
           placeholderColor={colors.text.muted}
         />
