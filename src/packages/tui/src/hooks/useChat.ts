@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
-import type { Message } from "../types";
+import type { Message, TodoItem } from "../types";
 
 function now() { return Date.now(); }
 
@@ -8,6 +8,7 @@ export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
   const [sessionBusy, setSessionBusy] = useState(false);
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const clientRef = useRef<TuiClient | null>(null);
   const thinkingIdRef = useRef<string | null>(null);
   const counterRef = useRef(0);
@@ -55,6 +56,11 @@ export function useChat(url: string, sessionId?: string) {
         });
       } else {
         setMessages(prev => [...prev, { role: "tool", toolName: event.name, state: "running", id, timestamp: now() }]);
+      }
+
+      if (event.name === "todowrite" && event.input) {
+        const todos = (event.input as any)?.todos;
+        if (Array.isArray(todos)) setTodoItems(todos);
       }
     });
 
@@ -114,5 +120,5 @@ export function useChat(url: string, sessionId?: string) {
     }
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy };
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems };
 }

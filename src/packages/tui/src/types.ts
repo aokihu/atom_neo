@@ -25,6 +25,12 @@ export type Message =
   | { role: "error"; content: string; id: string; timestamp: number }
   | { role: "info"; content: string; id: string; timestamp: number };
 
+export type TodoItem = {
+  content: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  priority: "high" | "medium" | "low";
+};
+
 export interface ServerInfo {
   port: number;
   host: string;

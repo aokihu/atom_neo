@@ -154,6 +154,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
+        paddingRight={2}
         border={["left"]}
         borderColor={borderColor}
         borderStyle="heavy"
@@ -172,7 +173,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused
-          height={5}
+          height={4}
           backgroundColor={colors.bg.codeBlock}
           focusedBackgroundColor={colors.bg.codeBlock}
           textColor={colors.text.primary}
@@ -182,7 +183,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
       {showMenu && (
         <box
           position="absolute"
-          bottom={8}
+          bottom={7}
           left={0}
           right={1}
           zIndex={100}

@@ -1,3 +1,4 @@
+import { ProcessingSpinner } from "./ProcessingSpinner";
 import { useTheme } from "./App";
 
 interface StatusLineProps {
@@ -10,9 +11,9 @@ export function StatusLine({ hint, processing }: StatusLineProps) {
 
   return (
     <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-      <text fg={processing ? colors.status.warning : colors.text.muted}>
-        {processing ? '◌ processing...' : '◉ ready'}
-      </text>
+      {processing
+        ? <ProcessingSpinner label="processing..." />
+        : <text fg={colors.text.muted}>◉ ready</text>}
       <text fg={colors.text.muted}>
         {hint ?? 'Ctrl+C exit  / help'}
       </text>
