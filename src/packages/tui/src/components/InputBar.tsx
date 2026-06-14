@@ -149,9 +149,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
   return (
     <box flexShrink={0}>
       <box
-        height={6}
         marginTop={1}
-        marginLeft={1}
         marginRight={1}
         paddingTop={1}
         paddingBottom={1}
@@ -162,9 +160,9 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
         backgroundColor={colors.bg.codeBlock}
         flexDirection="column"
       >
-        <box height={1} paddingLeft={2} paddingRight={2}>
+        <box flexDirection="row" justifyContent="space-between" paddingRight={2}>
           <text fg={colors.text.muted}>Message</text>
-          <text fg={colors.decoration.subtle}>  ─  ↑↓ history  / commands  ↩ send</text>
+          <text fg={colors.decoration.subtle}>↑↓ history  / commands  ↩ send</text>
         </box>
         <textarea
           ref={taRef}
@@ -174,7 +172,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused
-          flexGrow={1}
+          height={5}
           backgroundColor={colors.bg.codeBlock}
           focusedBackgroundColor={colors.bg.codeBlock}
           textColor={colors.text.primary}
@@ -184,8 +182,8 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
       {showMenu && (
         <box
           position="absolute"
-          bottom={7}
-          left={1}
+          bottom={8}
+          left={0}
           right={1}
           zIndex={100}
         >

@@ -23,9 +23,8 @@ export function StatusBar({ serverInfo, tokenUsage, contextLimit }: StatusBarPro
   const sep = <text fg={colors.decoration.subtle}> ▎ </text>;
 
   return (
-    <box flexShrink={0}>
-      <text fg={colors.decoration.subtle}>{'─'.repeat(80)}</text>
-      <box height={1} flexDirection="row" paddingLeft={2} paddingRight={2} gap={1}>
+    <box flexShrink={0} border={["bottom"]} borderColor={colors.decoration.subtle} borderStyle="single">
+      <box flexDirection="row" paddingLeft={2} paddingRight={2} gap={1} height={1}>
         <text fg={colors.accent.brand}>atom neo</text>
         {sep}
         <text fg={colors.status.success}>●</text>
@@ -37,7 +36,6 @@ export function StatusBar({ serverInfo, tokenUsage, contextLimit }: StatusBarPro
         {sep}
         <text fg={colors.text.muted}>v{serverInfo.version}</text>
       </box>
-      <text fg={colors.decoration.subtle}>{'─'.repeat(80)}</text>
     </box>
   );
 }
