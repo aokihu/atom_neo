@@ -159,6 +159,11 @@ const providerOptions = {
 - `"adaptive"` — 模型自行决定是否启用思考
 - `"enabled"` — 强制启用思考模式
 
+**TUI 展示**：`thinking` 状态会通过 `ServerInfo` 传递给 TUI，在 `StatusBar` 组件中于模型名称右侧显示 `[thinking]` 标签。颜色含义：
+- 绿色（`status.success`） — `enabled`（强制启用）
+- 黄色（`status.warning`） — `adaptive`（模型自适应）
+- 灰色（`text.muted`） — `disabled`（已关闭）
+
 **架构说明**：`config.json` 中 `thinking` 的值由 `server.ts` 翻译为 AI SDK 的 `providerOptions` 对象，再透传给 `StreamLLMElement`。Element 不感知 provider 具体选项结构，仅负责将 `providerOptions` 原样注入 `streamText()`。未来扩展其他 provider（OpenAI `reasoningEffort`、Gemini `thinkingConfig`）时只需修改 `server.ts` 的翻译逻辑，无需改动 Element 代码。
 
 **`contextLimit` 字段**：

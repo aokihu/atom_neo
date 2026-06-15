@@ -8,6 +8,10 @@ interface StatusBarProps {
 export function StatusBar({ serverInfo }: StatusBarProps) {
   const { colors } = useTheme();
   const sep = <text fg={colors.decoration.subtle}> ▎ </text>;
+  const thinkingColor =
+    serverInfo.thinking === "enabled" ? colors.status.success :
+    serverInfo.thinking === "adaptive" ? colors.status.warning :
+    colors.text.muted;
 
   return (
     <box flexShrink={0} border={["bottom"]} borderColor={colors.decoration.subtle} borderStyle="single">
@@ -19,6 +23,7 @@ export function StatusBar({ serverInfo }: StatusBarProps) {
           <text fg={colors.text.secondary}>connected</text>
           {sep}
           <text fg={colors.text.secondary}>{serverInfo.model}</text>
+          <text fg={thinkingColor}>[thinking]</text>
         </box>
         <text fg={colors.text.muted}>v{serverInfo.version}</text>
       </box>

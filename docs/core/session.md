@@ -214,6 +214,20 @@ src/packages/tui/src/components/App.tsx  isProcessing → sessionBusy 驱动
 src/packages/core/src/session/context.ts SessionContext 数据模型
 ```
 
+## 6. StatusBar 模型信息展示
+
+StatusBar 显示当前模型名称及 thinking 模式状态（始终显示 `[thinking]` 标签，颜色区分状态）：
+
+| 字段 | 来源 | 显示格式 |
+|------|------|----------|
+| `model` | `RuntimeService.getResolvedModel().model` | `deepseek-v4-flash` |
+| `thinking` | `RuntimeService.getResolvedModel().thinking` | `[thinking]` 标签，绿色=enabled，黄色=adaptive，灰色=disabled |
+
+```text
+atom neo ▎ ● connected ▎ deepseek-v4-flash [thinking] ▎ v1.3.7
+                                        ^^^^^^^^ 绿色/黄色/灰色 = enabled/adaptive/disabled
+```
+
 ---
 
 ## 相关文档

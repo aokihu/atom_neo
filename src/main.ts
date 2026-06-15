@@ -136,6 +136,7 @@ export async function main(): Promise<void> {
             `${resolved.provider}/${resolved.model}`,
             appConfig?.providers?.[resolved.provider]?.contextLimit,
           ),
+          thinking: resolved.thinking,
         },
       });
     } finally {

@@ -40,4 +40,5 @@ export interface ServerInfo {
   tools: string[];
   theme?: ThemeName;
   contextLimit?: number;
+  thinking?: "enabled" | "disabled" | "adaptive";
 }
