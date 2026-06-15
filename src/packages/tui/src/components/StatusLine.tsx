@@ -15,7 +15,7 @@ export function StatusLine({ hint, processing }: StatusLineProps) {
         ? <ProcessingSpinner label="processing..." />
         : <text fg={colors.text.muted}>◉ ready</text>}
       <text fg={colors.text.muted}>
-        {hint ?? 'Ctrl+C exit  / help'}
+        {hint ?? '↑↓ history  / commands  ↩ send'}
       </text>
     </box>
   );

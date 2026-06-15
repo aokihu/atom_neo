@@ -161,10 +161,6 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
         backgroundColor={colors.bg.codeBlock}
         flexDirection="column"
       >
-        <box flexDirection="row" justifyContent="space-between" paddingRight={2}>
-          <text fg={colors.text.muted}>Message</text>
-          <text fg={colors.decoration.subtle}>↑↓ history  / commands  ↩ send</text>
-        </box>
         <textarea
           ref={taRef}
           placeholder="Type a message..."
@@ -173,7 +169,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused
-          height={4}
+          height={3}
           backgroundColor={colors.bg.codeBlock}
           focusedBackgroundColor={colors.bg.codeBlock}
           textColor={colors.text.primary}
@@ -183,7 +179,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
       {showMenu && (
         <box
           position="absolute"
-          bottom={7}
+          bottom={5}
           left={0}
           right={1}
           zIndex={100}

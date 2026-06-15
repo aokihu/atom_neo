@@ -2,15 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import type { ServerInfo, TodoItem } from "../types";
 import { useTheme } from "./App";
 
-function gauge(used: number, limit: number, width = 20): string {
+function gauge(used: number, limit: number, width = 10): string {
   const r = Math.min(used / Math.max(limit, 1), 1);
   const f = Math.round(r * width);
   return '█'.repeat(f) + '░'.repeat(width - f);
-}
-
-function fmtK(n: number): string {
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-  return String(n);
 }
 
 function pct(used: number, limit: number): string {
@@ -68,21 +63,20 @@ export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems }: Sid
           <strong fg={colors.accent.brand}>Server</strong>
         </text>
         <box backgroundColor={colors.bg.codeBlock} padding={1} flexDirection="column">
-          <box flexDirection="row" gap={1}>
-            <text fg={colors.text.muted}>up</text>
+          <box flexDirection="row">
+            <text fg={colors.text.muted} width={7}>Uptime</text>
             <text fg={colors.text.secondary}>{fmtUptime(uptime)}</text>
           </box>
-          <box flexDirection="row" gap={1}>
-            <text fg={colors.text.muted}>tools</text>
+          <box flexDirection="row">
+            <text fg={colors.text.muted} width={7}>Tools</text>
             <text fg={colors.text.secondary}>{String(serverInfo.tools.length)}</text>
           </box>
-          <box height={1} />
-          <text fg={ratio > 90 ? colors.status.error : ratio > 75 ? colors.status.warning : colors.status.success}>
-            {gauge(tokenUsage, contextLimit)}
-          </text>
-          <box flexDirection="row" gap={1}>
-            <text fg={colors.text.muted}>{fmtK(tokenUsage)} / {fmtK(contextLimit)}</text>
-            <text fg={colors.text.secondary}>{pct(tokenUsage, contextLimit)}</text>
+          <box flexDirection="row">
+            <text fg={colors.text.muted} width={7}>Tokens</text>
+            <text fg={ratio > 90 ? colors.status.error : ratio > 75 ? colors.status.warning : colors.status.success}>
+              {gauge(tokenUsage, contextLimit)}
+            </text>
+            <text fg={colors.text.secondary}> {pct(tokenUsage, contextLimit)}</text>
           </box>
         </box>
       </box>
