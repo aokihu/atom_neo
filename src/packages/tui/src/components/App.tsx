@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useEffect, useCallback } from "react";
 import { useTerminalDimensions } from "@opentui/react";
+import "opentui-spinner/react";
 import { useChat } from "../hooks/useChat";
 import { getTheme } from "../theme";
 import type { ServerInfo, ThemeColors } from "../types";
