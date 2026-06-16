@@ -1,6 +1,6 @@
 import { BaseElement, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { streamText, tool, zodSchema } from "ai";
+import { streamText, tool, zodSchema, stepCountIs } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
@@ -100,7 +100,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         system: systemText || undefined,
         messages: userMessages as any,
         tools: tools.length > 0 ? this.#aiTools : undefined,
-        maxSteps: this.#maxSteps,
+        stopWhen: stepCountIs(this.#maxSteps),
         maxTokens: this.#maxTokens,
         allowSystemInMessages: true,
         providerOptions: this.#providerOptions,
@@ -277,7 +277,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       const chainAction = completeDetected ? undefined
         : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
         : finishReason === "length" ? "follow_up"
-        : finishReason === "tool-calls" ? "follow_up"
         : finishReason === "error" && streamErrorCode < 400 ? "follow_up"
         : undefined;
 
