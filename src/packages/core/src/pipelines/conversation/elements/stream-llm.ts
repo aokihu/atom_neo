@@ -1,6 +1,6 @@
 import { BaseElement, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { streamText, tool, jsonSchema } from "ai";
+import { streamText, tool, zodSchema } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
@@ -84,6 +84,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
 
       let fullText = "";
+      let reasoningText = "";
       let intentData: IntentToolInput | null = null;
       let finishReason = "";
       let tokenOverflow = false;
@@ -128,10 +129,18 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           const ctype = (chunk as any).type;
 
           if (ctype === "step-start" || ctype === "start-step") continue;
+          if (ctype === "start") continue;
           if (ctype === "step-finish" || ctype === "finish-step") {
             finishReason = (chunk as any).finishReason ?? "";
             continue;
           }
+          if (ctype === "reasoning-start") continue;
+          if (ctype === "reasoning-delta") {
+            reasoningText += (chunk as any).textDelta ?? (chunk as any).delta ?? "";
+            continue;
+          }
+          if (ctype === "reasoning-end") continue;
+          if (ctype === "text-start" || ctype === "text-end") continue;
           if (ctype === "tool-call") {
             const c = chunk as any;
             if (c.toolName === "intent" && !intentData) {
@@ -255,9 +264,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         if (!finishReason) finishReason = "error";
       }
 
-      const reasoningContent = (response.messages as any[])?.find((m: any) =>
-        m.role === "assistant" && m.reasoningContent
-      )?.reasoningContent ?? "";
+      const reasoningContent = reasoningText;
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
 
       fullText = sanitizeForJSON(fullText);
@@ -314,9 +321,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }, session?: any): Record<string, any> {
   const result: Record<string, any> = {};
   for (const t of tools) {
-    result[t.name] = tool({
+    result[t.name] = (tool as any)({
       description: t.description,
-      parameters: jsonSchema(t.inputSchema as any),
+      inputSchema: zodSchema(t.inputSchema),
       execute: t.name === "intent"
         ? async () => "Intent received"
         : async (args: any, opts?: any) => {
