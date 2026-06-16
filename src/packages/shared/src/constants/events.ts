@@ -19,6 +19,7 @@ export const BusEvents = {
     Delta: "transport.delta",
     ToolStarted: "transport.tool.started",
     ToolFinished: "transport.tool.finished",
+    ToolStepFinished: "transport.tool.step-finished",
     Failed: "transport.failed",
   },
   Intent: {
@@ -48,6 +49,7 @@ export const WsMessages = {
     TransportDelta: "event.transport.delta",
     TransportToolStarted: "event.transport.tool.started",
     TransportToolFinished: "event.transport.tool.finished",
+    TransportToolStepFinished: "event.transport.tool.step-finished",
     PipelineElementStarted: "event.pipeline.element.started",
     PipelineElementFinished: "event.pipeline.element.finished",
     ReplayStart: "event.pipeline.replay-start",

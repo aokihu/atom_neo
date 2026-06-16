@@ -1,5 +1,6 @@
 type DeltaCallback = (delta: string, offset: number) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
+type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
 type TokenUsageCallback = (total: number) => void;
 
 import { WsMessages } from "@atom-neo/shared";
@@ -19,6 +20,7 @@ export class TuiClient {
   #ready = false;
   #onDelta?: DeltaCallback;
   #onTool?: ToolCallback;
+  #onToolStep?: ToolStepCallback;
   #onTokenUsage?: TokenUsageCallback;
   #pending: PendingRequest[] = [];
 
@@ -62,6 +64,13 @@ export class TuiClient {
               callId: msg.payload?.toolCallId ?? "",
               result: msg.payload?.result,
               error: msg.payload?.error,
+            });
+          } else if (msg.type === WsMessages.Server.TransportToolStepFinished) {
+            this.#onToolStep?.({
+              total: msg.payload?.total ?? 0,
+              success: msg.payload?.success ?? 0,
+              failed: msg.payload?.failed ?? 0,
+              toolNames: msg.payload?.toolNames ?? [],
             });
           } else if (msg.type === WsMessages.Server.TaskCompleted) {
             const { taskId: completedId, parentTaskId } = msg.payload ?? {};
@@ -110,6 +119,7 @@ export class TuiClient {
 
   onDelta(cb: DeltaCallback): void { this.#onDelta = cb; }
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
+  onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
   onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
 
   close(): void {

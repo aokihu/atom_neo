@@ -43,6 +43,10 @@ export type ServerEvent =
       payload: ToolFinishedPayload;
     }
   | {
+      type: "event.transport.tool.step-finished";
+      payload: ToolStepFinishedPayload;
+    }
+  | {
       type: "event.task.completed";
       payload: TaskCompletedPayload;
     }
@@ -95,6 +99,15 @@ export type ToolFinishedPayload = {
   toolCallId: string;
   result?: unknown;
   error?: unknown;
+};
+
+export type ToolStepFinishedPayload = {
+  taskId: string;
+  stepNumber: number;
+  total: number;
+  success: number;
+  failed: number;
+  toolNames: string[];
 };
 
 export type TaskCompletedPayload = {

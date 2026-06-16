@@ -356,6 +356,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     });
   });
 
+  // Bridge: bus transport.tool.step-finished → WebSocket broadcaster
+  bus.on(BusEvents.Transport.ToolStepFinished as any, (ev: { name: string; payload: { stepNumber: number; total: number; success: number; failed: number; toolNames: string[] } }) => {
+    broadcaster.broadcast({
+      type: WsMessages.Server.TransportToolStepFinished,
+      ts: Date.now(), seq: 0,
+      payload: { taskId: "", ...ev.payload },
+    });
+  });
+
   const server = Bun.serve({
     port: port || 3100,
     hostname: host,

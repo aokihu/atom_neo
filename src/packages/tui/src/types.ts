@@ -22,6 +22,7 @@ export type Message =
   | { role: "assistant"; content: string; id: string; streaming: boolean; timestamp: number }
   | { role: "thinking"; id: string; timestamp: number }
   | { role: "tool"; toolCallId: string; toolName: string; phase: "preparing" | "executing" | "done" | "error"; input?: unknown; detail?: string; id: string; timestamp: number }
+  | { role: "tool-summary"; total: number; success: number; failed: number; toolNames: string[]; id: string; timestamp: number }
   | { role: "error"; content: string; id: string; timestamp: number }
   | { role: "info"; content: string; id: string; timestamp: number };
 

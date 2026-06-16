@@ -89,6 +89,13 @@ export type DomainEventMap = {
     result?: unknown;
     error?: unknown;
   };
+  "transport.tool.step-finished": {
+    stepNumber: number;
+    total: number;
+    success: number;
+    failed: number;
+    toolNames: string[];
+  };
   "transport.failed": { error: unknown };
   "conversation.chain": {
     sessionId: string;

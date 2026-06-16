@@ -21,6 +21,7 @@ export function MessageBubble({ message, syntaxStyle }: { message: Message; synt
       return <AssistantMessage message={message} syntaxStyle={syntaxStyle} />;
 
     case "tool":
+    case "tool-summary":
       return <ToolMessageBox message={message} />;
 
     case "error":

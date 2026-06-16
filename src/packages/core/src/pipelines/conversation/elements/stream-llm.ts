@@ -124,13 +124,29 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let completeDetected = false;
 
       try {
+        let stepToolCalls: { toolName: string; ok: boolean }[] = [];
         for await (const chunk of streamResult.fullStream) {
           const ctype = (chunk as any).type;
 
-          if (ctype === "step-start" || ctype === "start-step") continue;
+          if (ctype === "step-start" || ctype === "start-step") {
+            stepToolCalls = [];
+            continue;
+          }
           if (ctype === "start") continue;
           if (ctype === "step-finish" || ctype === "finish-step") {
             finishReason = (chunk as any).finishReason ?? "";
+            if (stepToolCalls.length > 0) {
+              const success = stepToolCalls.filter(t => t.ok).length;
+              const failed = stepToolCalls.length - success;
+              this.report(BusEvents.Transport.ToolStepFinished as any, {
+                stepNumber: this.#stepCounter.count,
+                total: stepToolCalls.length,
+                success,
+                failed,
+                toolNames: stepToolCalls.map(t => t.toolName),
+              });
+              stepToolCalls = [];
+            }
             continue;
           }
           if (ctype === "reasoning-start") continue;
@@ -187,6 +203,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             if (c.toolName === "intent") continue;
             this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
             this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
+            stepToolCalls.push({ toolName: c.toolName, ok: !c.error });
             if (this.#session?.addToolResult) {
               this.#session.addToolResult({
                 toolName: c.toolName,

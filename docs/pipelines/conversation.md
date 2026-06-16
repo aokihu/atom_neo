@@ -397,6 +397,19 @@ tool-input-start → tool-input-delta × N → tool-input-end → tool-call → 
 
 TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → executing → done/error），使用 `toolCallId` 作为主键匹配更新。
 
+**Step 结束折叠**：每个 step 中全部工具调用完成后，`finish-step` chunk 触发 `Transport.ToolStepFinished` 事件，TUI 将当前 step 内所有独立 tool 消息折叠为一条 `tool-summary`：
+
+| 时机 | Bus Event | WebSocket Message |
+|------|-----------|-------------------|
+| `finish-step` chunk | `Transport.ToolStepFinished` | `transport.tool.step-finished` |
+
+摘要格式：
+```
+◆ 2 tools ✓ — search_memory, webfetch         ← 全部成功
+◆ 3 tools (2 ok, 1 fail) — bash, webfetch, read  ← 部分失败
+◆ 1 tool ✓ — bash                              ← 单工具也折叠
+```
+
 **工具结果上下文存储**：工具执行结果不存入 SessionMessage（避免 `role:"tool"` 孤立消息导致 API 400），而是存入 `SessionContext.toolContext.results`（`ToolResultEntry[]`），在下一轮 `collect-context` 时按 topic 过滤注入系统 prompt：
 
 | 字段 | 类型 | 说明 |

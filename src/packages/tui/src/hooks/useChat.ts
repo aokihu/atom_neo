@@ -64,6 +64,26 @@ export function useChat(url: string, sessionId?: string) {
       }
     });
 
+    client.onToolStepFinish((event) => {
+      setMessages(prev => {
+        const toolIds = prev
+          .filter(m => m.role === "tool")
+          .map(m => m.id);
+        return [
+          ...prev.filter(m => m.role !== "tool"),
+          ...(event.total > 0 ? [{
+            role: "tool-summary" as const,
+            total: event.total,
+            success: event.success,
+            failed: event.failed,
+            toolNames: event.toolNames,
+            id: nextId(),
+            timestamp: now(),
+          }] : []),
+        ];
+      });
+    });
+
     client.connect().catch(() => {
       setMessages(prev => [...prev, { role: "error", content: "Connection failed", id: nextId(), timestamp: now() }]);
     });

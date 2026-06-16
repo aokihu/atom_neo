@@ -1,8 +1,23 @@
 import type { Message } from "../types";
 import { useTheme } from "./App";
 
-export function ToolMessageBox({ message }: { message: Extract<Message, { role: "tool" }> }) {
+export function ToolMessageBox({ message }: { message: Extract<Message, { role: "tool" | "tool-summary" }> }) {
   const { colors } = useTheme();
+
+  if (message.role === "tool-summary") {
+    const { total, success, failed, toolNames } = message;
+    const failedText = failed > 0 ? ` (${success} ok, ${failed} fail)` : "";
+    return (
+      <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2}
+           marginBottom={1}
+           border={["left"]} borderColor={colors.text.muted} borderStyle="heavy">
+        <text fg={colors.status.success}>
+          ◆ {total} tools{success === total ? " ✓" : failedText} — {toolNames.join(", ")}
+        </text>
+      </box>
+    );
+  }
+
   const isActive = message.phase === "preparing" || message.phase === "executing";
 
   return (
