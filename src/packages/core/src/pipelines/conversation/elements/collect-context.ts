@@ -88,6 +88,18 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         delete this.#session.postCheckGuidance;
       }
 
+      const results = this.#session.toolContext?.results ?? [];
+      if (results.length > 0) {
+        const topicResults = results.filter((r: any) => r.topic === this.#session.currentTopic);
+        if (topicResults.length > 0) {
+          const lines = topicResults.map((r: any) =>
+            `- [${new Date(r.timestamp).toISOString().slice(11, 19)}] ${r.toolName}: ${r.ok ? "ok" : "error"}${r.output ? ` — ${r.output.slice(0, 80)}` : ""}`
+          );
+          contextData += `\n\n[Tool Execution History]\n${lines.join("\n")}`;
+          this.#session.toolContext.results = results.filter((r: any) => r.topic !== this.#session.currentTopic);
+        }
+      }
+
       const topic = this.#session.currentTopic;
       if (topic) {
         contextData += `\n\n${this.#resolve(PromptKey.CONTEXT_TOPIC_CONSTRAINT).replace("%s", topic)}`;

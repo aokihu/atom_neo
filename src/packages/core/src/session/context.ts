@@ -1,6 +1,6 @@
 import type {
   SessionMessage,
-  ToolResult,
+  ToolResultEntry,
   InferenceFact,
   ToolContext,
   ScopeState,
@@ -93,7 +93,7 @@ export class SessionContext {
     this.#toolContext.mode = mode;
   }
 
-  addToolResult(result: ToolResult): void {
+  addToolResult(result: ToolResultEntry): void {
     this.#toolContext.results.push(result);
   }
 

@@ -79,7 +79,7 @@ class LoadSystemPromptElement extends BaseElement {
 
 **kind**: `transform`
 
-**职责**: 收集运行时上下文数据，注入长期记忆
+**职责**: 收集运行时上下文数据，注入长期记忆、工具执行历史
 
 ```typescript
 class CollectContextElement extends BaseElement {
@@ -98,6 +98,17 @@ class CollectContextElement extends BaseElement {
       contextData += `\n<Memory id="${node.id.slice(0,6)}" tags="${node.tags}"${aging}>\n${node.content}\n</Memory>`;
       this.#memory.incrementAccess(node.id);
       this.#memory.boostWeight(node.id);
+    }
+
+    // Tool execution history injection (from ToolContext)
+    const results = this.#session.toolContext?.results ?? [];
+    const topicResults = results.filter((r: any) => r.topic === this.#session.currentTopic);
+    if (topicResults.length > 0) {
+      const lines = topicResults.map((r: any) =>
+        `- [${new Date(r.timestamp).toISOString().slice(11, 19)}] ${r.toolName}: ${r.ok ? "ok" : "error"}${r.output ? ` — ${r.output.slice(0, 80)}` : ""}`
+      );
+      contextData += `\n\n[Tool Execution History]\n${lines.join("\n")}`;
+      this.#session.toolContext.results = results.filter((r: any) => r.topic !== this.#session.currentTopic);
     }
 
     return { ...input, contextData };
@@ -386,6 +397,35 @@ tool-input-start → tool-input-delta × N → tool-input-end → tool-call → 
 
 TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → executing → done/error），使用 `toolCallId` 作为主键匹配更新。
 
+**工具结果上下文存储**：工具执行结果不存入 SessionMessage（避免 `role:"tool"` 孤立消息导致 API 400），而是存入 `SessionContext.toolContext.results`（`ToolResultEntry[]`），在下一轮 `collect-context` 时按 topic 过滤注入系统 prompt：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `toolName` | `string` | 工具名 |
+| `topic` | `string` | 执行时的 `session.currentTopic` |
+| `timestamp` | `number` | Unix ms 执行时间 |
+| `ok` | `boolean` | 执行成功/失败 |
+| `output` | `string` | 结果内容 |
+| `durationMs` | `number?` | 执行耗时 |
+
+数据流：
+```
+工具执行完成 → session.addToolResult({ toolName, topic, timestamp, ok, output })
+  → toolContext.results 按 topic 累积
+  → 下一轮 collect-context: 过滤当前 topic → 格式化为 [Tool Execution History]
+  → 注入 contextData → 清除当前 topic 条目
+  → resetForNewTopic() 时全量清空
+```
+
+上下文展示格式：
+```
+[Tool Execution History]
+- [11:30:21] search_memory: ok — No memories found
+- [11:30:24] webfetch: ok — Weather data (1.2KB)
+```
+
+`format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
+
 **Chunk 类型全覆盖**：v6 完整 chunk 类型清单及处理策略：
 
 | 类别 | Chunk 类型 | 处理方式 |
@@ -519,12 +559,14 @@ src/packages/core/src/pipelines/conversation/
     check-follow-up.ts
     finalize.ts
 
-src/packages/core/src/server.ts    Transport.ToolStarted/Finished WebSocket 桥接
+src/packages/shared/src/types/session.ts    SessionMessage, ToolContext, ToolResultEntry 类型定义
+src/packages/core/src/session/context.ts     SessionContext, addToolResult()
+src/packages/core/src/server.ts             Transport.ToolStarted/Finished WebSocket 桥接
 src/packages/tui/src/
-  components/ToolMessageBox.tsx    工具调用多阶段展示组件
-  hooks/useChat.ts                 toolCallId 键控消息更新
-  client/ws-client.ts              TransportToolStarted/Finished 事件接收
-  types.ts                         ToolMessage phase 类型
+  components/ToolMessageBox.tsx              工具调用多阶段展示组件
+  hooks/useChat.ts                           toolCallId 键控消息更新
+  client/ws-client.ts                        TransportToolStarted/Finished 事件接收
+  types.ts                                   ToolMessage phase 类型
 ```
 
 ## 13. Token Ratio 共享边界

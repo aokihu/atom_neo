@@ -1,18 +1,12 @@
 import type { ToolResult } from "./tool";
 
 export type SessionMessage = {
-  role: "user" | "assistant" | "system" | "tool";
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
   pipeline?: string;
   visible?: boolean;
   metadata?: Record<string, unknown>;
-  tool_calls?: Array<{
-    id: string;
-    type: "function";
-    function: { name: string; arguments: string };
-  }>;
-  tool_call_id?: string;
 };
 
 export type InferenceFact = {
@@ -21,9 +15,19 @@ export type InferenceFact = {
   reason: string;
 };
 
+export type ToolResultEntry = {
+  toolName: string;
+  topic: string;
+  timestamp: number;
+  ok: boolean;
+  output: string;
+  error?: string;
+  durationMs?: number;
+};
+
 export type ToolContext = {
   mode: "idle" | "active" | "finished";
-  results: ToolResult[];
+  results: ToolResultEntry[];
 };
 
 export type ScopeState = {

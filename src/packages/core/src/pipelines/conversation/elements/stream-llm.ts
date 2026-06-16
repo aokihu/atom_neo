@@ -187,6 +187,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             if (c.toolName === "intent") continue;
             this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
             this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
+            if (this.#session?.addToolResult) {
+              this.#session.addToolResult({
+                toolName: c.toolName,
+                topic: this.#session.currentTopic ?? "",
+                timestamp: Date.now(),
+                ok: !c.error,
+                output: String(c.output ?? c.result ?? ""),
+                error: c.error,
+              });
+            }
             continue;
           }
           if (ctype === "text-delta") {
@@ -279,26 +289,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             setTimeout(() => reject(new Error("streamResult.response timeout")), 30_000)
           ),
         ]);
-        if (this.#session && response.messages?.length > 0) {
-          for (const msg of response.messages) {
-            if (msg.role === "assistant" && !(msg as any).tool_calls?.length) continue;
-            const dup = this.#session.messages.some((m: any) =>
-              m.role === msg.role && m.content === (msg.content ?? "") &&
-              m.tool_call_id === (msg as any).tool_call_id &&
-              JSON.stringify(m.tool_calls) === JSON.stringify((msg as any).tool_calls)
-            );
-            if (dup) continue;
-            this.#session.addMessage({
-              role: msg.role as any,
-              content: (msg as any).content ?? "",
-              timestamp: Date.now(),
-              pipeline: "conversation",
-              visible: true,
-              ...(msg.role === "assistant" && (msg as any).tool_calls ? { tool_calls: (msg as any).tool_calls } : {}),
-              ...(msg.role === "tool" ? { tool_call_id: (msg as any).tool_call_id } : {}),
-            } as any);
-          }
-        }
       } catch (err: any) {
         this.report(BusEvents.Element.Data, { step: "response-error", level: "warn", error: err?.message ?? String(err) });
         response = { messages: [] };

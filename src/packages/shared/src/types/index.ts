@@ -45,6 +45,7 @@ export type {
   SessionMessage,
   InferenceFact,
   ToolContext,
+  ToolResultEntry,
   ScopeState,
   MemoryScopeState,
   ContinuationContext,

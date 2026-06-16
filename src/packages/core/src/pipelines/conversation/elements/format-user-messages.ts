@@ -13,6 +13,7 @@ export class FormatUserMessagesElement extends BaseElement<ConversationFlowState
 
     const messages: Message[] = [];
     for (const m of input.prompts ?? []) {
+      if (m.role === "tool") continue;
       messages.push({ role: m.role, content: m.content });
     }
     const text = input.task?.payload?.[0]?.data;
