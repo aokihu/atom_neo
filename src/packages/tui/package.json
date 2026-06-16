@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@atom-neo/shared": "workspace:*",
-    "@opentui/core": "0.3.1",
-    "@opentui/react": "0.3.1",
+    "@opentui/core": "0.4.1",
+    "@opentui/react": "0.4.1",
     "react": "^19.2.6"
   },
   "devDependencies": {
