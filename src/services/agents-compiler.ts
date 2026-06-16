@@ -165,7 +165,7 @@ export class AgentsCompilerService extends BaseService {
         { role: "system" as const, content: compilerSystemPrompt },
         { role: "user" as const, content: raw },
       ],
-      maxTokens: 2048,
+      maxOutputTokens: 2048,
       allowSystemInMessages: true,
       providerOptions,
     } as any);

@@ -329,6 +329,17 @@ initial
 
 **溢出检测**：`stepCount===0 && fullTextLen===0 && ratio > 0.8` 才判定 token 溢出，ratio ≤ 0.8 时报 `stream-error-not-overflow` 避免误判。
 
+**Reasoning 流式处理（v6）**：`stream-llm.ts` 在流循环中处理以下 reasoning chunk 类型：
+
+| chunk type | 处理 | 说明 |
+|------------|------|------|
+| `reasoning-start` | 跳过 | 推理块起始信号 |
+| `reasoning-delta` | 累加 `reasoningText` | 流式推理文本增量 |
+| `reasoning-end` | 跳过 | 推理块结束信号 |
+| `text-start` / `text-end` | 跳过 | 文本块边界信号（v6 新增） |
+
+推理内容在流循环结束后直接使用累积的 `reasoningText` 填充 `ConversationFlowState.reasoningContent`，替代了 v4 中从 `response.messages` 后置提取的方式。多步 tool calling 场景中，每步的 reasoning 都会被正确累加。当 `config.json` 中 `thinking` 为 `enabled` 或 `adaptive` 时生效。
+
 **400 错误捕获**：`stream-llm.ts` 在 `type === "error"` 的 chunk 处理中提取 `err.statusCode` 存入 `streamErrorCode`。该变量在流循环结束后用于 `chainAction` 决策：
 
 ```

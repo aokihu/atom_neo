@@ -17,7 +17,7 @@ export async function callLLM(params: {
     model,
     system: resolvePrompt(params.systemKey),
     prompt: params.prompt,
-    maxTokens: params.maxTokens,
+    maxOutputTokens: params.maxTokens,
     temperature: 0,
   });
   return result.text.trim();
