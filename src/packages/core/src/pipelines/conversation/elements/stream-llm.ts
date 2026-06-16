@@ -101,8 +101,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         messages: userMessages as any,
         tools: tools.length > 0 ? this.#aiTools : undefined,
         stopWhen: stepCountIs(this.#maxSteps),
-        maxTokens: this.#maxTokens,
-        allowSystemInMessages: true,
+        maxOutputTokens: this.#maxTokens,
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
         prepareStep: ({ stepNumber }: { stepNumber: number }) => {
@@ -110,7 +109,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             return { activeTools: activeNames };
           }
         },
-      } as any);
+      });
 
       let timedOut = false;
       const timeoutTimer = setTimeout(() => {
