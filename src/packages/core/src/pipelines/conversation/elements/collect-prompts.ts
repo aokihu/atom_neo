@@ -31,6 +31,8 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
     const messages = limitedMsgs.map((m: any) => {
       const msg: any = { role: m.role, content: m.content };
       if (m.reasoningContent) msg.reasoning_content = m.reasoningContent;
+      if (m.tool_calls) msg.tool_calls = m.tool_calls;
+      if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
       return msg;
     });
 

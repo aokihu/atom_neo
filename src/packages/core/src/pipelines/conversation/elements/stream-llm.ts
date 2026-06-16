@@ -245,6 +245,26 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             setTimeout(() => reject(new Error("streamResult.response timeout")), 30_000)
           ),
         ]);
+        if (this.#session && response.messages?.length > 0) {
+          for (const msg of response.messages) {
+            if (msg.role === "assistant" && !(msg as any).tool_calls?.length) continue;
+            const dup = this.#session.messages.some((m: any) =>
+              m.role === msg.role && m.content === (msg.content ?? "") &&
+              m.tool_call_id === (msg as any).tool_call_id &&
+              JSON.stringify(m.tool_calls) === JSON.stringify((msg as any).tool_calls)
+            );
+            if (dup) continue;
+            this.#session.addMessage({
+              role: msg.role as any,
+              content: (msg as any).content ?? "",
+              timestamp: Date.now(),
+              pipeline: "conversation",
+              visible: true,
+              ...(msg.role === "assistant" && (msg as any).tool_calls ? { tool_calls: (msg as any).tool_calls } : {}),
+              ...(msg.role === "tool" ? { tool_call_id: (msg as any).tool_call_id } : {}),
+            } as any);
+          }
+        }
       } catch (err: any) {
         this.report(BusEvents.Element.Data, { step: "response-error", level: "warn", error: err?.message ?? String(err) });
         response = { messages: [] };

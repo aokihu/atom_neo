@@ -7,6 +7,12 @@ export type SessionMessage = {
   pipeline?: string;
   visible?: boolean;
   metadata?: Record<string, unknown>;
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
 };
 
 export type InferenceFact = {
