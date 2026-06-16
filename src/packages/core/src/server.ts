@@ -338,6 +338,24 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
   });
 
+  // Bridge: bus transport.tool.started → WebSocket broadcaster
+  bus.on(BusEvents.Transport.ToolStarted as any, (ev: { name: string; payload: { toolName: string; toolCallId: string; input: unknown } }) => {
+    broadcaster.broadcast({
+      type: WsMessages.Server.TransportToolStarted,
+      ts: Date.now(), seq: 0,
+      payload: { taskId: "", toolName: ev.payload.toolName, toolCallId: ev.payload.toolCallId, input: ev.payload.input },
+    });
+  });
+
+  // Bridge: bus transport.tool.finished → WebSocket broadcaster
+  bus.on(BusEvents.Transport.ToolFinished as any, (ev: { name: string; payload: { toolName: string; toolCallId: string; result?: unknown; error?: unknown } }) => {
+    broadcaster.broadcast({
+      type: WsMessages.Server.TransportToolFinished,
+      ts: Date.now(), seq: 0,
+      payload: { taskId: "", toolName: ev.payload.toolName, toolCallId: ev.payload.toolCallId, result: ev.payload.result, error: ev.payload.error },
+    });
+  });
+
   const server = Bun.serve({
     port: port || 3100,
     hostname: host,

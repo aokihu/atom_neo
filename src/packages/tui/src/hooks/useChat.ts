@@ -46,16 +46,16 @@ export function useChat(url: string, sessionId?: string) {
       const id = nextId();
       if (event.error || event.result !== undefined) {
         setMessages(prev => {
-          const toolMsg = prev.find(m => m.role === "tool" && m.toolName === event.name && m.state === "running");
+          const toolMsg = prev.find(m => m.role === "tool" && m.toolCallId === event.callId && m.phase === "executing");
           if (toolMsg) {
             return prev.map(m => m.id === toolMsg.id
-              ? { ...m, state: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? "") }
+              ? { ...m, phase: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? "") }
               : m);
           }
-          return [...prev, { role: "tool", toolName: event.name, state: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? ""), id, timestamp: now() }];
+          return [...prev, { role: "tool", toolCallId: event.callId, toolName: event.name, phase: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? ""), id, timestamp: now() }];
         });
       } else {
-        setMessages(prev => [...prev, { role: "tool", toolName: event.name, state: "running", id, timestamp: now() }]);
+        setMessages(prev => [...prev, { role: "tool", toolCallId: event.callId, toolName: event.name, phase: "executing", input: event.input, id, timestamp: now() }]);
       }
 
       if (event.name === "todowrite" && event.input) {

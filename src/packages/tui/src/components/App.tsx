@@ -22,7 +22,7 @@ const ThemeContext = createContext<ThemeCtx>(getTheme());
 export function useTheme() { return useContext(ThemeContext); }
 
 function isProcessing(msgs: Message[]): boolean {
-  return msgs.some(m => m.role === "tool" && m.state === "running");
+  return msgs.some(m => m.role === "tool" && (m.phase === "executing" || m.phase === "preparing"));
 }
 
 const HELP_TEXT = `Available commands:

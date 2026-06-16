@@ -159,8 +159,16 @@ const streamResult = streamText({
   system: input.systemText,        // ← 专用参数，不混在 messages 中
   messages: input.userMessages,    // ← 仅 user/assistant
   tools: aiTools,
-  maxSteps: 5,
-  maxTokens: input.maxTokens ?? 4096,
+  stopWhen: stepCountIs(this.#maxSteps),  // v6: 替代 maxSteps
+  maxOutputTokens: this.#maxTokens,       // v6: 替代 maxTokens
+  providerOptions: this.#providerOptions,
+  abortSignal: abortController.signal,
+  prepareStep: ({ stepNumber }) => {
+    // 按 taskIntent 渐进式开放工具
+    if (activeNames.length < tools.length) {
+      return { activeTools: activeNames };
+    }
+  },
 });
 ```
 
@@ -246,9 +254,11 @@ if (!pastMarker && buffer.length > 0) {
 
 | Element | 设置值 | 条件 |
 |---------|--------|------|
-| stream-llm | `"follow_up"` | finishReason === "length" / "tool-calls" / "error"(status<400)/意图包含 FOLLOW_UP |
+| stream-llm | `"follow_up"` | finishReason === "length" / "error"(status<400) / 意图包含 FOLLOW_UP |
 | stream-llm | (跳过) | finishReason === "error" && errorStatusCode >= 400 — 参数错误不可恢复 |
 | finalize | 跳过 Idle | errorStatusCode >= 400 — 不触发 post-conversation 分析 |
+
+> **v6 迁移说明**：`finishReason === "tool-calls"` 触发 follow_up 的逻辑已移除。v6 中 `stopWhen: stepCountIs(N)` 在工具循环内部自动处理，LLM 在生成文本前不会以 "tool-calls" 结束。
 
 **Token 溢出压缩**：当 `tokenOverflow === true` 时，finalize 计算 `compressRatio` 并调用 `orchestrator.scheduleCompress()`：
 
@@ -318,10 +328,12 @@ initial
 | 参数 | 来源 | 默认 |
 |------|------|------|
 | `model` | `runtime.getResolvedModel(difficulty).model` | `"deepseek-v4-flash"` |
-| `maxSteps` | `config.json → conversation.maxSteps` | `50` |
-| `maxTokens` | `config.json → transport.maxOutputTokens` | `4096` |
-| `tools` | 全部工具（启动时一次性加载），通过 `activeTools` 按 intent 过滤 | `createAllTools()` |
+| `stopWhen` | `config.json → conversation.maxSteps` → `stepCountIs(N)` | `stepCountIs(50)` |
+| `maxOutputTokens` | `config.json → transport.maxOutputTokens` | `4096` |
+| `tools` | 全部工具（启动时一次性加载），通过 `prepareStep.activeTools` 按 intent 过滤 | `createAllTools()` |
 | `providerOptions` | `{ deepseek: { thinking: { type: ... } } }` | thinking=disabled |
+
+> **v6 迁移说明**：`maxSteps` 已移除，改用 `stopWhen: stepCountIs(N)` 控制多步工具循环。`maxTokens` 已更名为 `maxOutputTokens`。`allowSystemInMessages` 已废弃（v6 中 system message 始终允许）。
 
 **输出净化**：所有 LLM 输出在流式结束后经过 `sanitizeForJSON()` 双层净化：
 1. `String.toWellFormed()` 修复非法 Unicode 代理对
@@ -349,6 +361,41 @@ outer catch block → err.statusCode ?? 0 → errorStatusCode 字段
 ```
 
 `errorStatusCode` 通过 `ConversationFlowState` 传至 `finalize.ts`，≥400 时跳过 `Conversation.Idle` 发射，阻断 post-conversation 对空输出的分析。
+
+**工具调用流式传输（v6）**：AI SDK v6 新增工具参数流式 chunk 类型，模型逐字符生成工具参数时实时传输：
+
+| chunk type | 处理 | 说明 |
+|------------|------|------|
+| `tool-input-start` | 记录 toolCallId + toolName | 模型开始构建工具参数 |
+| `tool-input-delta` | 累加 `delta` 文本 | 工具参数增量文本，用于 TUI 流式展示参数构建过程 |
+| `tool-input-end` | 标记参数构建完成 | 工具参数流式传输结束 |
+| `tool-input-available` | debug 记录 | 工具输入完整可用 |
+| `tool-input-error` | warn 记录 | 工具输入流式错误 |
+
+完整工具调用流（v6）：
+```
+tool-input-start → tool-input-delta × N → tool-input-end → tool-call → tool-result
+```
+
+**Transport 事件桥接**：stream-llm.ts 在工具调用和结果到达时发送 bus 事件，server.ts 桥接到 WebSocket 广播给 TUI：
+
+| 时机 | Bus Event | WebSocket Message |
+|------|-----------|-------------------|
+| `tool-call` chunk 到达 | `Transport.ToolStarted` | `TransportToolStarted` |
+| `tool-result` chunk 到达 | `Transport.ToolFinished` | `TransportToolFinished` |
+
+TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → executing → done/error），使用 `toolCallId` 作为主键匹配更新。
+
+**Chunk 类型全覆盖**：v6 完整 chunk 类型清单及处理策略：
+
+| 类别 | Chunk 类型 | 处理方式 |
+|------|-----------|----------|
+| 跳过 | `stream-start`, `response-metadata`, `message-metadata`, `source`, `source-document`, `source-url`, `object`, `raw`, `reasoning`, `all` | `continue` |
+| Debug | `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-input-available`, `tool-output-available`, `file`, `dynamic-tool` | `Element.Data` debug 级别 |
+| Warn | `tool-input-error`, `tool-output-denied`, `tool-output-error`, `tool-approval-request`, `abort` | `Element.Data` warn 级别 |
+| Error | `tool-error` | `Element.Data` error 级别 |
+
+不再有任何 chunk 类型落入 `unhandled-chunk` 兜底。
 
 ## 8. chainAction → 链式续写
 
@@ -445,8 +492,8 @@ type ConversationPipelineDeps = {
   configContextLimit?: number; // → collect-context
   tools: any[];              // → stream-llm (全量工具)
   getCompiledPrompt?: () => string;  // → fetch-agents-prompt
-  maxTokens?: number;        // → stream-llm
-  maxSteps?: number;         // → stream-llm
+  maxOutputTokens?: number;    // → stream-llm
+  maxSteps?: number;           // → stream-llm (→ stepCountIs(maxSteps))
   memory?: any;              // → collect-context, check-follow-up
   taskIntent?: string;       // → stream-llm (filter by intent type)
   contextRelevance?: string; // → collect-prompts
@@ -471,6 +518,13 @@ src/packages/core/src/pipelines/conversation/
     stream-llm.ts
     check-follow-up.ts
     finalize.ts
+
+src/packages/core/src/server.ts    Transport.ToolStarted/Finished WebSocket 桥接
+src/packages/tui/src/
+  components/ToolMessageBox.tsx    工具调用多阶段展示组件
+  hooks/useChat.ts                 toolCallId 键控消息更新
+  client/ws-client.ts              TransportToolStarted/Finished 事件接收
+  types.ts                         ToolMessage phase 类型
 ```
 
 ## 13. Token Ratio 共享边界

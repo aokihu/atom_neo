@@ -3,6 +3,7 @@ import { SyntaxStyle } from "@opentui/core";
 import { useTheme } from "./App";
 import { UserMessage } from "./UserMessage";
 import { AssistantMessage } from "./AssistantMessage";
+import { ToolMessageBox } from "./ToolMessageBox";
 
 export function fmtTime(ts: number): string {
   const d = new Date(ts);
@@ -20,17 +21,7 @@ export function MessageBubble({ message, syntaxStyle }: { message: Message; synt
       return <AssistantMessage message={message} syntaxStyle={syntaxStyle} />;
 
     case "tool":
-      return (
-        <box paddingLeft={5} paddingBottom={0}>
-          {message.state === "running" ? (
-            <text fg={colors.status.warning}>◌ {message.toolName}</text>
-          ) : message.state === "done" ? (
-            <text fg={colors.status.success}>◉ {message.toolName} ✓</text>
-          ) : (
-            <text selectable fg={colors.status.error}>✕ {message.toolName}: {message.detail}</text>
-          )}
-        </box>
-      );
+      return <ToolMessageBox message={message} />;
 
     case "error":
       return (

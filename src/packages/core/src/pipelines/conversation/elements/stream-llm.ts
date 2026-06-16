@@ -140,18 +140,53 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
           if (ctype === "reasoning-end") continue;
           if (ctype === "text-start" || ctype === "text-end") continue;
+          if (ctype === "tool-input-start") continue;
+          if (ctype === "tool-input-delta") continue;
+          if (ctype === "tool-input-end") continue;
+          if (ctype === "tool-input-available") continue;
+          if (ctype === "tool-input-error") {
+            this.report(BusEvents.Element.Data, { step: "tool-input-error", level: "warn", error: (chunk as any).error ?? "" });
+            continue;
+          }
+          if (ctype === "tool-output-available") continue;
+          if (ctype === "tool-output-denied") {
+            this.report(BusEvents.Element.Data, { step: "tool-output-denied", level: "warn" });
+            continue;
+          }
+          if (ctype === "tool-output-error") {
+            this.report(BusEvents.Element.Data, { step: "tool-output-error", level: "warn", error: (chunk as any).error ?? "" });
+            continue;
+          }
+          if (ctype === "tool-approval-request") {
+            this.report(BusEvents.Element.Data, { step: "tool-approval-request", level: "warn" });
+            continue;
+          }
+          if (ctype === "tool-error") {
+            this.report(BusEvents.Element.Data, { step: "tool-error", level: "error", error: (chunk as any).error ?? "" });
+            continue;
+          }
+          if (ctype === "stream-start" || ctype === "response-metadata" || ctype === "message-metadata") continue;
+          if (ctype === "source" || ctype === "source-document" || ctype === "source-url") continue;
+          if (ctype === "object" || ctype === "raw" || ctype === "reasoning" || ctype === "all") continue;
+          if (ctype === "abort") {
+            this.report(BusEvents.Element.Data, { step: "abort", level: "warn" });
+            continue;
+          }
+          if (ctype === "file" || ctype === "dynamic-tool") continue;
           if (ctype === "tool-call") {
             const c = chunk as any;
             if (c.toolName === "intent" && !intentData) {
               intentData = intentSignal.value ?? c.input;
             }
             this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
+            this.report(BusEvents.Transport.ToolStarted as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", input: c.input });
             continue;
           }
           if (ctype === "tool-result") {
             const c = chunk as any;
             if (c.toolName === "intent") continue;
             this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
+            this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
             continue;
           }
           if (ctype === "text-delta") {
