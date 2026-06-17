@@ -37,7 +37,6 @@ export type ToolSummary = {
 export type Message =
   | { role: "user"; content: string; id: string; timestamp: number }
   | { role: "assistant"; content: string; id: string; streaming: boolean; timestamp: number }
-  | { role: "thinking"; id: string; timestamp: number }
   | { role: "tool-group"; id: string; timestamp: number; entries: ToolEntry[]; collapsed: boolean; summary?: ToolSummary }
   | { role: "error"; content: string; id: string; timestamp: number }
   | { role: "info"; content: string; id: string; timestamp: number };

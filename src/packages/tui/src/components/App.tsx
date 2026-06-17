@@ -44,7 +44,7 @@ Keyboard shortcuts:
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems } = useChat(url);
+  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, thinkingVisible } = useChat(url);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
@@ -67,7 +67,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         <StatusBar serverInfo={serverInfo} />
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
-            <ChatView messages={messages} />
+            <ChatView messages={messages} thinkingVisible={thinkingVisible} />
             <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} sessionBusy={sessionBusy} />
             <StatusLine hint={exitHint} processing={sessionBusy || isProcessing(messages)} />
           </box>

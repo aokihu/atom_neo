@@ -8,9 +8,9 @@ export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
   const [sessionBusy, setSessionBusy] = useState(false);
+  const [thinkingVisible, setThinkingVisible] = useState(false);
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const clientRef = useRef<TuiClient | null>(null);
-  const thinkingIdRef = useRef<string | null>(null);
   const toolGroupIdRef = useRef<string | null>(null);
   const autoThinkingRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const counterRef = useRef(0);
@@ -26,19 +26,15 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     client.onDelta((delta, offset) => {
-      if (thinkingIdRef.current) {
-        setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
-        thinkingIdRef.current = null;
-      }
+      setThinkingVisible(false);
       clearTimeout(autoThinkingRef.current);
       autoThinkingRef.current = undefined;
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
-          const content = last.content.substring(0, offset) + delta;
           return [
             ...prev.slice(0, -1),
-            { ...last, content },
+            { ...last, content: last.content.substring(0, offset) + delta },
           ];
         }
         const id = nextId();
@@ -89,25 +85,19 @@ export function useChat(url: string, sessionId?: string) {
 
         const newGroupId = nextId();
         toolGroupIdRef.current = newGroupId;
-        const newEntry: ToolEntry = {
-          toolCallId: callId,
-          toolName: event.name,
-          phase: isResult ? (event.error ? "error" as const : "done" as const) : "executing" as const,
-          input: event.input,
-          detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
-        };
-        const newGroup = {
+        return [...prev, {
           role: "tool-group" as const,
           id: newGroupId,
           timestamp: now(),
-          entries: [newEntry],
+          entries: [{
+            toolCallId: callId,
+            toolName: event.name,
+            phase: isResult ? (event.error ? "error" as const : "done" as const) : "executing" as const,
+            input: event.input,
+            detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
+          }],
           collapsed: false,
-        };
-        const lastInPrev = prev[prev.length - 1];
-        if (lastInPrev?.role === "thinking" && lastInPrev.id === thinkingIdRef.current) {
-          return [...prev.slice(0, -1), newGroup, lastInPrev];
-        }
-        return [...prev, newGroup];
+        }];
       });
 
       if (event.name === "todowrite" && event.input) {
@@ -123,12 +113,7 @@ export function useChat(url: string, sessionId?: string) {
         return {
           ...m,
           collapsed: true,
-          summary: {
-            total: event.total,
-            success: event.success,
-            failed: event.failed,
-            toolNames: event.toolNames,
-          },
+          summary: { total: event.total, success: event.success, failed: event.failed, toolNames: event.toolNames },
         };
       }));
     });
@@ -136,21 +121,15 @@ export function useChat(url: string, sessionId?: string) {
     client.onBusyChange((busy) => {
       setSessionBusy(busy);
       if (busy) {
-        if (!thinkingIdRef.current && !autoThinkingRef.current) {
+        if (!autoThinkingRef.current) {
           autoThinkingRef.current = setTimeout(() => {
-            if (thinkingIdRef.current) return;
-            const id = nextId();
-            thinkingIdRef.current = id;
-            setMessages(prev => [...prev, { role: "thinking" as const, id, timestamp: now() }]);
-          }, 1500);
+            setThinkingVisible(true);
+          }, 4000);
         }
       } else {
+        setThinkingVisible(false);
         clearTimeout(autoThinkingRef.current);
         autoThinkingRef.current = undefined;
-        if (thinkingIdRef.current) {
-          setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
-          thinkingIdRef.current = null;
-        }
       }
     });
 
@@ -159,6 +138,7 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     return () => {
+      setThinkingVisible(false);
       clearTimeout(autoThinkingRef.current);
       autoThinkingRef.current = undefined;
       client.close();
@@ -167,7 +147,7 @@ export function useChat(url: string, sessionId?: string) {
   }, [url, sessionId]);
 
   const clearMessages = useCallback(() => {
-    thinkingIdRef.current = null;
+    setThinkingVisible(false);
     clearTimeout(autoThinkingRef.current);
     autoThinkingRef.current = undefined;
     setMessages([]);
@@ -179,15 +159,8 @@ export function useChat(url: string, sessionId?: string) {
 
   const send = useCallback(async (text: string) => {
     toolGroupIdRef.current = null;
-    const userMsgId = nextId();
-    const thinkingId = nextId();
-    const ts = now();
-    thinkingIdRef.current = thinkingId;
-    setMessages(prev => [
-      ...prev,
-      { role: "user", content: text, id: userMsgId, timestamp: ts },
-      { role: "thinking", id: thinkingId, timestamp: ts },
-    ]);
+    setThinkingVisible(true);
+    setMessages(prev => [...prev, { role: "user", content: text, id: nextId(), timestamp: now() }]);
     setSessionBusy(true);
 
     try {
@@ -195,6 +168,9 @@ export function useChat(url: string, sessionId?: string) {
       if (!client) throw new Error("Not connected");
       await client.send(text);
 
+      setThinkingVisible(false);
+      clearTimeout(autoThinkingRef.current);
+      autoThinkingRef.current = undefined;
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -202,18 +178,11 @@ export function useChat(url: string, sessionId?: string) {
         }
         return prev;
       });
-      if (thinkingIdRef.current) {
-        setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
-        thinkingIdRef.current = null;
-      }
-      clearTimeout(autoThinkingRef.current);
-      autoThinkingRef.current = undefined;
     } catch (err: any) {
-      thinkingIdRef.current = null;
-      setMessages(prev => prev.filter(m => m.id !== thinkingId));
+      setThinkingVisible(false);
       setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId(), timestamp: now() }]);
     }
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems };
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, thinkingVisible };
 }
