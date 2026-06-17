@@ -7,20 +7,20 @@ export function ToolMessageBox({ message }: { message: Extract<Message, { role: 
   if (message.collapsed && message.summary) {
     const { total, success, failed, toolNames } = message.summary;
     return (
-      <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2}
-           marginBottom={1}
-           border={["left"]} borderColor={colors.text.muted} borderStyle="heavy">
-        <text fg={failed > 0 ? colors.status.warning : colors.status.success}>
-          ◆ {total} tools ✓ — {toolNames.join(", ")}
-        </text>
-      </box>
+       <box paddingLeft={2} paddingRight={2}
+            marginBottom={1}
+            border={["left"]} borderColor={colors.text.muted} borderStyle="heavy">
+         <text fg={colors.text.muted}>
+           ◆ {total} tools ✓ — {toolNames.join(", ")}
+         </text>
+       </box>
     );
   }
 
   return (
-    <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2}
-         marginBottom={1}
-         border={["left"]} borderColor={colors.text.muted} borderStyle="heavy">
+      <box paddingLeft={2} paddingRight={2}
+           marginBottom={1}
+           border={["left"]} borderColor={colors.text.muted} borderStyle="heavy">
       {message.entries.map(e => {
         const active = e.phase === "preparing" || e.phase === "executing";
         return (
