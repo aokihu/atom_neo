@@ -12,11 +12,9 @@ export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [thinkingVisible, setThinkingVisible] = useState(false);
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const clientRef = useRef<TuiClient | null>(null);
   const toolGroupIdRef = useRef<string | null>(null);
-  const autoThinkingRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stepAccumRef = useRef({ total: 0, success: 0, failed: 0, toolNames: [] as string[] });
   const bufferingRef = useRef(false);
   const textBufferRef = useRef("");
@@ -84,10 +82,6 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     client.onDelta((delta, offset) => {
-      setThinkingVisible(false);
-      clearTimeout(autoThinkingRef.current);
-      autoThinkingRef.current = undefined;
-
       if (bufferingRef.current) {
         textBufferRef.current += delta;
         return;
@@ -109,9 +103,6 @@ export function useChat(url: string, sessionId?: string) {
     client.onTool((event) => {
       const callId = event.callId;
       const isResult = event.error || event.result !== undefined;
-
-      clearTimeout(autoThinkingRef.current);
-      autoThinkingRef.current = undefined;
 
       setMessages(prev => {
         const groupIdx = toolGroupIdRef.current
@@ -196,18 +187,7 @@ export function useChat(url: string, sessionId?: string) {
 
     client.onBusyChange((busy) => {
       setSessionBusy(busy);
-      if (busy) {
-        if (!autoThinkingRef.current) {
-          autoThinkingRef.current = setTimeout(() => {
-            setThinkingVisible(true);
-          }, 4000);
-        }
-      } else {
-        setThinkingVisible(false);
-        clearTimeout(autoThinkingRef.current);
-        autoThinkingRef.current = undefined;
-        if (bufferingRef.current) startQuickRender();
-      }
+      if (!busy && bufferingRef.current) startQuickRender();
     });
 
     client.connect().catch(() => {
@@ -215,9 +195,6 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     return () => {
-      setThinkingVisible(false);
-      clearTimeout(autoThinkingRef.current);
-      autoThinkingRef.current = undefined;
       resetBuffer();
       client.close();
       clientRef.current = null;
@@ -225,9 +202,6 @@ export function useChat(url: string, sessionId?: string) {
   }, [url, sessionId]);
 
   const clearMessages = useCallback(() => {
-    setThinkingVisible(false);
-    clearTimeout(autoThinkingRef.current);
-    autoThinkingRef.current = undefined;
     resetBuffer();
     setMessages([]);
   }, []);
@@ -240,7 +214,6 @@ export function useChat(url: string, sessionId?: string) {
     toolGroupIdRef.current = null;
     stepAccumRef.current = { total: 0, success: 0, failed: 0, toolNames: [] };
     resetBuffer();
-    setThinkingVisible(true);
     setMessages(prev => [...prev, { role: "user", content: text, id: nextId(), timestamp: now() }]);
     setSessionBusy(true);
 
@@ -249,9 +222,6 @@ export function useChat(url: string, sessionId?: string) {
       if (!client) throw new Error("Not connected");
       await client.send(text);
 
-      setThinkingVisible(false);
-      clearTimeout(autoThinkingRef.current);
-      autoThinkingRef.current = undefined;
       resetBuffer();
       setMessages(prev => {
         const last = prev[prev.length - 1];
@@ -261,11 +231,10 @@ export function useChat(url: string, sessionId?: string) {
         return prev;
       });
     } catch (err: any) {
-      setThinkingVisible(false);
       resetBuffer();
       setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId(), timestamp: now() }]);
     }
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, thinkingVisible };
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems };
 }
