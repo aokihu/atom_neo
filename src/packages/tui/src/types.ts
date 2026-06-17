@@ -17,12 +17,28 @@ export type ThemeName =
   | "solarized-dark"
   | "monokai";
 
+export type ToolPhase = "preparing" | "executing" | "done" | "error";
+
+export type ToolEntry = {
+  toolCallId: string;
+  toolName: string;
+  phase: ToolPhase;
+  input?: unknown;
+  detail?: string;
+};
+
+export type ToolSummary = {
+  total: number;
+  success: number;
+  failed: number;
+  toolNames: string[];
+};
+
 export type Message =
   | { role: "user"; content: string; id: string; timestamp: number }
   | { role: "assistant"; content: string; id: string; streaming: boolean; timestamp: number }
   | { role: "thinking"; id: string; timestamp: number }
-  | { role: "tool"; toolCallId: string; toolName: string; phase: "preparing" | "executing" | "done" | "error"; input?: unknown; detail?: string; id: string; timestamp: number }
-  | { role: "tool-summary"; total: number; success: number; failed: number; toolNames: string[]; id: string; timestamp: number }
+  | { role: "tool-group"; id: string; timestamp: number; entries: ToolEntry[]; collapsed: boolean; summary?: ToolSummary }
   | { role: "error"; content: string; id: string; timestamp: number }
   | { role: "info"; content: string; id: string; timestamp: number };
 

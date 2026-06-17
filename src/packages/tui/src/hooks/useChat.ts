@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
-import type { Message, TodoItem } from "../types";
+import type { Message, TodoItem, ToolEntry } from "../types";
 
 function now() { return Date.now(); }
 
@@ -11,6 +11,7 @@ export function useChat(url: string, sessionId?: string) {
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const clientRef = useRef<TuiClient | null>(null);
   const thinkingIdRef = useRef<string | null>(null);
+  const toolGroupIdRef = useRef<string | null>(null);
   const counterRef = useRef(0);
 
   function nextId() { return `msg-${Date.now()}-${++counterRef.current}`; }
@@ -43,20 +44,61 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     client.onTool((event) => {
-      const id = nextId();
-      if (event.error || event.result !== undefined) {
-        setMessages(prev => {
-          const toolMsg = prev.find(m => m.role === "tool" && m.toolCallId === event.callId && m.phase === "executing");
-          if (toolMsg) {
-            return prev.map(m => m.id === toolMsg.id
-              ? { ...m, phase: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? "") }
-              : m);
-          }
-          return [...prev, { role: "tool", toolCallId: event.callId, toolName: event.name, phase: event.error ? "error" as const : "done" as const, detail: String(event.error ?? event.result ?? ""), id, timestamp: now() }];
-        });
-      } else {
-        setMessages(prev => [...prev, { role: "tool", toolCallId: event.callId, toolName: event.name, phase: "executing", input: event.input, id, timestamp: now() }]);
-      }
+      const callId = event.callId;
+
+      setMessages(prev => {
+        const groupIdx = toolGroupIdRef.current
+          ? prev.findIndex(m => m.role === "tool-group" && m.id === toolGroupIdRef.current)
+          : -1;
+
+        const isResult = event.error || event.result !== undefined;
+
+        if (groupIdx >= 0) {
+          return prev.map((m, i) => {
+            if (i !== groupIdx) return m;
+            const group = m as Extract<Message, { role: "tool-group" }>;
+            const existingIdx = group.entries.findIndex(e => e.toolCallId === callId);
+            if (existingIdx >= 0) {
+              const updated = [...group.entries];
+              if (isResult) {
+                updated[existingIdx] = {
+                  ...updated[existingIdx],
+                  phase: event.error ? "error" as const : "done" as const,
+                  detail: String(event.error ?? event.result ?? ""),
+                };
+              }
+              return { ...group, entries: updated };
+            }
+            return {
+              ...group,
+              entries: [...group.entries, {
+                toolCallId: callId,
+                toolName: event.name,
+                phase: isResult ? (event.error ? "error" as const : "done" as const) : "executing" as const,
+                input: event.input,
+                detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
+              }],
+            };
+          });
+        }
+
+        const newGroupId = nextId();
+        toolGroupIdRef.current = newGroupId;
+        const newEntry: ToolEntry = {
+          toolCallId: callId,
+          toolName: event.name,
+          phase: isResult ? (event.error ? "error" as const : "done" as const) : "executing" as const,
+          input: event.input,
+          detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
+        };
+        return [...prev, {
+          role: "tool-group" as const,
+          id: newGroupId,
+          timestamp: now(),
+          entries: [newEntry],
+          collapsed: false,
+        }];
+      });
 
       if (event.name === "todowrite" && event.input) {
         const todos = (event.input as any)?.todos;
@@ -65,23 +107,20 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     client.onToolStepFinish((event) => {
-      setMessages(prev => {
-        const toolIds = prev
-          .filter(m => m.role === "tool")
-          .map(m => m.id);
-        return [
-          ...prev.filter(m => m.role !== "tool"),
-          ...(event.total > 0 ? [{
-            role: "tool-summary" as const,
+      if (!toolGroupIdRef.current) return;
+      setMessages(prev => prev.map(m => {
+        if (m.role !== "tool-group" || m.id !== toolGroupIdRef.current) return m;
+        return {
+          ...m,
+          collapsed: true,
+          summary: {
             total: event.total,
             success: event.success,
             failed: event.failed,
             toolNames: event.toolNames,
-            id: nextId(),
-            timestamp: now(),
-          }] : []),
-        ];
-      });
+          },
+        };
+      }));
     });
 
     client.connect().catch(() => {
@@ -104,6 +143,7 @@ export function useChat(url: string, sessionId?: string) {
   }, []);
 
   const send = useCallback(async (text: string) => {
+    toolGroupIdRef.current = null;
     const userMsgId = nextId();
     const thinkingId = nextId();
     const ts = now();
