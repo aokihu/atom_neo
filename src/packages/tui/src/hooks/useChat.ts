@@ -4,6 +4,10 @@ import type { Message, TodoItem, ToolEntry } from "../types";
 
 function now() { return Date.now(); }
 
+const FLUSH_DELAY = 1000;
+const QUICK_RENDER_MS = 20;
+const QUICK_RENDER_CHUNK = 3;
+
 export function useChat(url: string, sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
@@ -13,9 +17,63 @@ export function useChat(url: string, sessionId?: string) {
   const clientRef = useRef<TuiClient | null>(null);
   const toolGroupIdRef = useRef<string | null>(null);
   const autoThinkingRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const stepAccumRef = useRef({ total: 0, success: 0, failed: 0, toolNames: [] as string[] });
+  const bufferingRef = useRef(false);
+  const textBufferRef = useRef("");
+  const bufferOffsetRef = useRef(0);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const flushIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const counterRef = useRef(0);
 
   function nextId() { return `msg-${Date.now()}-${++counterRef.current}`; }
+
+  function stopFlush() {
+    clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = undefined;
+    clearInterval(flushIntervalRef.current);
+    flushIntervalRef.current = undefined;
+  }
+
+  function startQuickRender() {
+    stopFlush();
+    if (!textBufferRef.current) { bufferingRef.current = false; return; }
+    const id = nextId();
+    let started = false;
+    flushIntervalRef.current = setInterval(() => {
+      const off = bufferOffsetRef.current;
+      const total = textBufferRef.current.length;
+      if (off >= total) {
+        stopFlush();
+        bufferingRef.current = false;
+        if (!started) return;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && last.streaming) {
+            return prev.map(m => m.id === last.id ? { ...m, streaming: false } : m);
+          }
+          return prev;
+        });
+        return;
+      }
+      const chunk = textBufferRef.current.slice(off, off + QUICK_RENDER_CHUNK);
+      bufferOffsetRef.current = off + chunk.length;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant" && last.streaming && started) {
+          return [...prev.slice(0, -1), { ...last, content: last.content + chunk }];
+        }
+        started = true;
+        return [...prev, { role: "assistant", content: chunk, id, streaming: true, timestamp: now() }];
+      });
+    }, QUICK_RENDER_MS);
+  }
+
+  function resetBuffer() {
+    stopFlush();
+    bufferingRef.current = false;
+    textBufferRef.current = "";
+    bufferOffsetRef.current = 0;
+  }
 
   useEffect(() => {
     const client = new TuiClient({ url, sessionId });
@@ -29,6 +87,12 @@ export function useChat(url: string, sessionId?: string) {
       setThinkingVisible(false);
       clearTimeout(autoThinkingRef.current);
       autoThinkingRef.current = undefined;
+
+      if (bufferingRef.current) {
+        textBufferRef.current += delta;
+        return;
+      }
+
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -55,6 +119,7 @@ export function useChat(url: string, sessionId?: string) {
           : -1;
 
         if (groupIdx >= 0) {
+          stopFlush();
           return prev.map((m, i) => {
             if (i !== groupIdx) return m;
             const group = m as Extract<Message, { role: "tool-group" }>;
@@ -83,8 +148,11 @@ export function useChat(url: string, sessionId?: string) {
           });
         }
 
+        resetBuffer();
+        bufferingRef.current = true;
         const newGroupId = nextId();
         toolGroupIdRef.current = newGroupId;
+        stepAccumRef.current = { total: 0, success: 0, failed: 0, toolNames: [] };
         return [...prev, {
           role: "tool-group" as const,
           id: newGroupId,
@@ -108,14 +176,22 @@ export function useChat(url: string, sessionId?: string) {
 
     client.onToolStepFinish((event) => {
       if (!toolGroupIdRef.current) return;
+      const acc = stepAccumRef.current;
+      acc.total += event.total;
+      acc.success += event.success;
+      acc.failed += event.failed;
+      acc.toolNames.push(...event.toolNames);
       setMessages(prev => prev.map(m => {
         if (m.role !== "tool-group" || m.id !== toolGroupIdRef.current) return m;
         return {
           ...m,
           collapsed: true,
-          summary: { total: event.total, success: event.success, failed: event.failed, toolNames: event.toolNames },
+          summary: { ...acc },
         };
       }));
+
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = setTimeout(startQuickRender, FLUSH_DELAY);
     });
 
     client.onBusyChange((busy) => {
@@ -130,6 +206,7 @@ export function useChat(url: string, sessionId?: string) {
         setThinkingVisible(false);
         clearTimeout(autoThinkingRef.current);
         autoThinkingRef.current = undefined;
+        if (bufferingRef.current) startQuickRender();
       }
     });
 
@@ -141,6 +218,7 @@ export function useChat(url: string, sessionId?: string) {
       setThinkingVisible(false);
       clearTimeout(autoThinkingRef.current);
       autoThinkingRef.current = undefined;
+      resetBuffer();
       client.close();
       clientRef.current = null;
     };
@@ -150,6 +228,7 @@ export function useChat(url: string, sessionId?: string) {
     setThinkingVisible(false);
     clearTimeout(autoThinkingRef.current);
     autoThinkingRef.current = undefined;
+    resetBuffer();
     setMessages([]);
   }, []);
 
@@ -159,6 +238,8 @@ export function useChat(url: string, sessionId?: string) {
 
   const send = useCallback(async (text: string) => {
     toolGroupIdRef.current = null;
+    stepAccumRef.current = { total: 0, success: 0, failed: 0, toolNames: [] };
+    resetBuffer();
     setThinkingVisible(true);
     setMessages(prev => [...prev, { role: "user", content: text, id: nextId(), timestamp: now() }]);
     setSessionBusy(true);
@@ -171,6 +252,7 @@ export function useChat(url: string, sessionId?: string) {
       setThinkingVisible(false);
       clearTimeout(autoThinkingRef.current);
       autoThinkingRef.current = undefined;
+      resetBuffer();
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -180,6 +262,7 @@ export function useChat(url: string, sessionId?: string) {
       });
     } catch (err: any) {
       setThinkingVisible(false);
+      resetBuffer();
       setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId(), timestamp: now() }]);
     }
   }, []);

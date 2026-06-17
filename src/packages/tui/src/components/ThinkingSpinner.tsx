@@ -1,6 +1,7 @@
+import { memo } from "react";
 import { useTheme } from "./App";
 
-export function ThinkingSpinner() {
+export const ThinkingSpinner = memo(function ThinkingSpinner() {
   const { colors } = useTheme();
 
   return (
@@ -9,4 +10,4 @@ export function ThinkingSpinner() {
       <text marginLeft={1} fg={colors.text.muted}>thinking</text>
     </box>
   );
-}
+});
