@@ -12,6 +12,7 @@ export function useChat(url: string, sessionId?: string) {
   const clientRef = useRef<TuiClient | null>(null);
   const thinkingIdRef = useRef<string | null>(null);
   const toolGroupIdRef = useRef<string | null>(null);
+  const autoThinkingRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const counterRef = useRef(0);
 
   function nextId() { return `msg-${Date.now()}-${++counterRef.current}`; }
@@ -29,6 +30,8 @@ export function useChat(url: string, sessionId?: string) {
         setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
         thinkingIdRef.current = null;
       }
+      clearTimeout(autoThinkingRef.current);
+      autoThinkingRef.current = undefined;
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -47,10 +50,8 @@ export function useChat(url: string, sessionId?: string) {
       const callId = event.callId;
       const isResult = event.error || event.result !== undefined;
 
-      if (!isResult && thinkingIdRef.current) {
-        setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
-        thinkingIdRef.current = null;
-      }
+      clearTimeout(autoThinkingRef.current);
+      autoThinkingRef.current = undefined;
 
       setMessages(prev => {
         const groupIdx = toolGroupIdRef.current
@@ -95,13 +96,18 @@ export function useChat(url: string, sessionId?: string) {
           input: event.input,
           detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
         };
-        return [...prev, {
+        const newGroup = {
           role: "tool-group" as const,
           id: newGroupId,
           timestamp: now(),
           entries: [newEntry],
           collapsed: false,
-        }];
+        };
+        const lastInPrev = prev[prev.length - 1];
+        if (lastInPrev?.role === "thinking" && lastInPrev.id === thinkingIdRef.current) {
+          return [...prev.slice(0, -1), newGroup, lastInPrev];
+        }
+        return [...prev, newGroup];
       });
 
       if (event.name === "todowrite" && event.input) {
@@ -129,6 +135,23 @@ export function useChat(url: string, sessionId?: string) {
 
     client.onBusyChange((busy) => {
       setSessionBusy(busy);
+      if (busy) {
+        if (!thinkingIdRef.current && !autoThinkingRef.current) {
+          autoThinkingRef.current = setTimeout(() => {
+            if (thinkingIdRef.current) return;
+            const id = nextId();
+            thinkingIdRef.current = id;
+            setMessages(prev => [...prev, { role: "thinking" as const, id, timestamp: now() }]);
+          }, 1500);
+        }
+      } else {
+        clearTimeout(autoThinkingRef.current);
+        autoThinkingRef.current = undefined;
+        if (thinkingIdRef.current) {
+          setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
+          thinkingIdRef.current = null;
+        }
+      }
     });
 
     client.connect().catch(() => {
@@ -136,6 +159,8 @@ export function useChat(url: string, sessionId?: string) {
     });
 
     return () => {
+      clearTimeout(autoThinkingRef.current);
+      autoThinkingRef.current = undefined;
       client.close();
       clientRef.current = null;
     };
@@ -143,6 +168,8 @@ export function useChat(url: string, sessionId?: string) {
 
   const clearMessages = useCallback(() => {
     thinkingIdRef.current = null;
+    clearTimeout(autoThinkingRef.current);
+    autoThinkingRef.current = undefined;
     setMessages([]);
   }, []);
 
@@ -179,12 +206,12 @@ export function useChat(url: string, sessionId?: string) {
         setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
         thinkingIdRef.current = null;
       }
-      setSessionBusy(false);
+      clearTimeout(autoThinkingRef.current);
+      autoThinkingRef.current = undefined;
     } catch (err: any) {
       thinkingIdRef.current = null;
       setMessages(prev => prev.filter(m => m.id !== thinkingId));
       setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId(), timestamp: now() }]);
-      setSessionBusy(false);
     }
   }, []);
 
