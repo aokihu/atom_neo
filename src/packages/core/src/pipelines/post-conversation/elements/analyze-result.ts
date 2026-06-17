@@ -67,14 +67,14 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
         maxTokens: this.#maxTokens,
       });
 
-      const parsed = parseJsonFromLLMResponse<{ status: string; reason?: string }>(raw);
+      const parsed = parseJsonFromLLMResponse<{ status: string; reason?: string; fingerprint?: string }>(raw);
       if (!parsed) {
         this.report(BusEvents.Element.Data, { step: "no JSON, fallback to satisfactory" });
         return { ...input, mode: "acting", analysis: FALLBACK_ANALYSIS };
       }
 
-      const status = ["satisfactory", "blocked"].includes(parsed.status) ? parsed.status as AnalysisResult["status"] : "satisfactory";
-      const analysis: AnalysisResult = { status, reason: parsed.reason ?? "" };
+      const status = ["satisfactory", "blocked", "needs_user_input"].includes(parsed.status) ? parsed.status as AnalysisResult["status"] : "satisfactory";
+      const analysis: AnalysisResult = { status, reason: parsed.reason ?? "", fingerprint: parsed.fingerprint };
 
       this.report(BusEvents.Element.Data, { step: "analyzed", status, reason: analysis.reason });
       return { ...input, mode: "acting", analysis };

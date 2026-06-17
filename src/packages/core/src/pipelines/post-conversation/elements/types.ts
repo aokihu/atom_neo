@@ -1,11 +1,14 @@
 export type PostConversationMode = "initial" | "analyzing" | "acting";
 
 export type AnalysisResult = {
-  status: "satisfactory" | "blocked";
+  status: "satisfactory" | "blocked" | "needs_user_input";
   reason: string;
+  fingerprint?: string;
 };
 
 export const FALLBACK_ANALYSIS: AnalysisResult = { status: "satisfactory", reason: "analysis skipped, continuing" };
+
+export const STALL_THRESHOLD = 0.6;
 
 export type PostConversationFlowState = {
   mode: PostConversationMode;

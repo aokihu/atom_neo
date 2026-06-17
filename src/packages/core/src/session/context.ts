@@ -48,6 +48,7 @@ export class SessionContext {
   #chainDepth: number = 0;
   #todoState: TodoItem[] = [];
   #currentTopic: string | null = null;
+  #postCheckFingerprints: string[] = [];
 
   constructor(sessionId: string) {
     this.sessionId = sessionId;
@@ -149,12 +150,21 @@ export class SessionContext {
     return this.#currentTopic;
   }
 
+  get postCheckFingerprints(): readonly string[] {
+    return this.#postCheckFingerprints;
+  }
+
+  addPostCheckFingerprint(fp: string): void {
+    this.#postCheckFingerprints.push(fp);
+  }
+
   resetForNewTopic(topic: string): void {
     this.#currentTopic = topic || null;
     this.#todoState = [];
     this.#chainDepth = 0;
     this.#toolContext = { mode: "idle", results: [] };
     this.#continuationContext = null;
+    this.#postCheckFingerprints = [];
     this.evaluatorSuggestion = undefined;
     this.upgradeModel = undefined;
     this.conversationSummary = undefined;

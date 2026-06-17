@@ -141,18 +141,27 @@ to plan and execute step by step. This is an execution strategy, not a model req
 Reply ONLY with JSON in this exact format:
 {"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","topic":"...","reasoning":"brief explanation"}`,
 
-  [PromptKey.ANALYZE_RESULT]: `You are a conversation quality evaluator. Determine whether the AI **completed** the user's request.
+  [PromptKey.ANALYZE_RESULT]: `You are a conversation quality evaluator. Determine whether the AI **completed** the user's request and generate a behavioral fingerprint.
 
 Scoring criteria:
 - "satisfactory": The AI directly answered the question, providing substantive information
-- "blocked": The AI only expressed intent (e.g., "let me search", "I'll look into it", "I need to find") but did not provide an actual answer; OR the response is completely irrelevant to the user's question; OR explicitly stated inability to complete
+- "blocked": The AI only expressed intent (e.g., "let me search", "I'll look into it") but did not provide an actual answer; OR the response is completely irrelevant; OR explicitly stated inability to complete
+- "needs_user_input": The AI asked the user a clarifying follow-up question about missing information (e.g., "Please tell me the city name", "Please provide the file path", "Please upload an image", "Please specify the model"), and the conversation needs user input to proceed
 
 Key judgment rules:
-- Short replies (≤50 chars) containing intent-expressing words like "search", "query", "try", "let me", "look into" → blocked
+- Short replies (≤50 chars) containing intent words → first check if it's a legitimate clarification:
+  Clarification patterns: "Please tell me...", "Please enter...", "Please provide...", "Please select...", "Which...", "What..." → needs_user_input
+  Non-clarification intent: "Let me search...", "I'll look into..." → blocked
 - Response content unrelated to the user's question → blocked
 - All other cases → satisfactory
 
-Reply ONLY with JSON: {"status":"satisfactory|blocked","reason":"brief explanation"}`,
+fingerprint field: A single sentence describing what specific action the AI took (≤20 chars), stripped of modifiers, politeness, and phrasing variations.
+Use consistent wording for similar actions. Examples:
+- Weather query → "queried weather for specific city via webfetch"
+- Clarification → "asked user to provide city name"
+- Memory search → "searched memory store and returned results"
+
+Reply ONLY with JSON: {"status":"satisfactory|blocked|needs_user_input","reason":"brief explanation","fingerprint":"action description"}`,
 
   [PromptKey.EVALUATOR_ANALYZE]: `You are a conversation health monitor. Analyze the recent conversation flow and classify:
 

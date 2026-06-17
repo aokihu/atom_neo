@@ -2,6 +2,7 @@ type DeltaCallback = (delta: string, offset: number) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
 type TokenUsageCallback = (total: number) => void;
+type BusyChangeCallback = (busy: boolean) => void;
 
 import { WsMessages } from "@atom-neo/shared";
 
@@ -22,6 +23,8 @@ export class TuiClient {
   #onTool?: ToolCallback;
   #onToolStep?: ToolStepCallback;
   #onTokenUsage?: TokenUsageCallback;
+  #onBusyChange?: BusyChangeCallback;
+  #activeTaskIds: Set<string> = new Set();
   #pending: PendingRequest[] = [];
 
   constructor(params: { url?: string; sessionId?: string; chatId?: string } = {}) {
@@ -90,6 +93,14 @@ export class TuiClient {
             const pending = this.#pending.shift();
             const err = msg.payload?.error ?? "Unknown error";
             if (pending) pending.reject(new Error(String(err)));
+          } else if (msg.type === WsMessages.Server.SessionTaskActive) {
+            const { active, taskId } = msg.payload ?? {};
+            if (active === false) {
+              this.#activeTaskIds.delete(taskId ?? "");
+            } else {
+              this.#activeTaskIds.add(taskId ?? "");
+            }
+            this.#onBusyChange?.(this.#activeTaskIds.size > 0);
           }
         } catch { /* ignore */ }
       };
@@ -121,6 +132,7 @@ export class TuiClient {
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
   onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
   onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
+  onBusyChange(cb: BusyChangeCallback): void { this.#onBusyChange = cb; }
 
   close(): void {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));

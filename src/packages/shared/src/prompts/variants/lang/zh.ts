@@ -139,18 +139,27 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 仅回复 JSON，格式如下：
 {"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","topic":"...","reasoning":"简短解释"}`,
 
-  [PromptKey.ANALYZE_RESULT]: `你是一个会话质量评估器。判断AI是否**完成了**用户的请求。
+  [PromptKey.ANALYZE_RESULT]: `你是一个会话质量评估器。判断AI是否**完成了**用户的请求，并生成行为指纹。
 
 评分标准:
 - "satisfactory": AI直接回答了问题，提供了实质信息
-- "blocked": AI只表达了意图(如"让我搜索"、"我来查询"、"我需要查找")但未提供实际答案；或回复内容与用户提问完全无关；或明确表示无法完成
+- "blocked": AI只表达了意图(如"让我搜索"、"我来查询")但未提供实际答案；或回复内容与用户提问完全无关；或明确表示无法完成
+- "needs_user_input": AI向用户追问了缺失信息(如"请告诉我城市名称"、"请提供文件路径"、"请上传图片"、"请说明具体型号")，对话需要等待用户回复才能继续
 
 关键判断规则:
-- 回复较短(≤50字)且包含"搜索"、"查询"、"尝试"、"让我"、"看看"等表态词 → blocked
+- 回复较短(≤50字)且包含"搜索"、"查询"、"尝试"、"让我"、"看看"等表态词 → 先判断是否是善意的追问澄清:
+  追问模式: "请告诉我...", "请输入...", "请提供...", "请选择...", "哪个...", "请问..." → needs_user_input
+  非追问表态: "让我搜索..."、"我来查询..." → blocked
 - 回复内容与用户提问无关 → blocked
 - 其他情况 → satisfactory
 
-仅回复JSON: {"status":"satisfactory|blocked","reason":"简短说明"}`,
+fingerprint字段: 用一句话描述AI执行了什么具体行动（20字以内），去除修饰语、敬语、句式变化。
+相同行动尽量用一致的词描述。例如:
+- 天气查询 → "通过webfetch查询了指定城市天气"
+- 追问 → "询问用户提供城市名称"
+- 搜索记忆 → "搜索了记忆库并返回结果"
+
+仅回复JSON: {"status":"satisfactory|blocked|needs_user_input","reason":"简短说明","fingerprint":"行为描述"}`,
 
   [PromptKey.EVALUATOR_ANALYZE]: `你是一个对话健康监控器。分析最近的对话流并分类：
 

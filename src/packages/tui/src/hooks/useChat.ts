@@ -45,13 +45,17 @@ export function useChat(url: string, sessionId?: string) {
 
     client.onTool((event) => {
       const callId = event.callId;
+      const isResult = event.error || event.result !== undefined;
+
+      if (!isResult && thinkingIdRef.current) {
+        setMessages(prev => prev.filter(m => m.id !== thinkingIdRef.current));
+        thinkingIdRef.current = null;
+      }
 
       setMessages(prev => {
         const groupIdx = toolGroupIdRef.current
           ? prev.findIndex(m => m.role === "tool-group" && m.id === toolGroupIdRef.current)
           : -1;
-
-        const isResult = event.error || event.result !== undefined;
 
         if (groupIdx >= 0) {
           return prev.map((m, i) => {
@@ -121,6 +125,10 @@ export function useChat(url: string, sessionId?: string) {
           },
         };
       }));
+    });
+
+    client.onBusyChange((busy) => {
+      setSessionBusy(busy);
     });
 
     client.connect().catch(() => {

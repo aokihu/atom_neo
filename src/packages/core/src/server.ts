@@ -204,6 +204,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
+  bus.on(BusEvents.Task.Activated, (p) => {
+    const sid = p.task.sessionId;
+    if (sid) {
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.SessionTaskActive,
+        ts: Date.now(), seq: 0,
+        payload: { active: true, taskId: p.task.id },
+      });
+    }
+  });
   bus.on(BusEvents.Task.Completed, (p) => {
     const result = p.result as CompletedResult;
     logger.info("task completed", {
@@ -237,9 +247,24 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       ts: Date.now(), seq: 0,
       payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", tokenUsage: accumulated },
     });
+    if (sid) {
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.SessionTaskActive,
+        ts: Date.now(), seq: 0,
+        payload: { active: false, taskId: p.task.id },
+      });
+    }
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
+    const sid = p.task.sessionId;
+    if (sid) {
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.SessionTaskActive,
+        ts: Date.now(), seq: 0,
+        payload: { active: false, taskId: p.task.id },
+      });
+    }
   });
 
   bus.on(BusEvents.Pipeline.ElementStarted, (p) => {
