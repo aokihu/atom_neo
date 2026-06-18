@@ -10,8 +10,7 @@
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
-      "thinking": "enabled",
-      "contextLimit": 131072
+      "thinking": "enabled"
     }
   },
   "transport": {

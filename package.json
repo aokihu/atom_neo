@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.4.9",
+  "version": "1.4.10",
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
