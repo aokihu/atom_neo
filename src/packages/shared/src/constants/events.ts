@@ -17,6 +17,7 @@ export const BusEvents = {
   },
   Transport: {
     Delta: "transport.delta",
+    Reason: "transport.reason",
     ToolStarted: "transport.tool.started",
     ToolFinished: "transport.tool.finished",
     ToolStepFinished: "transport.tool.step-finished",
@@ -47,6 +48,7 @@ export const WsMessages = {
     TaskFailed: "event.task.failed",
     TaskStateChanged: "event.task.state-changed",
     TransportDelta: "event.transport.delta",
+    TransportReason: "event.transport.reason",
     TransportToolStarted: "event.transport.tool.started",
     TransportToolFinished: "event.transport.tool.finished",
     TransportToolStepFinished: "event.transport.tool.step-finished",

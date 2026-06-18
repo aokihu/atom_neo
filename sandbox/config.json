@@ -4,7 +4,7 @@
   "providerProfiles": {
     "advanced": "deepseek/deepseek-v4-pro",
     "balanced": "deepseek/deepseek-v4-pro",
-    "basic": "deepseek/deepseek-v4-flash"
+    "basic": "deepseek/deepseek-v4-pro"
   },
   "providers": {
     "deepseek": {

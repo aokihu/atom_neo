@@ -242,11 +242,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
     }
     const accumulated = sessionStore.get(sid).tokenUsage;
-    broadcaster.broadcastToSession(sid, {
-      type: WsMessages.Server.TaskCompleted,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", tokenUsage: accumulated },
-    });
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.TaskCompleted,
+        ts: Date.now(), seq: 0,
+        payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", reasoningContent, tokenUsage: accumulated },
+      });
     if (sid) {
       broadcaster.broadcastToSession(sid, {
         type: WsMessages.Server.SessionTaskActive,
@@ -352,6 +352,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const broadcaster = new Broadcaster();
   const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus, logger });
+
+  // Bridge: bus transport.reason → WebSocket broadcaster for reasoning streaming
+  bus.on(BusEvents.Transport.Reason as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
+    const { textDelta, offset } = ev.payload;
+    if (textDelta) {
+      broadcaster.broadcast({ type: WsMessages.Server.TransportReason, ts: Date.now(), seq: 0, payload: { textDelta, offset } });
+    }
+  });
 
   // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
   // BaseElement.report() wraps payload in { name, payload } — FullEventMap doesn't reflect this yet

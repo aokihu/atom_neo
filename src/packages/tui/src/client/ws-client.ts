@@ -1,4 +1,5 @@
 type DeltaCallback = (delta: string, offset: number) => void;
+type ReasonCallback = (delta: string, offset: number) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
 type TokenUsageCallback = (total: number) => void;
@@ -20,6 +21,7 @@ export class TuiClient {
   #ws: WebSocket | null = null;
   #ready = false;
   #onDelta?: DeltaCallback;
+  #onReason?: ReasonCallback;
   #onTool?: ToolCallback;
   #onToolStep?: ToolStepCallback;
   #onTokenUsage?: TokenUsageCallback;
@@ -44,65 +46,68 @@ export class TuiClient {
       this.#ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data as string);
-          if (msg.type === WsMessages.Server.SessionReady) {
-            this.#ready = true;
-            resolve();
-          } else if (msg.type === WsMessages.Server.TransportDelta) {
-            const delta = msg.payload?.textDelta ?? "";
-            const offset = msg.payload?.offset ?? 0;
-            if (delta) {
-              const head = this.#pending[0];
-              if (head) head.text += delta;
-              this.#onDelta?.(delta, offset);
-            }
-          } else if (msg.type === WsMessages.Server.TransportToolStarted) {
-            this.#onTool?.({
-              name: msg.payload?.toolName ?? "",
-              callId: msg.payload?.toolCallId ?? "",
-              input: msg.payload?.input,
-            });
-          } else if (msg.type === WsMessages.Server.TransportToolFinished) {
-            this.#onTool?.({
-              name: msg.payload?.toolName ?? "",
-              callId: msg.payload?.toolCallId ?? "",
-              result: msg.payload?.result,
-              error: msg.payload?.error,
-            });
-          } else if (msg.type === WsMessages.Server.TransportToolStepFinished) {
-            this.#onToolStep?.({
-              total: msg.payload?.total ?? 0,
-              success: msg.payload?.success ?? 0,
-              failed: msg.payload?.failed ?? 0,
-              toolNames: msg.payload?.toolNames ?? [],
-            });
-          } else if (msg.type === WsMessages.Server.TaskCompleted) {
-            const { taskId: completedId, parentTaskId } = msg.payload ?? {};
+          const p = msg.payload ?? {};
+          const t = msg.type as string;
 
-            for (let i = 0; i < this.#pending.length; i++) {
-              const head = this.#pending[i];
-              if (parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
-                const done = this.#pending.splice(i, 1)[0];
-                done.resolve(done.text);
-                break;
-              }
-            }
-
-            const tu = msg.payload?.tokenUsage;
-            if (tu) this.#onTokenUsage?.(tu.total);
-          } else if (msg.type === WsMessages.Server.TaskFailed) {
-            const pending = this.#pending.shift();
-            const err = msg.payload?.error ?? "Unknown error";
-            if (pending) pending.reject(new Error(String(err)));
-          } else if (msg.type === WsMessages.Server.SessionTaskActive) {
-            const { active, taskId } = msg.payload ?? {};
-            if (active === false) {
-              this.#activeTaskIds.delete(taskId ?? "");
-            } else {
-              this.#activeTaskIds.add(taskId ?? "");
-            }
-            this.#onBusyChange?.(this.#activeTaskIds.size > 0);
-          }
+          const handle = (handlers as any)[t];
+          if (handle) handle(p);
         } catch { /* ignore */ }
+      };
+
+      const handlers: Record<string, (p: Record<string, any>) => void> = {
+        [WsMessages.Server.SessionReady]: () => {
+          this.#ready = true;
+          resolve();
+        },
+        [WsMessages.Server.TransportDelta]: (p) => {
+          const delta = p.textDelta ?? "";
+          const offset = p.offset ?? 0;
+          if (delta) {
+            const head = this.#pending[0];
+            if (head) head.text += delta;
+            this.#onDelta?.(delta, offset);
+          }
+        },
+        [WsMessages.Server.TransportReason]: (p) => {
+          const delta = p.textDelta ?? "";
+          if (delta) this.#onReason?.(delta, p.offset ?? 0);
+        },
+        [WsMessages.Server.TransportToolStarted]: (p) => {
+          this.#onTool?.({ name: p.toolName ?? "", callId: p.toolCallId ?? "", input: p.input });
+        },
+        [WsMessages.Server.TransportToolFinished]: (p) => {
+          this.#onTool?.({ name: p.toolName ?? "", callId: p.toolCallId ?? "", result: p.result, error: p.error });
+        },
+        [WsMessages.Server.TransportToolStepFinished]: (p) => {
+          this.#onToolStep?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
+        },
+        [WsMessages.Server.TaskCompleted]: (p) => {
+          const { taskId: completedId, parentTaskId } = p;
+          for (let i = 0; i < this.#pending.length; i++) {
+            const head = this.#pending[i];
+            if (parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
+              const done = this.#pending.splice(i, 1)[0];
+              done.resolve(done.text);
+              break;
+            }
+          }
+          const tu = p.tokenUsage;
+          if (tu) this.#onTokenUsage?.(tu.total);
+        },
+        [WsMessages.Server.TaskFailed]: (p) => {
+          const pending = this.#pending.shift();
+          const err = p.error ?? "Unknown error";
+          if (pending) pending.reject(new Error(String(err)));
+        },
+        [WsMessages.Server.SessionTaskActive]: (p) => {
+          const { active, taskId } = p;
+          if (active === false) {
+            this.#activeTaskIds.delete(taskId ?? "");
+          } else {
+            this.#activeTaskIds.add(taskId ?? "");
+          }
+          this.#onBusyChange?.(this.#activeTaskIds.size > 0);
+        },
       };
 
       this.#ws.onerror = () => reject(new Error("WebSocket connection failed"));
@@ -129,6 +134,7 @@ export class TuiClient {
   }
 
   onDelta(cb: DeltaCallback): void { this.#onDelta = cb; }
+  onReason(cb: ReasonCallback): void { this.#onReason = cb; }
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
   onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
   onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }

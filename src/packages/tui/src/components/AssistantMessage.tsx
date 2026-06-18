@@ -1,6 +1,6 @@
+import { useTheme } from "./App";
 import type { Message } from "../types";
 import { SyntaxStyle } from "@opentui/core";
-import { useTheme } from "./App";
 
 export function AssistantMessage({ message, syntaxStyle }: { message: Message & { role: "assistant" }; syntaxStyle: SyntaxStyle }) {
   const { colors } = useTheme();

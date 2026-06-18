@@ -4,6 +4,7 @@ import { useTheme } from "./App";
 import { UserMessage } from "./UserMessage";
 import { AssistantMessage } from "./AssistantMessage";
 import { ToolMessageBox } from "./ToolMessageBox";
+import { ThinkingMessageBox } from "./ThinkingMessageBox";
 
 export function fmtTime(ts: number): string {
   const d = new Date(ts);
@@ -16,6 +17,9 @@ export function MessageBubble({ message, syntaxStyle }: { message: Message; synt
   switch (message.role) {
     case "user":
       return <UserMessage message={message} />;
+
+    case "reasoning":
+      return <ThinkingMessageBox message={message} />;
 
     case "assistant":
       return <AssistantMessage message={message} syntaxStyle={syntaxStyle} />;

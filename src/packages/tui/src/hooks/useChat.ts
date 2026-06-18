@@ -100,6 +100,16 @@ export function useChat(url: string, sessionId?: string) {
       });
     });
 
+    client.onReason((delta, _offset) => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "reasoning") {
+          return [...prev.slice(0, -1), { ...last, content: last.content + delta }];
+        }
+        return [...prev, { role: "reasoning" as const, content: delta, id: nextId(), timestamp: now() }];
+      });
+    });
+
     client.onTool((event) => {
       const callId = event.callId;
       const isResult = event.error || event.result !== undefined;

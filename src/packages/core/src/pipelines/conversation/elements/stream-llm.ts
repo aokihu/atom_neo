@@ -126,98 +126,36 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       try {
         let stepToolCalls: { toolName: string; ok: boolean }[] = [];
         for await (const chunk of streamResult.fullStream) {
-          const ctype = (chunk as any).type;
+          const pt = (chunk as any).type;
 
-          if (ctype === "step-start" || ctype === "start-step") {
+          if (pt === "start" || pt === "source" || pt === "raw" || pt === "object"
+            || pt === "response-metadata" || pt === "message-metadata") continue;
+
+          if (pt !== "tool-call" && pt !== "tool-result" && stepToolCalls.length > 0) {
+            const success = stepToolCalls.filter(t => t.ok).length;
+            const failed = stepToolCalls.length - success;
+            this.report(BusEvents.Transport.ToolStepFinished as any, {
+              stepNumber: this.#stepCounter.count,
+              total: stepToolCalls.length,
+              success,
+              failed,
+              toolNames: stepToolCalls.map(t => t.toolName),
+            });
             stepToolCalls = [];
-            continue;
           }
-          if (ctype === "start") continue;
-          if (ctype === "step-finish" || ctype === "finish-step") {
-            finishReason = (chunk as any).finishReason ?? "";
-            if (stepToolCalls.length > 0) {
-              const success = stepToolCalls.filter(t => t.ok).length;
-              const failed = stepToolCalls.length - success;
-              this.report(BusEvents.Transport.ToolStepFinished as any, {
-                stepNumber: this.#stepCounter.count,
-                total: stepToolCalls.length,
-                success,
-                failed,
-                toolNames: stepToolCalls.map(t => t.toolName),
-              });
-              stepToolCalls = [];
-            }
-            continue;
-          }
-          if (ctype === "reasoning-start") continue;
-          if (ctype === "reasoning-delta") {
-            reasoningText += (chunk as any).textDelta ?? (chunk as any).delta ?? "";
-            continue;
-          }
-          if (ctype === "reasoning-end") continue;
-          if (ctype === "text-start" || ctype === "text-end") continue;
-          if (ctype === "tool-input-start") continue;
-          if (ctype === "tool-input-delta") continue;
-          if (ctype === "tool-input-end") continue;
-          if (ctype === "tool-input-available") continue;
-          if (ctype === "tool-input-error") {
-            this.report(BusEvents.Element.Data, { step: "tool-input-error", level: "warn", error: (chunk as any).error ?? "" });
-            continue;
-          }
-          if (ctype === "tool-output-available") continue;
-          if (ctype === "tool-output-denied") {
-            this.report(BusEvents.Element.Data, { step: "tool-output-denied", level: "warn" });
-            continue;
-          }
-          if (ctype === "tool-output-error") {
-            this.report(BusEvents.Element.Data, { step: "tool-output-error", level: "warn", error: (chunk as any).error ?? "" });
-            continue;
-          }
-          if (ctype === "tool-approval-request") {
-            this.report(BusEvents.Element.Data, { step: "tool-approval-request", level: "warn" });
-            continue;
-          }
-          if (ctype === "tool-error") {
-            this.report(BusEvents.Element.Data, { step: "tool-error", level: "error", error: (chunk as any).error ?? "" });
-            continue;
-          }
-          if (ctype === "stream-start" || ctype === "response-metadata" || ctype === "message-metadata") continue;
-          if (ctype === "source" || ctype === "source-document" || ctype === "source-url") continue;
-          if (ctype === "object" || ctype === "raw" || ctype === "reasoning" || ctype === "all") continue;
-          if (ctype === "abort") {
-            this.report(BusEvents.Element.Data, { step: "abort", level: "warn" });
-            continue;
-          }
-          if (ctype === "file" || ctype === "dynamic-tool") continue;
-          if (ctype === "tool-call") {
-            const c = chunk as any;
-            if (c.toolName === "intent" && !intentData) {
-              intentData = intentSignal.value ?? c.input;
-            }
-            this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
-            this.report(BusEvents.Transport.ToolStarted as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", input: c.input });
-            continue;
-          }
-          if (ctype === "tool-result") {
-            const c = chunk as any;
-            if (c.toolName === "intent") continue;
-            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
-            this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
-            stepToolCalls.push({ toolName: c.toolName, ok: !c.error });
-            if (this.#session?.addToolResult) {
-              this.#session.addToolResult({
-                toolName: c.toolName,
-                topic: this.#session.currentTopic ?? "",
-                timestamp: Date.now(),
-                ok: !c.error,
-                output: String(c.output ?? c.result ?? ""),
-                error: c.error,
-              });
-            }
-            continue;
-          }
-          if (ctype === "text-delta") {
+
+          if (pt === "reasoning-delta" || pt === "reasoning") {
             const text = (chunk as any).textDelta ?? (chunk as any).text ?? "";
+            if (text) {
+              const offset = reasoningText.length;
+              reasoningText += text;
+              this.report(BusEvents.Transport.Reason as any, { textDelta: text, offset });
+            }
+            continue;
+          }
+
+          if (pt === "text-delta") {
+            const text = (chunk as any).text ?? "";
             if (completeDetected) continue;
 
             textBuffer += text;
@@ -246,17 +184,52 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             }
             continue;
           }
-          if (ctype === "finish") {
+
+          if (pt === "tool-call") {
+            const c = chunk as any;
+            if (c.toolName === "intent" && !intentData) {
+              intentData = intentSignal.value ?? c.input;
+            }
+            this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
+            this.report(BusEvents.Transport.ToolStarted as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", input: c.input });
+            continue;
+          }
+
+          if (pt === "tool-result") {
+            const c = chunk as any;
+            if (c.toolName === "intent") continue;
+            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
+            this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
+            stepToolCalls.push({ toolName: c.toolName, ok: !c.error });
+            if (this.#session?.addToolResult) {
+              this.#session.addToolResult({
+                toolName: c.toolName,
+                topic: this.#session.currentTopic ?? "",
+                timestamp: Date.now(),
+                ok: !c.error,
+                output: String(c.output ?? c.result ?? ""),
+                error: c.error,
+              });
+            }
+            continue;
+          }
+
+          if (pt === "finish") {
             finishReason = (chunk as any).finishReason ?? finishReason;
             continue;
           }
-          if (ctype === "error") {
+
+          if (pt === "error") {
             const err = (chunk as any).error ?? {};
             if (err.statusCode) streamErrorCode = err.statusCode;
             this.report(BusEvents.Element.Data, { step: "stream-llm-error", errorName: err.name, statusCode: err.statusCode, message: (err.message ?? "").slice(0, 500), responseBody: (err.responseBody ?? "").slice(0, 500) });
             continue;
           }
-          this.report(BusEvents.Element.Data, { step: "unhandled-chunk", type: ctype, raw: JSON.stringify(chunk).slice(0, 200) });
+
+          if (pt === "abort") {
+            this.report(BusEvents.Element.Data, { step: "abort", level: "warn" });
+            continue;
+          }
         }
       } finally {
         clearTimeout(timeoutTimer);
