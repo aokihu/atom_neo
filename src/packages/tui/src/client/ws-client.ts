@@ -4,6 +4,8 @@ type ToolCallback = (event: { name: string; callId: string; input?: unknown; res
 type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
 type TokenUsageCallback = (total: number) => void;
 type BusyChangeCallback = (busy: boolean) => void;
+type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: string[] }[]) => void;
+type MCPConnectedCallback = (data: { servers: { name: string; online: boolean; toolCount: number }[]; toolInfos: { name: string; source: string; description: string; online: boolean }[] }) => void;
 
 import { WsMessages } from "@atom-neo/shared";
 
@@ -26,6 +28,8 @@ export class TuiClient {
   #onToolStep?: ToolStepCallback;
   #onTokenUsage?: TokenUsageCallback;
   #onBusyChange?: BusyChangeCallback;
+  #onMCPStatus?: MCPStatusCallback;
+  #onMCPConnected?: MCPConnectedCallback;
   #activeTaskIds: Set<string> = new Set();
   #pending: PendingRequest[] = [];
 
@@ -108,6 +112,13 @@ export class TuiClient {
           }
           this.#onBusyChange?.(this.#activeTaskIds.size > 0);
         },
+        [WsMessages.Server.MCPToolStatus]: (p) => {
+          const servers = p.servers ?? [];
+          if (servers.length > 0) this.#onMCPStatus?.(servers);
+        },
+        [WsMessages.Server.MCPConnected]: (p) => {
+          this.#onMCPConnected?.({ servers: p.servers ?? [], toolInfos: p.toolInfos ?? [] });
+        },
       };
 
       this.#ws.onerror = () => reject(new Error("WebSocket connection failed"));
@@ -139,6 +150,8 @@ export class TuiClient {
   onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
   onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
   onBusyChange(cb: BusyChangeCallback): void { this.#onBusyChange = cb; }
+  onMCPStatus(cb: MCPStatusCallback): void { this.#onMCPStatus = cb; }
+  onMCPConnected(cb: MCPConnectedCallback): void { this.#onMCPConnected = cb; }
 
   close(): void {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));

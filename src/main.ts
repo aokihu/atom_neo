@@ -131,6 +131,8 @@ export async function main(): Promise<void> {
           sandbox: args.sandbox,
           version: VERSION,
           tools: core.tools,
+          toolInfos: core.toolInfos,
+          mcpServerInfos: core.mcpServerInfos,
           theme: appConfig.tui?.theme ?? "github-dark",
           contextLimit: resolveContextLimit(
             `${resolved.provider}/${resolved.model}`,

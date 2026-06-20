@@ -44,7 +44,7 @@ Keyboard shortcuts:
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems } = useChat(url);
+  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
@@ -71,7 +71,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
             <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} sessionBusy={sessionBusy} />
             <StatusLine hint={exitHint} processing={sessionBusy || isProcessing(messages)} />
           </box>
-          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={contextLimit} todoItems={todoItems} />}
+          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={contextLimit} todoItems={todoItems} toolInfos={toolInfos} mcpServers={mcpServers} />}
         </box>
       </box>
     </ThemeContext.Provider>

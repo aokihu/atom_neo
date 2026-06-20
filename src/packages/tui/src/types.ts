@@ -48,6 +48,19 @@ export type TodoItem = {
   priority: "high" | "medium" | "low";
 };
 
+export type ToolInfo = {
+  name: string;
+  source: "builtin" | "plugin" | "mcp";
+  description?: string;
+  online?: boolean;
+};
+
+export type MCPServerInfo = {
+  name: string;
+  online: boolean;
+  toolCount: number;
+};
+
 export interface ServerInfo {
   port: number;
   host: string;
@@ -55,6 +68,8 @@ export interface ServerInfo {
   sandbox: string;
   version: string;
   tools: string[];
+  toolInfos?: ToolInfo[];
+  mcpServerInfos?: MCPServerInfo[];
   theme?: ThemeName;
   contextLimit?: number;
   thinking?: "enabled" | "disabled" | "adaptive";

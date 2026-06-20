@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { ServerInfo, TodoItem } from "../types";
+import type { ServerInfo, TodoItem, ToolInfo, MCPServerInfo } from "../types";
 import { useTheme } from "./App";
 
 function gauge(used: number, limit: number, width = 10): string {
@@ -24,6 +24,8 @@ interface SidebarProps {
   tokenUsage: number;
   contextLimit: number;
   todoItems: TodoItem[];
+  toolInfos: ToolInfo[];
+  mcpServers: MCPServerInfo[];
 }
 
 function fmtUptime(totalSec: number): string {
@@ -40,10 +42,11 @@ function fmtUptime(totalSec: number): string {
   return result;
 }
 
-export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems }: SidebarProps) {
+export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems, toolInfos, mcpServers }: SidebarProps) {
   const { colors } = useTheme();
   const [uptime, setUptime] = useState(0);
   const startRef = useRef(Date.now());
+  const [mcpExpanded, setMcpExpanded] = useState(false);
 
   useEffect(() => {
     const interval = uptime < 60 ? 1000 : 60_000;
@@ -54,6 +57,9 @@ export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems }: Sid
   }, [uptime < 60]);
 
   const ratio = Math.round((tokenUsage / Math.max(contextLimit, 1)) * 100);
+  const builtinCount = toolInfos.filter(t => t.source === "builtin").length;
+  const mcpTotal = mcpServers.length;
+  const mcpOnline = mcpServers.filter(s => s.online).length;
 
   return (
     <box flexShrink={0} minWidth={24} width="28%" paddingLeft={1} paddingRight={1} paddingTop={1} flexDirection="column" gap={2}>
@@ -69,7 +75,7 @@ export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems }: Sid
           </box>
           <box flexDirection="row">
             <text fg={colors.text.muted} width={7}>Tools</text>
-            <text fg={colors.text.secondary}>{String(serverInfo.tools.length)}</text>
+            <text fg={colors.text.secondary}>{`${builtinCount} builtin`}</text>
           </box>
           <box flexDirection="row">
             <text fg={colors.text.muted} width={7}>Tokens</text>
@@ -80,6 +86,29 @@ export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems }: Sid
           </box>
         </box>
       </box>
+
+      {/* MCP Servers block */}
+      {mcpServers.length > 0 && (
+        <box flexDirection="column" onMouseUp={() => setMcpExpanded(!mcpExpanded)}>
+          <box flexDirection="row" gap={0}>
+            <text>
+              <strong fg={colors.accent.brand}>MCP Tools</strong>
+            </text>
+            <text fg={colors.text.muted}>{` (${mcpOnline}/${mcpTotal})`}</text>
+            <text fg={colors.text.muted}>{mcpExpanded ? ' ▲' : ' ▼'}</text>
+          </box>
+          {mcpExpanded && (
+            <box backgroundColor={colors.bg.codeBlock} padding={1} flexDirection="column" gap={1}>
+              {mcpServers.map((s, i) => (
+                <box key={i} flexDirection="row" gap={1}>
+                  <text fg={s.online ? colors.status.success : colors.text.muted}>{s.online ? '●' : '○'}</text>
+                  <text fg={s.online ? colors.text.primary : colors.text.muted}>{s.name}</text>
+                </box>
+              ))}
+            </box>
+          )}
+        </box>
+      )}
 
       {/* TODO block */}
       {todoItems.length > 0 && (

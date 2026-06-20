@@ -24,6 +24,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #stepCounter = { count: 0 };
   #session: any;
   #configContextLimit: number;
+  #mcpToolsRef?: { current: Record<string, any> };
+  #mcpToolNamesCount = 0;
 
   constructor(params: {
     name: string;
@@ -33,6 +35,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     model: string;
     baseUrl?: string;
     tools: ToolDefinition[];
+    mcpToolsRef?: { current: Record<string, any> };
     maxTokens?: number;
     maxSteps?: number;
     providerOptions?: Record<string, any>;
@@ -50,7 +53,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#session = params.session;
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
-    this.#aiTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
+    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
+    const mcpCurrent = params.mcpToolsRef?.current ?? {};
+    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
+    this.#mcpToolsRef = params.mcpToolsRef;
+    this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
+    this.#aiTools = { ...builtinTools, ...wrappedMCP };
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -62,7 +70,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
     const userMessages = input.userMessages ?? [];
     const systemText = input.systemText ?? "";
-    const activeNames = getActiveToolNames(this.#taskIntent);
+    const mcpCurrent = this.#mcpToolsRef?.current ?? {};
+    if (Object.keys(mcpCurrent).length > this.#mcpToolNamesCount) {
+      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
+      this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
+      Object.assign(this.#aiTools, wrappedMCP);
+    }
+    const activeNames = [...getActiveToolNames(this.#taskIntent), ...Object.keys(mcpCurrent)];
     const tools = Object.keys(this.#aiTools);
     this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: tools.length, activeCount: activeNames.length, taskIntent: this.#taskIntent });
 
@@ -381,6 +395,36 @@ function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payloa
     });
   }
   return result;
+}
+
+function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }): Record<string, any> {
+  const wrapped: Record<string, any> = {};
+  for (const [name, t] of Object.entries(mcpTools)) {
+    const origExecute = (t as any).execute;
+    if (typeof origExecute !== "function") {
+      wrapped[name] = t;
+      continue;
+    }
+    wrapped[name] = {
+      ...t as any,
+      execute: async (args: any, opts?: any) => {
+        const sc = ++stepCounter.count;
+        const start = Date.now();
+        try {
+          report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: name, stepCount: sc, source: "mcp", args: JSON.stringify(args).slice(0, 200) });
+          const result = await origExecute(args, opts);
+          const duration = Date.now() - start;
+          report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: name, stepCount: sc, source: "mcp", duration });
+          return result;
+        } catch (err: any) {
+          const duration = Date.now() - start;
+          report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: name, stepCount: sc, source: "mcp", duration, error: err?.message ?? String(err) });
+          return `MCP tool error: ${err?.message ?? String(err)}`;
+        }
+      },
+    };
+  }
+  return wrapped;
 }
 
 function getActiveToolNames(taskIntent: string): string[] {

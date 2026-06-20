@@ -38,6 +38,7 @@ export type ConversationPipelineDeps = {
   providerModel?: string;
   configContextLimit?: number;
   tools: any[];
+  mcpToolsRef?: { current: Record<string, any> };
   getCompiledPrompt?: () => string;
   maxTokens?: number;
   maxSteps?: number;
@@ -63,6 +64,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       model: deps.model ?? "deepseek-v4-flash",
       baseUrl: deps.baseUrl,
       tools: deps.tools ?? [],
+      mcpToolsRef: deps.mcpToolsRef,
       maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,
       maxSteps: deps.maxSteps,
       providerOptions: deps.providerOptions,

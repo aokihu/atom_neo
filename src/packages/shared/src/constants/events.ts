@@ -53,6 +53,8 @@ export const WsMessages = {
     TransportToolFinished: "event.transport.tool.finished",
     TransportToolStepFinished: "event.transport.tool.step-finished",
     SessionTaskActive: "event.session.task-active",
+    MCPConnected: "event.mcp.connected",
+    MCPToolStatus: "event.mcp.tool.status",
     PipelineElementStarted: "event.pipeline.element.started",
     PipelineElementFinished: "event.pipeline.element.finished",
     ReplayStart: "event.pipeline.replay-start",

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
-import type { Message, TodoItem, ToolEntry } from "../types";
+import type { Message, TodoItem, ToolEntry, ToolInfo, MCPServerInfo } from "../types";
 
 function now() { return Date.now(); }
 
@@ -8,11 +8,13 @@ const FLUSH_DELAY = 1000;
 const QUICK_RENDER_MS = 20;
 const QUICK_RENDER_CHUNK = 3;
 
-export function useChat(url: string, sessionId?: string) {
+export function useChat(url: string, sessionId?: string, initialToolInfos?: ToolInfo[], initialMCPServers?: MCPServerInfo[]) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tokenUsage, setTokenUsage] = useState(0);
   const [sessionBusy, setSessionBusy] = useState(false);
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
+  const [toolInfos, setToolInfos] = useState<ToolInfo[]>(initialToolInfos ?? []);
+  const [mcpServers, setMcpServers] = useState<MCPServerInfo[]>(initialMCPServers ?? []);
   const clientRef = useRef<TuiClient | null>(null);
   const toolGroupIdRef = useRef<string | null>(null);
   const stepAccumRef = useRef({ total: 0, success: 0, failed: 0, toolNames: [] as string[] });
@@ -200,6 +202,20 @@ export function useChat(url: string, sessionId?: string) {
       if (!busy && bufferingRef.current) startQuickRender();
     });
 
+    client.onMCPConnected((data) => {
+      setMcpServers(data.servers.map(s => ({ name: s.name, online: s.online, toolCount: s.toolCount })));
+      setToolInfos(prev => [...prev.filter(t => t.source !== "mcp"), ...data.toolInfos.map(t => ({ ...t, source: t.source as ToolInfo["source"] }))]);
+    });
+
+    client.onMCPStatus((servers) => {
+      setMcpServers(prev =>
+        prev.map(s => {
+          const updated = servers.find(ss => ss.name === s.name);
+          return updated ? { ...s, online: updated.online } : s;
+        })
+      );
+    });
+
     client.connect().catch(() => {
       setMessages(prev => [...prev, { role: "error", content: "Connection failed", id: nextId(), timestamp: now() }]);
     });
@@ -246,5 +262,5 @@ export function useChat(url: string, sessionId?: string) {
     }
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems };
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers };
 }

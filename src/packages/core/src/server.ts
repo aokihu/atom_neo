@@ -15,6 +15,8 @@ import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, setPipeline } from "./api/tasks";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
+import { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck } from "./tools/mcp-manager";
+import type { MCPServerConfig } from "./tools/mcp-manager";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -70,7 +72,7 @@ export type CoreDeps = {
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
-export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; stop: () => void }> {
+export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; toolInfos: { name: string; source: string; description: string; online?: boolean }[]; mcpServerInfos: { name: string; online: boolean; toolCount: number }[]; stop: () => void }> {
   const { port, host, logger, sm, runtime } = deps;
   const sandbox: string = runtime.sandbox ?? "";
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
@@ -96,6 +98,51 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   };
 
   const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
+
+  const mcpToolsRef: { current: Record<string, any> } = { current: {} };
+  let mcpServerInfos: { name: string; online: boolean; toolCount: number }[] = [];
+  let mcpClients: Array<Awaited<ReturnType<typeof initMCPClients>>["clients"][number]> = [];
+
+  const toolInfos = allTools.map(t => ({ name: t.name, source: t.source as string, description: t.description, online: undefined as boolean | undefined }));
+
+  const mcpConfigs: MCPServerConfig[] = runtime?.appConfig?.mcpServers ?? [];
+  if (mcpConfigs.length > 0) {
+    initMCPClients(mcpConfigs, logger).then(async ({ clients, matchedConfigs }) => {
+      mcpClients = clients;
+      if (clients.length === 0) return;
+      const { tools, toolServers } = await fetchMCPTools(clients, matchedConfigs, logger);
+      mcpToolsRef.current = tools;
+      const names = Object.keys(tools);
+      logger.info("mcp tools loaded", { mcpToolCount: names.length, totalTools: allTools.length + names.length });
+
+      mcpServerInfos = matchedConfigs.map(cfg => ({
+        name: cfg.name,
+        online: true,
+        toolCount: names.filter(n => toolServers[n] === cfg.name).length,
+      }));
+
+      broadcaster.broadcast({
+        type: WsMessages.Server.MCPConnected,
+        ts: Date.now(), seq: 0,
+        payload: { servers: mcpServerInfos, toolInfos: names.map(name => ({ name, source: "mcp" as const, description: (tools[name] as any)?.description ?? "", online: true })) },
+      });
+
+      const healthStop = startMCPHealthCheck(clients, matchedConfigs, toolServers, (statuses) => {
+        broadcaster.broadcast({
+          type: WsMessages.Server.MCPToolStatus,
+          ts: Date.now(), seq: 0,
+          payload: { servers: statuses },
+        });
+        for (const s of statuses) {
+          const info = mcpServerInfos.find(i => i.name === s.name);
+          if (info) info.online = s.online;
+        }
+      }, logger);
+      mcpHealthStopRef.current = healthStop;
+    }).catch(err => logger.warn("mcp async init failed", { error: String(err) }));
+  }
+
+  const mcpHealthStopRef = { current: () => {} };
 
   const pipelineBuilders: Record<string, (task: any) => any> = {
     prediction: (task: any) => {
@@ -140,6 +187,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
           deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
         },
         tools: allTools,
+        mcpToolsRef,
         getCompiledPrompt,
         maxTokens,
         maxSteps,
@@ -438,5 +486,5 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   logger.info("core ready", { port: server.port, address: host });
-  return { port: server.port!, tools: allTools.map((t: any) => t.name), stop: () => { taskEngine.stop(); server.stop(); } };
+  return { port: server.port!, tools: allTools.map((t: any) => t.name), toolInfos, mcpServerInfos, stop: () => { mcpHealthStopRef.current(); taskEngine.stop(); server.stop(); closeMCPClients(mcpClients); } };
 }

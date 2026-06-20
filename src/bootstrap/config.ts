@@ -49,6 +49,14 @@ const ConfigSchema = z.object({
     maxSteps: z.number().int().min(1).default(50),
     maxChainDepth: z.number().int().min(1).default(5),
   }).default({ maxSteps: 50, maxChainDepth: 5 }),
+  mcpServers: z.array(z.object({
+    name: z.string(),
+    transport: z.discriminatedUnion("type", [
+      z.object({ type: z.literal("http"), url: z.string(), headers: z.record(z.string()).optional() }),
+      z.object({ type: z.literal("sse"), url: z.string(), headers: z.record(z.string()).optional() }),
+      z.object({ type: z.literal("stdio"), command: z.string(), args: z.array(z.string()).optional(), env: z.record(z.string()).optional(), cwd: z.string().optional() }),
+    ]),
+  })).default([]),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

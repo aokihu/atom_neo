@@ -3,8 +3,8 @@
   "theme": "dark",
   "providerProfiles": {
     "advanced": "deepseek/deepseek-v4-pro",
-    "balanced": "deepseek/deepseek-v4-pro",
-    "basic": "deepseek/deepseek-v4-pro"
+    "balanced": "deepseek/deepseek-v4-flash",
+    "basic": "deepseek/deepseek-v4-flash"
   },
   "providers": {
     "deepseek": {
@@ -22,5 +22,17 @@
   },
   "tui": {
     "theme": "github-dark"
-  }
+  },
+  "mcpServers": [
+    {
+      "name": "context7",
+      "transport": {
+        "type": "http",
+        "url": "https://mcp.context7.com/mcp",
+        "headers": {
+          "CONTEXT7_API_KEY": "ctx7sk-98dd62fe-899b-4371-9cb2-ca1f51decba1"
+        }
+      }
+    }
+  ]
 }

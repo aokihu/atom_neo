@@ -22,6 +22,8 @@ export { ToolRegistry } from "./tools/registry";
 export { executeTool } from "./tools/executor";
 export { filterToolsByPermission } from "./tools/permissions";
 export { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
+export { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck, checkMCPHealth } from "./tools/mcp-manager";
+export type { MCPServerConfig, MCPClient, MCPServerStatus } from "./tools/mcp-manager";
 export {
   createReadTool, createWriteTool, createLsTool,
   createTreeTool, createGrepTool, createCpTool, createMvTool,

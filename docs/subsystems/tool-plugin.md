@@ -223,31 +223,134 @@ export class ToolRegistry {
 }
 ```
 
-## 6. MCP Tool Adapter (Future)
+## 6. MCP Tool Integration
 
-```typescript
-// src/packages/core/src/tools/adapters/mcp-tool.ts
+MCP tools are integrated via `@ai-sdk/mcp` package. The client auto-converts MCP tools to AI SDK tool format — no adapter class needed.
 
-export class MCPToolAdapter implements ToolDefinition {
-  name: string;
-  description: string;
-  source = "mcp" as const;
-  inputSchema: z.ZodSchema;
+### 6.1 Config Schema
 
-  #transport: MCPTransport;
-
-  constructor(mcpTool: MCPToolSchema, transport: MCPTransport) {
-    this.name = mcpTool.name;
-    this.description = mcpTool.description;
-    this.inputSchema = convertJSONSchemaToZod(mcpTool.inputSchema);
-    this.#transport = transport;
-  }
-
-  async execute(args: unknown): Promise<ToolResult> {
-    return this.#transport.callTool(this.name, args);
-  }
+```json
+{
+  "mcpServers": [
+    {
+      "name": "weather",
+      "transport": { "type": "http", "url": "http://localhost:3000/mcp" }
+    },
+    {
+      "name": "filesystem",
+      "transport": { "type": "stdio", "command": "node", "args": ["mcp-server.js"] }
+    },
+    {
+      "name": "web-search",
+      "transport": { "type": "sse", "url": "http://localhost:3000/sse" }
+    }
+  ]
 }
 ```
+
+### 6.2 MCP Client Manager
+
+```typescript
+// src/packages/core/src/tools/mcp-manager.ts
+
+export type MCPServerConfig = {
+  name: string;
+  transport:
+    | { type: "http"; url: string; headers?: Record<string, string> }
+    | { type: "sse"; url: string; headers?: Record<string, string> }
+    | { type: "stdio"; command: string; args?: string[]; env?: Record<string, string>; cwd?: string };
+};
+
+export type MCPClient = Awaited<ReturnType<typeof createMCPClient>>;
+
+// Initialize all MCP clients from config
+export async function initMCPClients(configs: MCPServerConfig[]): Promise<MCPClient[]>
+
+// Fetch and merge tools from all clients
+export async function fetchMCPTools(clients: MCPClient[]): Promise<Record<string, any>>
+
+// Close all MCP connections
+export async function closeMCPClients(clients: MCPClient[]): Promise<void>
+```
+
+### 6.3 TUI Sidebar — MCP Tools Block
+
+The TUI right sidebar displays MCP tools with live online/offline status and collapsible layout.
+
+```
+展开态:                              折叠态:
+┌─ MCP Tools (5/7) ▲ ──┐            ┌─ MCP Tools (5/7) ▼ ──┐
+│ ◆ context7           │            └───────────────────────┘
+│ ◆ weather            │
+│ ◇ filesystem         │   ← 灰色=离线
+│ ◆ search             │
+└──────────────────────┘
+```
+
+Status indicators:
+- `◆` bright orange (`status.warning`) = online
+- `◇` gray (`text.muted`) = offline
+
+Click anywhere on the block to toggle expand/collapse.
+
+### 6.4 MCP Health Check
+
+Periodic health detection runs every 30 seconds:
+
+```typescript
+// src/packages/core/src/tools/mcp-manager.ts
+
+export type MCPServerStatus = { name: string; online: boolean; toolNames: string[] };
+
+export async function checkMCPHealth(
+  clients: MCPClient[],
+  configs: MCPServerConfig[],
+): Promise<MCPServerStatus[]>
+
+export function startMCPHealthCheck(
+  clients: MCPClient[],
+  configs: MCPServerConfig[],
+  onStatusChange: (statuses: MCPServerStatus[]) => void,
+): () => void  // returns stop function
+```
+
+Health check tries `client.listResources()` on each client. Success → online, failure → offline.
+
+### 6.5 Status Broadcasting
+
+Status changes are broadcast to TUI via WebSocket:
+
+```
+MCPToolStatus = "event.mcp.tool.status"
+payload: { servers: { name, online, toolNames }[] }
+```
+
+TUI WS client receives the event and updates `toolInfos` in App state, which flows to Sidebar.
+
+### 6.6 Data Flow
+
+```
+mcp-manager.ts                 server.ts                    WS → TUI
+┌──────────────┐    ┌──────────────────────────┐    ┌──────────────────┐
+│ initMCPClient │───>│ toolInfos (name+source+  │───>│ ServerInfo       │
+│ fetchMCPTools │    │  online: true)           │    │   .toolInfos     │
+│              │    │ startMCPHealthCheck()     │    │                  │
+│              │    │   → onStatusChange()      │    │ MCPToolStatus    │
+│              │    │     → broadcaster.send()  │───>│   → update online│
+└──────────────┘    └──────────────────────────┘    └──────────────────┘
+```
+
+### 6.7 Tool Pipeline Merge
+
+MCP tools (AI SDK format) are merged directly with builtin tools before `streamText()`:
+
+```
+createAllTools() ──> ToolDefinition[] ──> buildAllAiTools() ──┐
+                                                              ├──> { ...builtin, ...mcp } ──> streamText()
+mcpClient.tools() ────────────> AI-SDK tools ───────────────┘
+```
+
+MCP tool execution is wrapped with step-counting and event reporting, identical to builtin tools.
 
 ## 7. Permission Filtering
 
