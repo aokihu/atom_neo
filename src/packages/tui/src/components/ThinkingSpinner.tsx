@@ -7,7 +7,7 @@ export const ThinkingSpinner = memo(function ThinkingSpinner() {
   return (
     <box paddingLeft={2} flexDirection="row" alignItems="center">
       <spinner name="dots" color={colors.accent.brand} />
-      <text marginLeft={1} fg={colors.text.muted}>thinking</text>
+      <text marginLeft={1} fg={colors.text.muted}>preparing...</text>
     </box>
   );
 });

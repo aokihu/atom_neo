@@ -3,7 +3,7 @@ import { MessageBubble } from "./MessageBubble";
 import { useTheme } from "./App";
 import { ThinkingSpinner } from "./ThinkingSpinner";
 
-export function ChatView({ messages, thinkingVisible }: { messages: Message[]; thinkingVisible: boolean }) {
+export function ChatView({ messages, showPreparing }: { messages: Message[]; showPreparing: boolean }) {
   const { colors, syntaxStyle } = useTheme();
 
   if (messages.length === 0) {
@@ -14,6 +14,7 @@ export function ChatView({ messages, thinkingVisible }: { messages: Message[]; t
           <text fg={colors.text.secondary}>AI-driven development platform</text>
           <text fg={colors.text.muted}>{'  '}</text>
           <text fg={colors.text.secondary}>Type a message below to get started.</text>
+          {showPreparing && <ThinkingSpinner />}
         </box>
       </scrollbox>
     );
@@ -24,7 +25,7 @@ export function ChatView({ messages, thinkingVisible }: { messages: Message[]; t
       {messages.map(msg => (
         <MessageBubble key={msg.id} message={msg} syntaxStyle={syntaxStyle} />
       ))}
-      {thinkingVisible && <ThinkingSpinner />}
+      {showPreparing && <ThinkingSpinner />}
       <box height={1} />
     </scrollbox>
   );

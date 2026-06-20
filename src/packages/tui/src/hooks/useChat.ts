@@ -15,12 +15,16 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
   const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
   const [toolInfos, setToolInfos] = useState<ToolInfo[]>(initialToolInfos ?? []);
   const [mcpServers, setMcpServers] = useState<MCPServerInfo[]>(initialMCPServers ?? []);
+  const [showPreparing, setShowPreparing] = useState(false);
   const clientRef = useRef<TuiClient | null>(null);
   const toolGroupIdRef = useRef<string | null>(null);
   const stepAccumRef = useRef({ total: 0, success: 0, failed: 0, toolNames: [] as string[] });
   const bufferingRef = useRef(false);
   const textBufferRef = useRef("");
   const bufferOffsetRef = useRef(0);
+  const reasoningBufferRef = useRef("");
+  const activityRef = useRef(false);
+  const thinkingStartRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const flushIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const counterRef = useRef(0);
@@ -38,6 +42,8 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     stopFlush();
     if (!textBufferRef.current) { bufferingRef.current = false; return; }
     const id = nextId();
+    const reasoning = reasoningBufferRef.current;
+    reasoningBufferRef.current = "";
     let started = false;
     flushIntervalRef.current = setInterval(() => {
       const off = bufferOffsetRef.current;
@@ -63,7 +69,10 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
           return [...prev.slice(0, -1), { ...last, content: last.content + chunk }];
         }
         started = true;
-        return [...prev, { role: "assistant", content: chunk, id, streaming: true, timestamp: now() }];
+        return [...prev, {
+          role: "assistant", content: chunk, id, streaming: true, timestamp: now(),
+          ...(reasoning ? { reasoningContent: reasoning } : {}),
+        } as Extract<Message, { role: "assistant" }>];
       });
     }, QUICK_RENDER_MS);
   }
@@ -73,6 +82,7 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     bufferingRef.current = false;
     textBufferRef.current = "";
     bufferOffsetRef.current = 0;
+    reasoningBufferRef.current = "";
   }
 
   useEffect(() => {
@@ -89,6 +99,8 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
         return;
       }
 
+      const reasoning = reasoningBufferRef.current;
+
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.streaming) {
@@ -97,22 +109,34 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
             { ...last, content: last.content.substring(0, offset) + delta },
           ];
         }
+        reasoningBufferRef.current = "";
+        if (!activityRef.current) {
+          activityRef.current = true;
+          setShowPreparing(false);
+        }
         const id = nextId();
-        return [...prev, { role: "assistant", content: delta, id, streaming: true, timestamp: now() }];
+        const duration = thinkingStartRef.current ? Math.round((Date.now() - thinkingStartRef.current) / 1000) : 0;
+        return [...prev, {
+          role: "assistant", content: delta, id, streaming: true, timestamp: now(),
+          ...(reasoning ? { reasoningContent: reasoning, thinkingDuration: duration } : {}),
+        } as Extract<Message, { role: "assistant" }>];
       });
     });
 
-    client.onReason((delta, _offset) => {
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "reasoning") {
-          return [...prev.slice(0, -1), { ...last, content: last.content + delta }];
-        }
-        return [...prev, { role: "reasoning" as const, content: delta, id: nextId(), timestamp: now() }];
-      });
+    client.onReason((delta) => {
+      if (!activityRef.current) {
+        activityRef.current = true;
+        setShowPreparing(false);
+        thinkingStartRef.current = Date.now();
+      }
+      reasoningBufferRef.current += delta;
     });
 
     client.onTool((event) => {
+      if (!activityRef.current) {
+        activityRef.current = true;
+        setShowPreparing(false);
+      }
       const callId = event.callId;
       const isResult = event.error || event.result !== undefined;
 
@@ -240,6 +264,9 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     toolGroupIdRef.current = null;
     stepAccumRef.current = { total: 0, success: 0, failed: 0, toolNames: [] };
     resetBuffer();
+    activityRef.current = false;
+    thinkingStartRef.current = 0;
+    setShowPreparing(true);
     setMessages(prev => [...prev, { role: "user", content: text, id: nextId(), timestamp: now() }]);
     setSessionBusy(true);
 
@@ -262,5 +289,5 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     }
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers };
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing };
 }
