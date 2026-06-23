@@ -50,6 +50,9 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     this.report(BusEvents.Element.Data, { step: "scheduling retry conversation", sessionId, parentTaskId: input.task.parentTaskId });
 
     input.session.compressing = false;
+    if (typeof input.session.setContextTokens === "function") {
+      input.session.setContextTokens(0);
+    }
 
     this.#orchestrator.scheduleConversation(
       sessionId,

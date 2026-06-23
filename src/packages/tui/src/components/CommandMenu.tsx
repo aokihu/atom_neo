@@ -9,6 +9,7 @@ export const CMDS: Command[] = [
   { name: "/quit", description: "Exit Atom Neo" },
   { name: "/help", description: "Show help message" },
   { name: "/clear", description: "Clear chat history" },
+  { name: "/compact", description: "Compress session context" },
 ];
 
 function matchCommands(filter: string): Command[] {

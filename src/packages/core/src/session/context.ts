@@ -45,6 +45,7 @@ export class SessionContext {
   };
   #continuationContext: ContinuationContext | null = null;
   #tokenUsage: TokenUsage = { total: 0 };
+  #contextTokens: number = 0;
   #chainDepth: number = 0;
   #todoState: TodoItem[] = [];
   #currentTopic: string | null = null;
@@ -136,6 +137,14 @@ export class SessionContext {
 
   addTokenUsage(total: number): void {
     this.#tokenUsage.total += total;
+  }
+
+  get contextTokens(): number {
+    return this.#contextTokens;
+  }
+
+  setContextTokens(total: number): void {
+    this.#contextTokens = total;
   }
 
   get todoState(): readonly TodoItem[] {

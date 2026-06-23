@@ -47,7 +47,7 @@ export class TokenRatioElement extends BaseElement<any, any> {
   }
 
   async doProcess(input: any): Promise<any> {
-    const tu = calcTokenUsage(this.#session?.tokenUsage?.total ?? 0, input);
+    const tu = this.#session?.contextTokens ?? 0;
     const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
 
     this.report(BusEvents.Element.Data, {

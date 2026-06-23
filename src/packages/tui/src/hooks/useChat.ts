@@ -289,5 +289,9 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     }
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing };
+  const compact = useCallback(() => {
+    clientRef.current?.sendCompact();
+  }, []);
+
+  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing, compact };
 }

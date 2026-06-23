@@ -44,6 +44,7 @@ export const WsMessages = {
   Client: {
     TaskSubmit: "event.task.submit",
     TaskCancel: "event.task.cancel",
+    Compact: "event.task.compact",
   },
   Server: {
     SessionReady: "session.ready",

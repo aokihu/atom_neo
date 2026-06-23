@@ -314,6 +314,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       const reasoningContent = reasoningText;
       const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
+      if (this.#session?.setContextTokens) {
+        this.#session.setContextTokens(usage?.totalTokens ?? 0);
+      }
 
       fullText = sanitizeForJSON(fullText);
       this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });

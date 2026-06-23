@@ -5,12 +5,14 @@ import type { PipelineEventBus, Logger } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import { TaskSource, BusEvents, WsMessages, errorMessage } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
+import type { InternalTaskOrchestrator } from "../task/internal-task-orchestrator";
 
 type ServerContext = {
   broadcaster: Broadcaster;
   taskQueue: TaskQueue;
   bus?: PipelineEventBus<FullEventMap>;
   logger?: Logger;
+  orchestrator?: InternalTaskOrchestrator;
 };
 
 let seq = 0;
@@ -57,6 +59,11 @@ export function createWsHandlers(ctx: ServerContext) {
           send(ws, WsMessages.Server.TaskStateChanged, { taskId: payload.taskId, currentState: "failed" });
         } else if (type === WsMessages.Control.Ping) {
           send(ws, WsMessages.Control.Pong, {});
+        } else if (type === WsMessages.Client.Compact) {
+          const sid = (ws as any).data?.sessionId;
+          if (sid && ctx.orchestrator) {
+            ctx.orchestrator.scheduleCompress(sid, "default", sid);
+          }
         }
       } catch (err) {
         ctx.logger?.error("ws message parse failed", { error: errorMessage(err) });

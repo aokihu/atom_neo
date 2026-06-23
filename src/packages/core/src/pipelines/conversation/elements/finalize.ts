@@ -69,7 +69,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       return this.#complete(input);
     }
 
-    const tu = this.#session?.tokenUsage?.total ?? 0;
+    const tu = this.#session?.contextTokens ?? 0;
     const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
     const effectiveLimit = this.#configContextLimit - this.#maxTokens;
 

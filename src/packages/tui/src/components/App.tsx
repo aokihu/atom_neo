@@ -30,9 +30,10 @@ function isProcessing(msgs: Message[]): boolean {
 }
 
 const HELP_TEXT = `Available commands:
-  /quit   Exit Atom Neo
-  /help   Show this help message
-  /clear  Clear chat history
+  /quit     Exit Atom Neo
+  /help     Show this help message
+  /clear    Clear chat history
+  /compact  Compress session context
 
 Keyboard shortcuts:
   Ctrl+C      Exit (press twice)
@@ -44,7 +45,7 @@ Keyboard shortcuts:
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
+  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing, compact } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
@@ -61,6 +62,10 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
     clearMessages();
   }, [clearMessages]);
 
+  const handleCompact = useCallback(() => {
+    compact();
+  }, [compact]);
+
   return (
     <ThemeContext.Provider value={theme}>
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
@@ -68,7 +73,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView messages={messages} showPreparing={showPreparing} />
-            <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} sessionBusy={sessionBusy} />
+            <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} sessionBusy={sessionBusy} />
             <StatusLine hint={exitHint} processing={sessionBusy || isProcessing(messages)} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={contextLimit} todoItems={todoItems} toolInfos={toolInfos} mcpServers={mcpServers} />}

@@ -157,5 +157,12 @@ export class TuiClient {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));
     this.#pending = [];
     this.#ws?.close();
+    this.#ready = false;
+  }
+
+  sendCompact(): void {
+    if (this.#ws && this.#ready) {
+      this.#ws.send(JSON.stringify({ type: WsMessages.Client.Compact }));
+    }
   }
 }

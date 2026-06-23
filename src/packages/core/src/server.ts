@@ -425,7 +425,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
-  const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus, logger });
+  const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus, logger, orchestrator });
 
   // Bridge: bus transport.reason → WebSocket broadcaster for reasoning streaming
   bus.on(BusEvents.Transport.Reason as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {

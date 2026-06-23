@@ -19,10 +19,11 @@ interface InputBarProps {
   onQuit?: () => void;
   onHelp?: () => void;
   onClear?: () => void;
+  onCompact?: () => void;
   sessionBusy: boolean;
 }
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: InputBarProps) {
+export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, sessionBusy }: InputBarProps) {
   const { colors } = useTheme();
   const taRef = useRef<TextareaRenderable>(null);
   const [content, setContent] = useState("");
@@ -69,10 +70,13 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, sessionBusy }: Input
       case "/clear":
         onClear?.();
         break;
+      case "/compact":
+        onCompact?.();
+        break;
     }
     taRef.current?.setText("");
     setContent("");
-  }, [onQuit, onHelp, onClear]);
+  }, [onQuit, onHelp, onClear, onCompact]);
 
   const handleSubmit = useCallback(() => {
     const text = (taRef.current?.plainText ?? "").trim();
