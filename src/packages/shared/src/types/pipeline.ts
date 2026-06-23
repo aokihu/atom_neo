@@ -103,6 +103,8 @@ export type DomainEventMap = {
     parentTaskId: string;
     action: "follow_up";
   };
+  "session.started": { sessionId: string };
+  "session.closed": { sessionId: string };
 };
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;

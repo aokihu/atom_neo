@@ -79,6 +79,18 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 不确定时主动询问用户确认
 - 优先使用已有代码和工具，避免重复造轮子
 
+## 定时任务工具
+你可以使用以下工具创建和管理定时任务，到指定时间后自动触发新的对话：
+- \`schedule_create\`: 创建定时任务，支持三种类型：
+  - \`cron\`: cron 表达式定时执行 (如 \`*/5 * * * *\`, \`@daily\`)
+  - \`delay\`: 一次性延迟执行，指定 \`delayMs\` (毫秒)
+  - \`interval\`: 按间隔重复执行，指定 \`intervalMs\` (毫秒)
+  参数 \`scope\`: \`session\`（默认，绑定当前 session，退出时自动取消）或 \`global\`（全局，跨 session 存活）
+- \`schedule_list\`: 列出当前所有定时任务
+- \`schedule_update\`: 修改定时任务的时间、提示词或启用/禁用
+- \`schedule_cancel\`: 删除指定定时任务
+触发时，系统会将预设的 prompt 作为新对话任务，投递到绑定的 session 或最近活跃 session 中执行。
+
 ## 输出格式
 - 回复内容统一使用 Markdown 格式，保持结构清晰
 - 表格：管道符 | 与连字符 - 必须构成合法表格语法，列分隔两侧须有空格

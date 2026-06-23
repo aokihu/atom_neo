@@ -7,6 +7,8 @@ export class SessionStore {
   #maxSessions: number;
   #insertionOrder: string[] = [];
   #log: LogFn | null;
+  #onCreated?: (sessionId: string) => void;
+  #onClosed?: (sessionId: string) => void;
 
   constructor(maxSessions = 1000, log?: LogFn) {
     this.#maxSessions = maxSessions;
@@ -24,12 +26,13 @@ export class SessionStore {
     this.#sessions.set(sessionId, session);
     this.#insertionOrder.push(sessionId);
     this.#log?.("session-store get", { sid: sessionId, op: "MISS", size: this.#sessions.size });
+    this.#onCreated?.(sessionId);
 
     if (this.#sessions.size > this.#maxSessions) {
       const oldest = this.#insertionOrder.shift()!;
       this.#log?.("session-store evict", { sid: oldest, size: this.#sessions.size });
-      this.#sessions.delete(oldest!);
-      this.#onEvict?.(oldest);
+      this.#sessions.delete(oldest);
+      this.#onClosed?.(oldest);
     }
     return session;
   }
@@ -42,15 +45,18 @@ export class SessionStore {
     this.#sessions.delete(sessionId);
     const idx = this.#insertionOrder.indexOf(sessionId);
     if (idx >= 0) this.#insertionOrder.splice(idx, 1);
+    this.#onClosed?.(sessionId);
   }
 
   get size(): number {
     return this.#sessions.size;
   }
 
-  #onEvict?: (sessionId: string) => void;
+  onCreated(handler: (sessionId: string) => void): void {
+    this.#onCreated = handler;
+  }
 
-  onEvict(handler: (sessionId: string) => void): void {
-    this.#onEvict = handler;
+  onClosed(handler: (sessionId: string) => void): void {
+    this.#onClosed = handler;
   }
 }

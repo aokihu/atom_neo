@@ -34,6 +34,10 @@ export const BusEvents = {
     Chain: "conversation.chain",
     Idle: "conversation.idle",
   },
+  Session: {
+    Started: "session.started",
+    Closed: "session.closed",
+  },
 } as const;
 
 export const WsMessages = {

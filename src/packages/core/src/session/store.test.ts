@@ -48,10 +48,10 @@ describe("SessionStore", () => {
     expect(store.size).toBe(2);
   });
 
-  test("calls eviction handler", () => {
+  test("calls closed handler on eviction", () => {
     const handler = mock(() => {});
     const store = new SessionStore(1);
-    store.onEvict(handler);
+    store.onClosed(handler);
 
     store.get("first");
     store.get("second");

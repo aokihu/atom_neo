@@ -44,6 +44,9 @@ export type {
   ScopeState,
   MemoryScopeState,
   ContinuationContext,
+  ScheduledTask,
+  HookTrigger,
+  Hook,
 } from "./types";
 
 // ── Pipeline ──

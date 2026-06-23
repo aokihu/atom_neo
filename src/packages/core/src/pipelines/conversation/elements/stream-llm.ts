@@ -433,17 +433,18 @@ function getActiveToolNames(taskIntent: string): string[] {
   const MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
   const CONTROL = ["todowrite", "intent"];
   const EXTRA = ["webfetch", "bash"];
+  const SCHEDULE = ["schedule_create", "schedule_list", "schedule_update", "schedule_cancel"];
 
   switch (taskIntent) {
     case "instruction":
-      return [...FS_RO, ...FS_RW, ...MEMORY, ...CONTROL, ...EXTRA];
+      return [...FS_RO, ...FS_RW, ...MEMORY, ...CONTROL, ...EXTRA, ...SCHEDULE];
     case "question":
-      return [...FS_RO, ...MEMORY, ...CONTROL, "webfetch"];
+      return [...FS_RO, ...MEMORY, ...CONTROL, "webfetch", ...SCHEDULE];
     case "creative":
-      return [...FS_RO, ...FS_RW, ...CONTROL, "webfetch"];
+      return [...FS_RO, ...FS_RW, ...CONTROL, "webfetch", ...SCHEDULE];
     case "conversation":
     default:
-      return [...FS_RO, ...CONTROL, "webfetch"];
+      return [...FS_RO, ...CONTROL, "webfetch", ...SCHEDULE];
   }
 }
 

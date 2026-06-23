@@ -17,6 +17,9 @@ import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
 import { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck } from "./tools/mcp-manager";
 import type { MCPServerConfig } from "./tools/mcp-manager";
+import { ScheduleService } from "./tools/schedule-service";
+import { HookManager } from "./hooks/hook-manager";
+import { createScheduleTools } from "./tools/builtin/schedule";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -102,6 +105,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const mcpToolsRef: { current: Record<string, any> } = { current: {} };
   let mcpServerInfos: { name: string; online: boolean; toolCount: number }[] = [];
   let mcpClients: Array<Awaited<ReturnType<typeof initMCPClients>>["clients"][number]> = [];
+
+  const hookManagerRef: { current: HookManager | null } = { current: null };
 
   const toolInfos = allTools.map(t => ({ name: t.name, source: t.source as string, description: t.description, online: undefined as boolean | undefined }));
 
@@ -255,6 +260,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   bus.on(BusEvents.Task.Activated, (p) => {
     const sid = p.task.sessionId;
     if (sid) {
+      sessionRef.current = { sessionId: sid, chatId: p.task.chatId ?? "default" };
       broadcaster.broadcastToSession(sid, {
         type: WsMessages.Server.SessionTaskActive,
         ts: Date.now(), seq: 0,
@@ -334,6 +340,26 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const taskQueue = new TaskQueue();
   const orchestrator = new InternalTaskOrchestrator(taskQueue);
+
+  const schedulePersistPath = `${sandbox}/${runtime?.appConfig?.schedule?.persistPath ?? "schedule-tasks.json"}`;
+  const scheduleService = new ScheduleService(taskQueue, schedulePersistPath, logger);
+
+  const hookPersistPath = `${sandbox}/hooks.json`;
+  const hookManager = new HookManager(scheduleService, bus, taskQueue, hookPersistPath, logger);
+  hookManagerRef.current = hookManager;
+  hookManager.restore();
+
+  const sessionRef: { current: { sessionId: string; chatId: string } | null } = { current: null };
+  const scheduleTools = createScheduleTools(hookManagerRef, sessionRef);
+  for (const t of scheduleTools) {
+    toolRegistry.register(t);
+    allTools.push(t);
+    toolInfos.push({ name: t.name, source: t.source, description: t.description, online: undefined as boolean | undefined });
+  }
+  logger.info("schedule tools registered", { count: scheduleTools.length, restored: hookManager.list().length });
+
+  sessionStore.onCreated((sid) => bus.emit(BusEvents.Session.Started as any, { sessionId: sid }));
+  sessionStore.onClosed((sid) => bus.emit(BusEvents.Session.Closed as any, { sessionId: sid }));
 
   bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: string } }) => {
     const p = e.payload;
@@ -486,5 +512,5 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   logger.info("core ready", { port: server.port, address: host });
-  return { port: server.port!, tools: allTools.map((t: any) => t.name), toolInfos, mcpServerInfos, stop: () => { mcpHealthStopRef.current(); taskEngine.stop(); server.stop(); closeMCPClients(mcpClients); } };
+  return { port: server.port!, tools: allTools.map((t: any) => t.name), toolInfos, mcpServerInfos, stop: () => { hookManager.stop(); mcpHealthStopRef.current(); taskEngine.stop(); server.stop(); closeMCPClients(mcpClients); } };
 }

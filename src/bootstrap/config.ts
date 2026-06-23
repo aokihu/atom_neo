@@ -49,6 +49,9 @@ const ConfigSchema = z.object({
     maxSteps: z.number().int().min(1).default(50),
     maxChainDepth: z.number().int().min(1).default(5),
   }).default({ maxSteps: 50, maxChainDepth: 5 }),
+  schedule: z.object({
+    persistPath: z.string().default("schedule-tasks.json"),
+  }).default({ persistPath: "schedule-tasks.json" }),
   mcpServers: z.array(z.object({
     name: z.string(),
     transport: z.discriminatedUnion("type", [

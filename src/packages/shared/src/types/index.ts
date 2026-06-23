@@ -41,6 +41,9 @@ export type {
   FullEventMap,
 } from "./pipeline";
 
+export type { ScheduledTask } from "./schedule";
+export type { HookTrigger, Hook } from "./hook";
+
 export type {
   SessionMessage,
   InferenceFact,
