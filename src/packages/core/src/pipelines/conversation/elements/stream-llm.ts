@@ -260,7 +260,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
 
       if (tokenOverflow) {
-        const tu = calcTokenUsage(this.#session?.tokenUsage?.total ?? 0, input.tokenUsage);
+        const tu = this.#session?.contextTokens ?? 0;
         const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
         const effectiveLimit = this.#configContextLimit - this.#maxTokens;
 

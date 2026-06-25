@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTheme } from "./App";
 import type { Message } from "../types";
 import { SyntaxStyle } from "@opentui/core";
+import { formatDuration } from "./MessageBubble";
 
 export function AssistantMessage({ message, syntaxStyle }: { message: Message & { role: "assistant" }; syntaxStyle: SyntaxStyle }) {
   const { colors } = useTheme();
@@ -25,7 +26,7 @@ export function AssistantMessage({ message, syntaxStyle }: { message: Message & 
           <text fg={colors.text.muted}>
             {thinkingExpanded
               ? 'Thinking:'
-              : `Thought - ${message.thinkingDuration ?? 0}s ▸`}
+              : `Thought - ${formatDuration(message.thinkingDuration ?? 0)} ▸`}
           </text>
           {thinkingExpanded && (
             <text selectable fg={colors.text.muted}>{message.reasoningContent}</text>

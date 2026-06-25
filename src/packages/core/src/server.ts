@@ -339,7 +339,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   const taskQueue = new TaskQueue();
-  const orchestrator = new InternalTaskOrchestrator(taskQueue);
+  const orchestrator = new InternalTaskOrchestrator(taskQueue, bus);
 
   const schedulePersistPath = `${sandbox}/${runtime?.appConfig?.schedule?.persistPath ?? "schedule-tasks.json"}`;
   const scheduleService = new ScheduleService(taskQueue, schedulePersistPath, logger);

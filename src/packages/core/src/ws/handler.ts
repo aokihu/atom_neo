@@ -41,7 +41,10 @@ export function createWsHandlers(ctx: ServerContext) {
 
         if (type === WsMessages.Client.TaskSubmit) {
           const sid = (ws as any).data?.sessionId;
-          if (sid) ctx.broadcaster.add(ws, sid);
+          if (sid) {
+            ctx.broadcaster.add(ws, sid);
+            (ws as any).data.chatId = payload.chatId ?? "default";
+          }
 
           const task = createTaskItem({
             sessionId: payload.sessionId,
@@ -61,8 +64,9 @@ export function createWsHandlers(ctx: ServerContext) {
           send(ws, WsMessages.Control.Pong, {});
         } else if (type === WsMessages.Client.Compact) {
           const sid = (ws as any).data?.sessionId;
+          const cid = (ws as any).data?.chatId ?? "default";
           if (sid && ctx.orchestrator) {
-            ctx.orchestrator.scheduleCompress(sid, "default", sid);
+            ctx.orchestrator.scheduleCompress(sid, cid, sid);
           }
         }
       } catch (err) {

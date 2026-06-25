@@ -1,13 +1,15 @@
 import { createTaskItem } from "../task-factory";
-import { TaskSource } from "@atom-neo/shared";
-import type { TaskPayload } from "@atom-neo/shared";
+import { TaskSource, BusEvents } from "@atom-neo/shared";
+import type { TaskPayload, PipelineEventBus, FullEventMap } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
 
 export class InternalTaskOrchestrator {
   #queue: TaskQueue;
+  #bus?: PipelineEventBus<FullEventMap>;
 
-  constructor(queue: TaskQueue) {
+  constructor(queue: TaskQueue, bus?: PipelineEventBus<FullEventMap>) {
     this.#queue = queue;
+    this.#bus = bus;
   }
 
   scheduleConversation(
@@ -56,5 +58,6 @@ export class InternalTaskOrchestrator {
     });
     opts.onEnqueue?.(task);
     this.#queue.enqueue(task);
+    this.#bus?.emit(BusEvents.Task.Enqueued as any, { task });
   }
 }

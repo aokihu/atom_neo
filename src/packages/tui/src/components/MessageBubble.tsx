@@ -10,6 +10,12 @@ export function fmtTime(ts: number): string {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
+export function formatDuration(seconds: number): string {
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m`;
+  return `${seconds}s`;
+}
+
 export function MessageBubble({ message, syntaxStyle }: { message: Message; syntaxStyle: SyntaxStyle }) {
   const { colors } = useTheme();
 

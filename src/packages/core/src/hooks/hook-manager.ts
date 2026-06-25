@@ -185,7 +185,6 @@ export class HookManager {
     this.#queue.enqueue(taskItem);
     this.#bus.emit(BusEvents.Task.Enqueued as any, { task: taskItem });
     hook.lastFiredAt = Date.now();
-    this.#persist();
     this.#logger.info("hook fired", { id: hook.id, name: hook.name, trigger: hook.trigger.type, sessionId, taskItemId: taskItem.id });
   }
 
