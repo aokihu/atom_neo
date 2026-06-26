@@ -103,6 +103,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let finishReason = "";
       let tokenOverflow = false;
       let streamErrorCode = 0;
+      const allToolCalls: { toolName: string; ok: boolean }[] = [];
 
       try {
         const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -215,6 +216,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
             this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
             stepToolCalls.push({ toolName: c.toolName, ok: !c.error });
+            allToolCalls.push({ toolName: c.toolName, ok: !c.error });
             if (this.#session?.addToolResult) {
               this.#session.addToolResult({
                 toolName: c.toolName,
@@ -256,6 +258,17 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       }
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
+
+      if (allToolCalls.length > 0) {
+        const uniqueNames = [...new Set(allToolCalls.map(t => t.toolName))];
+        const success = allToolCalls.filter(t => t.ok).length;
+        this.report(BusEvents.Transport.ToolGroupComplete as any, {
+          total: allToolCalls.length,
+          success,
+          failed: allToolCalls.length - success,
+          toolNames: uniqueNames,
+        });
+      }
 
       tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
 

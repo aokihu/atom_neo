@@ -2,15 +2,15 @@ import { createContext, useContext, useMemo, useEffect, useCallback } from "reac
 import { useTerminalDimensions } from "@opentui/react";
 import "opentui-spinner/react";
 import { useChat } from "../hooks/useChat";
+import { useChatStore } from "../stores/chat";
 import { getTheme } from "../theme";
-import type { ServerInfo, ThemeColors } from "../types";
+import type { ServerInfo, ThemeColors, Message } from "../types";
 import { SyntaxStyle } from "@opentui/core";
 import { StatusBar } from "./StatusBar";
 import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
 import { Sidebar } from "./Sidebar";
-import type { Message } from "../types";
 import { useInputHistory } from "../stores/inputHistory";
 
 const SIDEBAR_MIN_WIDTH = 90;
@@ -21,13 +21,6 @@ type ThemeCtx = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
 const ThemeContext = createContext<ThemeCtx>(getTheme());
 
 export function useTheme() { return useContext(ThemeContext); }
-
-function isProcessing(msgs: Message[]): boolean {
-  return msgs.some(m =>
-    m.role === "tool-group" && !m.collapsed &&
-    m.entries.some(e => e.phase === "executing" || e.phase === "preparing")
-  );
-}
 
 const HELP_TEXT = `Available commands:
   /quit     Exit Atom Neo
@@ -45,26 +38,20 @@ Keyboard shortcuts:
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing, compact } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
+  const { send, clearMessages, addMessage, compact } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
 
   useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
 
-  const nextIdRef = useCallback(() => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, []);
-
   const handleHelp = useCallback(() => {
-    addMessage({ role: "info", content: HELP_TEXT, id: nextIdRef(), timestamp: Date.now() });
-  }, [addMessage, nextIdRef]);
+    addMessage({ role: "info", content: HELP_TEXT, id: useChatStore.getState().generateId(), timestamp: Date.now() });
+  }, [addMessage]);
 
-  const handleClear = useCallback(() => {
-    clearMessages();
-  }, [clearMessages]);
+  const handleClear = useCallback(() => { clearMessages(); }, [clearMessages]);
 
-  const handleCompact = useCallback(() => {
-    compact();
-  }, [compact]);
+  const handleCompact = useCallback(() => { compact(); }, [compact]);
 
   return (
     <ThemeContext.Provider value={theme}>
@@ -72,11 +59,11 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         <StatusBar serverInfo={serverInfo} />
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
-            <ChatView messages={messages} showPreparing={showPreparing} />
-            <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} sessionBusy={sessionBusy} />
-            <StatusLine hint={exitHint} processing={sessionBusy || isProcessing(messages)} />
+            <ChatView />
+            <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} />
+            <StatusLine hint={exitHint} />
           </box>
-          {showSidebar && <Sidebar serverInfo={serverInfo} tokenUsage={tokenUsage} contextLimit={contextLimit} todoItems={todoItems} toolInfos={toolInfos} mcpServers={mcpServers} />}
+          {showSidebar && <Sidebar serverInfo={serverInfo} contextLimit={contextLimit} />}
         </box>
       </box>
     </ThemeContext.Provider>

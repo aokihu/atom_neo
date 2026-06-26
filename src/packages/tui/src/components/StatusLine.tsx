@@ -1,13 +1,20 @@
 import { BounceBarSpinner } from "./BounceBarSpinner";
 import { useTheme } from "./App";
+import { useChatStore } from "../stores/chat";
 
 interface StatusLineProps {
   hint?: string | null;
-  processing: boolean;
 }
 
-export function StatusLine({ hint, processing }: StatusLineProps) {
+export function StatusLine({ hint }: StatusLineProps) {
   const { colors } = useTheme();
+  const processing = useChatStore(s => {
+    if (s.busy) return true;
+    return s.messages.some(m =>
+      m.role === "tool-group" && !m.collapsed &&
+      m.entries.some(e => e.phase === "executing" || e.phase === "preparing")
+    );
+  });
 
   return (
     <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>

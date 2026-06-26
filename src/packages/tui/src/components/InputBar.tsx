@@ -3,6 +3,7 @@ import { useTheme } from "./App";
 import { CommandMenu, CMDS, matchCommands } from "./CommandMenu";
 import type { Command } from "./CommandMenu";
 import { useInputHistory } from "../stores/inputHistory";
+import { useChatStore } from "../stores/chat";
 import type { TextareaRenderable, KeyBinding, KeyEvent } from "@opentui/core";
 
 const keyBindings: KeyBinding[] = [
@@ -20,11 +21,11 @@ interface InputBarProps {
   onHelp?: () => void;
   onClear?: () => void;
   onCompact?: () => void;
-  sessionBusy: boolean;
 }
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, sessionBusy }: InputBarProps) {
+export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact }: InputBarProps) {
   const { colors } = useTheme();
+  const sessionBusy = useChatStore(s => s.busy);
   const taRef = useRef<TextareaRenderable>(null);
   const [content, setContent] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);

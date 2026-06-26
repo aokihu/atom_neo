@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import type { ServerInfo, TodoItem, ToolInfo, MCPServerInfo } from "../types";
+import type { ServerInfo } from "../types";
 import { useTheme } from "./App";
+import { useChatStore } from "../stores/chat";
 
 function gauge(used: number, limit: number, width = 10): string {
   const r = Math.min(used / Math.max(limit, 1), 1);
@@ -21,11 +22,7 @@ const STATUS_ICON: Record<string, string> = {
 
 interface SidebarProps {
   serverInfo: ServerInfo;
-  tokenUsage: number;
   contextLimit: number;
-  todoItems: TodoItem[];
-  toolInfos: ToolInfo[];
-  mcpServers: MCPServerInfo[];
 }
 
 function fmtUptime(totalSec: number): string {
@@ -42,11 +39,15 @@ function fmtUptime(totalSec: number): string {
   return result;
 }
 
-export function Sidebar({ serverInfo, tokenUsage, contextLimit, todoItems, toolInfos, mcpServers }: SidebarProps) {
+export function Sidebar({ serverInfo, contextLimit }: SidebarProps) {
   const { colors } = useTheme();
   const [uptime, setUptime] = useState(0);
   const startRef = useRef(Date.now());
   const [mcpExpanded, setMcpExpanded] = useState(false);
+  const tokenUsage = useChatStore(s => s.tokenUsage);
+  const todoItems = useChatStore(s => s.todoItems);
+  const toolInfos = useChatStore(s => s.toolInfos);
+  const mcpServers = useChatStore(s => s.mcpServers);
 
   useEffect(() => {
     const interval = uptime < 60 ? 1000 : 60_000;

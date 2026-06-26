@@ -21,6 +21,7 @@ export const BusEvents = {
     ToolStarted: "transport.tool.started",
     ToolFinished: "transport.tool.finished",
     ToolStepFinished: "transport.tool.step-finished",
+    ToolGroupComplete: "transport.tool.group-complete",
     Failed: "transport.failed",
   },
   Intent: {
@@ -57,6 +58,7 @@ export const WsMessages = {
     TransportToolStarted: "event.transport.tool.started",
     TransportToolFinished: "event.transport.tool.finished",
     TransportToolStepFinished: "event.transport.tool.step-finished",
+    TransportToolGroupComplete: "event.transport.tool.group-complete",
     SessionTaskActive: "event.session.task-active",
     MCPConnected: "event.mcp.connected",
     MCPToolStatus: "event.mcp.tool.status",

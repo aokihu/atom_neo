@@ -179,7 +179,7 @@ export class HookManager {
       sessionId,
       chatId: "default",
       pipeline: "conversation",
-      source: TaskSource.EXTERNAL,
+      source: TaskSource.INTERNAL,
       payload: [{ type: "text", data: hook.prompt }],
     });
     this.#queue.enqueue(taskItem);

@@ -1,297 +1,124 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
-import type { Message, TodoItem, ToolEntry, ToolInfo, MCPServerInfo } from "../types";
-
-function now() { return Date.now(); }
-
-const FLUSH_DELAY = 1000;
-const QUICK_RENDER_MS = 20;
-const QUICK_RENDER_CHUNK = 3;
+import { useChatStore } from "../stores/chat";
+import type { ToolInfo, MCPServerInfo } from "../types";
 
 export function useChat(url: string, sessionId?: string, initialToolInfos?: ToolInfo[], initialMCPServers?: MCPServerInfo[]) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [tokenUsage, setTokenUsage] = useState(0);
-  const [sessionBusy, setSessionBusy] = useState(false);
-  const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
-  const [toolInfos, setToolInfos] = useState<ToolInfo[]>(initialToolInfos ?? []);
-  const [mcpServers, setMcpServers] = useState<MCPServerInfo[]>(initialMCPServers ?? []);
-  const [showPreparing, setShowPreparing] = useState(false);
   const clientRef = useRef<TuiClient | null>(null);
-  const toolGroupIdRef = useRef<string | null>(null);
-  const stepAccumRef = useRef({ total: 0, success: 0, failed: 0, toolNames: [] as string[] });
-  const bufferingRef = useRef(false);
-  const textBufferRef = useRef("");
-  const bufferOffsetRef = useRef(0);
   const reasoningBufferRef = useRef("");
   const activityRef = useRef(false);
   const thinkingStartRef = useRef(0);
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const flushIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const counterRef = useRef(0);
-
-  function nextId() { return `msg-${Date.now()}-${++counterRef.current}`; }
-
-  function stopFlush() {
-    clearTimeout(flushTimerRef.current);
-    flushTimerRef.current = undefined;
-    clearInterval(flushIntervalRef.current);
-    flushIntervalRef.current = undefined;
-  }
-
-  function startQuickRender() {
-    stopFlush();
-    if (!textBufferRef.current) { bufferingRef.current = false; return; }
-    const id = nextId();
-    const reasoning = reasoningBufferRef.current;
-    reasoningBufferRef.current = "";
-    let started = false;
-    flushIntervalRef.current = setInterval(() => {
-      const off = bufferOffsetRef.current;
-      const total = textBufferRef.current.length;
-      if (off >= total) {
-        stopFlush();
-        bufferingRef.current = false;
-        if (!started) return;
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && last.streaming) {
-            return prev.map(m => m.id === last.id ? { ...m, streaming: false } : m);
-          }
-          return prev;
-        });
-        return;
-      }
-      const chunk = textBufferRef.current.slice(off, off + QUICK_RENDER_CHUNK);
-      bufferOffsetRef.current = off + chunk.length;
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant" && last.streaming && started) {
-          return [...prev.slice(0, -1), { ...last, content: last.content + chunk }];
-        }
-        started = true;
-        return [...prev, {
-          role: "assistant", content: chunk, id, streaming: true, timestamp: now(),
-          ...(reasoning ? { reasoningContent: reasoning } : {}),
-        } as Extract<Message, { role: "assistant" }>];
-      });
-    }, QUICK_RENDER_MS);
-  }
-
-  function resetBuffer() {
-    stopFlush();
-    bufferingRef.current = false;
-    textBufferRef.current = "";
-    bufferOffsetRef.current = 0;
-    reasoningBufferRef.current = "";
-  }
 
   useEffect(() => {
+    if (initialToolInfos) useChatStore.setState({ toolInfos: initialToolInfos });
+    if (initialMCPServers) useChatStore.setState({ mcpServers: initialMCPServers });
+
     const client = new TuiClient({ url, sessionId });
     clientRef.current = client;
 
     client.onTokenUsage((total) => {
-      setTokenUsage(total);
-    });
-
-    client.onDelta((delta, offset) => {
-      if (bufferingRef.current) {
-        textBufferRef.current += delta;
-        return;
-      }
-
-      const reasoning = reasoningBufferRef.current;
-
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant" && last.streaming) {
-          return [
-            ...prev.slice(0, -1),
-            { ...last, content: last.content.substring(0, offset) + delta },
-          ];
-        }
-        reasoningBufferRef.current = "";
-        if (!activityRef.current) {
-          activityRef.current = true;
-          setShowPreparing(false);
-        }
-        const id = nextId();
-        const duration = thinkingStartRef.current ? Math.round((Date.now() - thinkingStartRef.current) / 1000) : 0;
-        return [...prev, {
-          role: "assistant", content: delta, id, streaming: true, timestamp: now(),
-          ...(reasoning ? { reasoningContent: reasoning, thinkingDuration: duration } : {}),
-        } as Extract<Message, { role: "assistant" }>];
-      });
+      useChatStore.getState().setTokenUsage(total);
     });
 
     client.onReason((delta) => {
       if (!activityRef.current) {
         activityRef.current = true;
-        setShowPreparing(false);
+        useChatStore.getState().setShowPreparing(false);
         thinkingStartRef.current = Date.now();
       }
       reasoningBufferRef.current += delta;
     });
 
-    client.onTool((event) => {
+    client.onDelta((delta, offset) => {
+      const reasoning = reasoningBufferRef.current;
       if (!activityRef.current) {
         activityRef.current = true;
-        setShowPreparing(false);
+        thinkingStartRef.current = Date.now();
+        reasoningBufferRef.current = "";
+      } else {
+        reasoningBufferRef.current = "";
       }
-      const callId = event.callId;
-      const isResult = event.error || event.result !== undefined;
+      const duration = reasoning && thinkingStartRef.current
+        ? Math.round((Date.now() - thinkingStartRef.current) / 1000)
+        : undefined;
+      useChatStore.getState().handleDelta(delta, offset, reasoning || undefined, duration);
+    });
 
-      setMessages(prev => {
-        const groupIdx = toolGroupIdRef.current
-          ? prev.findIndex(m => m.role === "tool-group" && m.id === toolGroupIdRef.current)
-          : -1;
-
-        if (groupIdx >= 0) {
-          stopFlush();
-          return prev.map((m, i) => {
-            if (i !== groupIdx) return m;
-            const group = m as Extract<Message, { role: "tool-group" }>;
-            const existingIdx = group.entries.findIndex(e => e.toolCallId === callId);
-            if (existingIdx >= 0) {
-              const updated = [...group.entries];
-              if (isResult) {
-                updated[existingIdx] = {
-                  ...updated[existingIdx],
-                  phase: event.error ? "error" as const : "done" as const,
-                  detail: String(event.error ?? event.result ?? ""),
-                };
-              }
-              return { ...group, entries: updated };
-            }
-            return {
-              ...group,
-              entries: [...group.entries, {
-                toolCallId: callId,
-                toolName: event.name,
-                phase: isResult ? (event.error ? "error" as const : "done" as const) : "executing" as const,
-                input: event.input,
-                detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
-              }],
-            };
-          });
-        }
-
-        resetBuffer();
-        bufferingRef.current = true;
-        const newGroupId = nextId();
-        toolGroupIdRef.current = newGroupId;
-        stepAccumRef.current = { total: 0, success: 0, failed: 0, toolNames: [] };
-        return [...prev, {
-          role: "tool-group" as const,
-          id: newGroupId,
-          timestamp: now(),
-          entries: [{
-            toolCallId: callId,
-            toolName: event.name,
-            phase: isResult ? (event.error ? "error" as const : "done" as const) : "executing" as const,
-            input: event.input,
-            detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
-          }],
-          collapsed: false,
-        }];
-      });
-
-      if (event.name === "todowrite" && event.input) {
-        const todos = (event.input as any)?.todos;
-        if (Array.isArray(todos)) setTodoItems(todos);
-      }
+    client.onTool((event) => {
+      useChatStore.getState().handleToolEvent(event);
     });
 
     client.onToolStepFinish((event) => {
-      if (!toolGroupIdRef.current) return;
-      const acc = stepAccumRef.current;
-      acc.total += event.total;
-      acc.success += event.success;
-      acc.failed += event.failed;
-      acc.toolNames.push(...event.toolNames);
-      setMessages(prev => prev.map(m => {
-        if (m.role !== "tool-group" || m.id !== toolGroupIdRef.current) return m;
-        return {
-          ...m,
-          collapsed: true,
-          summary: { ...acc },
-        };
-      }));
-
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = setTimeout(startQuickRender, FLUSH_DELAY);
-    });
-
-    client.onBusyChange((busy) => {
-      setSessionBusy(busy);
-      if (!busy && bufferingRef.current) startQuickRender();
-    });
-
-    client.onMCPConnected((data) => {
-      setMcpServers(data.servers.map(s => ({ name: s.name, online: s.online, toolCount: s.toolCount })));
-      setToolInfos(prev => [...prev.filter(t => t.source !== "mcp"), ...data.toolInfos.map(t => ({ ...t, source: t.source as ToolInfo["source"] }))]);
-    });
-
-    client.onMCPStatus((servers) => {
-      setMcpServers(prev =>
-        prev.map(s => {
-          const updated = servers.find(ss => ss.name === s.name);
-          return updated ? { ...s, online: updated.online } : s;
-        })
+      useChatStore.getState().handleToolStepFinish(
+        event.total, event.success, event.failed, event.toolNames,
       );
     });
 
+    client.onToolGroupComplete((event) => {
+      useChatStore.getState().handleToolGroupComplete(
+        event.total, event.success, event.failed, event.toolNames,
+      );
+    });
+
+    client.onBusyChange((busy) => {
+      useChatStore.getState().setBusy(busy);
+    });
+
+    client.onMCPConnected((data) => {
+      useChatStore.getState().updateMCPConnected(data);
+    });
+
+    client.onMCPStatus((servers) => {
+      useChatStore.getState().updateMCPStatus(servers);
+    });
+
     client.connect().catch(() => {
-      setMessages(prev => [...prev, { role: "error", content: "Connection failed", id: nextId(), timestamp: now() }]);
+      useChatStore.getState().addMessage({
+        role: "error", content: "Connection failed",
+        id: useChatStore.getState().generateId(), timestamp: Date.now(),
+      });
     });
 
     return () => {
-      resetBuffer();
       client.close();
       clientRef.current = null;
     };
   }, [url, sessionId]);
 
-  const clearMessages = useCallback(() => {
-    resetBuffer();
-    setMessages([]);
-  }, []);
-
-  const addMessage = useCallback((msg: Message) => {
-    setMessages(prev => [...prev, msg]);
-  }, []);
-
   const send = useCallback(async (text: string) => {
-    toolGroupIdRef.current = null;
-    stepAccumRef.current = { total: 0, success: 0, failed: 0, toolNames: [] };
-    resetBuffer();
     activityRef.current = false;
     thinkingStartRef.current = 0;
-    setShowPreparing(true);
-    setMessages(prev => [...prev, { role: "user", content: text, id: nextId(), timestamp: now() }]);
-    setSessionBusy(true);
+    reasoningBufferRef.current = "";
+    useChatStore.getState().prepareForSend();
+
+    const id = useChatStore.getState().generateId();
+    useChatStore.getState().addMessage({
+      role: "user", content: text, id, timestamp: Date.now(),
+    });
 
     try {
       const client = clientRef.current;
       if (!client) throw new Error("Not connected");
       await client.send(text);
-
-      resetBuffer();
-      setMessages(prev => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant" && last.streaming) {
-          return prev.map(m => m.id === last.id ? { ...m, streaming: false } : m);
-        }
-        return prev;
-      });
     } catch (err: any) {
-      resetBuffer();
-      setMessages(prev => [...prev, { role: "error", content: err.message, id: nextId(), timestamp: now() }]);
+      useChatStore.getState().addMessage({
+        role: "error", content: err.message,
+        id: useChatStore.getState().generateId(), timestamp: Date.now(),
+      });
     }
+  }, []);
+
+  const clearMessages = useCallback(() => {
+    useChatStore.getState().clearMessages();
+  }, []);
+
+  const addMessage = useCallback((msg: import("../types").Message) => {
+    useChatStore.getState().addMessage(msg);
   }, []);
 
   const compact = useCallback(() => {
     clientRef.current?.sendCompact();
   }, []);
 
-  return { messages, send, clearMessages, addMessage, tokenUsage, sessionBusy, todoItems, toolInfos, mcpServers, showPreparing, compact };
+  return { send, clearMessages, addMessage, compact };
 }

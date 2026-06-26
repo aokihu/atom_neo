@@ -10,13 +10,12 @@ export function ToolMessageBox({ message }: { message: Extract<Message, { role: 
   const { colors } = useTheme();
 
   if (message.collapsed && message.summary) {
-    const { total, toolNames } = message.summary;
     return (
        <box paddingLeft={2} paddingRight={2}
             marginBottom={1}
             border={["left"]} borderColor={colors.text.muted} borderStyle="heavy">
          <text fg={colors.text.muted}>
-           {total} tools ✓ — {toolNames.join(", ")}
+           {message.summary.total} tools done.
          </text>
        </box>
     );
@@ -34,7 +33,7 @@ export function ToolMessageBox({ message }: { message: Extract<Message, { role: 
               {active && (
                 <>
                   <spinner name="line" />
-                  <text marginLeft={1} fg={colors.text.muted}>{e.toolName}</text>
+                  <text marginLeft={1} fg={colors.text.muted}>{e.toolName} -processing-</text>
                 </>
               )}
               {e.phase === "done" && (

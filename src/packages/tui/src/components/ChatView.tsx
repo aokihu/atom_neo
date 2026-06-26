@@ -1,10 +1,12 @@
-import type { Message } from "../types";
+import { useChatStore } from "../stores/chat";
 import { MessageBubble } from "./MessageBubble";
 import { useTheme } from "./App";
 import { ThinkingSpinner } from "./ThinkingSpinner";
 
-export function ChatView({ messages, showPreparing }: { messages: Message[]; showPreparing: boolean }) {
+export function ChatView() {
   const { colors, syntaxStyle } = useTheme();
+  const messages = useChatStore(s => s.messages);
+  const showPreparing = useChatStore(s => s.showPreparing);
 
   if (messages.length === 0) {
     return (

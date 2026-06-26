@@ -20,6 +20,10 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
     }
 
     if (status === "blocked") {
+      if (input.session?.originalSource === "external") {
+        return { type: "complete", task: input.task, output: `post-conversation: blocked, awaiting user judgment — ${reason}` };
+      }
+
       const fp = fingerprint?.slice(0, 50) ?? "";
       if (fp) {
         const prev = input.session?.postCheckFingerprints ?? ([] as string[]);

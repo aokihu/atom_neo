@@ -47,6 +47,7 @@ export class SessionContext {
   #tokenUsage: TokenUsage = { total: 0 };
   #contextTokens: number = 0;
   #chainDepth: number = 0;
+  #originalSource?: string;
   #todoState: TodoItem[] = [];
   #currentTopic: string | null = null;
   #postCheckFingerprints: string[] = [];
@@ -66,6 +67,9 @@ export class SessionContext {
   get chainDepth(): number { return this.#chainDepth; }
   incrementChainDepth(): void { this.#chainDepth++; }
   resetChainDepth(): void { this.#chainDepth = 0; }
+
+  get originalSource(): string | undefined { return this.#originalSource; }
+  set originalSource(v: string | undefined) { this.#originalSource = v; }
 
   get messages(): readonly SessionMessage[] {
     return this.#messages;

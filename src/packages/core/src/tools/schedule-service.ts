@@ -204,7 +204,7 @@ export class ScheduleService {
       sessionId: task.sessionId,
       chatId: task.chatId,
       pipeline: "conversation",
-      source: TaskSource.EXTERNAL,
+      source: TaskSource.INTERNAL,
       payload: [{ type: "text", data: task.prompt }],
     });
     this.#queue.enqueue(taskItem);

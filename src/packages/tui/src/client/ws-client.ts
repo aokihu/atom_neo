@@ -2,6 +2,7 @@ type DeltaCallback = (delta: string, offset: number) => void;
 type ReasonCallback = (delta: string, offset: number) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
+type ToolGroupCompleteCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
 type TokenUsageCallback = (total: number) => void;
 type BusyChangeCallback = (busy: boolean) => void;
 type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: string[] }[]) => void;
@@ -26,6 +27,7 @@ export class TuiClient {
   #onReason?: ReasonCallback;
   #onTool?: ToolCallback;
   #onToolStep?: ToolStepCallback;
+  #onToolGroupComplete?: ToolGroupCompleteCallback;
   #onTokenUsage?: TokenUsageCallback;
   #onBusyChange?: BusyChangeCallback;
   #onMCPStatus?: MCPStatusCallback;
@@ -84,6 +86,9 @@ export class TuiClient {
         },
         [WsMessages.Server.TransportToolStepFinished]: (p) => {
           this.#onToolStep?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
+        },
+        [WsMessages.Server.TransportToolGroupComplete]: (p) => {
+          this.#onToolGroupComplete?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
         },
         [WsMessages.Server.TaskCompleted]: (p) => {
           const { taskId: completedId, parentTaskId } = p;
@@ -148,6 +153,7 @@ export class TuiClient {
   onReason(cb: ReasonCallback): void { this.#onReason = cb; }
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
   onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
+  onToolGroupComplete(cb: ToolGroupCompleteCallback): void { this.#onToolGroupComplete = cb; }
   onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
   onBusyChange(cb: BusyChangeCallback): void { this.#onBusyChange = cb; }
   onMCPStatus(cb: MCPStatusCallback): void { this.#onMCPStatus = cb; }

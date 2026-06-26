@@ -472,6 +472,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     });
   });
 
+  // Bridge: bus transport.tool.group-complete → WebSocket broadcaster
+  bus.on(BusEvents.Transport.ToolGroupComplete as any, (ev: { name: string; payload: { total: number; success: number; failed: number; toolNames: string[] } }) => {
+    broadcaster.broadcast({
+      type: WsMessages.Server.TransportToolGroupComplete,
+      ts: Date.now(), seq: 0,
+      payload: { taskId: "", ...ev.payload },
+    });
+  });
+
   const server = Bun.serve({
     port: port || 3100,
     hostname: host,
@@ -496,6 +505,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         if (body.data?.text) {
           session.addMessage({ role: "user", content: body.data.text, timestamp: Date.now() });
           session.resetChainDepth();
+          session.originalSource = "external";
         }
         return createTaskHandler(taskQueue, body, bus);
       }
