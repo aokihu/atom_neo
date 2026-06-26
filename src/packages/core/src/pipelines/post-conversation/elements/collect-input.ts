@@ -26,7 +26,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
     const parts: string[] = [];
     for (let i = lastUserIdx + 1; i < msgs.length; i++) {
       if (msgs[i].role === "user") break;
-      if (msgs[i].role === "assistant" && msgs[i].content) {
+      if (msgs[i].role === "assistant" && msgs[i].content && (msgs[i] as any).visible !== false) {
         const content = msgs[i].content;
         parts.push(content.length > MAX_PART_CHARS
           ? content.slice(0, MAX_PART_CHARS) + resolvePrompt(PromptKey.TRUNCATION_MARKER).replace("%d", String(content.length))
