@@ -33,6 +33,7 @@
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
 | [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行 Ink 安装向导规格 | 实现首次启动流程 |
+| [tui-modal.md](./tui-modal.md) | TUI 通用 Modal 组件 — 标题/内容/ActionBar + 键盘导航 + 定位 | 实现 TUI 浮层/确认框 |
 | [future-features.md](./future-features.md) | 已设计但未实现的功能清单 | 设计时查，避免遗忘 |
 
 ## Pipeline 管线

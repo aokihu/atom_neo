@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useEffect, useCallback } from "react";
+import { createContext, useContext, useMemo, useEffect, useCallback, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import "opentui-spinner/react";
 import { useChat } from "../hooks/useChat";
@@ -11,10 +11,19 @@ import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
 import { Sidebar } from "./Sidebar";
+import { Modal } from "./modal";
+import type { ModalAction } from "./modal";
 import { useInputHistory } from "../stores/inputHistory";
 
 const SIDEBAR_MIN_WIDTH = 90;
 const FALLBACK_CONTEXT_LIMIT = 131_072;
+
+type ActiveModal = { kind: "confirm-clear" } | { kind: "confirm-quit" } | null;
+
+const MODAL_ACTIONS: ModalAction[] = [
+  { key: "cancel", label: "Cancel", role: "cancel" },
+  { key: "ok", label: "OK", role: "confirm", variant: "primary" },
+];
 
 type ThemeCtx = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
 
@@ -43,13 +52,19 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
 
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+
   useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
+
+  const closeModal = useCallback(() => { setActiveModal(null); }, []);
 
   const handleHelp = useCallback(() => {
     addMessage({ role: "info", content: HELP_TEXT, id: useChatStore.getState().generateId(), timestamp: Date.now() });
   }, [addMessage]);
 
-  const handleClear = useCallback(() => { clearMessages(); }, [clearMessages]);
+  const handleClear = useCallback(() => { setActiveModal({ kind: "confirm-clear" }); }, []);
+
+  const handleQuit = useCallback(() => { setActiveModal({ kind: "confirm-quit" }); }, []);
 
   const handleCompact = useCallback(() => { compact(); }, [compact]);
 
@@ -60,11 +75,33 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView />
-            <InputBar onSend={send} onQuit={onQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} />
+            <InputBar onSend={send} onQuit={handleQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} disabled={activeModal !== null} />
             <StatusLine hint={exitHint} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} contextLimit={contextLimit} />}
         </box>
+        {activeModal && (
+          <Modal
+            open
+            title={activeModal.kind === "confirm-clear" ? "Clear conversation?" : "Exit Atom Neo?"}
+            placement="center"
+            width={56}
+            actions={MODAL_ACTIONS}
+            defaultActionKey="cancel"
+            onClose={closeModal}
+            onAction={(key) => {
+              if (key === "cancel") { closeModal(); return; }
+              if (activeModal.kind === "confirm-clear") { clearMessages(); closeModal(); return; }
+              if (activeModal.kind === "confirm-quit") { closeModal(); onQuit?.(); }
+            }}
+          >
+            <text fg={theme.colors.text.secondary}>
+              {activeModal.kind === "confirm-clear"
+                ? "This will remove all messages from the current TUI view."
+                : "The current terminal UI session will be closed."}
+            </text>
+          </Modal>
+        )}
       </box>
     </ThemeContext.Provider>
   );

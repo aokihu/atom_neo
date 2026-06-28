@@ -21,9 +21,10 @@ interface InputBarProps {
   onHelp?: () => void;
   onClear?: () => void;
   onCompact?: () => void;
+  disabled?: boolean;
 }
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact }: InputBarProps) {
+export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled = false }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
   const taRef = useRef<TextareaRenderable>(null);
@@ -80,6 +81,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact }: InputBa
   }, [onQuit, onHelp, onClear, onCompact]);
 
   const handleSubmit = useCallback(() => {
+    if (disabled) return;
     const text = (taRef.current?.plainText ?? "").trim();
     if (!text) return;
 
@@ -98,9 +100,13 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact }: InputBa
     onSend(text);
     taRef.current?.setText("");
     setContent("");
-  }, [showMenu, cmdMatches, onSend, push, doCommand, doAutocomplete]);
+  }, [disabled, showMenu, cmdMatches, onSend, push, doCommand, doAutocomplete]);
 
   const handleKeyDown = useCallback((event: KeyEvent) => {
+    if (disabled) {
+      event.preventDefault();
+      return;
+    }
     if (event.name === "escape" && showMenu) {
       event.preventDefault();
       taRef.current?.setText("");
@@ -149,7 +155,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact }: InputBa
       ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
       navigatingRef.current = false;
     }
-  }, [showMenu, cmdMatches, navigateUp, navigateDown, setDraft, doAutocomplete]);
+  }, [disabled, showMenu, cmdMatches, navigateUp, navigateDown, setDraft, doAutocomplete]);
 
   return (
     <box flexShrink={0}>
@@ -173,7 +179,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact }: InputBa
           onContentChange={handleContentChange}
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
-          focused
+          focused={!disabled}
           height={3}
           backgroundColor={colors.bg.codeBlock}
           focusedBackgroundColor={colors.bg.codeBlock}
