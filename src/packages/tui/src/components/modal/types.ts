@@ -1,13 +1,17 @@
 import type React from "react";
 
-export type ModalPlacement =
-  | "center"
+export type ModalPlacement = "center" | "top" | "bottom";
+
+export type ModalAnchorPoint =
+  | "top-left"
   | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
   | "bottom"
-  | "attach-top"
-  | "attach-bottom"
-  | "attach-left"
-  | "attach-right";
+  | "bottom-right";
 
 export type ModalActionRole = "confirm" | "cancel" | "destructive";
 
@@ -18,6 +22,11 @@ export interface ModalAnchorRect {
   y: number;
   width: number;
   height: number;
+}
+
+export interface ModalOffset {
+  x?: number;
+  y?: number;
 }
 
 export interface ModalAction {
@@ -35,10 +44,18 @@ export interface ModalProps {
   height?: number;
   placement?: ModalPlacement;
   anchorRect?: ModalAnchorRect;
+  anchorPosition?: ModalAnchorPoint;
+  position?: ModalAnchorPoint;
+  offset?: ModalOffset;
+  matchAnchorWidth?: boolean;
   actions?: ModalAction[];
   defaultActionKey?: string;
   children?: React.ReactNode;
   zIndex?: number;
   onAction?: (key: string, action: ModalAction) => void;
   onClose?: () => void;
+  listLength?: number;
+  selectedListIndex?: number;
+  onListNavigate?: (index: number) => void;
+  onListActivate?: (index: number) => void;
 }

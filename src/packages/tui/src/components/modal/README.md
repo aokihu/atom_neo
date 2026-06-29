@@ -15,6 +15,9 @@
 
 ## 关键约定
 
-- 键盘：`Esc` 关闭，`Enter` 触发选中项，`Tab`/`→` 下一项，`←` 上一项。
+- 两种模式：默认 **ActionBar 模式**（确认框，Tab/←/→ 切按钮，Enter 触发）；传入 `listLength` 启用 **列表模式**（↑/↓ 导航，Enter 激活，配合 `selectedListIndex`/`onListNavigate`/`onListActivate`）。
+- 定位：无 `anchorRect` 时按 `placement`（`center`/`top`/`bottom`）相对屏幕；提供 `anchorRect` 时用「两参考点对齐」—— Modal 的 `position` 点贴到锚点对象的 `anchorPosition` 点（9 点：`top-left`…`bottom-right`），再叠加 `offset` 间距；`matchAnchorWidth` 令面板与锚点等宽。
+- 键盘：`Esc` 关闭，`Enter` 触发选中项，`Tab`/`→` 下一项，`←` 上一项；列表模式下 `↑`/`↓` 切换、`Enter` 激活。
 - 焦点：使用 `@opentui/react` 全局 `useKeyboard`（不依赖元素焦点）；打开时调用方应禁用 `InputBar` 焦点。
 - 复用 `theme.colors`，不引入新颜色体系。
+- 命令面板见 `../CommandPalette.tsx`（基于列表模式 + 锚点对齐构建：锚到输入框、覆盖、满宽）。

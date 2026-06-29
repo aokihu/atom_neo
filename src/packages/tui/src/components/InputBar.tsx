@@ -1,138 +1,59 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useRef, useCallback, useEffect } from "react";
+import type { Ref } from "react";
 import { useTheme } from "./App";
-import { CommandMenu, CMDS, matchCommands } from "./CommandMenu";
-import type { Command } from "./CommandMenu";
 import { useInputHistory } from "../stores/inputHistory";
 import { useChatStore } from "../stores/chat";
-import type { TextareaRenderable, KeyBinding, KeyEvent } from "@opentui/core";
+import type { TextareaRenderable, KeyBinding, KeyEvent, BoxRenderable } from "@opentui/core";
 
 const keyBindings: KeyBinding[] = [
   { name: "enter", action: "submit" },
   { name: "enter", shift: true, action: "newline" },
 ];
 
-function resolveCommand(text: string): Command | null {
-  return CMDS.find(c => c.name === text) ?? null;
-}
-
 interface InputBarProps {
   onSend: (text: string) => void;
-  onQuit?: () => void;
-  onHelp?: () => void;
-  onClear?: () => void;
-  onCompact?: () => void;
+  onOpenPalette?: (seed: string) => void;
   disabled?: boolean;
+  anchorRef?: Ref<BoxRenderable>;
 }
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled = false }: InputBarProps) {
+export function InputBar({ onSend, onOpenPalette, disabled = false, anchorRef }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
   const taRef = useRef<TextareaRenderable>(null);
-  const [content, setContent] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const navigatingRef = useRef(false);
-  const selectedIndexRef = useRef(0);
   const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
-  const showMenu = content.startsWith("/");
   const borderColor = sessionBusy ? colors.status.warning : colors.status.success;
 
-  const cmdMatches = useMemo(() => {
-    if (!showMenu || content.length < 1) return [];
-    return matchCommands(content);
-  }, [content, showMenu]);
-
-  useEffect(() => { selectedIndexRef.current = selectedIndex; }, [selectedIndex]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-    selectedIndexRef.current = 0;
-  }, [content]);
+  useEffect(() => { if (disabled) taRef.current?.setText(""); }, [disabled]);
 
   const handleContentChange = useCallback(() => {
-    setContent(taRef.current?.plainText ?? "");
+    if (disabled) return;
+    const text = taRef.current?.plainText ?? "";
+    if (text.startsWith("/")) {
+      taRef.current?.setText("");
+      onOpenPalette?.(text);
+      return;
+    }
     if (navigatingRef.current) return;
     resetIndex();
-  }, [resetIndex]);
-
-  const doAutocomplete = useCallback((matches: Command[]) => {
-    const idx = Math.min(selectedIndexRef.current, matches.length - 1);
-    const cmd = matches[idx];
-    taRef.current?.setText(cmd.name);
-  }, []);
-
-  const doCommand = useCallback((cmd: Command) => {
-    switch (cmd.name) {
-      case "/quit":
-        onQuit?.();
-        break;
-      case "/help":
-        onHelp?.();
-        break;
-      case "/clear":
-        onClear?.();
-        break;
-      case "/compact":
-        onCompact?.();
-        break;
-    }
-    taRef.current?.setText("");
-    setContent("");
-  }, [onQuit, onHelp, onClear, onCompact]);
+  }, [disabled, onOpenPalette, resetIndex]);
 
   const handleSubmit = useCallback(() => {
     if (disabled) return;
     const text = (taRef.current?.plainText ?? "").trim();
     if (!text) return;
-
-    const cmd = resolveCommand(text);
-    if (cmd) {
-      doCommand(cmd);
-      return;
-    }
-
-    if (showMenu && cmdMatches.length > 0) {
-      doAutocomplete(cmdMatches);
-      return;
-    }
-
     push(text);
     onSend(text);
     taRef.current?.setText("");
-    setContent("");
-  }, [disabled, showMenu, cmdMatches, onSend, push, doCommand, doAutocomplete]);
+  }, [disabled, onSend, push]);
 
   const handleKeyDown = useCallback((event: KeyEvent) => {
     if (disabled) {
       event.preventDefault();
       return;
     }
-    if (event.name === "escape" && showMenu) {
-      event.preventDefault();
-      taRef.current?.setText("");
-      setContent("");
-      return;
-    }
-
-    if (showMenu && cmdMatches.length > 0) {
-      if (event.name === "tab") {
-        event.preventDefault();
-        doAutocomplete(cmdMatches);
-        return;
-      }
-      if (event.name === "up") {
-        event.preventDefault();
-        setSelectedIndex(prev => Math.max(0, prev - 1));
-        return;
-      }
-      if (event.name === "down") {
-        event.preventDefault();
-        setSelectedIndex(prev => Math.min(cmdMatches.length - 1, prev + 1));
-        return;
-      }
-      return;
-    }
-
     if (event.ctrl || event.meta) return;
 
     if (event.name === "up") {
@@ -155,11 +76,12 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
       ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
       navigatingRef.current = false;
     }
-  }, [disabled, showMenu, cmdMatches, navigateUp, navigateDown, setDraft, doAutocomplete]);
+  }, [disabled, navigateUp, navigateDown, setDraft]);
 
   return (
     <box flexShrink={0}>
       <box
+        ref={anchorRef}
         marginTop={1}
         marginRight={1}
         paddingTop={1}
@@ -187,17 +109,6 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
           placeholderColor={colors.text.muted}
         />
       </box>
-      {showMenu && (
-        <box
-          position="absolute"
-          bottom={5}
-          left={0}
-          right={1}
-          zIndex={100}
-        >
-          <CommandMenu filter={content} matches={cmdMatches} selectedIndex={selectedIndex} />
-        </box>
-      )}
     </box>
   );
 }

@@ -4,10 +4,22 @@ import type { KeyEvent } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useTheme } from "../App";
 import { ModalActionBar } from "./ModalActionBar";
-import type { ModalAction, ModalProps } from "./types";
+import type { ModalAction, ModalAnchorPoint, ModalProps } from "./types";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+type LayoutPos = { left?: number; right?: number; top?: number; bottom?: number; width: number };
+
+function pointFractions(p: ModalAnchorPoint): { h: number; v: number } {
+  const v = p === "top" || p.startsWith("top-") ? 0
+    : p === "bottom" || p.startsWith("bottom-") ? 1
+    : 0.5;
+  const h = p === "left" || p.endsWith("-left") ? 0
+    : p === "right" || p.endsWith("-right") ? 1
+    : 0.5;
+  return { h, v };
 }
 
 function findInitialIndex(actions: ModalAction[], defaultActionKey?: string) {
@@ -31,12 +43,20 @@ export function Modal({
   height,
   placement = "center",
   anchorRect,
+  anchorPosition = "bottom-left",
+  position: modalPosition = "top-left",
+  offset,
+  matchAnchorWidth,
   actions = [],
   defaultActionKey,
   children,
   zIndex = 1000,
   onAction,
   onClose,
+  listLength,
+  selectedListIndex = 0,
+  onListNavigate,
+  onListActivate,
 }: ModalProps) {
   const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useTerminalDimensions();
@@ -49,44 +69,35 @@ export function Modal({
 
   const boxWidth = clamp(width, 20, Math.max(20, screenWidth - 4));
   const boxHeight = height;
+  const offsetX = offset?.x ?? 0;
+  const offsetY = offset?.y ?? 0;
 
-  const position = useMemo(() => {
-    const fallbackX = Math.floor((screenWidth - boxWidth) / 2);
-    const fallbackY = Math.floor(screenHeight / 3);
-    if (!anchorRect) {
-      if (placement === "top") {
-        return { left: fallbackX, top: 2 };
-      }
-      if (placement === "bottom") {
-        return { left: fallbackX, bottom: 2 };
-      }
-      return { left: fallbackX, top: fallbackY };
+  const layout = useMemo<LayoutPos>(() => {
+    const panelWidth = matchAnchorWidth && anchorRect ? anchorRect.width : boxWidth;
+
+    if (anchorRect) {
+      const a = pointFractions(anchorPosition);
+      const m = pointFractions(modalPosition);
+      const targetX = anchorRect.x + a.h * anchorRect.width + offsetX;
+      const targetY = anchorRect.y + a.v * anchorRect.height + offsetY;
+      const pos: LayoutPos = { width: panelWidth };
+
+      if (m.h === 1) pos.right = Math.max(0, screenWidth - targetX);
+      else if (m.h === 0.5) pos.left = Math.round(targetX - panelWidth / 2);
+      else pos.left = targetX;
+
+      if (m.v === 1) pos.bottom = Math.max(0, screenHeight - targetY);
+      else if (m.v === 0.5) pos.top = Math.round(targetY - (boxHeight ?? 0) / 2);
+      else pos.top = targetY;
+
+      return pos;
     }
-    switch (placement) {
-      case "attach-top":
-        return {
-          left: clamp(anchorRect.x, 0, screenWidth - boxWidth),
-          top: Math.max(0, anchorRect.y - (boxHeight ?? 8)),
-        };
-      case "attach-bottom":
-        return {
-          left: clamp(anchorRect.x, 0, screenWidth - boxWidth),
-          top: clamp(anchorRect.y + anchorRect.height, 0, screenHeight - 3),
-        };
-      case "attach-left":
-        return {
-          left: Math.max(0, anchorRect.x - boxWidth),
-          top: clamp(anchorRect.y, 0, screenHeight - 3),
-        };
-      case "attach-right":
-        return {
-          left: clamp(anchorRect.x + anchorRect.width, 0, screenWidth - boxWidth),
-          top: clamp(anchorRect.y, 0, screenHeight - 3),
-        };
-      default:
-        return { left: fallbackX, top: fallbackY };
-    }
-  }, [placement, anchorRect, screenWidth, screenHeight, boxWidth, boxHeight]);
+
+    const fallbackX = Math.floor((screenWidth - panelWidth) / 2);
+    if (placement === "top") return { left: fallbackX, top: 2, width: panelWidth };
+    if (placement === "bottom") return { left: fallbackX, bottom: 2, width: panelWidth };
+    return { left: fallbackX, top: Math.floor(screenHeight / 3), width: panelWidth };
+  }, [anchorRect, anchorPosition, modalPosition, matchAnchorWidth, offsetX, offsetY, placement, boxWidth, boxHeight, screenWidth, screenHeight]);
 
   const moveSelection = useCallback((direction: 1 | -1) => {
     if (actions.length === 0) return;
@@ -113,6 +124,22 @@ export function Modal({
       onClose?.();
       return;
     }
+
+    if (listLength != null && listLength > 0) {
+      if (event.name === "up") {
+        onListNavigate?.((selectedListIndex - 1 + listLength) % listLength);
+        return;
+      }
+      if (event.name === "down") {
+        onListNavigate?.((selectedListIndex + 1) % listLength);
+        return;
+      }
+      if (event.name === "return" || event.name === "enter") {
+        onListActivate?.(selectedListIndex);
+        return;
+      }
+    }
+
     if (event.name === "tab" || event.name === "right") {
       moveSelection(1);
       return;
@@ -124,7 +151,7 @@ export function Modal({
     if (event.name === "return" || event.name === "enter") {
       triggerSelected();
     }
-  }, [open, moveSelection, triggerSelected, onClose]);
+  }, [open, listLength, selectedListIndex, onListNavigate, onListActivate, moveSelection, triggerSelected, onClose]);
 
   useKeyboard(handleKeyDown);
 
@@ -141,14 +168,12 @@ export function Modal({
     >
       <box
         position="absolute"
-        {...position}
-        width={boxWidth}
+        {...layout}
         height={boxHeight}
         flexDirection="column"
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
+        paddingTop={0}
         paddingBottom={1}
+        paddingX={1}
         border
         borderStyle="single"
         borderColor={colors.border.default}
@@ -156,7 +181,6 @@ export function Modal({
       >
         {title && (
           <box
-            paddingBottom={1}
             border={["bottom"]}
             borderColor={colors.decoration.subtle}
           >
@@ -165,7 +189,7 @@ export function Modal({
             </text>
           </box>
         )}
-        <box flexGrow={1} flexDirection="column" paddingTop={1} paddingBottom={1}>
+        <box flexGrow={1} flexDirection="column">
           {children}
         </box>
         <ModalActionBar actions={actions} selectedIndex={selectedIndex} />
