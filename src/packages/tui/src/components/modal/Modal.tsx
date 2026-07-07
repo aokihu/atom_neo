@@ -57,6 +57,7 @@ export function Modal({
   selectedListIndex = 0,
   onListNavigate,
   onListActivate,
+  interactive = true,
 }: ModalProps) {
   const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useTerminalDimensions();
@@ -119,7 +120,7 @@ export function Modal({
   }, [actions, selectedIndex, onAction]);
 
   const handleKeyDown = useCallback((event: KeyEvent) => {
-    if (!open) return;
+    if (!open || !interactive) return;
     if (event.name === "escape") {
       onClose?.();
       return;
@@ -151,7 +152,7 @@ export function Modal({
     if (event.name === "return" || event.name === "enter") {
       triggerSelected();
     }
-  }, [open, listLength, selectedListIndex, onListNavigate, onListActivate, moveSelection, triggerSelected, onClose]);
+  }, [open, interactive, listLength, selectedListIndex, onListNavigate, onListActivate, moveSelection, triggerSelected, onClose]);
 
   useKeyboard(handleKeyDown);
 

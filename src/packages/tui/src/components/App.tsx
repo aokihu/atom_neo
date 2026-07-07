@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useEffect, useCallback, useState, useRef } from "react";
+import { createContext, useContext, useMemo, useEffect, useCallback, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import "opentui-spinner/react";
 import { useChat } from "../hooks/useChat";
@@ -6,7 +6,6 @@ import { useChatStore } from "../stores/chat";
 import { getTheme } from "../theme";
 import type { ServerInfo, ThemeColors, Message } from "../types";
 import { SyntaxStyle } from "@opentui/core";
-import type { BoxRenderable } from "@opentui/core";
 import { StatusBar } from "./StatusBar";
 import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
@@ -14,8 +13,6 @@ import { InputBar } from "./InputBar";
 import { Sidebar } from "./Sidebar";
 import { Modal } from "./modal";
 import type { ModalAction } from "./modal";
-import { CommandPalette } from "./CommandPalette";
-import type { Command } from "./CommandMenu";
 import { useInputHistory } from "../stores/inputHistory";
 
 const SIDEBAR_MIN_WIDTH = 90;
@@ -42,10 +39,10 @@ const HELP_TEXT = `Available commands:
 
 Keyboard shortcuts:
   Ctrl+C      Exit (press twice)
-  Up/Down     Input history / Command palette
-  /           Open command palette
-  Enter       Run selected command
-  Esc         Dismiss command palette
+  Up/Down     Input history / Command menu
+  /           Open command menu
+  Tab         Autocomplete command
+  Esc         Dismiss command menu
   Shift+Enter New line`;
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
@@ -56,8 +53,6 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
-  const [palette, setPalette] = useState<{ seed: string } | null>(null);
-  const anchorRef = useRef<BoxRenderable>(null);
 
   useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
 
@@ -73,20 +68,6 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
 
   const handleCompact = useCallback(() => { compact(); }, [compact]);
 
-  const openPalette = useCallback((seed: string) => { setPalette({ seed }); }, []);
-
-  const closePalette = useCallback(() => { setPalette(null); }, []);
-
-  const runCommand = useCallback((cmd: Command) => {
-    setPalette(null);
-    switch (cmd.name) {
-      case "/quit": handleQuit(); break;
-      case "/help": handleHelp(); break;
-      case "/clear": handleClear(); break;
-      case "/compact": handleCompact(); break;
-    }
-  }, [handleQuit, handleHelp, handleClear, handleCompact]);
-
   return (
     <ThemeContext.Provider value={theme}>
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
@@ -94,7 +75,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView />
-            <InputBar onSend={send} onOpenPalette={openPalette} disabled={activeModal !== null || palette !== null} anchorRef={anchorRef} />
+            <InputBar onSend={send} onQuit={handleQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} disabled={activeModal !== null} />
             <StatusLine hint={exitHint} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} contextLimit={contextLimit} />}
@@ -120,15 +101,6 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
                 : "The current terminal UI session will be closed."}
             </text>
           </Modal>
-        )}
-        {palette && (
-          <CommandPalette
-            open
-            initialFilter={palette.seed}
-            anchorRef={anchorRef}
-            onRun={runCommand}
-            onClose={closePalette}
-          />
         )}
       </box>
     </ThemeContext.Provider>

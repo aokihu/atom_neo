@@ -58,4 +58,5 @@ export interface ModalProps {
   selectedListIndex?: number;
   onListNavigate?: (index: number) => void;
   onListActivate?: (index: number) => void;
+  interactive?: boolean;
 }

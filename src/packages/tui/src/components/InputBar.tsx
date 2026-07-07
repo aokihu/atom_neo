@@ -1,59 +1,128 @@
-import { useRef, useCallback, useEffect } from "react";
-import type { Ref } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo } from "react";
+import { TextAttributes } from "@opentui/core";
+import type { KeyBinding, KeyEvent, TextareaRenderable } from "@opentui/core";
 import { useTheme } from "./App";
 import { useInputHistory } from "../stores/inputHistory";
 import { useChatStore } from "../stores/chat";
-import type { TextareaRenderable, KeyBinding, KeyEvent, BoxRenderable } from "@opentui/core";
+import { CommandMenu, CMDS, matchCommands } from "./CommandMenu";
+import type { Command } from "./CommandMenu";
 
 const keyBindings: KeyBinding[] = [
   { name: "enter", action: "submit" },
   { name: "enter", shift: true, action: "newline" },
 ];
 
-interface InputBarProps {
-  onSend: (text: string) => void;
-  onOpenPalette?: (seed: string) => void;
-  disabled?: boolean;
-  anchorRef?: Ref<BoxRenderable>;
+function resolveCommand(text: string): Command | null {
+  return CMDS.find(c => c.name === text) ?? null;
 }
 
-export function InputBar({ onSend, onOpenPalette, disabled = false, anchorRef }: InputBarProps) {
+interface InputBarProps {
+  onSend: (text: string) => void;
+  onQuit?: () => void;
+  onHelp?: () => void;
+  onClear?: () => void;
+  onCompact?: () => void;
+  disabled?: boolean;
+}
+
+export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled = false }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
   const taRef = useRef<TextareaRenderable>(null);
+  const [content, setContent] = useState("");
+  const [menuSelected, setMenuSelected] = useState(0);
   const navigatingRef = useRef(false);
+  const menuSelectedRef = useRef(0);
+  const fillFlag = useRef(0);
   const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
+  const showMenu = content.startsWith("/");
   const borderColor = sessionBusy ? colors.status.warning : colors.status.success;
+
+  const cmdMatches = useMemo(() => {
+    if (!showMenu || content.length < 1) return [];
+    return matchCommands(content);
+  }, [content, showMenu]);
+
+  useEffect(() => { menuSelectedRef.current = menuSelected; }, [menuSelected]);
 
   useEffect(() => { if (disabled) taRef.current?.setText(""); }, [disabled]);
 
   const handleContentChange = useCallback(() => {
     if (disabled) return;
     const text = taRef.current?.plainText ?? "";
-    if (text.startsWith("/")) {
-      taRef.current?.setText("");
-      onOpenPalette?.(text);
-      return;
-    }
+    setContent(text);
+    if (fillFlag.current > 0) { fillFlag.current--; return; }
+    setMenuSelected(0);
+    menuSelectedRef.current = 0;
     if (navigatingRef.current) return;
     resetIndex();
-  }, [disabled, onOpenPalette, resetIndex]);
+  }, [disabled, resetIndex]);
+
+  const doCommand = useCallback((cmd: Command) => {
+    switch (cmd.name) {
+      case "/quit": onQuit?.(); break;
+      case "/help": onHelp?.(); break;
+      case "/clear": onClear?.(); break;
+      case "/compact": onCompact?.(); break;
+    }
+    taRef.current?.setText("");
+    setContent("");
+  }, [onQuit, onHelp, onClear, onCompact]);
 
   const handleSubmit = useCallback(() => {
     if (disabled) return;
     const text = (taRef.current?.plainText ?? "").trim();
     if (!text) return;
+
+    const cmd = resolveCommand(text);
+    if (cmd) { doCommand(cmd); return; }
+
     push(text);
     onSend(text);
     taRef.current?.setText("");
-  }, [disabled, onSend, push]);
+    setContent("");
+  }, [disabled, onSend, push, doCommand]);
 
   const handleKeyDown = useCallback((event: KeyEvent) => {
-    if (disabled) {
+    if (disabled) { event.preventDefault(); return; }
+
+    if (event.name === "escape" && showMenu) {
       event.preventDefault();
+      taRef.current?.setText("");
+      setContent("");
       return;
     }
+
+    if (showMenu && cmdMatches.length > 0) {
+      if (event.name === "tab") {
+        event.preventDefault();
+        fillFlag.current++;
+        const idx = menuSelectedRef.current;
+        taRef.current?.setText(cmdMatches[idx]?.name ?? "");
+        return;
+      }
+      if (event.name === "up") {
+        event.preventDefault();
+        fillFlag.current++;
+        const next = Math.max(0, menuSelectedRef.current - 1);
+        menuSelectedRef.current = next;
+        setMenuSelected(next);
+        taRef.current?.setText(cmdMatches[next]?.name ?? "");
+        return;
+      }
+      if (event.name === "down") {
+        event.preventDefault();
+        fillFlag.current++;
+        const next = Math.min(cmdMatches.length - 1, menuSelectedRef.current + 1);
+        menuSelectedRef.current = next;
+        setMenuSelected(next);
+        taRef.current?.setText(cmdMatches[next]?.name ?? "");
+        return;
+      }
+      return;
+    }
+
     if (event.ctrl || event.meta) return;
 
     if (event.name === "up") {
@@ -76,12 +145,33 @@ export function InputBar({ onSend, onOpenPalette, disabled = false, anchorRef }:
       ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
       navigatingRef.current = false;
     }
-  }, [disabled, navigateUp, navigateDown, setDraft]);
+  }, [disabled, showMenu, cmdMatches, navigateUp, navigateDown, setDraft]);
 
   return (
     <box flexShrink={0}>
+      {showMenu && cmdMatches.length > 0 && (
+        <box
+          position="absolute"
+          bottom={7}
+          left={0}
+          right={1}
+          zIndex={1000}
+          flexDirection="column"
+          paddingTop={0}
+          paddingBottom={1}
+          paddingX={1}
+          border
+          borderStyle="single"
+          borderColor={colors.border.default}
+          backgroundColor={colors.bg.popup}
+        >
+          <box border={["bottom"]} borderColor={colors.decoration.subtle}>
+            <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>Commands</text>
+          </box>
+          <CommandMenu filter={content} matches={cmdMatches} selectedIndex={menuSelected} />
+        </box>
+      )}
       <box
-        ref={anchorRef}
         marginTop={1}
         marginRight={1}
         paddingTop={1}
