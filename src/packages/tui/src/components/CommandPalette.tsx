@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
 import type { KeyEvent, BoxRenderable } from "@opentui/core";
 import { useKeyboard, useOnResize } from "@opentui/react";
-import { useTheme } from "./App";
 import { Modal } from "./modal";
 import type { ModalAnchorRect } from "./modal";
 import { CommandMenu, matchCommands } from "./CommandMenu";
@@ -17,7 +16,6 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open, initialFilter, anchorRef, onRun, onClose }: CommandPaletteProps) {
-  const { colors } = useTheme();
   const [filter, setFilter] = useState(initialFilter);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [rect, setRect] = useState<ModalAnchorRect | null>(null);
@@ -80,10 +78,6 @@ export function CommandPalette({ open, initialFilter, anchorRef, onRun, onClose 
       onListActivate={activate}
       onClose={onClose}
     >
-      <box flexDirection="row" paddingBottom={1}>
-        <text fg={colors.text.muted}>{"› "}</text>
-        <text fg={colors.accent.brand}>{filter || " "}</text>
-      </box>
       <CommandMenu filter={filter} matches={matches} selectedIndex={selectedIndex} />
     </Modal>
   );
