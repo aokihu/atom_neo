@@ -14,8 +14,6 @@ export function ModalActionBar({ actions, selectedIndex }: ModalActionBarProps) 
       flexDirection="row"
       justifyContent="flex-end"
       paddingTop={1}
-      border={["top"]}
-      borderColor={colors.decoration.subtle}
     >
       {actions.map((action, index) => {
         const selected = index === selectedIndex;
@@ -29,8 +27,7 @@ export function ModalActionBar({ actions, selectedIndex }: ModalActionBarProps) 
           <box
             key={action.key}
             marginLeft={1}
-            paddingLeft={2}
-            paddingRight={2}
+            paddingX={2}
             backgroundColor={selected ? colors.decoration.subtle : undefined}
           >
             <text fg={action.disabled ? colors.text.muted : fg}>

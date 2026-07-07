@@ -57,8 +57,10 @@ export function Modal({
   selectedListIndex = 0,
   onListNavigate,
   onListActivate,
-  interactive = true,
-}: ModalProps) {
+    interactive = true,
+    titlePadding = 1,
+    contentPaddingX = 1,
+  }: ModalProps) {
   const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useTerminalDimensions();
 
@@ -175,22 +177,16 @@ export function Modal({
         paddingTop={0}
         paddingBottom={1}
         paddingX={1}
-        border
-        borderStyle="single"
-        borderColor={colors.border.default}
         backgroundColor={colors.bg.popup}
       >
         {title && (
-          <box
-            border={["bottom"]}
-            borderColor={colors.decoration.subtle}
-          >
+          <box padding={titlePadding}>
             <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>
               {title}
             </text>
           </box>
         )}
-        <box flexGrow={1} flexDirection="column">
+        <box flexGrow={1} flexDirection="column" paddingX={contentPaddingX}>
           {children}
         </box>
         <ModalActionBar actions={actions} selectedIndex={selectedIndex} />

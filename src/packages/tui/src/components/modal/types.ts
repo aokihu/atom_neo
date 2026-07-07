@@ -59,4 +59,6 @@ export interface ModalProps {
   onListNavigate?: (index: number) => void;
   onListActivate?: (index: number) => void;
   interactive?: boolean;
+  titlePadding?: number;
+  contentPaddingX?: number;
 }
