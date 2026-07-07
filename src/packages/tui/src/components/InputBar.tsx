@@ -36,13 +36,15 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
   const fillFlag = useRef(0);
   const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
-  const showMenu = content.startsWith("/");
+  const [filter, setFilter] = useState("");
+
+  const showMenu = filter.startsWith("/");
   const borderColor = sessionBusy ? colors.status.warning : colors.status.success;
 
   const cmdMatches = useMemo(() => {
-    if (!showMenu || content.length < 1) return [];
-    return matchCommands(content);
-  }, [content, showMenu]);
+    if (!showMenu || filter.length < 1) return [];
+    return matchCommands(filter);
+  }, [filter, showMenu]);
 
   useEffect(() => { menuSelectedRef.current = menuSelected; }, [menuSelected]);
 
@@ -53,6 +55,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
     const text = taRef.current?.plainText ?? "";
     setContent(text);
     if (fillFlag.current > 0) { fillFlag.current--; return; }
+    setFilter(text);
     setMenuSelected(0);
     menuSelectedRef.current = 0;
     if (navigatingRef.current) return;
@@ -68,6 +71,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
     }
     taRef.current?.setText("");
     setContent("");
+    setFilter("");
   }, [onQuit, onHelp, onClear, onCompact]);
 
   const handleSubmit = useCallback(() => {
@@ -82,6 +86,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
     onSend(text);
     taRef.current?.setText("");
     setContent("");
+    setFilter("");
   }, [disabled, onSend, push, doCommand]);
 
   const handleKeyDown = useCallback((event: KeyEvent) => {
@@ -91,6 +96,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
       event.preventDefault();
       taRef.current?.setText("");
       setContent("");
+      setFilter("");
       return;
     }
 
@@ -152,7 +158,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
       {showMenu && cmdMatches.length > 0 && (
         <box
           position="absolute"
-          bottom={7}
+          bottom={6}
           left={0}
           right={1}
           zIndex={1000}

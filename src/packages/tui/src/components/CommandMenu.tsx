@@ -43,37 +43,47 @@ export function CommandMenu({ filter, matches, selectedIndex }: { filter: string
     );
   }
 
+  const list = matches.map((cmd, i) => {
+    const isSelected = i === selectedIndex;
+    const nameFg = isSelected ? colors.text.bright : colors.text.secondary;
+    const matchFg = isSelected ? colors.text.bright : colors.accent.brand;
+    const descFg = isSelected ? colors.text.bright : colors.text.muted;
+    const idx = cmd.name.indexOf(filter);
+    const hasMatch = idx >= 0 && filter.length > 0;
+    const before = hasMatch ? cmd.name.slice(0, idx) : cmd.name;
+    const matched = hasMatch ? cmd.name.slice(idx, idx + filter.length) : "";
+    const after = hasMatch ? cmd.name.slice(idx + filter.length) : "";
+    return (
+      <box
+        key={cmd.name}
+        flexDirection="row"
+        backgroundColor={isSelected ? colors.accent.brand : undefined}
+      >
+        {hasMatch ? (
+          <>
+            {before && <text fg={nameFg} attributes={TextAttributes.BOLD}>{before}</text>}
+            <text fg={matchFg} attributes={TextAttributes.BOLD}>{matched}</text>
+            {after && <text fg={nameFg} attributes={TextAttributes.BOLD}>{after}</text>}
+          </>
+        ) : (
+          <text fg={nameFg} attributes={TextAttributes.BOLD}>{before}</text>
+        )}
+        <text fg={descFg}>  {cmd.description}</text>
+      </box>
+    );
+  });
+
+  if (matches.length < 6) {
+    return (
+      <box flexDirection="column" backgroundColor={colors.bg.popup}>
+        {list}
+      </box>
+    );
+  }
+
   return (
-    <scrollbox ref={scrollRef} flexDirection="column" height={8} backgroundColor={colors.bg.popup}>
-      {matches.map((cmd, i) => {
-        const isSelected = i === selectedIndex;
-        const nameFg = isSelected ? colors.text.bright : colors.text.secondary;
-        const matchFg = isSelected ? colors.text.bright : colors.accent.brand;
-        const descFg = isSelected ? colors.text.bright : colors.text.muted;
-        const idx = cmd.name.indexOf(filter);
-        const hasMatch = idx >= 0 && filter.length > 0;
-        const before = hasMatch ? cmd.name.slice(0, idx) : cmd.name;
-        const matched = hasMatch ? cmd.name.slice(idx, idx + filter.length) : "";
-        const after = hasMatch ? cmd.name.slice(idx + filter.length) : "";
-        return (
-          <box
-            key={cmd.name}
-            flexDirection="row"
-            backgroundColor={isSelected ? colors.accent.brand : undefined}
-          >
-            {hasMatch ? (
-              <>
-                {before && <text fg={nameFg} attributes={TextAttributes.BOLD}>{before}</text>}
-                <text fg={matchFg} attributes={TextAttributes.BOLD}>{matched}</text>
-                {after && <text fg={nameFg} attributes={TextAttributes.BOLD}>{after}</text>}
-              </>
-            ) : (
-              <text fg={nameFg} attributes={TextAttributes.BOLD}>{before}</text>
-            )}
-            <text fg={descFg}>  {cmd.description}</text>
-          </box>
-        );
-      })}
+    <scrollbox ref={scrollRef} flexDirection="column" height={6} backgroundColor={colors.bg.popup}>
+      {list}
     </scrollbox>
   );
 }
