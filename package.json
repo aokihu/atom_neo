@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
@@ -19,8 +19,8 @@
     "build:bin": "mkdir -p dist && bun -e 'const{writeFileSync}=require(\"fs\");const pkg=require(\"./package.json\");writeFileSync(\"src/version.ts\",`export const VERSION = \\\"${pkg.version}\\\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^2.0.38",
-    "@ai-sdk/mcp": "^1.0.52",
+    "@ai-sdk/deepseek": "^3.0.5",
+    "@ai-sdk/mcp": "^2.0.8",
     "@atom-neo/core": "workspace:*",
     "@atom-neo/setup-wizard": "workspace:*",
     "@atom-neo/shared": "workspace:*",
@@ -29,7 +29,7 @@
     "@heroui/styles": "^3.2.2",
     "@opentui/core": "^0.4.3",
     "@opentui/react": "^0.4.3",
-    "ai": "^6.0.206",
+    "ai": "^7.0.17",
     "highlight.js": "^11.11.1",
     "opentui-spinner": "^0.0.7",
     "react": "^19.2.7",
