@@ -43,6 +43,12 @@ export type {
 
 export type { ScheduledTask } from "./schedule";
 export type { HookTrigger, Hook } from "./hook";
+export type {
+  SkillSectionMeta,
+  SkillDef,
+  SkillListItem,
+  SkillLoadResult,
+} from "./skill";
 
 export type {
   SessionMessage,

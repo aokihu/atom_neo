@@ -14,6 +14,7 @@ export class FormatSystemMessagesElement extends BaseElement<ConversationFlowSta
     const parts: string[] = [];
     if (input.systemPrompt) parts.push(input.systemPrompt);
     if (input.compiledAgentsPrompt) parts.push(input.compiledAgentsPrompt);
+    if (input.skillContext) parts.push(input.skillContext);
     if (input.contextData) parts.push(input.contextData);
 
     this.report(BusEvents.Element.Data, { step: "done", systemLen: input.systemPrompt?.length ?? 0, agentsLen: input.compiledAgentsPrompt?.length ?? 0, contextLen: input.contextData?.length ?? 0 });

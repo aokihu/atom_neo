@@ -10,10 +10,12 @@ import {
   StreamLLMElement,
   CheckFollowUpElement,
   FinalizeElement,
+  InjectSkillContextElement,
 } from "./elements";
 
 import { DEFAULT_MAX_TOKENS } from "../../constants";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
+import type { SkillServiceLike } from "../../skills/types";
 
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement);
@@ -25,6 +27,7 @@ export function registerConversationElements(): void {
   registerElement("stream-llm", StreamLLMElement);
   registerElement("check-follow-up", CheckFollowUpElement);
   registerElement("finalize", FinalizeElement);
+  registerElement("inject-skill-context", InjectSkillContextElement);
 }
 
 export type ConversationPipelineDeps = {
@@ -47,6 +50,7 @@ export type ConversationPipelineDeps = {
   contextRelevance?: string;
   sandbox?: string;
   orchestrator?: InternalTaskOrchestrator;
+  skillService?: SkillServiceLike;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -56,6 +60,9 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("fetch-agents-prompt", {
       getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
     })
+    .transform("inject-skill-context", { skillService: deps.skillService ?? {
+      list: () => [], load: () => ({ ok: false, error: "" }), loadSection: () => false, removeSection: () => false, unload: () => {}, buildContext: () => "",
+    } as SkillServiceLike })
     .transform("collect-context", { memory: deps.memory, sandbox: deps.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.intent })
     .transform("format-system-messages", {})
     .transform("format-user-messages", {})

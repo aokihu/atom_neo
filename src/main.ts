@@ -12,6 +12,7 @@ import { RuntimeService } from "./services/runtime-service";
 import { ServiceManager } from "./services/service-manager";
 import { AgentsCompilerService } from "./services/agents-compiler";
 import { MemoryService } from "./services/memory-service";
+import { SkillService } from "./services/skill-service";
 import { resolveContextLimit } from "./packages/core/src/constants";
 
 declare global {
@@ -109,6 +110,7 @@ export async function main(): Promise<void> {
     dbPath: runtime.atomDir + "/memory/memory.db",
     nodesPath: runtime.atomDir + "/memory/nodes",
   }));
+  sm.register("skill", new SkillService({ sandbox: args.sandbox }));
   sm.startAll();
 
   // Lazy import to ensure AI_SDK_LOG_WARNINGS is set before AI SDK loads

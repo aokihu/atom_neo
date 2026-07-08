@@ -16,6 +16,7 @@ export type ConversationFlowState = {
   prompts?: Array<{ role: string; content: string; reasoning_content?: string }>;
   systemPrompt?: string;
   compiledAgentsPrompt?: string;
+  skillContext?: string;
   contextData?: string;
   systemText?: string;
   userMessages?: Message[];

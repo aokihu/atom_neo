@@ -20,6 +20,8 @@ import type { MCPServerConfig } from "./tools/mcp-manager";
 import { ScheduleService } from "./tools/schedule-service";
 import { HookManager } from "./hooks/hook-manager";
 import { createScheduleTools } from "./tools/builtin/schedule";
+import { createSkillTools } from "./tools/builtin/skill";
+import type { SkillServiceLike } from "./skills/types";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -95,12 +97,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 50;
   const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
   const memory = sm.get("memory");
+  const skillService = sm.get<SkillServiceLike>("skill");
   const getCompiledPrompt = () => {
     const compiler = sm.get<CompilerLike>("agents-compiler");
     return compiler?.getCompiledPrompt() ?? "";
   };
 
   const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
+  if (skillService) {
+    allTools.push(...createSkillTools(skillService));
+  }
 
   const mcpToolsRef: { current: Record<string, any> } = { current: {} };
   let mcpServerInfos: { name: string; online: boolean; toolCount: number }[] = [];
@@ -201,6 +207,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         contextRelevance: prediction.contextRelevance,
         sandbox,
         orchestrator,
+        skillService,
       }).build(bus);
     },
 

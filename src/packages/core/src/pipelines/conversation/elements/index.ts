@@ -8,3 +8,4 @@ export { FormatUserMessagesElement } from "./format-user-messages";
 export { StreamLLMElement } from "./stream-llm";
 export { CheckFollowUpElement } from "./check-follow-up";
 export { FinalizeElement } from "./finalize";
+export { InjectSkillContextElement } from "./inject-skill-context";

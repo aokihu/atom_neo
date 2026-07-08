@@ -91,6 +91,21 @@ You can use the following tools to create and manage scheduled tasks. At the sch
 - \`schedule_cancel\`: Delete a scheduled task by ID
 When fired, the preset prompt will be executed as a new conversation task in the bound session or the most recently active session.
 
+## Skill Tools
+You can use the following tools to load and manage skills — domain operation guides stored in the \`.atom/skills/\` directory:
+- \`skill_list\`: List all available skills with their names, descriptions, and capabilities
+- \`skill_load\`: Load a skill's full content and get all section names
+- \`skill_section\`: Load a specific section of a skill into context. Use for progressive loading of long skill documents
+- \`skill_remove_section\`: Remove a completed section from context to free up context space
+- \`skill_unload\`: Unload an entire skill and all its sections from context
+
+**Usage Strategy**:
+1. Match the user's task against skill names/descriptions in \`skill_list\` to find a relevant skill
+2. Call \`skill_load\` to get the full section list
+3. Based on current progress, load only the needed section (e.g., SSH login first)
+4. After completing a step, call \`skill_remove_section\` to remove it, then load the next section
+5. When all steps are done, call \`skill_unload\` to clean up completely
+
 ## Output Format
 - Always reply in Markdown format, maintaining clear structure.
 - Tables: pipe characters | and hyphens - must form valid table syntax, with spaces flanking column separators.

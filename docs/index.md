@@ -61,3 +61,5 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [agents-compiler.md](./subsystems/agents-compiler.md) | AGENTS.md 安全编译器 — LLM 无害化过滤 + SHA-256 缓存 | 理解安全过滤机制 |
+| [skill-system-plan.md](./subsystems/skill-system-plan.md) | Skill 系统开发计划 — 8 阶段，33 测试用例 | 开始编码前 |
+| [skill-system.md](./subsystems/skill-system.md) | 可插拔 AI Agent 技能系统 — 三层加载、分段注入、自主卸载 | 实现 skill 功能 |
