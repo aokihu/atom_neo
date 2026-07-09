@@ -134,7 +134,7 @@ export class MemoryService extends BaseService {
     );
   }
 
-  keep(id: string): void {
+  retain(id: string): void {
     this.#db.run(
       "UPDATE nodes SET access_count = 0, weight = MIN(100, weight + 5), accessed_at = ? WHERE id = ?",
       [Date.now(), id],

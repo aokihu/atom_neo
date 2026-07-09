@@ -3,7 +3,7 @@ import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 
 export const IntentInputSchema = z.object({
-  action: z.enum(["follow_up", "keep_memory"]),
+  action: z.enum(["follow_up", "retain_memory"]),
   mem_id: z.string().optional(),
   next_prompt: z.string().optional(),
   summary: z.string().optional(),
@@ -17,7 +17,7 @@ export function createIntentTool(): ToolDefinition {
   return {
     name: "intent",
     description:
-      "Signal system to follow_up (continue segmented output) or keep_memory (save to long-term memory).",
+      "Signal system to follow_up (continue segmented output) or retain_memory (retain an existing long-term memory).",
     source: "builtin",
     inputSchema: IntentInputSchema,
     execute: async () => ({ ok: true, output: "信号已收到" }),

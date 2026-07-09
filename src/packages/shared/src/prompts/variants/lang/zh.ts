@@ -38,9 +38,10 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 
 ### 步骤 3：是否需要保存记忆？
 判断标准：对话中产生了值得记录到长期记忆的信息。
-- 是 → 调用 \`intent\` 工具：
-  - \`action\`: \`keep_memory\`
-  - \`mem_id\`: 要保存的记忆 ID
+- 新信息需要保存 → 调用 \`save_memory\` 工具，写入简洁、可复用的事实或偏好。
+- 已注入的旧记忆仍然重要 → 调用 \`intent\` 工具：
+  - \`action\`: \`retain_memory\`
+  - \`mem_id\`: 要保留的记忆 ID
 - 否 → 输出完整回复，在最后一行单独输出 \`<<<COMPLETE>>>\`。
 
 ## 重要：调用 \`intent\` 工具后立即停止

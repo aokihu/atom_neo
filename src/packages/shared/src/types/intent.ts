@@ -1,6 +1,6 @@
 export enum IntentRequestType {
   FOLLOW_UP = "follow_up",
-  KEEP_MEMORY = "keep_memory",
+  RETAIN_MEMORY = "retain_memory",
 }
 
 export enum IntentRequestSource {

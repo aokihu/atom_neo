@@ -62,8 +62,8 @@ class MemoryService extends BaseService {
   // 建立关系
   link(source: string, target: string, relation: string): void
 
-  // 重置记忆生命周期 — KEEP_MEMORY 意图触发
-  keep(id: string): void
+  // 重置记忆生命周期 — RETAIN_MEMORY 意图触发
+  retain(id: string): void
 
   // 检查记忆是否存在
   has(id: string): boolean
@@ -93,7 +93,7 @@ class MemoryService extends BaseService {
 | 注入上下文 | weight += 5（上限 100） |
 | 上下文卸载 (count ≥ 5) | weight -= 10（下限 0） |
 | 每日衰减 | weight -= 1（下限 0） |
-| KEEP_MEMORY 意图 | weight += 5, access_count 重置为 0 |
+| RETAIN_MEMORY 意图 | weight += 5, access_count 重置为 0 |
 
 记忆不会被删除。weight ≤ 0 的记忆仍在数据库和文件系统中，仅搜索排名降至底部。
 
@@ -144,19 +144,19 @@ for (const node of memories) {
 | 3–4 | 注入 context + `aging="true"` 标签 |
 | ≥ 5 | **卸载**: 不注入 context，weight -10 |
 
-### KEEP_MEMORY 意图
+### RETAIN_MEMORY 意图
 
 LLM 发现 `aging="true"` 且当前会话需要该记忆时：
 
 ```
-LLM 回复: KEEP_MEMORY: mem:2d4bed
+LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 ```
 
-`check-follow-up` 检测 → 调用 `memory.keep("2d4bed")` → count = 0, weight += 5
+`check-follow-up` 检测 → 调用 `memory.retain("2d4bed")` → count = 0, weight += 5
 
 ### 后台衰减
 
-每 5 分钟定时器：所有记忆每日 -1 权重。记忆不会被删除，weight ≤ 0 仅影响搜索排名。LLM 可通过 `[KEEP_MEMORY]` 重置 accessCount 并提升权重。
+每 5 分钟定时器：所有记忆每日 -1 权重。记忆不会被删除，weight ≤ 0 仅影响搜索排名。LLM 可通过 `retain_memory` 重置 accessCount 并提升权重。
 
 ## 9. 记忆工具
 
