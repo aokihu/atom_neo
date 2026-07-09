@@ -93,7 +93,7 @@ TaskEngine.#processNext()
   └─ pipeline 执行 (9 elements)
        │
        ├─ stream-llm:      chainAction = "follow_up" (if truncated)
-        ├─ check-follow-up: 处理 intent (FOLLOW_UP, KEEP_MEMORY)
+        ├─ check-follow-up: 处理 intent (FOLLOW_UP, RETAIN_MEMORY)
        └─ FinalizeElement:
             ├─ "follow_up"  → 创建续写任务   → ActiveQueue
             └─ return complete

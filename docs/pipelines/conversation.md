@@ -244,14 +244,14 @@ if (!pastMarker && buffer.length > 0) {
 **职责**: 消费 `input.intents[]`，按类型分派
 
 - `FOLLOW_UP` → 设置 followUp data
-- `KEEP_MEMORY` → 验证 mem_id 真实存在后执行 `memory.keep()`
+- `RETAIN_MEMORY` → 验证 mem_id 真实存在后执行 `memory.retain()`
 
 **两阶段安全校验：**
 
 | 阶段 | 位置 | 校验内容 |
 |------|------|---------|
 | parse | intent 解析阶段 | 格式校验：必需参数非空、未知 TYPE 跳过 |
-| execute | CheckFollowUpElement | 存在性校验：mem_id 需在 MemoryService 中存在才执行 keep() |
+| execute | CheckFollowUpElement | 存在性校验：mem_id 需在 MemoryService 中存在才执行 retain() |
 
 ### 4.7 `finalize` — 链任务统一收口
 
@@ -614,8 +614,8 @@ const ratio = effectiveLimit > 0 ? tu / effectiveLimit : 0;
 
 ```typescript
 IntentInputSchema = z.object({
-  action: z.enum(["follow_up", "keep_memory"]),
-  mem_id: z.string().optional(),           // keep_memory 时指定目标记忆 ID
+  action: z.enum(["follow_up", "retain_memory"]),
+  mem_id: z.string().optional(),           // retain_memory 时指定目标记忆 ID
   next_prompt: z.string().optional(),      // follow_up 时指定下一个片段的提示
   summary: z.string().optional(),          // 当前片段的简短摘要
   history_abstract: z.string().optional(), // 对话历史概要
@@ -627,8 +627,8 @@ IntentInputSchema = z.object({
 
 | 字段 | action | 说明 |
 |------|--------|------|
-| `action` | 两者 | `follow_up`（分段续写）或 `keep_memory`（保存记忆） |
-| `mem_id` | `keep_memory` | 要保存的记忆 ID（来自 `search_memory` 返回的 `node.id`） |
+| `action` | 两者 | `follow_up`（分段续写）或 `retain_memory`（保留已有记忆） |
+| `mem_id` | `retain_memory` | 要保留的记忆 ID（来自 `search_memory` 或 `<Memory id="...">`） |
 | `next_prompt` | `follow_up` | 下一段续写的方向提示（如 "继续输出第3段"） |
 | `summary` | `follow_up` | 当前段的摘要，供下次续写时上下文注入 |
 | `history_abstract` | 两者 | 对话历史的简短概括 |
@@ -648,7 +648,7 @@ IntentInputSchema = z.object({
 LLM 调用 intent → stream-llm 捕获 (intentSignal)
   → toIntentRequest() → intents[]
     → check-follow-up:
-      ├── KEEP_MEMORY → memory.keep(mem_id)
+      ├── RETAIN_MEMORY → memory.retain(mem_id)
       └── FOLLOW_UP  → chainAction: "follow_up" + followUp data
 ```
 

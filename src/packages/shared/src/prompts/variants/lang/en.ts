@@ -38,9 +38,10 @@ Criteria: Your output cannot fit in one reply (e.g., long articles, multi-paragr
 
 ### Step 3: Should memory be saved?
 Criteria: The conversation produced information worth recording in long-term memory.
-- Yes → Call \`intent\` tool:
-  - \`action\`: \`keep_memory\`
-  - \`mem_id\`: the memory ID to save
+- New information should be saved → Call the \`save_memory\` tool with concise, reusable facts or preferences.
+- An injected existing memory is still important → Call the \`intent\` tool:
+  - \`action\`: \`retain_memory\`
+  - \`mem_id\`: the memory ID to retain
 - No → Output the complete reply. Output \`<<<COMPLETE>>>\` alone on the last line.
 
 ## Important: Stop after calling \`intent\`
