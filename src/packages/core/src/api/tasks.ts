@@ -1,4 +1,4 @@
-import type { TaskQueue } from "../task-queue";
+import type { TaskQueue, TaskStatus } from "../task-queue";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { CoreEventMap } from "@atom-neo/shared";
 import { TaskSource, BusEvents } from "@atom-neo/shared";
@@ -47,8 +47,15 @@ export async function createTaskHandler(
 
 export function taskCancelHandler(taskQueue: TaskQueue, _req: Request, taskId: string): Response {
   if (taskQueue.remove(taskId)) {
+    taskQueue.storeResult(taskId, { taskId, state: "cancelled" });
     return Response.json({ taskId, state: "cancelled" });
   }
   return Response.json({ taskId, state: "not_found" }, { status: 404 });
+}
+
+export function taskStatusHandler(taskQueue: TaskQueue, taskId: string): Response {
+  const status = taskQueue.getStatus(taskId);
+  if (!status) return Response.json({ error: "not_found" }, { status: 404 });
+  return Response.json(status);
 }
 

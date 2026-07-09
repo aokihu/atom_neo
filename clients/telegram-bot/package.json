@@ -1,0 +1,10 @@
+{
+  "name": "atom-neo-telegram-bot",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "start": "bun run src/main.ts",
+    "build": "bun build src/main.ts --compile --outfile telegram-bot"
+  }
+}

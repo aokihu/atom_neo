@@ -1,10 +1,18 @@
 import { TaskSource } from "@atom-neo/shared";
-import type { TaskItem } from "@atom-neo/shared";
+import type { TaskItem, TaskState } from "@atom-neo/shared";
+
+export type TaskStatus = {
+  taskId: string;
+  state: TaskState | "cancelled";
+  result?: unknown;
+  error?: string;
+};
 
 export class TaskQueue {
   #waitingQueue: TaskItem[] = [];
   #activeQueue: TaskItem[] = [];
   #processing = new Set<string>();
+  #completed = new Map<string, TaskStatus>();
 
   enqueue(task: TaskItem): void {
     if (task.source === TaskSource.EXTERNAL) {
@@ -57,5 +65,20 @@ export class TaskQueue {
 
   get size(): number {
     return this.#waitingQueue.length + this.#activeQueue.length + this.#processing.size;
+  }
+
+  storeResult(taskId: string, status: TaskStatus): void {
+    this.#completed.set(taskId, status);
+  }
+
+  getStatus(taskId: string): TaskStatus | undefined {
+    const task = this.#findInQueues(taskId);
+    if (task) return { taskId: task.id, state: task.state };
+    return this.#completed.get(taskId);
+  }
+
+  #findInQueues(taskId: string): TaskItem | undefined {
+    return this.#activeQueue.find((t) => t.id === taskId)
+      ?? this.#waitingQueue.find((t) => t.id === taskId);
   }
 }

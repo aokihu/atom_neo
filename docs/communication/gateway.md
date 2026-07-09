@@ -5,20 +5,23 @@
 ## 1. 架构
 
 ```
-外部平台/用户               Gateway                         Core
-┌──────────────┐         ┌──────────────────────┐       ┌──────┐
-│ WeChat       │  spawn  │ Client Manager       │       │      │
-│ Client (子进程)│←──────→│ ├ Token 随机生成      │       │      │
-│              │ stdio   │ ├ 生命周期(启/停/重启) │       │      │
-├──────────────┤  JSONL  │ └ 健康监控            │       │      │
-│ Telegram     │  spawn  │                      │─────→│ Core │
-│ Client (子进程)│←──────→│ ┌──────────────────┐ │       │      │
-├──────────────┤         │ │ Message Router    │ │       │      │
-│ TUI /        │ JWT     │ │ Client ↔ Core     │ │       │      │
-│ HTTP API     │───────→│ └──────────────────┘ │       │      │
-│ (外部用户)    │ /api/*  │                      │       │      │
-└──────────────┘         └──────────────────────┘       └──────┘
+外部平台                   Client (子进程)              Gateway                     Core
+┌──────────┐   webhook  ┌──────────────────┐  HTTP  ┌─────────────────────┐  HTTP  ┌──────┐
+│ Telegram │───────────→│ Telegram Bot     │───────→│ /gateway/inbound    │───────→│      │
+│ API      │←───────────│ ├ HTTP Server     │←───────│ ├ Secret 验证        │←───────│ Core │
+└──────────┘  sendMsg   │ ├ 长轮询/Webhook  │        │ ├ Message → Task    │        │      │
+                        │ └ 平台逻辑        │        │ ├ Poll Task Result  │        │      │
+                        └──────────────────┘        │ └ Push Result→Client│        └──────┘
+                                                     │                     │
+                                                     │ /api/* (JWT)        │
+                        外部 HTTP 用户 ─────────────→│ 代理到 Core          │
 ```
+
+**原则：**
+- Gateway **不感知**平台细节（Telegram API 格式、消息转换等）
+- Client 负责**所有平台特定逻辑**（webhook 管理、消息收发、格式转换）
+- Gateway 是 **Client ↔ Core** 的安全中转层
+- Client 和 Gateway 之间通过 **HTTP API + Secret** 双向通信
 
 ## 2. 路由分离
 
@@ -26,66 +29,142 @@ Gateway 暴露两类路由，独立验证：
 
 | 路由前缀 | 验证方式 | 用户 | 用途 |
 |---------|---------|------|------|
-| `/api/*` | `Authorization: Bearer <JWT>` | TUI / 外部 HTTP 客户端 | 任务提交、状态查询、WebSocket |
-| `/gateway/*` | 内部 Client Token | Client 子进程 | 状态上报、管理 API |
+| `/api/*` | `Authorization: Bearer <JWT>` | TUI / 外部 HTTP 客户端 | 代理到 Core |
+| `/gateway/*` | `X-Gateway-Secret` Header | Client 子进程 | 消息中转 |
 
 ### 2.1 `/api/*` — JWT 验证
 
-外部用户（TUI、HTTP API 调用者）通过 JWT Bearer Token 访问 Gateway。
+外部用户（TUI、HTTP API 调用者）通过 JWT Bearer Token 访问 Gateway，Gateway 代理请求到 Core。
+
+### 2.2 `/gateway/*` — Secret 验证
+
+内部 Client 子进程通过 HTTP Header `X-Gateway-Secret` 进行身份验证。
+
+**Gateway 端点：**
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/gateway/inbound` | POST | Client 将平台消息提交给 Gateway |
+| `/gateway/event` | POST | Client 上报平台连接状态事件 |
+
+**Client 端点：**
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | Gateway 健康检查（每 30s） |
+| `/task-result` | POST | Gateway 推送 Core 任务结果 |
+| `/command` | POST | Gateway 管理指令（stop/ping） |
+
+## 3. 消息流
 
 ```
-Client → Gateway:  POST /api/tasks
-                   Authorization: Bearer eyJhbG...
-                   {"sessionId": "...", "data": {"text": "..."}}
-
-Gateway → Core:    转发经过验证的请求
+1. 用户 → Telegram API → Client 接收 (webhook/polling)
+2. Client → POST /gateway/inbound (Secret) → Gateway
+3. Gateway → POST /api/tasks → Core
+4. Gateway → GET /api/tasks/:id (轮询) → Core
+5. Gateway → POST /task-result (Secret) → Client
+6. Client → Telegram API (sendMessage) → 用户
 ```
 
-JWT 包含：
-- `sub` — 用户标识
-- `permissionLevel` — 权限等级
-- `exp` — 过期时间
+### Inbound 消息格式
 
-### 2.2 `/gateway/*` — Client Token 验证
+```jsonc
+// POST /gateway/inbound
+// Header: X-Gateway-Secret: <secret>
+{
+  "type": "message",
+  "platform": "telegram",
+  "platformUserId": "123456789",
+  "data": {
+    "text": "帮我查一下天气"
+  }
+}
+```
 
-内部 Client 子进程通过 Gateway 启动时分配的一次性随机 Token 进行身份验证。Token 仅存在于内存，每次 Client 重启自动轮换。
+### Task Result 推送格式
 
-## 3. Client 子进程
+```jsonc
+// POST /task-result (Gateway → Client)
+// Header: X-Gateway-Secret: <secret>
+{
+  "taskId": "task-abc123",
+  "platformUserId": "123456789",
+  "result": {
+    "output": "今天北京晴，22°C",
+    "responseText": "今天北京晴，22°C"
+  }
+}
+```
 
-### 3.1 启动
+## 4. Secret 机制
+
+| 时机 | 行为 |
+|------|------|
+| Gateway 启动 | 对每个 Client 生成 `crypto.randomUUID()` 作为 secret |
+| 启动 Client | 通过 `--secret <uuid>` 传入 |
+| 通讯 | Client 每次 HTTP 调用都带 `X-Gateway-Secret` Header |
+| 崩溃重启 | Gateway 自动生成新 secret，旧 secret 立即失效 |
+
+Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。
+
+## 5. Client Manager
+
+### 5.1 启动
 
 ```typescript
 // Gateway 内部
-const token = crypto.randomUUID();
-const proc = Bun.spawn(clientBinaryPath, ["--token", token], {
-  stdin: "pipe",
-  stdout: "pipe",
-  stderr: "pipe",
-});
-
-// 记录 Client 信息
-this.#clients.set(clientId, {
-  proc,
-  token,
-  status: "starting",
-  platform: "wechat",
-  startedAt: Date.now(),
-});
+const secret = crypto.randomUUID();
+const port = allocatePort();
+const proc = Bun.spawn(clientBinaryPath, [
+  "--secret", secret,
+  "--port", String(port),
+  "--gateway-url", `http://127.0.0.1:${config.port}`,
+], { onExit: () => restartClient(id) });
 ```
 
-用户在 `config.json` 中配置 Client 二进制路径：
+### 5.2 生命周期
+
+```
+Gateway 启动
+  ├── 读取 config.gateway.clients[]
+  ├── 对每个 client:
+  │     ├── 生成 secret + 分配端口
+  │     ├── Bun.spawn(二进制, ["--secret", secret, "--port", port])
+  │     └── 等待 Client HTTP server 就绪
+  │
+  └── 运行中:
+        ├── 心跳: 每 30s GET /health
+        ├── 进程异常退出 → 自动重启 (新 secret)
+        └── 收到 inbound → 轮询 Core → 推送 result
+
+Gateway 关闭
+  ├── POST /command {"action":"stop"} → Client
+  └── server.stop()
+```
+
+## 6. Client 二进制规范
+
+每个 Client 是一个独立可执行文件，必须满足以下契约：
+
+- **参数**: `--secret <uuid> --port <number> --gateway-url <url>`
+- **HTTP Server**: 监听 `127.0.0.1:{port}`
+- **端点实现**:
+  - `GET /health` → `{ "ok": true }`
+  - `POST /task-result` → 接收 Core 任务结果（需 Secret 验证）
+  - `POST /command` → 接收管理指令（需 Secret 验证）
+- **平台通讯**: 负责与外部平台（Telegram/WeChat）的所有 API 交互
+- **将用户消息转发到**: `POST {gatewayUrl}/gateway/inbound` (带 Secret Header)
+- **退出码**: 0 = 正常退出
+
+## 7. 配置
 
 ```jsonc
+// config.json
 {
   "gateway": {
     "port": 3000,
-    "jwtSecret": "...",
+    "jwtSecret": "change-me-minimum-16-chars",
     "clients": [
-      {
-        "id": "wechat-bot",
-        "platform": "wechat",
-        "binary": "/home/user/bots/wechat-bot"
-      },
       {
         "id": "telegram-bot",
         "platform": "telegram",
@@ -96,118 +175,19 @@ this.#clients.set(clientId, {
 }
 ```
 
-### 3.2 Token 机制
+环境变量：`GATEWAY_PORT`, `CORE_URL`, `JWT_SECRET`
 
-| 时机 | 行为 |
-|------|------|
-| 启动 | `crypto.randomUUID()` 生成新 token |
-| 握手 | Client 通过 stdout 发送 token，Gateway 验证 |
-| 崩溃重启 | 自动生成新 token，旧 token 立即失效 |
-| 主动停止 | 清理 token，结束子进程 |
-
-Token 仅存储于 Gateway 内存，不写入磁盘或日志。
-
-### 3.3 通信协议 — JSONL over stdin/stdout
-
-Gateway 与 Client 子进程通过进程管道通信，每行一条 JSON 消息。
-
-**Client → Gateway (stdout)：**
-
-```jsonl
-{"type":"auth","token":"550e8400-e29b-41d4-a716-446655440000"}
-{"type":"message","platform":"wechat","platformUserId":"user_123","data":{"text":"帮我查一下天气"}}
-{"type":"status","status":"connected","platformUserId":"user_123"}
-```
-
-**Gateway → Client (stdin)：**
-
-```jsonl
-{"type":"auth_ok","sessionId":"sess-abc123"}
-{"type":"response","sessionId":"sess-abc123","userId":"user_123","data":{"text":"今天北京晴，22°C"}}
-{"type":"command","action":"stop"}
-```
-
-**消息类型：**
-
-| type | 方向 | 说明 |
-|------|------|------|
-| `auth` | Client → Gateway | 握手：携带 token 进行身份验证 |
-| `auth_ok` | Gateway → Client | 握手成功，返回分配的 sessionId |
-| `auth_fail` | Gateway → Client | 握手失败，连接将被关闭 |
-| `message` | Client → Gateway | 来自外部平台的用户消息 |
-| `response` | Gateway → Client | Core 处理完成后的回复 |
-| `status` | 双向 | 平台连接状态（connected/disconnected） |
-| `error` | 双向 | 错误信息 |
-| `command` | Gateway → Client | Gateway 指令（stop/restart/ping） |
-| `pong` | Client → Gateway | 心跳响应 |
-
-### 3.4 生命周期
-
-```
-Gateway 启动
-  ├── 读取 config.clients[]
-  ├── 对每个 client:
-  │     ├── 生成 token
-  │     ├── Bun.spawn(client.binary, ["--token", token])
-  │     ├── 等待 stdout 握手: {"type":"auth","token":"..."}
-  │     ├── 验证通过 → 发送 {"type":"auth_ok","sessionId":"..."}
-  │     └── 进入消息循环
-  │
-  └── 运行中:
-        ├── 心跳检测: 每 30s 发送 {"type":"command","action":"ping"}
-        ├── 超时无响应 → SIGTERM → 自动重启(新token)
-        └── 进程异常退出 → 自动重启(新token)
-
-Gateway 关闭
-  ├── 对每个 client:
-  │     ├── stdin: {"type":"command","action":"stop"}
-  │     ├── 等待 5s
-  │     └── SIGKILL
-  └── 清理 token 注册表
-```
-
-## 4. 消息路由
-
-```
-Client → stdout: {"type":"message","platform":"wechat","userId":"u1","data":{...}}
-  │
-  ▼ Gateway MessageRouter
-  │
-  ├── 查找或创建 session: sessionStore.get(platform + ":" + userId)
-  ├── 标准化为 TaskPayload
-  └── POST /api/tasks → Core
-  
-Core 处理完成 → WebSocket transport.completed
-  │
-  ▼ Gateway
-  │
-  └── Client stdin: {"type":"response","userId":"u1","data":{"text":"回复内容"}}
-```
-
-## 5. Client 二进制规范
-
-每个 Client 是一个独立可执行文件，必须满足以下契约：
-
-- **参数**: 接受 `--token <uuid>` 作为唯一 CLI 参数
-- **stdin**: 读取来自 Gateway 的 JSONL 消息
-- **stdout**: 写入发往 Gateway 的 JSONL 消息
-- **stderr**: 仅用于日志输出（Gateway 捕获但不解析）
-- **启动后首个消息**: 必须发送 `{"type":"auth","token":"..."}` 完成握手
-- **退出码**: 0 = 正常退出，非 0 = 异常
-- **信号处理**: 接收 SIGTERM 后优雅关闭（5s 内退出）
-
-Client 负责与外部平台的**所有**平台特定逻辑（API 调用、消息格式转换、连接保活），Gateway 不感知平台细节。
-
-## 6. 文件
+## 8. 文件
 
 ```
 src/packages/gateway/
   src/
     index.ts                        barrel exports
-    server.ts                       HTTP Server + 路由分发
-    config.ts                       config.json 加载
+    server.ts                       HTTP Server + 路由分发 + 消息中转
+    config.ts                       Gateway 配置
     auth/
       jwt.ts                        JWT 签发与验证
+      secret.ts                     Secret 生成与验证
     ratelimit/
       limiter.ts                    滑动窗口速率限制
     permissions/
@@ -215,12 +195,15 @@ src/packages/gateway/
     proxy/
       core-proxy.ts                 HTTP 反向代理到 Core
     client-manager/
-      index.ts                      Client 子进程管理器（待实现）
-      protocol.ts                   JSONL 消息解析（待实现）
-    ---
+      index.ts                      Client 子进程管理器
+
+clients/
+  telegram-bot/
+    src/main.ts                     Telegram Bot Client 参考实现
+    package.json
 ```
 
-## 7. 相关文档
+## 9. 相关文档
 
 | 文档 | 说明 |
 |------|------|

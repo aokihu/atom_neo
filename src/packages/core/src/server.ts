@@ -4,7 +4,7 @@ import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
 import { BusEvents, WsMessages, sanitizeForJSON } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
-import { TaskSource } from "@atom-neo/shared";
+import { TaskSource, TaskState } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
 import { TaskQueue } from "./task-queue";
 import { TaskEngine } from "./task-engine";
@@ -12,7 +12,7 @@ import { SessionStore } from "./session/store";
 import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
 import { healthHandler, metricsHandler } from "./api/health";
-import { createTaskHandler, taskCancelHandler, setPipeline } from "./api/tasks";
+import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
 import { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck } from "./tools/mcp-manager";
@@ -277,6 +277,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Completed, (p) => {
     const result = p.result as CompletedResult;
+    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.COMPLETED, result });
+
     logger.info("task completed", {
       taskId: p.task.id,
       output: result.output?.slice(0, LOG_OUTPUT_MAX_LEN),
@@ -317,6 +319,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
   });
   bus.on(BusEvents.Task.Failed, (p) => {
+    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error: String(p.error) });
     logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
     const sid = p.task.sessionId;
     if (sid) {
@@ -522,6 +525,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
         return taskCancelHandler(taskQueue, req, url.pathname.split("/").pop()!);
+      }
+      if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
+        return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
       }
       return new Response("Not Found", { status: 404 });
     },

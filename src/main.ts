@@ -152,9 +152,21 @@ export async function main(): Promise<void> {
   // Explicit --mode: core or full
   switch (args.mode) {
     case "core":
-    case "full":
       await startCore({ port, host: args.host, logger, sm, runtime });
       break;
+
+    case "full": {
+      const core = await startCore({ port, host: args.host, logger, sm, runtime });
+      const { startGateway } = await import("@atom-neo/gateway");
+      const gateway = await startGateway({
+        port: appConfig.gateway?.port ?? 3000,
+        coreUrl: `http://${args.host}:${core.port}`,
+        jwtSecret: appConfig.gateway?.jwtSecret,
+        clients: (appConfig.gateway as any)?.clients,
+      });
+      logger.info("gateway started alongside core", { corePort: core.port, gatewayPort: appConfig.gateway?.port ?? 3000 });
+      break;
+    }
   }
 }
 
