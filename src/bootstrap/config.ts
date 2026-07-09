@@ -31,7 +31,12 @@ const ConfigSchema = z.object({
   gateway: z.object({
     jwtSecret: z.string().default("change-me-minimum-16-chars"),
     port: z.number().int().default(3000),
-  }).default({ jwtSecret: "change-me-minimum-16-chars", port: 3000 }),
+    clients: z.array(z.object({
+      id: z.string(),
+      platform: z.string(),
+      binary: z.string(),
+    })).default([]),
+  }).default({ jwtSecret: "change-me-minimum-16-chars", port: 3000, clients: [] }),
   tui: z.object({
     theme: z.enum([
       "github-dark", "github-light", "dracula", "nord",
