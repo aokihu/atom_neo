@@ -18,9 +18,7 @@ export function AssistantMessage({ message, syntaxStyle }: { message: Message & 
 
   return (
     <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2}
-         marginBottom={1}
-         border={["left"]} borderColor={colors.accent.brand}
-         borderStyle="heavy">
+         marginBottom={1}>
       {message.reasoningContent && (
         <box marginBottom={1} onMouseUp={() => setThinkingExpanded(!thinkingExpanded)}>
           <text fg={colors.text.muted}>
