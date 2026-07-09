@@ -15,6 +15,7 @@ type ToolEventParams = {
 type ChatState = {
   messages: Message[];
   toolGroupId: string | null;
+  activeAssistantId: string | null;
   busy: boolean;
   showPreparing: boolean;
   tokenUsage: number;
@@ -50,6 +51,7 @@ type ChatState = {
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   toolGroupId: null,
+  activeAssistantId: null,
   busy: false,
   showPreparing: false,
   tokenUsage: 0,
@@ -67,16 +69,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: s.messages.map(m => (m.id === id ? { ...m, ...patch } as Message : m)),
     })),
 
-  clearMessages: () => set({ messages: [], toolGroupId: null }),
+  clearMessages: () => set({ messages: [], toolGroupId: null, activeAssistantId: null }),
 
   handleDelta(delta: string, offset: number, reasoning?: string, thinkingDuration?: number) {
     set(s => {
-      const last = s.messages[s.messages.length - 1];
-      if (last?.role === "assistant" && last.streaming) {
+      if (s.activeAssistantId) {
         return {
           showPreparing: false,
           messages: s.messages.map(m =>
-            m.id === last.id
+            m.id === s.activeAssistantId
               ? { ...m, content: (m as Extract<Message, { role: "assistant" }>).content.substring(0, offset) + delta }
               : m
           ),
@@ -85,6 +86,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const id = get().generateId();
       return {
         showPreparing: false,
+        activeAssistantId: id,
         messages: [...s.messages, {
           role: "assistant",
           content: delta,
@@ -102,6 +104,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleToolEvent(event: ToolEventParams): "created" | "updated" | null {
+    if (event.name === "todowrite" && event.input) {
+      const todos = (event.input as any)?.todos;
+      if (Array.isArray(todos)) set({ todoItems: todos });
+    }
+
     const { toolGroupId, messages } = get();
     const callId = event.callId;
     const isResult = event.error !== undefined || event.result !== undefined;
@@ -140,38 +147,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         }),
       }));
-
-      if (event.name === "todowrite" && event.input) {
-        const todos = (event.input as any)?.todos;
-        if (Array.isArray(todos)) set({ todoItems: todos });
-      }
-
       return "updated";
     }
 
     const newGroupId = get().generateId();
-    set(s => ({
-      toolGroupId: newGroupId,
-      messages: [...s.messages, {
-        role: "tool-group" as const,
-        id: newGroupId,
-        timestamp: now(),
-        entries: [{
-          toolCallId: callId,
-          toolName: event.name,
-          phase: isResult ? ((event.error ? "error" : "done") as "error" | "done") : ("executing" as const),
-          input: event.input,
-          detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
+    set(s => {
+      const updatedMessages = s.activeAssistantId
+        ? s.messages.map(m =>
+            m.id === s.activeAssistantId && m.role === "assistant"
+              ? { ...m, streaming: false }
+              : m)
+        : s.messages;
+      return {
+        toolGroupId: newGroupId,
+        messages: [...updatedMessages, {
+          role: "tool-group" as const,
+          id: newGroupId,
+          timestamp: now(),
+          entries: [{
+            toolCallId: callId,
+            toolName: event.name,
+            phase: isResult ? ((event.error ? "error" : "done") as "error" | "done") : ("executing" as const),
+            input: event.input,
+            detail: isResult ? String(event.error ?? event.result ?? "") : undefined,
+          }],
+          collapsed: false,
         }],
-        collapsed: false,
-      }],
-      showPreparing: false,
-    }));
-
-    if (event.name === "todowrite" && event.input) {
-      const todos = (event.input as any)?.todos;
-      if (Array.isArray(todos)) set({ todoItems: todos });
-    }
+        showPreparing: false,
+      };
+    });
 
     return "created";
   },
@@ -193,7 +197,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  setBusy: (busy: boolean) => set({ busy }),
+  setBusy: (busy: boolean) => set(s => {
+    if (busy) return { busy };
+    return {
+      busy: false,
+      activeAssistantId: null,
+      messages: s.messages.map(m =>
+        m.role === "assistant" && m.streaming ? { ...m, streaming: false } : m),
+    };
+  }),
 
   setTokenUsage: (total: number) => set({ tokenUsage: total }),
 
@@ -223,6 +235,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   prepareForSend() {
     set({
       toolGroupId: null,
+      activeAssistantId: null,
       showPreparing: true,
       busy: true,
     });
