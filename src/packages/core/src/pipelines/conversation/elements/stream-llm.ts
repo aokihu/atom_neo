@@ -26,6 +26,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #configContextLimit: number;
   #mcpToolsRef?: { current: Record<string, any> };
   #mcpToolNamesCount = 0;
+  #builtinToolResults = new Map<string, ToolExecutionStatus[]>();
 
   constructor(params: {
     name: string;
@@ -53,7 +54,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#session = params.session;
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
-    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#session);
+    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#builtinToolResults, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
     const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
     this.#mcpToolsRef = params.mcpToolsRef;
@@ -78,6 +79,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
     const activeNames = [...getActiveToolNames(this.#taskIntent), ...Object.keys(mcpCurrent)];
     const tools = Object.keys(this.#aiTools);
+    this.#builtinToolResults.clear();
     this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: tools.length, activeCount: activeNames.length, taskIntent: this.#taskIntent });
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
@@ -213,18 +215,24 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           if (pt === "tool-result") {
             const c = chunk as any;
             if (c.toolName === "intent") continue;
-            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: JSON.stringify(c.output ?? c.result).slice(0, 300) });
-            this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: c.output ?? c.result, error: c.error });
-            stepToolCalls.push({ toolName: c.toolName, ok: !c.error });
-            allToolCalls.push({ toolName: c.toolName, ok: !c.error });
+            const status = takeToolExecutionStatus(this.#builtinToolResults, c.toolName);
+            const rawResult = c.output ?? c.result;
+            const toolOutput = String(c.output ?? c.result ?? status?.output ?? "");
+            const toolError = c.error ?? status?.error;
+            const toolOk = status?.ok ?? !toolError;
+            const resultPreview = rawResult === undefined ? "" : JSON.stringify(rawResult).slice(0, 300);
+            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: resultPreview, ok: toolOk, error: toolError });
+            this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
+            stepToolCalls.push({ toolName: c.toolName, ok: toolOk });
+            allToolCalls.push({ toolName: c.toolName, ok: toolOk });
             if (this.#session?.addToolResult) {
               this.#session.addToolResult({
                 toolName: c.toolName,
                 topic: this.#session.currentTopic ?? "",
                 timestamp: Date.now(),
-                ok: !c.error,
-                output: String(c.output ?? c.result ?? ""),
-                error: c.error,
+                ok: toolOk,
+                output: toolOutput,
+                error: toolError,
               });
             }
             continue;
@@ -381,7 +389,40 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   }
 }
 
-function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }, session?: any): Record<string, any> {
+type ToolExecutionStatus = {
+  ok: boolean;
+  output: string;
+  error?: string;
+};
+
+function pushToolExecutionStatus(
+  store: Map<string, ToolExecutionStatus[]>,
+  toolName: string,
+  status: ToolExecutionStatus,
+): void {
+  const queue = store.get(toolName) ?? [];
+  queue.push(status);
+  store.set(toolName, queue);
+}
+
+function takeToolExecutionStatus(
+  store: Map<string, ToolExecutionStatus[]>,
+  toolName: string,
+): ToolExecutionStatus | undefined {
+  const queue = store.get(toolName);
+  if (!queue || queue.length === 0) return undefined;
+  const status = queue.shift();
+  if (queue.length === 0) store.delete(toolName);
+  return status;
+}
+
+function buildAllAiTools(
+  tools: ToolDefinition[],
+  report: (event: string, payload: Record<string, unknown>) => void,
+  stepCounter: { count: number },
+  toolResults: Map<string, ToolExecutionStatus[]>,
+  session?: any,
+): Record<string, any> {
   const result: Record<string, any> = {};
   for (const t of tools) {
     result[t.name] = (tool as any)({
@@ -397,15 +438,19 @@ function buildAllAiTools(tools: ToolDefinition[], report: (event: string, payloa
               const r = await t.execute(args, { abortSignal: opts?.abortSignal });
               const duration = Date.now() - start;
               report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: r.ok });
+              const output = r.output || (r.data === undefined ? "" : JSON.stringify(r.data));
+              pushToolExecutionStatus(toolResults, t.name, { ok: r.ok, output, error: r.error });
               if (t.name === "todowrite" && r.ok && session?.setTodoState) {
                 session.setTodoState((args as any).todos ?? []);
               }
               if (!r.ok) return `Error: ${r.error}`;
-              return r.output || JSON.stringify(r.data);
+              return output;
             } catch (err: any) {
               const duration = Date.now() - start;
-              report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error: err?.message ?? String(err) });
-              return `Tool execution error: ${err?.message ?? String(err)}`;
+              const error = err?.message ?? String(err);
+              report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error });
+              pushToolExecutionStatus(toolResults, t.name, { ok: false, output: "", error });
+              return `Tool execution error: ${error}`;
             }
           },
     });
@@ -446,7 +491,7 @@ function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, p
 function getActiveToolNames(taskIntent: string): string[] {
   const FS_RO = ["read", "grep", "ls", "tree", "glob"];
   const FS_RW = ["write", "edit", "cp", "mv"];
-  const MEMORY = ["search_memory", "save_memory", "link_memory", "traverse_memory"];
+  const MEMORY = ["search_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory"];
   const CONTROL = ["todowrite", "intent"];
   const EXTRA = ["webfetch", "bash"];
   const SCHEDULE = ["schedule_create", "schedule_list", "schedule_update", "schedule_cancel"];
