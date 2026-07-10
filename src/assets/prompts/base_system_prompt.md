@@ -84,9 +84,9 @@
 - `bash` — 在沙箱中执行 shell 命令
 - `cp` — 复制文件或目录
 - `mv` — 移动或重命名文件
-- `search_memory` — 搜索长期记忆
+- `search_memory` — 搜索长期记忆，结果包含可供后续操作使用的短 ID
 - `save_memory` — 保存到长期记忆
-- `forget_memory` — 删除指定长期记忆
+- `forget_memory` — 按完整或唯一短 ID 删除指定长期记忆；只有正文时先用 `search_memory` 取得 ID，禁止把正文当作 ID
 - `link_memory` — 链接两条记忆
 - `traverse_memory` — 遍历记忆图谱
 

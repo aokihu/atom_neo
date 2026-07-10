@@ -141,6 +141,16 @@ for (const node of memories) {
 | `tags` | 分类标签 |
 | `aging` | count ≥ 3 时出现，提示 LLM 该记忆即将被卸载 |
 
+`search_memory` 使用相同的 `<Memory>` 格式返回命中结果，确保 LLM 同时获得记忆正文和可供后续工具使用的短 ID：
+
+```xml
+<Memory id="2d4bed" tags="project,tech-stack">
+项目使用 TypeScript 和 Bun 运行时
+</Memory>
+```
+
+这里不存在独立的业务 `key`。当前实现中的完整 `id` 是正文的 SHA-256，短 ID 是它在 Context 和工具输出中的唯一前缀。
+
 ## 8. 记忆生命周期管理
 
 ### 访问计数
@@ -161,6 +171,16 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 
 `check-follow-up` 检测 → `memory.findFullId("2d4bed")` 查回完整 ID → 调用 `memory.retain(fullMemoryId)` → count = 0, weight += 5
 
+### 删除记忆
+
+`forget_memory` 只接受完整 ID 或可唯一匹配的短 ID，不接受记忆正文。用户只描述要删除的内容时，LLM 必须先调用 `search_memory`，再把搜索结果 `<Memory id="...">` 中的 ID 传给 `forget_memory`。
+
+```text
+用户描述记忆正文 → search_memory(query) → <Memory id="2d4bed"> → forget_memory({ id: "2d4bed" })
+```
+
+`MemoryService.findFullId()` 会将短 ID 查回完整 ID；无匹配或前缀对应多条记忆时不执行删除。
+
 ### 后台衰减
 
 每 5 分钟定时器：所有记忆每日 -1 权重。记忆不会被删除，weight ≤ 0 仅影响搜索排名。LLM 可通过 `retain_memory` 重置 accessCount 并提升权重。
@@ -169,11 +189,11 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 
 | 工具 | 说明 |
 |------|------|
-| `search_memory` | 搜索记忆库 |
+| `search_memory` | 搜索记忆库；结果包含可供后续操作使用的短 ID |
 | `save_memory` | 保存新记忆；写入失败必须返回 `ok: false`，重复保存不重置生命周期 |
-| `traverse_memory` | 从 key 开始图谱遍历 |
+| `traverse_memory` | 从记忆 ID 开始图谱遍历 |
 | `link_memory` | 建立记忆关联 |
-| `forget_memory` | 删除指定记忆及关联边；支持 Context 短 ID |
+| `forget_memory` | 按 ID 删除指定记忆及关联边；支持 Context/搜索结果中的短 ID，不接受正文 |
 
 ## 10. 相关文档
 

@@ -39,7 +39,8 @@ Criteria: Your output cannot fit in one reply (e.g., long articles, multi-paragr
 ### Step 3: Should memory be updated?
 Criteria: The conversation produced reusable long-term information, or existing memory should be retained/deleted.
 - New facts, user preferences, project decisions, or durable workflow differences → call \`save_memory\`; content must be concise, reusable, and tagged appropriately.
-- Existing memory is confirmed wrong, outdated, or the user explicitly asks to delete it → call \`forget_memory\`.
+- Existing memory is confirmed wrong, outdated, or the user explicitly asks to delete it → call \`forget_memory\`; its argument must be a full or short ID from \`<Memory id="...">\`, never memory content.
+- Only the content to delete is known and no ID is available → call \`search_memory\` first, then pass the returned ID to \`forget_memory\`.
 - An injected existing memory is still important → Call the \`intent\` tool:
   - \`action\`: \`retain_memory\`
   - \`mem_id\`: the memory ID to retain
@@ -51,7 +52,7 @@ Criteria: The conversation produced reusable long-term information, or existing 
 - Do not save raw Skill text, complete steps, or large Skill sections into Memory.
 - After using a Skill, save only stable user preferences, project decisions, workflow differences, or durable lessons as concise Memory.
 - When Memory references a Skill or workflow, prefer loading the corresponding Skill instead of relying on Memory to restate the full procedure.
-- If Skill-related Memory becomes outdated, wrong, or rejected by the user, call \`forget_memory\`.
+- If Skill-related Memory becomes outdated, wrong, or rejected by the user, use the same “search for its ID, then delete” \`forget_memory\` flow.
 
 ## Important: Stop after calling \`intent\`
 

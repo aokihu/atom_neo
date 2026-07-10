@@ -39,11 +39,27 @@ describe("searchMemoryTool", () => {
     const result = await search.execute({ query: "test" });
     expect(result.ok).toBe(true);
   });
+
+  test("returns short IDs with matching memory content", async () => {
+    const tool = createSearchMemoryTool({
+      search: () => [{
+        id: "abcdef1234567890",
+        content: "CODE=9528 is a remembered identifier.",
+        tags: ["identifier"],
+      }],
+    });
+
+    const result = await tool.execute({ query: "CODE=9528" });
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('<Memory id="abcdef" tags="identifier">');
+    expect(result.output).toContain("CODE=9528 is a remembered identifier.");
+  });
 });
 
 describe("traverseMemoryTool", () => {
   test("returns placeholder when no memory service", async () => {
-    const result = await traverse.execute({ startKey: "test" });
+    const result = await traverse.execute({ startId: "test" });
     expect(result.ok).toBe(true);
   });
 });
@@ -72,6 +88,22 @@ describe("forgetMemoryTool", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("Memory not found: abc123");
+  });
+
+  test("rejects memory content passed as an ID", async () => {
+    let forgetCalled = false;
+    const tool = createForgetMemoryTool({
+      forget: () => {
+        forgetCalled = true;
+        return true;
+      },
+    });
+
+    const result = await tool.execute({ id: "CODE=9528 is a remembered identifier." });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Memory ID must be a full or short hexadecimal ID");
+    expect(forgetCalled).toBe(false);
   });
 
   test("forgets memory by ID", async () => {

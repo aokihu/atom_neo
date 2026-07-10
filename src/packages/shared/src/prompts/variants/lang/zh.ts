@@ -39,7 +39,8 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 ### 步骤 3：是否需要更新记忆？
 判断标准：对话中产生了值得长期复用的信息，或已有记忆需要保留/删除。
 - 新事实、用户偏好、项目决策、长期有效的流程差异 → 调用 \`save_memory\`，内容必须简洁、可复用，并带上合适 tags。
-- 已有记忆确认错误、过时或用户明确要求删除 → 调用 \`forget_memory\`。
+- 已有记忆确认错误、过时或用户明确要求删除 → 调用 \`forget_memory\`；参数必须是 \`<Memory id="...">\` 中的完整或短 ID，不能传记忆正文。
+- 只知道要删除的记忆内容而没有 ID → 先调用 \`search_memory\`，再使用搜索结果中的 ID 调用 \`forget_memory\`。
 - 已注入的旧记忆仍然重要 → 调用 \`intent\` 工具：
   - \`action\`: \`retain_memory\`
   - \`mem_id\`: 要保留的记忆 ID
@@ -51,7 +52,7 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 不要把 Skill 原文、完整步骤或大段 section 保存进 Memory。
 - 使用 Skill 后，如产生稳定的用户偏好、项目决策、流程差异或长期有效经验，可以用 \`save_memory\` 保存简洁摘要。
 - 当 Memory 提到某个 Skill 或 workflow 时，优先加载对应 Skill，而不是依赖 Memory 复述完整流程。
-- 当与 Skill 相关的 Memory 已过时、错误或被用户否定时，使用 \`forget_memory\` 删除。
+- 当与 Skill 相关的 Memory 已过时、错误或被用户否定时，按上述“先搜索取得 ID，再删除”的流程使用 \`forget_memory\`。
 
 ## 重要：调用 \`intent\` 工具后立即停止
 
