@@ -181,6 +181,7 @@ export const searchMemoryTool: ToolDefinition = {
 export const saveMemoryTool: ToolDefinition = { /* ... */ };
 export const traverseMemoryTool: ToolDefinition = { /* ... */ };
 export const linkMemoryTool: ToolDefinition = { /* ... */ };
+export const forgetMemoryTool: ToolDefinition = { /* ... */ };
 ```
 
 ## 5. Tool Registry

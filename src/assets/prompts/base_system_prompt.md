@@ -86,6 +86,7 @@
 - `mv` — 移动或重命名文件
 - `search_memory` — 搜索长期记忆
 - `save_memory` — 保存到长期记忆
+- `forget_memory` — 删除指定长期记忆
 - `link_memory` — 链接两条记忆
 - `traverse_memory` — 遍历记忆图谱
 

@@ -267,7 +267,7 @@ export interface ToolResult {
 const builtinTools: ToolDefinition[] = [
   readTool, writeTool, lsTool, grepTool, treeTool, cpTool, mvTool,
   bashTool,        // 需确认
-  searchMemoryTool, saveMemoryTool, traverseMemoryTool, linkMemoryTool,
+  searchMemoryTool, saveMemoryTool, traverseMemoryTool, linkMemoryTool, forgetMemoryTool,
 ];
 ```
 
@@ -364,7 +364,7 @@ GET    /api/metrics            → 运行时指标
 ```typescript
 enum PermissionLevel {
   READ_ONLY = 0,   // read, ls, grep, tree, search_memory, traverse_memory
-  FILE_WRITE = 1,  // + write, cp, mv, save_memory, link_memory
+  FILE_WRITE = 1,  // + write, cp, mv, save_memory, link_memory, forget_memory
   FULL = 2,        // + bash (需确认)
 }
 

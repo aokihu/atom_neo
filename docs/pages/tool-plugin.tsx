@@ -70,6 +70,7 @@ export enum PermissionLevel {
             [<code>save_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "保存新记忆节点"],
             [<code>traverse_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "图遍历检索记忆"],
             [<code>link_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "在两个记忆节点间建立关系"],
+            [<code>forget_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "删除指定记忆节点"],
             [<code>recall_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 session 召回上下文化记忆"],
             [<code>bash</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行 shell 命令"],
           ]}

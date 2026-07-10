@@ -56,14 +56,20 @@ class MemoryService extends BaseService {
   // 图谱遍历 — SQLite edges BFS
   traverse(startId: string, maxSteps?: number): MemoryNode[]
 
-  // 保存记忆 — 写入 .txt + INSERT SQLite
+  // 保存记忆 — 写临时文件 + upsert SQLite + 落正式 .txt
   save(content: string, tags?: string[]): string
 
   // 建立关系
   link(source: string, target: string, relation: string): void
 
+  // 删除记忆及关联边；支持短 ID 查回完整 ID
+  forget(id: string): boolean
+
   // 重置记忆生命周期 — RETAIN_MEMORY 意图触发
   retain(id: string): void
+
+  // 将 Context 中的短 ID 查回唯一完整 ID
+  findFullId(memoryId: string): string | null
 
   // 检查记忆是否存在
   has(id: string): boolean
@@ -89,6 +95,7 @@ class MemoryService extends BaseService {
 | 操作 | 权重变化 |
 |------|----------|
 | 新建记忆 | weight = 100 |
+| 重复保存 | 保留 created_at / access_count / weight，仅更新 tags / accessed_at |
 | 搜索命中 | weight += 5（上限 100） |
 | 注入上下文 | weight += 5（上限 100） |
 | 上下文卸载 (count ≥ 5) | weight -= 10（下限 0） |
@@ -130,7 +137,7 @@ for (const node of memories) {
 
 | 属性 | 说明 |
 |------|------|
-| `id` | SHA-256 前 6 位，LLM 引用用 |
+| `id` | SHA-256 前 6 位，LLM 引用用；执行 `retain_memory` 时由 MemoryService 恢复为唯一完整 ID |
 | `tags` | 分类标签 |
 | `aging` | count ≥ 3 时出现，提示 LLM 该记忆即将被卸载 |
 
@@ -152,7 +159,7 @@ LLM 发现 `aging="true"` 且当前会话需要该记忆时：
 LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 ```
 
-`check-follow-up` 检测 → 调用 `memory.retain("2d4bed")` → count = 0, weight += 5
+`check-follow-up` 检测 → `memory.findFullId("2d4bed")` 查回完整 ID → 调用 `memory.retain(fullMemoryId)` → count = 0, weight += 5
 
 ### 后台衰减
 
@@ -163,9 +170,10 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 | 工具 | 说明 |
 |------|------|
 | `search_memory` | 搜索记忆库 |
-| `save_memory` | 保存新记忆 |
+| `save_memory` | 保存新记忆；写入失败必须返回 `ok: false`，重复保存不重置生命周期 |
 | `traverse_memory` | 从 key 开始图谱遍历 |
 | `link_memory` | 建立记忆关联 |
+| `forget_memory` | 删除指定记忆及关联边；支持 Context 短 ID |
 
 ## 10. 相关文档
 
