@@ -54,6 +54,22 @@ describe("MemoryService save", () => {
   });
 });
 
+describe("MemoryService search", () => {
+  test("finds capability memory by a core keyword", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      service.save("查询台风信息时使用 Typhoon Skill。", ["skill", "typhoon"]);
+
+      const results = await service.search("台风");
+
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toContain("Typhoon Skill");
+    } finally {
+      cleanup(dir);
+    }
+  });
+});
+
 describe("MemoryService findFullId", () => {
   test("resolves exact and unique short IDs", () => {
     const { service, dir } = createMemoryService();

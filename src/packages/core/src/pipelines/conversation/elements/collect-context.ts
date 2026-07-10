@@ -50,10 +50,22 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       .replace("%s", process.platform)
       .replace("%s", process.arch);
 
-    let memoryCount = 0;
-    if (this.#memory && (this.#taskIntent === "instruction" || this.#taskIntent === "question")) {
-      const text = input.task?.payload?.[0]?.data || "";
-      const memories = (await this.#memory.search(text)) || [];
+    const memoryQuery = this.#session?.pendingPrediction?.memoryQuery?.trim() || "";
+    let memorySearchAttempted = false;
+    let injectedMemoryCount = 0;
+    let memories: any[] = [];
+
+    if (memoryQuery) {
+      memorySearchAttempted = true;
+      try {
+        memories = this.#memory ? (await this.#memory.search(memoryQuery)) || [] : [];
+        if (!this.#memory) {
+          this.report(BusEvents.Element.Data, { step: "memory-search-unavailable", memoryQuery });
+        }
+      } catch (err) {
+        this.report(BusEvents.Element.Data, { step: "memory-search-error", memoryQuery, error: err instanceof Error ? err.message : String(err) });
+      }
+
       for (const node of memories) {
         if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }
         const aging = node.accessCount >= 3 ? ' aging="true"' : "";
@@ -61,7 +73,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         contextData += `\n<Memory id="${id}" tags="${node.tags?.join(",") || ""}"${aging}>\n${node.content}\n</Memory>`;
         this.#memory.incrementAccess(node.id);
         this.#memory.boostWeight(node.id);
-        memoryCount++;
+        injectedMemoryCount++;
       }
     }
 
@@ -124,7 +136,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
     }
 
-    this.report(BusEvents.Element.Data, { step: "done", memoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
-    return { ...input, contextData };
+    this.report(BusEvents.Element.Data, { step: "done", memoryQuery, memorySearchAttempted, injectedMemoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
+    return { ...input, contextData, memorySearchAttempted, injectedMemoryCount };
   }
 }

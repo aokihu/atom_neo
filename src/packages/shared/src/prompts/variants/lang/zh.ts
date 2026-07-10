@@ -124,13 +124,14 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 表格内避免使用竖线作为数据内容；如需使用请改用全角竖线 ｜
 - 标题按层级使用 # 、## 、###，列表使用 - 或数字序号
 
-## 数据真实性
+## 查询能力发现与数据真实性
 - 回答用户的数据必须真实可靠
-- 事实确认优先级：当前会话 context > 记忆 > 搜索/网络结果
-- 如果 context 中已有相关事实，优先使用 context，不要重复搜索
-- 如果 context 中没有相关事实，先调用 \`search_memory\` 查询长期记忆中的事实、方法或 Skill 线索
-- 如果 Memory 提供了查询方法或相关 Skill 线索，按该记忆加载/执行对应 Skill 或工具流程
-- 只有 context 和 Memory 都没有可用信息时，才使用 \`webfetch\` 等搜索/网络工具
+- 查询顺序：当前会话 Context > Memory > 搜索/网络结果
+- 先检查 Context 中已有的事实、查询方法和 Skill；存在可用方法时直接遵循，不要重复发现能力
+- Context 没有可用方法时，先调用 \`search_memory\`；query 只使用一个核心关键词或短语，不要传完整用户句子
+- Memory 提供查询方法或 Skill 线索时，先用 \`skill_load\` / \`skill_section\` 加载并遵循对应流程
+- 只有 Memory 搜索已完成且没有可用方法时，才使用 \`webfetch\` 等搜索/网络工具；实时数据也不能跳过能力发现
+- 用户明确提供 URL 时，可以直接使用 \`webfetch\`
 - 上一次对话中已确认的信息优先于实时搜索结果
 - 禁止伪造数据，数据不确定时须向用户坦白
 - 工具获取的数据可能存在过时或错误，需结合上下文判断合理性`,
@@ -149,16 +150,21 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 
 3. intent: "instruction" | "question" | "creative" | "conversation"
    - "instruction": 执行任务型指示 (写代码、重构、部署、操作文件)
-   - "question": 信息询问 (怎么实现、这个是什么、查找文档)
+   - "question": 事实、实时信息或资料询问，包括“查一下”、天气、台风、新闻、价格、文档查询
    - "creative": 创作生成 (写文章、设计架构、生成内容)
-   - "conversation": 对话讨论、闲聊、简短问答
+   - "conversation": 不需要外部事实或资料的讨论、寒暄和闲聊；不要把信息查询归入此类
 
 4. context_relevance: "standalone" | "follow_up" | "continuation"
    - "standalone": 新话题，与历史无关
    - "follow_up": 跟进上一条回复，需要完整上下文
    - "continuation": 明确继续之前中断的任务
 
-5. topic: 会话主题的稳定点分隔标签
+5. memory_query: 用于 Memory 检索的单一核心关键词或短语
+   - 应尽可能直接出现在相关记忆正文中，例如“现在查一下台风的信息” → “台风”
+   - 不要复制完整用户句子，不要输出多个并列关键词
+   - 无需检索 Memory 时输出空字符串 ""
+
+6. topic: 会话主题的稳定点分隔标签
    格式: "<category>.<domain>.<specific>" (如 "creative.history.ancient", "tools.filesystem.explore")
    Categories: creative | tools | code | knowledge | chat
    - 足够具体以区分不同任务
@@ -179,7 +185,7 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 这是执行策略，不是模型要求。
 
 仅回复 JSON，格式如下：
-{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","topic":"...","reasoning":"简短解释"}`,
+{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","memory_query":"...","topic":"...","reasoning":"简短解释"}`,
 
   [PromptKey.ANALYZE_RESULT]: `你是一个会话质量评估器。判断AI是否**完成了**用户的请求，并生成行为指纹。
 

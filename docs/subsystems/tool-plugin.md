@@ -174,6 +174,13 @@ createForgetMemoryTool(memory)   // { id }
 // When only content is known, call search_memory first to obtain the ID.
 ```
 
+### Context → Memory → Web 工具门控
+
+- `search_memory` 与 Skill 工具对所有 intent 可用。
+- 未完成自动 Memory 搜索且此前没有 `search_memory` 调用时，AI SDK `prepareStep` 不把内置 `webfetch` 放入 `activeTools`。
+- 自动搜索完成、前一步调用过 `search_memory`、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
+- MCP 工具保持原有行为，不参与本阶段门控。
+
 ## 5. Tool Registry
 
 ```typescript

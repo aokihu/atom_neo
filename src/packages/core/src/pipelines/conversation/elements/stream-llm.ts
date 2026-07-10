@@ -12,6 +12,56 @@ import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 
+type WebfetchUnlockReason =
+  | "explicit_url"
+  | "skill_context"
+  | "automatic_memory_search"
+  | "search_memory_called"
+  | "memory_search_required";
+
+type ActiveToolSelection = {
+  activeTools: string[];
+  webfetchEnabled: boolean;
+  webfetchUnlockReason: WebfetchUnlockReason;
+};
+
+export function containsExplicitUrl(messages: Array<{ role: string; content: string }>): boolean {
+  const latestUserText = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+  return /https?:\/\/\S+/i.test(latestUserText);
+}
+
+export function selectActiveToolsForStep(params: {
+  taskIntent: string;
+  availableToolNames: string[];
+  mcpToolNames: string[];
+  memorySearchAttempted: boolean;
+  memorySearchCalled: boolean;
+  hasSkillContext: boolean;
+  hasExplicitUrl: boolean;
+}): ActiveToolSelection {
+  const webfetchUnlockReason: WebfetchUnlockReason = params.hasExplicitUrl
+    ? "explicit_url"
+    : params.hasSkillContext
+      ? "skill_context"
+      : params.memorySearchAttempted
+        ? "automatic_memory_search"
+        : params.memorySearchCalled
+          ? "search_memory_called"
+          : "memory_search_required";
+  const webfetchEnabled = webfetchUnlockReason !== "memory_search_required";
+  const selected = [
+    ...getTaskToolNames(params.taskIntent),
+    ...params.mcpToolNames,
+    ...(webfetchEnabled ? ["webfetch"] : []),
+  ];
+  const available = new Set(params.availableToolNames);
+  return {
+    activeTools: [...new Set(selected)].filter((name) => available.has(name)),
+    webfetchEnabled,
+    webfetchUnlockReason,
+  };
+}
+
 export class StreamLLMElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #apiKey: string;
   #model: string;
@@ -77,10 +127,33 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
       Object.assign(this.#aiTools, wrappedMCP);
     }
-    const activeNames = [...getActiveToolNames(this.#taskIntent), ...Object.keys(mcpCurrent)];
     const tools = Object.keys(this.#aiTools);
+    const mcpToolNames = Object.keys(mcpCurrent);
+    const hasExplicitUrl = containsExplicitUrl(userMessages);
+    const hasSkillContext = Boolean(input.skillContext?.trim());
+    const initialToolSelection = selectActiveToolsForStep({
+      taskIntent: this.#taskIntent,
+      availableToolNames: tools,
+      mcpToolNames,
+      memorySearchAttempted: input.memorySearchAttempted ?? false,
+      memorySearchCalled: false,
+      hasSkillContext,
+      hasExplicitUrl,
+    });
     this.#builtinToolResults.clear();
-    this.report(BusEvents.Element.Data, { step: "starting LLM call", model: this.#model, msgCount: userMessages.length, toolCount: tools.length, activeCount: activeNames.length, taskIntent: this.#taskIntent });
+    this.report(BusEvents.Element.Data, {
+      step: "starting LLM call",
+      model: this.#model,
+      msgCount: userMessages.length,
+      toolCount: tools.length,
+      activeCount: initialToolSelection.activeTools.length,
+      taskIntent: this.#taskIntent,
+      memoryQuery: this.#session?.pendingPrediction?.memoryQuery ?? "",
+      memorySearchAttempted: input.memorySearchAttempted ?? false,
+      injectedMemoryCount: input.injectedMemoryCount ?? 0,
+      webfetchEnabled: initialToolSelection.webfetchEnabled,
+      webfetchUnlockReason: initialToolSelection.webfetchUnlockReason,
+    });
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
@@ -111,6 +184,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
         const STREAM_TIMEOUT_MS = resolveTimeout(difficulty);
         const abortController = new AbortController();
+        let reportedToolSelection = "";
 
         const streamResult = streamText({
         model,
@@ -121,10 +195,31 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         maxOutputTokens: this.#maxTokens,
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
-        prepareStep: ({ stepNumber }: { stepNumber: number }) => {
-          if (activeNames.length < tools.length) {
-            return { activeTools: activeNames };
+        prepareStep: ({ stepNumber, steps }) => {
+          const memorySearchCalled = steps.some((step) =>
+            step.toolCalls.some((call) => call.toolName === "search_memory")
+          );
+          const selection = selectActiveToolsForStep({
+            taskIntent: this.#taskIntent,
+            availableToolNames: tools,
+            mcpToolNames,
+            memorySearchAttempted: input.memorySearchAttempted ?? false,
+            memorySearchCalled,
+            hasSkillContext,
+            hasExplicitUrl,
+          });
+          const selectionKey = `${selection.webfetchEnabled}:${selection.webfetchUnlockReason}`;
+          if (selectionKey !== reportedToolSelection) {
+            reportedToolSelection = selectionKey;
+            this.report(BusEvents.Element.Data, {
+              step: "tool-policy",
+              stepNumber,
+              activeCount: selection.activeTools.length,
+              webfetchEnabled: selection.webfetchEnabled,
+              webfetchUnlockReason: selection.webfetchUnlockReason,
+            });
           }
+          return { activeTools: selection.activeTools };
         },
       });
 
@@ -488,24 +583,25 @@ function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, p
   return wrapped;
 }
 
-function getActiveToolNames(taskIntent: string): string[] {
+function getTaskToolNames(taskIntent: string): string[] {
   const FS_RO = ["read", "grep", "ls", "tree", "glob"];
   const FS_RW = ["write", "edit", "cp", "mv"];
   const MEMORY = ["search_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory"];
+  const MEMORY_DISCOVERY = ["search_memory"];
+  const SKILL = ["skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload"];
   const CONTROL = ["todowrite", "intent"];
-  const EXTRA = ["webfetch", "bash"];
   const SCHEDULE = ["schedule_create", "schedule_list", "schedule_update", "schedule_cancel"];
 
   switch (taskIntent) {
     case "instruction":
-      return [...FS_RO, ...FS_RW, ...MEMORY, ...CONTROL, ...EXTRA, ...SCHEDULE];
+      return [...FS_RO, ...FS_RW, ...MEMORY, ...SKILL, ...CONTROL, "bash", ...SCHEDULE];
     case "question":
-      return [...FS_RO, ...MEMORY, ...CONTROL, "webfetch", ...SCHEDULE];
+      return [...FS_RO, ...MEMORY, ...SKILL, ...CONTROL, ...SCHEDULE];
     case "creative":
-      return [...FS_RO, ...FS_RW, ...CONTROL, "webfetch", ...SCHEDULE];
+      return [...FS_RO, ...FS_RW, ...MEMORY_DISCOVERY, ...SKILL, ...CONTROL, ...SCHEDULE];
     case "conversation":
     default:
-      return [...FS_RO, ...CONTROL, "webfetch", ...SCHEDULE];
+      return [...FS_RO, ...MEMORY_DISCOVERY, ...SKILL, ...CONTROL, ...SCHEDULE];
   }
 }
 
