@@ -117,12 +117,13 @@ export interface MemorySearchResult {
           headers={["操作", "方法签名", "说明"]}
           rows={[
             [<Badge color="blue">search</Badge>, <code>search({"{"}query, scope?, limit?{"}"})</code>, "FTS5 全文搜索；返回排名的 MemorySearchResult[]"],
-            [<Badge color="green">save</Badge>, <code>save(node: Omit&lt;MemoryNode, ...&gt;)</code>, "创建新记忆节点；自动链接到领域入口"],
+            [<Badge color="green">save</Badge>, <code>save(node: Omit&lt;MemoryNode, ...&gt;)</code>, "临时文件 + SQLite upsert；失败返回 ok:false，重复保存不重置生命周期"],
             [<Badge color="purple">traverse</Badge>, <code>traverse({"{"}goal, startKey?, direction?, ...{"}"})</code>, "图遍历搜索；BFS 优先队列"],
+            [<Badge color="blue">findFullId</Badge>, <code>findFullId(memoryId)</code>, "将 Context 短 ID 查回唯一完整 ID；模糊匹配不执行写操作"],
             [<Badge color="orange">link</Badge>, <code>link({"{"}sourceKey, targetKey, relation{"}"})</code>, "在两个节点间创建关系边"],
+            [<Badge color="red">forget</Badge>, <code>forget(id)</code>, "删除指定记忆节点及关联边；支持 Context 短 ID"],
             [<Badge color="blue">getNeighbors</Badge>, <code>getNeighbors(key, direction)</code>, "获取节点的所有邻居关系"],
             [<Badge color="purple">recallSessionContext</Badge>, <code>recallSessionContext(sessionId)</code>, "按 session 召回上下文化记忆"],
-            [<Badge color="red">delete</Badge>, <code>delete(key)</code>, "删除记忆节点及其关联数据"],
             [<Badge color="blue">getStats</Badge>, <code>getStats()</code>, "返回 nodeCount / linkCount / dbSizeBytes"],
           ]}
         />

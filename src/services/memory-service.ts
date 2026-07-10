@@ -1,7 +1,7 @@
 import { BaseService } from "./base-service";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, renameSync } from "node:fs";
 
 export type MemoryNode = {
   id: string;
@@ -108,23 +108,45 @@ export class MemoryService extends BaseService {
   save(content: string, tags: string[] = []): string {
     const hash = createHash("sha256").update(content).digest("hex");
     const now = Date.now();
+    const contentPath = `${this.#nodesPath}/${hash}.txt`;
+    const tempPath = `${this.#nodesPath}/${hash}.${now}.tmp`;
+    const existed = this.has(hash);
 
-    // Write .txt file
     mkdirSync(this.#nodesPath, { recursive: true });
-    writeFileSync(`${this.#nodesPath}/${hash}.txt`, content, "utf-8");
+    writeFileSync(tempPath, content, "utf-8");
 
-    // Insert metadata
-    this.#db.run(
-      "INSERT OR REPLACE INTO nodes (id, tags, weight, access_count, created_at, accessed_at) VALUES (?, ?, ?, 0, ?, ?)",
-      [hash, tags.join(","), 100, now, now],
-    );
+    try {
+      this.#db.run(
+        `INSERT INTO nodes (id, tags, weight, access_count, created_at, accessed_at)
+         VALUES (?, ?, 100, 0, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET tags = excluded.tags, accessed_at = excluded.accessed_at`,
+        [hash, tags.join(","), now, now],
+      );
+      renameSync(tempPath, contentPath);
+    } catch (err) {
+      try { unlinkSync(tempPath); } catch {}
+      if (!existed) {
+        try { this.#db.run("DELETE FROM nodes WHERE id = ?", [hash]); } catch {}
+      }
+      throw err;
+    }
 
     return hash;
   }
 
   has(id: string): boolean {
-    const row = this.#db.prepare("SELECT 1 FROM nodes WHERE id = ?").get(id);
-    return row !== null;
+    return this.findFullId(id) !== null;
+  }
+
+  findFullId(memoryId: string): string | null {
+    const key = memoryId.trim().toLowerCase();
+    if (!/^[a-f0-9]+$/.test(key)) return null;
+
+    const exact = this.#db.prepare("SELECT id FROM nodes WHERE id = ?").get(key) as { id: string } | null;
+    if (exact) return exact.id;
+
+    const rows = this.#db.prepare("SELECT id FROM nodes WHERE id LIKE ? ORDER BY id LIMIT 2").all(`${key}%`) as Array<{ id: string }>;
+    return rows.length === 1 ? rows[0].id : null;
   }
 
   link(source: string, target: string, relation: string): void {
@@ -134,10 +156,29 @@ export class MemoryService extends BaseService {
     );
   }
 
+  forget(id: string): boolean {
+    const fullMemoryId = this.findFullId(id);
+    if (!fullMemoryId) return false;
+
+    this.#db.run("DELETE FROM edges WHERE source_id = ? OR target_id = ?", [fullMemoryId, fullMemoryId]);
+    const result = this.#db.run("DELETE FROM nodes WHERE id = ?", [fullMemoryId]) as { changes?: number };
+    if ((result.changes ?? 0) === 0) return false;
+
+    try {
+      unlinkSync(`${this.#nodesPath}/${fullMemoryId}.txt`);
+    } catch {
+      // Metadata deletion is authoritative; missing content files are already forgotten.
+    }
+    return true;
+  }
+
   retain(id: string): void {
+    const fullMemoryId = this.findFullId(id);
+    if (!fullMemoryId) return;
+
     this.#db.run(
       "UPDATE nodes SET access_count = 0, weight = MIN(100, weight + 5), accessed_at = ? WHERE id = ?",
-      [Date.now(), id],
+      [Date.now(), fullMemoryId],
     );
   }
 

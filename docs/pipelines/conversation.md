@@ -244,14 +244,14 @@ if (!pastMarker && buffer.length > 0) {
 **职责**: 消费 `input.intents[]`，按类型分派
 
 - `FOLLOW_UP` → 设置 followUp data
-- `RETAIN_MEMORY` → 验证 mem_id 真实存在后执行 `memory.retain()`
+- `RETAIN_MEMORY` → 将 mem_id 短 ID 恢复为唯一长 ID 后执行 `memory.retain()`
 
 **两阶段安全校验：**
 
 | 阶段 | 位置 | 校验内容 |
 |------|------|---------|
 | parse | intent 解析阶段 | 格式校验：必需参数非空、未知 TYPE 跳过 |
-| execute | CheckFollowUpElement | 存在性校验：mem_id 需在 MemoryService 中存在才执行 retain() |
+| execute | CheckFollowUpElement | ID 校验：mem_id 需能被 MemoryService 解析为唯一完整 ID 才执行 retain() |
 
 ### 4.7 `finalize` — 链任务统一收口
 
@@ -423,7 +423,7 @@ TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → execu
 
 数据流：
 ```
-工具执行完成 → session.addToolResult({ toolName, topic, timestamp, ok, output })
+工具执行完成 → 按 ToolResult.ok 生成 session.addToolResult({ toolName, topic, timestamp, ok, output, error })
   → toolContext.results 按 topic 累积
   → 下一轮 collect-context: 过滤当前 topic → 格式化为 [Tool Execution History]
   → 注入 contextData → 清除当前 topic 条目
@@ -512,7 +512,7 @@ if (t.name === "todowrite" && r.ok && session?.setTodoState) {
 }
 ```
 
-**工具级验证**：`execute` 函数统计 `in_progress === "in_progress"` 的数量，> 1 时返回 `{ ok: false, error: "..." }`。`r.ok === false` 时不会同步到 session。
+**工具级验证**：`execute` 函数统计 `in_progress === "in_progress"` 的数量，> 1 时返回 `{ ok: false, error: "..." }`。`r.ok === false` 必须同步到工具统计和 session toolContext，避免失败被展示为成功。
 
 **formatProgress() 输出**：使用 Unicode 图标格式化进度（⬜/🔄/✅/❌），包含编号和优先级，末尾显示"下一步"提示。
 
@@ -648,7 +648,7 @@ IntentInputSchema = z.object({
 LLM 调用 intent → stream-llm 捕获 (intentSignal)
   → toIntentRequest() → intents[]
     → check-follow-up:
-      ├── RETAIN_MEMORY → memory.retain(mem_id)
+      ├── RETAIN_MEMORY → memory.findFullId(mem_id) → memory.retain(fullMemoryId)
       └── FOLLOW_UP  → chainAction: "follow_up" + followUp data
 ```
 

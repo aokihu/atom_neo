@@ -24,9 +24,11 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
     for (const intent of intents) {
       if (intent.request === IntentRequestType.RETAIN_MEMORY && this.#memory) {
-        const memId = intent.params.id as string;
-        if (memId && this.#memory.has?.(memId)) {
-          this.#memory.retain(memId);
+        const memId = typeof intent.params.id === "string" ? intent.params.id : "";
+        if (!memId) continue;
+        const fullMemoryId = this.#memory.findFullId?.(memId) ?? (this.#memory.has?.(memId) ? memId : null);
+        if (fullMemoryId) {
+          this.#memory.retain(fullMemoryId);
         }
       }
     }

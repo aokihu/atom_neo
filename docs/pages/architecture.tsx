@@ -181,6 +181,7 @@ ctx.setInferenceFacts(facts);`} />
             [<code>save_memory</code>, "Memory", "FILE_WRITE"],
             [<code>traverse_memory</code>, "Memory", "READ_ONLY"],
             [<code>link_memory</code>, "Memory", "FILE_WRITE"],
+            [<code>forget_memory</code>, "Memory", "FILE_WRITE"],
             [<code>recall_memory</code>, "Memory", "READ_ONLY"],
           ]}
         />

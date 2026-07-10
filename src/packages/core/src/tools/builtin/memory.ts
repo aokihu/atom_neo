@@ -27,11 +27,15 @@ export function createSaveMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema: z.object({ content: z.string(), tags: z.array(z.string()).optional().default([]) }),
     execute: async (args) => {
-      if (!memory) return { ok: true, output: "(memory service not connected)", data: {} };
+      if (!memory) return { ok: false, output: "", error: "memory service not connected" };
       const r = z.object({ content: z.string(), tags: z.array(z.string()).optional().default([]) }).safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
-      const id = memory.save(r.data.content, r.data.tags);
-      return { ok: true, output: `Saved memory: ${id.slice(0, 8)}...`, data: { id } };
+      try {
+        const id = memory.save(r.data.content, r.data.tags);
+        return { ok: true, output: `Saved memory: ${id.slice(0, 8)}...`, data: { id } };
+      } catch (err) {
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+      }
     },
     permission: PermissionLevel.FILE_WRITE,
   };
@@ -67,6 +71,29 @@ export function createLinkMemoryTool(memory?: any): ToolDefinition {
       if (!r.success) return { ok: false, output: "", error: r.error.message };
       memory.link(r.data.source, r.data.target, r.data.relation);
       return { ok: true, output: `Linked.` };
+    },
+    permission: PermissionLevel.FILE_WRITE,
+  };
+}
+
+export function createForgetMemoryTool(memory?: any): ToolDefinition {
+  return {
+    name: "forget_memory",
+    description: "Delete a memory by ID.",
+    source: "builtin",
+    inputSchema: z.object({ id: z.string() }),
+    execute: async (args) => {
+      if (!memory) return { ok: false, output: "", error: "memory service not connected" };
+      const r = z.object({ id: z.string() }).safeParse(args);
+      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      try {
+        const forgotten = memory.forget(r.data.id);
+        return forgotten
+          ? { ok: true, output: `Forgot memory: ${r.data.id}` }
+          : { ok: false, output: "", error: `Memory not found: ${r.data.id}` };
+      } catch (err) {
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+      }
     },
     permission: PermissionLevel.FILE_WRITE,
   };

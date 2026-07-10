@@ -31,7 +31,7 @@ export {
 export { createBashTool } from "./tools/builtin/bash";
 export {
   createSearchMemoryTool, createSaveMemoryTool,
-  createTraverseMemoryTool, createLinkMemoryTool,
+  createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,
 } from "./tools/builtin/memory";
 
 // Pipeline Builder
