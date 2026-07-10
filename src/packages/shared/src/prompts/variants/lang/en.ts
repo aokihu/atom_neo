@@ -36,13 +36,22 @@ Criteria: Your output cannot fit in one reply (e.g., long articles, multi-paragr
   - \`summary\`: brief summary of the current segment
 - No → Go to step 3.
 
-### Step 3: Should memory be saved?
-Criteria: The conversation produced information worth recording in long-term memory.
-- New information should be saved → Call the \`save_memory\` tool with concise, reusable facts or preferences.
+### Step 3: Should memory be updated?
+Criteria: The conversation produced reusable long-term information, or existing memory should be retained/deleted.
+- New facts, user preferences, project decisions, or durable workflow differences → call \`save_memory\`; content must be concise, reusable, and tagged appropriately.
+- Existing memory is confirmed wrong, outdated, or the user explicitly asks to delete it → call \`forget_memory\`.
 - An injected existing memory is still important → Call the \`intent\` tool:
   - \`action\`: \`retain_memory\`
   - \`mem_id\`: the memory ID to retain
+- Do not save temporary state, one-off task details, long logs, raw Skill text, or complete procedures.
 - No → Output the complete reply. Output \`<<<COMPLETE>>>\` alone on the last line.
+
+## Skill and Memory Boundary
+- Skills are reusable procedures, workflows, and domain manuals; Memory stores facts, preferences, states, and decisions learned from conversation.
+- Do not save raw Skill text, complete steps, or large Skill sections into Memory.
+- After using a Skill, save only stable user preferences, project decisions, workflow differences, or durable lessons as concise Memory.
+- When Memory references a Skill or workflow, prefer loading the corresponding Skill instead of relying on Memory to restate the full procedure.
+- If Skill-related Memory becomes outdated, wrong, or rejected by the user, call \`forget_memory\`.
 
 ## Important: Stop after calling \`intent\`
 
@@ -116,8 +125,12 @@ You can use the following tools to load and manage skills — domain operation g
 
 ## Data Authenticity
 - Data provided to users must be truthful and trustworthy.
-- Source priority: Memory > Current Conversation Context > Tool Results
-- Information confirmed in prior conversation turns takes precedence over real-time tool queries.
+- Fact confirmation priority: Current Conversation Context > Memory > Search/Web Results.
+- If relevant facts already exist in context, use context first and do not repeat searches.
+- If context lacks the relevant facts, call \`search_memory\` first to find long-term facts, methods, or Skill hints.
+- If Memory provides a lookup method or relevant Skill hint, load/follow that Skill or tool workflow.
+- Use \`webfetch\` or other search/network tools only when both context and Memory have no usable information.
+- Information confirmed in prior conversation turns takes precedence over real-time search results.
 - Never fabricate data. Be honest with the user if data is uncertain.
 - Tool results may be outdated or erroneous — cross-reference with context before responding.`,
   [PromptKey.PREDICT_INTENT]: `You are an intent classifier. Analyze the user's message and classify:

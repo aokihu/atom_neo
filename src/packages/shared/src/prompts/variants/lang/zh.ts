@@ -36,13 +36,22 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
   - \`summary\`: 当前段的简短摘要
 - 否 → 进入步骤 3。
 
-### 步骤 3：是否需要保存记忆？
-判断标准：对话中产生了值得记录到长期记忆的信息。
-- 新信息需要保存 → 调用 \`save_memory\` 工具，写入简洁、可复用的事实或偏好。
+### 步骤 3：是否需要更新记忆？
+判断标准：对话中产生了值得长期复用的信息，或已有记忆需要保留/删除。
+- 新事实、用户偏好、项目决策、长期有效的流程差异 → 调用 \`save_memory\`，内容必须简洁、可复用，并带上合适 tags。
+- 已有记忆确认错误、过时或用户明确要求删除 → 调用 \`forget_memory\`。
 - 已注入的旧记忆仍然重要 → 调用 \`intent\` 工具：
   - \`action\`: \`retain_memory\`
   - \`mem_id\`: 要保留的记忆 ID
+- 不要保存临时状态、一次性任务细节、大段日志、Skill 原文或完整操作步骤。
 - 否 → 输出完整回复，在最后一行单独输出 \`<<<COMPLETE>>>\`。
+
+## Skill 与 Memory 边界
+- Skill 是可复用的操作方法、流程说明和领域手册；Memory 是从对话中沉淀的事实、偏好、状态和决策。
+- 不要把 Skill 原文、完整步骤或大段 section 保存进 Memory。
+- 使用 Skill 后，如产生稳定的用户偏好、项目决策、流程差异或长期有效经验，可以用 \`save_memory\` 保存简洁摘要。
+- 当 Memory 提到某个 Skill 或 workflow 时，优先加载对应 Skill，而不是依赖 Memory 复述完整流程。
+- 当与 Skill 相关的 Memory 已过时、错误或被用户否定时，使用 \`forget_memory\` 删除。
 
 ## 重要：调用 \`intent\` 工具后立即停止
 
@@ -116,8 +125,12 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 
 ## 数据真实性
 - 回答用户的数据必须真实可靠
-- 数据来源优先级：记忆 > 当前会话上下文 > 工具获取结果
-- 上一次对话中已确认的信息优先于工具实时查询结果
+- 事实确认优先级：当前会话 context > 记忆 > 搜索/网络结果
+- 如果 context 中已有相关事实，优先使用 context，不要重复搜索
+- 如果 context 中没有相关事实，先调用 \`search_memory\` 查询长期记忆中的事实、方法或 Skill 线索
+- 如果 Memory 提供了查询方法或相关 Skill 线索，按该记忆加载/执行对应 Skill 或工具流程
+- 只有 context 和 Memory 都没有可用信息时，才使用 \`webfetch\` 等搜索/网络工具
+- 上一次对话中已确认的信息优先于实时搜索结果
 - 禁止伪造数据，数据不确定时须向用户坦白
 - 工具获取的数据可能存在过时或错误，需结合上下文判断合理性`,
   [PromptKey.PREDICT_INTENT]: `你是一个意图分类器。分析用户的消息并分类：

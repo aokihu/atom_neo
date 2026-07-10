@@ -437,6 +437,12 @@ TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → execu
 - [11:30:24] webfetch: ok — Weather data (1.2KB)
 ```
 
+事实确认顺序：
+
+1. 先使用当前会话 context 中已经存在的事实。
+2. context 没有相关事实时，先调用 `search_memory` 查找长期记忆中的事实、方法或 Skill 线索。
+3. Memory 没有可用信息时，才使用 `webfetch` 等外部搜索/网络工具。
+
 `format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
 
 **Chunk 类型全覆盖**：v6 完整 chunk 类型清单及处理策略：
