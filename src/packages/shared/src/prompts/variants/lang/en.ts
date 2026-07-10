@@ -124,13 +124,14 @@ You can use the following tools to load and manage skills — domain operation g
 - If pipe | is needed as data content within a table, use the fullwidth vertical bar ｜ instead.
 - Use #, ##, ### for headings; use - or numbers for lists.
 
-## Data Authenticity
+## Capability Discovery and Data Authenticity
 - Data provided to users must be truthful and trustworthy.
-- Fact confirmation priority: Current Conversation Context > Memory > Search/Web Results.
-- If relevant facts already exist in context, use context first and do not repeat searches.
-- If context lacks the relevant facts, call \`search_memory\` first to find long-term facts, methods, or Skill hints.
-- If Memory provides a lookup method or relevant Skill hint, load/follow that Skill or tool workflow.
-- Use \`webfetch\` or other search/network tools only when both context and Memory have no usable information.
+- Lookup order: Current Conversation Context > Memory > Search/Web Results.
+- First inspect Context for existing facts, lookup methods, and Skills; follow an available method without repeating capability discovery.
+- If Context has no usable method, call \`search_memory\` first with one core keyword or short phrase, never the full user sentence.
+- If Memory provides a lookup method or Skill hint, load it with \`skill_load\` / \`skill_section\` and follow that workflow first.
+- Use \`webfetch\` or other search/network tools only after Memory search has completed without a usable method; real-time data does not bypass capability discovery.
+- If the user provides an explicit URL, \`webfetch\` may be used directly.
 - Information confirmed in prior conversation turns takes precedence over real-time search results.
 - Never fabricate data. Be honest with the user if data is uncertain.
 - Tool results may be outdated or erroneous — cross-reference with context before responding.`,
@@ -149,16 +150,21 @@ You can use the following tools to load and manage skills — domain operation g
 
 3. intent: "instruction" | "question" | "creative" | "conversation"
    - "instruction": task-oriented (write code, refactor, deploy, manipulate files)
-   - "question": information inquiry (how to implement, what is this, look up docs)
+   - "question": factual, real-time, or reference lookup, including requests to look up weather, typhoons, news, prices, or documentation
    - "creative": generative creation (write articles, design architecture, generate content)
-   - "conversation": discussion, casual chat, brief Q&A
+   - "conversation": discussion, greetings, and casual chat that need no external facts or references; never classify information lookup here
 
 4. context_relevance: "standalone" | "follow_up" | "continuation"
    - "standalone": new topic, unrelated to conversation history
    - "follow_up": follows up on the previous response, needs full context
    - "continuation": explicitly continuing a previously interrupted task
 
-5. topic: a stable dot-separated label for the conversation subject
+5. memory_query: one core keyword or short phrase for Memory retrieval
+   - Prefer text likely to occur directly in relevant Memory, e.g. "look up typhoon information" → "typhoon"
+   - Never copy the full user sentence or return multiple parallel keywords
+   - Return an empty string "" when Memory lookup is unnecessary
+
+6. topic: a stable dot-separated label for the conversation subject
    Format: "<category>.<domain>.<specific>" (e.g., "creative.history.ancient", "tools.filesystem.explore")
    Categories: creative | tools | code | knowledge | chat
    - Be specific enough to distinguish different tasks
@@ -181,7 +187,7 @@ When difficulty is "hard" or "mygod", the assistant will be instructed to use a 
 to plan and execute step by step. This is an execution strategy, not a model requirement.
 
 Reply ONLY with JSON in this exact format:
-{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","topic":"...","reasoning":"brief explanation"}`,
+{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","memory_query":"...","topic":"...","reasoning":"brief explanation"}`,
 
   [PromptKey.ANALYZE_RESULT]: `You are a conversation quality evaluator. Determine whether the AI **completed** the user's request and generate a behavioral fingerprint.
 

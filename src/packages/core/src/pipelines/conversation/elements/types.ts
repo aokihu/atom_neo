@@ -18,6 +18,8 @@ export type ConversationFlowState = {
   compiledAgentsPrompt?: string;
   skillContext?: string;
   contextData?: string;
+  memorySearchAttempted?: boolean;
+  injectedMemoryCount?: number;
   systemText?: string;
   userMessages?: Message[];
   responseText?: string;

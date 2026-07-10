@@ -1,10 +1,10 @@
 # Prediction Pipeline
 
-> **Purpose**: 用户意图预分类 — 用 basic 模型做轻量级分类，输出任务复杂度、模型级别、任务类型、上下文关联度。
+> **Purpose**: 用户意图预分类 — 用 basic 模型做轻量级分类，输出任务复杂度、模型级别、任务类型、上下文关联度和 Memory 核心查询词。
 
 ## 职责
 
-在正式会话之前，用 basic 模型对用户意图做轻量级分类，输出任务复杂度、所需模型级别、任务类型、上下文关联度，供 conversation pipeline 优化执行。
+在正式会话之前，用 basic 模型对用户意图做轻量级分类，同时生成一个适合 Memory 检索的核心关键词，供 conversation pipeline 自动召回查询方法和 Skill 线索。
 
 ## 触发方式
 
@@ -16,14 +16,15 @@ POST /api/tasks → createTaskHandler → taskQueue.enqueue(pipeline="prediction
 ## Element 链
 
 ```
-predict-input (source) → predict-intent (transform) → predict-finalize (sink)
+predict-input (source) → predict-intent (transform) → token-ratio (boundary) → predict-finalize (sink)
 ```
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
 | 1 | `predict-input` | source | 提取用户消息 + 最近对话上下文 |
 | 2 | `predict-intent` | transform | 调用 `generateText`（非流式），输出 `IntentPredictionResult` |
-| 3 | `predict-finalize` | sink | 写入 `session.pendingPrediction`，调度 conversation 任务 |
+| 3 | `token-ratio` | boundary | 检查 token 使用比例 |
+| 4 | `predict-finalize` | sink | 写入 `session.pendingPrediction`，调度 conversation 任务 |
 
 ## FlowState
 
@@ -58,6 +59,7 @@ type IntentPredictionResult = {
   modelProfile: "basic" | "balanced" | "advanced";        // 所需推理能力 → 模型选择
   intent: "instruction" | "question" | "creative" | "conversation";  // 任务意图 (Anthropic 风格)
   contextRelevance: "standalone" | "follow_up" | "continuation";
+  memoryQuery: string;                                    // 单一 Memory 核心查询词；无需查询时为空
   topic: string;                                          // 主题标签 → 会话状态管理
   reasoning: string;
 };
@@ -86,14 +88,20 @@ type IntentPredictionResult = {
 
 重命名为 Anthropic 标准意图分类，与工具白名单直接关联：
 
-| 值 | 场景示例 | 可用工具数 |
-|-----|---------|-----------|
-| `instruction` | 执行命令、写代码、重构、操作文件 | 17 (全量) |
-| `question` | 信息询问、查天气、查记忆、文档搜索 | 12 |
-| `creative` | 写长文、设计架构、生成内容 | 11 |
-| `conversation` | 闲聊、简短问答、讨论 | 8 |
+| 值 | 场景示例 |
+|-----|---------|
+| `instruction` | 执行命令、写代码、重构、操作文件 |
+| `question` | 事实、天气、台风、新闻、价格和文档等信息查询 |
+| `creative` | 写长文、设计架构、生成内容 |
+| `conversation` | 不需要外部事实的闲聊、寒暄和讨论 |
 
-每个 intent 通过 `getActiveToolNames()` 控制工具可见性，减少无关工具 token 开销。
+每个 intent 通过 `selectActiveToolsForStep()` 控制工具可见性；`search_memory` 与 Skill 工具始终可用，内置 `webfetch` 按 Memory 搜索状态动态开放。
+
+### memoryQuery（Memory 核心查询词）
+
+- 输出单一关键词或短语，例如“现在查一下台风的信息” → `台风`。
+- 关键词应尽可能直接出现在相关 Memory 正文中，不复制完整用户句子。
+- 无需 Memory 检索时输出空字符串；Prediction 失败时也回退为空，由 Conversation 工具门控要求 Agent 先调用 `search_memory`。
 
 ### contextRelevance（上下文关联）
 
@@ -142,7 +150,7 @@ type PredictionPipelineDeps = {
 
 | 场景 | 行为 |
 |------|------|
-| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced", intent: "conversation", topic: "" }` |
+| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced", intent: "conversation", memoryQuery: "", topic: "" }` |
 | API 400 错误 (如消息损坏) | fallback 同上，不阻塞对话 |
 | 空用户消息 | fallback 同上 |
 | 无 apiKey | fallback 同上 |

@@ -75,6 +75,9 @@ export enum PermissionLevel {
             [<code>bash</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行 shell 命令"],
           ]}
         />
+        <Callout type="info" title="动态工具门控">
+          <code>search_memory</code> 和 Skill 工具对所有 intent 可用。AI SDK <code>prepareStep</code> 仅在 Memory 搜索已尝试、已有 Skill Context、前一步调用过 <code>search_memory</code>，或用户提供明确 URL 时开放内置 <code>webfetch</code>。
+        </Callout>
       </Section>
 
       {/* ── Builtin Tool Template ── */}

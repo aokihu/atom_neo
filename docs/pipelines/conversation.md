@@ -29,12 +29,13 @@ prediction pipeline → predict-finalize → orchestrator.scheduleConversation()
   → conversationPipeline(deps).build(bus)
 ```
 
-## 3. Element 链（9 个元素）
+## 3. Element 链（10 个元素）
 
 ```
 collect-prompts (source)
   → load-system-prompt (transform)
   → fetch-agents-prompt (transform)
+  → inject-skill-context (transform)
   → collect-context (transform)
   → format-system-messages (transform)
   → format-user-messages (transform)
@@ -48,12 +49,13 @@ collect-prompts (source)
 | 1 | `collect-prompts` | source | 从 session 提取可见消息 |
 | 2 | `load-system-prompt` | transform | 从 PromptRegistry 合成系统提示词 |
 | 3 | `fetch-agents-prompt` | transform | 获取 Agent 编译器输出的指令 |
-| 4 | `collect-context` | transform | 构建环境上下文（cwd、OS、记忆、token 使用、主题约束、任务进度、难度规则） |
-| 5 | `format-system-messages` | transform | 合并 system prompt + agent prompt + context |
-| 6 | `format-user-messages` | transform | 组装 user message 数组，切换 mode → `formatted` |
-| 7 | `stream-llm` | transform | 核心：调用 LLM 流式生成 |
-| 8 | `check-follow-up` | boundary | 根据意图和 finishReason 决定 chainAction |
-| 9 | `finalize` | sink | 发出 `Conversation.Chain` 事件 → server.ts 统一调度 |
+| 4 | `inject-skill-context` | transform | 注入当前已加载的 Skill section |
+| 5 | `collect-context` | transform | 使用 Prediction 的核心关键词检索并注入 Memory，同时构建运行时上下文 |
+| 6 | `format-system-messages` | transform | 合并 system prompt + agent prompt + skill + context |
+| 7 | `format-user-messages` | transform | 组装 user message 数组，切换 mode → `formatted` |
+| 8 | `stream-llm` | transform | 核心：调用 LLM，并按 step 动态开放工具 |
+| 9 | `check-follow-up` | boundary | 根据意图和 finishReason 决定 chainAction |
+| 10 | `finalize` | sink | 发出 `Conversation.Chain` 事件 → server.ts 统一调度 |
 
 ## 4. Element 详解
 
@@ -90,14 +92,25 @@ class CollectContextElement extends BaseElement {
       `OS: ${process.platform} ${process.arch}`,
     ].join("\n");
 
+    // Prediction 输出单一核心关键词，例如“台风”
+    const memoryQuery = this.#session?.pendingPrediction?.memoryQuery?.trim() || "";
+    let memorySearchAttempted = false;
+    let injectedMemoryCount = 0;
+
     // Memory injection with <Memory> tags
-    const memories = this.#memory?.search(input.task?.payload?.[0]?.data) || [];
+    let memories = [];
+    if (memoryQuery) {
+      memorySearchAttempted = true;
+      try { memories = this.#memory ? await this.#memory.search(memoryQuery) : []; }
+      catch { memories = []; } // Memory 不可用时允许继续进入网络查询
+    }
     for (const node of memories) {
       if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }  // 高频记忆衰减
       const aging = node.accessCount >= 3 ? ' aging="true"' : "";                     // 中等频率标记老化
       contextData += `\n<Memory id="${node.id.slice(0,6)}" tags="${node.tags}"${aging}>\n${node.content}\n</Memory>`;
       this.#memory.incrementAccess(node.id);
       this.#memory.boostWeight(node.id);
+      injectedMemoryCount++;
     }
 
     // Tool execution history injection (from ToolContext)
@@ -111,7 +124,7 @@ class CollectContextElement extends BaseElement {
       this.#session.toolContext.results = results.filter((r: any) => r.topic !== this.#session.currentTopic);
     }
 
-    return { ...input, contextData };
+    return { ...input, contextData, memorySearchAttempted, injectedMemoryCount };
   }
 }
 ```
@@ -174,11 +187,17 @@ const streamResult = streamText({
   maxOutputTokens: this.#maxTokens,       // v6: 替代 maxTokens
   providerOptions: this.#providerOptions,
   abortSignal: abortController.signal,
-  prepareStep: ({ stepNumber }) => {
-    // 按 taskIntent 渐进式开放工具
-    if (activeNames.length < tools.length) {
-      return { activeTools: activeNames };
-    }
+  prepareStep: ({ steps }) => {
+    const activeTools = selectActiveToolsForStep({
+      taskIntent,
+      memorySearchAttempted: input.memorySearchAttempted,
+      hasSkillContext: Boolean(input.skillContext?.trim()),
+      hasExplicitUrl,
+      memoryToolCalled: steps.some(step =>
+        step.toolCalls.some(call => call.toolName === "search_memory")
+      ),
+    });
+    return { activeTools };
   },
 });
 ```
@@ -437,11 +456,18 @@ TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → execu
 - [11:30:24] webfetch: ok — Weather data (1.2KB)
 ```
 
-事实确认顺序：
+查询能力与事实确认顺序：
 
-1. 先使用当前会话 context 中已经存在的事实。
-2. context 没有相关事实时，先调用 `search_memory` 查找长期记忆中的事实、方法或 Skill 线索。
-3. Memory 没有可用信息时，才使用 `webfetch` 等外部搜索/网络工具。
+1. 先检查当前 Context 中已经注入的事实、查询方法和 Skill。
+2. Prediction 生成单一 `memoryQuery`，`collect-context` 在 LLM 调用前自动搜索 Memory。
+3. 自动搜索未执行时，`webfetch` 保持隐藏；Agent 必须先调用 `search_memory`。
+4. 自动搜索完成（命中、无结果或失败）或 `search_memory` 已调用后，下一 step 才开放 `webfetch`。
+5. Memory 指向 Skill 时，Agent 先使用 `skill_load` / `skill_section` 加载方法，再执行对应查询。
+6. 用户消息含明确 `http://` 或 `https://` URL 时允许直接使用 `webfetch`。
+
+`search_memory` 和 Skill 工具对所有 intent 保持可用，避免一次 intent 误分类切断能力发现。MCP 工具不参与本阶段的内置 `webfetch` 门控。
+
+Debug 日志记录 `memoryQuery`、`memorySearchAttempted`、`injectedMemoryCount`、`webfetchEnabled` 和开放原因，不记录 Memory 正文。
 
 `format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
 

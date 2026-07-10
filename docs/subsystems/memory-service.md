@@ -83,7 +83,7 @@ class MemoryService extends BaseService {
 ## 4. 搜索流程
 
 ```
-用户输入 → ripgrep --json 扫 nodes/*.txt
+Prediction.memoryQuery（单一核心关键词）→ ripgrep --json 扫 nodes/*.txt
   → 提取匹配文件 hash
   → SQLite: SELECT * FROM nodes WHERE id IN (...)
   → 按 weight × recency 排序 → ≤3 条
@@ -117,8 +117,14 @@ SELECT target_id FROM edges WHERE source_id = ?
 
 ## 7. 注入 conversation context
 
+Prediction 在现有分类调用中额外生成 `memory_query`，例如把“现在查一下台风的信息”提炼为“台风”。`collect-context` 只在该字段非空时执行自动 Memory 搜索，不增加新的 LLM 调用，也不使用本地中文分词。
+
+搜索命中、无结果或异常都会设置 `memorySearchAttempted = true`；异常只记录 Debug 信息，不阻断 Conversation。命中并实际注入的节点数记录在 `injectedMemoryCount`。
+
 ```typescript
 // collect-context 元素 — Memory 标签包裹
+const memoryQuery = session.pendingPrediction?.memoryQuery?.trim() || "";
+const memories = memoryQuery ? await memory.search(memoryQuery) : [];
 for (const node of memories) {
   if (node.accessCount >= 5) continue;  // 卸载
   const aging = node.accessCount >= 3 ? ' aging="true"' : "";

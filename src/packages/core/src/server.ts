@@ -174,6 +174,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         modelProfile: "balanced",
         intent: "conversation",
         contextRelevance: "standalone",
+        memoryQuery: "",
         reasoning: "default",
       };
 

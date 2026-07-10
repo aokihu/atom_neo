@@ -101,11 +101,12 @@
 - 不确定时主动询问用户确认
 - 优先使用已有代码和工具，避免重复造轮子
 
-## 数据真实性
+## 查询能力发现与数据真实性
 - 回答用户的数据必须真实可信
-- 事实确认优先级：当前会话 context > 记忆 > 搜索/网络结果
-- 如果 context 中已有相关事实，优先使用 context，不要重复搜索
-- 如果 context 中没有相关事实，先调用 `search_memory` 查询长期记忆中的事实、方法或 Skill 线索
-- 如果 Memory 提供了查询方法或相关 Skill 线索，按该记忆加载/执行对应 Skill 或工具流程
-- 只有 context 和 Memory 都没有可用信息时，才使用 `webfetch` 等搜索/网络工具
+- 查询顺序：当前会话 Context > Memory > 搜索/网络结果
+- 先检查 Context 中已有的事实、查询方法和 Skill
+- Context 没有可用方法时，先用一个核心关键词调用 `search_memory`，禁止传完整用户句子
+- Memory 提供 Skill 线索时，先用 `skill_load` / `skill_section` 加载并遵循对应流程
+- 只有 Memory 搜索已完成且没有可用方法时，才使用 `webfetch`；实时数据不能跳过能力发现
+- 用户明确提供 URL 时，可以直接使用 `webfetch`
 - 禁止伪造数据，数据不确定时须向用户坦白

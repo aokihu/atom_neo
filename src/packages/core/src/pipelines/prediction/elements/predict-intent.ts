@@ -10,9 +10,22 @@ const FALLBACK: IntentPredictionResult = {
   modelProfile: "balanced",
   intent: "conversation",
   contextRelevance: "standalone",
+  memoryQuery: "",
   topic: "",
   reasoning: "prediction skipped or failed, fallback to defaults",
 };
+
+export function parseIntentPrediction(parsed: Record<string, any>): IntentPredictionResult {
+  return {
+    difficulty: (["easy", "medium", "hard", "mygod"].includes(parsed.difficulty as string) ? parsed.difficulty : "medium") as DifficultyLevel,
+    modelProfile: (["basic", "balanced", "advanced"].includes(parsed.model_profile as string) ? parsed.model_profile : "balanced") as ModelProfile,
+    intent: (["instruction", "question", "creative", "conversation"].includes(parsed.intent as string) ? parsed.intent : "conversation") as IntentPredictionResult["intent"],
+    contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance as string) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
+    memoryQuery: typeof parsed.memory_query === "string" ? parsed.memory_query.trim() : "",
+    topic: typeof parsed.topic === "string" ? parsed.topic : "",
+    reasoning: parsed.reasoning ?? "",
+  };
+}
 
 export class PredictIntentElement extends BaseElement<PredictionFlowState, PredictionFlowState> {
   #apiKey: string;
@@ -70,15 +83,8 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
         return { ...input, mode: "routing", prediction: FALLBACK };
       }
 
-      const prediction: IntentPredictionResult = {
-        difficulty: (["easy", "medium", "hard", "mygod"].includes(parsed.difficulty as string) ? parsed.difficulty : "medium") as DifficultyLevel,
-        modelProfile: (["basic", "balanced", "advanced"].includes(parsed.model_profile as string) ? parsed.model_profile : "balanced") as ModelProfile,
-        intent: (["instruction", "question", "creative", "conversation"].includes(parsed.intent as string) ? parsed.intent : "conversation") as IntentPredictionResult["intent"],
-        contextRelevance: (["standalone", "follow_up", "continuation"].includes(parsed.context_relevance as string) ? parsed.context_relevance : "standalone") as IntentPredictionResult["contextRelevance"],
-        topic: typeof parsed.topic === "string" ? parsed.topic : "",
-        reasoning: parsed.reasoning ?? "",
-      };
-      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, intent: prediction.intent, contextRelevance: prediction.contextRelevance, topic: prediction.topic, reasoning: prediction.reasoning });
+      const prediction = parseIntentPrediction(parsed);
+      this.report(BusEvents.Element.Data, { step: "done", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, intent: prediction.intent, contextRelevance: prediction.contextRelevance, memoryQuery: prediction.memoryQuery, topic: prediction.topic, reasoning: prediction.reasoning });
       return { ...input, mode: "routing", prediction };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error, fallback", error: err?.message });

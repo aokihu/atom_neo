@@ -3,6 +3,7 @@ import { registerPredictionElements, predictionPipeline } from "../index";
 import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
+import { parseIntentPrediction } from "./elements/predict-intent";
 
 beforeAll(() => {
   registerPredictionElements();
@@ -10,6 +11,21 @@ beforeAll(() => {
 });
 
 describe("prediction pipeline elements", () => {
+  test("parses a core Memory query for information lookup", () => {
+    const prediction = parseIntentPrediction({
+      difficulty: "easy",
+      model_profile: "basic",
+      intent: "question",
+      context_relevance: "standalone",
+      memory_query: " 台风 ",
+      topic: "knowledge.weather.typhoon",
+      reasoning: "current information lookup",
+    });
+
+    expect(prediction.intent).toBe("question");
+    expect(prediction.memoryQuery).toBe("台风");
+  });
+
   test("predict-input extracts user message from task payload", async () => {
     const bus = makeBus();
     const Ctor = resolveElement("predict-input");
@@ -106,6 +122,7 @@ describe("prediction pipeline elements", () => {
     expect(result.mode).toBe("routing");
     expect(result.prediction).toBeDefined();
     expect(result.prediction!.difficulty).toBe("medium");
+    expect(result.prediction!.memoryQuery).toBe("");
   });
 
   test("predict-intent falls back on empty message", async () => {
@@ -148,7 +165,7 @@ describe("prediction pipeline elements", () => {
       task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
       userMessage: "hello",
-      prediction: { difficulty: "mygod", modelProfile: "advanced", topic: "code.test", reasoning: "needs shell" },
+      prediction: { difficulty: "mygod", modelProfile: "advanced", intent: "instruction", contextRelevance: "standalone", memoryQuery: "", topic: "code.test", reasoning: "needs shell" },
     });
 
     expect(result.type).toBe("complete");

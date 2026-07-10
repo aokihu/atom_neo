@@ -83,6 +83,26 @@ CREATE TABLE edges (
         </Callout>
       </Section>
 
+      <Section title="查询能力发现">
+        <ComparisonTable
+          headers={["阶段", "行为", "结果"]}
+          rows={[
+            ["Context", "检查已注入的 Memory 与 Skill", "已有查询方法时直接遵循"],
+            ["Memory", "使用 Prediction 生成的单一核心关键词自动搜索", "记录是否尝试及注入数量"],
+            ["Skill", "Memory 提供 Skill 线索时加载对应 section", "取得可复用查询流程"],
+            ["Web", "Memory 搜索完成后开放 webfetch", "获取最终实时数据"],
+          ]}
+        />
+        <CodeBlock lang="text" code={`用户: 现在查一下台风的信息
+  → Prediction.memoryQuery = "台风"
+  → collect-context 搜索 Memory
+  → 命中查询方法 / Skill 线索
+  → 按方法开放并执行 webfetch`} />
+        <Callout type="info" title="Memory 搜索是网络查询前置条件">
+          自动搜索无结果或失败也视为已经尝试；此时允许进入 Web。用户提供明确 URL 时可直接访问。
+        </Callout>
+      </Section>
+
       <Section title="权重与生命周期">
         <ComparisonTable
           headers={["事件", "变化"]}
