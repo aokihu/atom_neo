@@ -2,10 +2,16 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 
+const forgetMemoryInputSchema = z.object({
+  id: z.string()
+    .regex(/^[a-fA-F0-9]+$/, "Memory ID must be a full or short hexadecimal ID")
+    .describe("Full or short hexadecimal ID from <Memory id=\"...\">")
+});
+
 export function createSearchMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "search_memory",
-    description: "Search memory by keywords.",
+    description: "Search memory by keywords. Returns matching memories with short IDs for follow-up memory operations.",
     source: "builtin",
     inputSchema: z.object({ query: z.string(), limit: z.number().optional().default(3) }),
     execute: async (args) => {
@@ -14,7 +20,12 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
       if (!r.success) return { ok: false, output: "", error: r.error.message };
       const nodes = await memory.search(r.data.query, r.data.limit);
       if (nodes.length === 0) return { ok: true, output: "No memories found." };
-      return { ok: true, output: nodes.map((n: any) => `- ${n.content}`).join("\n"), data: nodes };
+      const output = nodes.map((n: any) => {
+        const id = String(n.id).slice(0, 6);
+        const tags = Array.isArray(n.tags) ? n.tags.join(",") : "";
+        return `<Memory id="${id}" tags="${tags}">\n${n.content}\n</Memory>`;
+      }).join("\n");
+      return { ok: true, output, data: nodes };
     },
     permission: PermissionLevel.READ_ONLY,
   };
@@ -46,12 +57,12 @@ export function createTraverseMemoryTool(memory?: any): ToolDefinition {
     name: "traverse_memory",
     description: "Traverse memory graph.",
     source: "builtin",
-    inputSchema: z.object({ startKey: z.string(), maxSteps: z.number().optional().default(4) }),
+    inputSchema: z.object({ startId: z.string(), maxSteps: z.number().optional().default(4) }),
     execute: async (args) => {
       if (!memory) return { ok: true, output: "(memory service not connected)", data: { paths: [] } };
-      const r = z.object({ startKey: z.string(), maxSteps: z.number().optional().default(4) }).safeParse(args);
+      const r = z.object({ startId: z.string(), maxSteps: z.number().optional().default(4) }).safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
-      const nodes = memory.traverse(r.data.startKey, r.data.maxSteps);
+      const nodes = memory.traverse(r.data.startId, r.data.maxSteps);
       if (nodes.length === 0) return { ok: true, output: "No related memories found." };
       return { ok: true, output: nodes.map((n: any) => `- ${n.content.slice(0, 100)}`).join("\n"), data: nodes };
     },
@@ -79,12 +90,12 @@ export function createLinkMemoryTool(memory?: any): ToolDefinition {
 export function createForgetMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "forget_memory",
-    description: "Delete a memory by ID.",
+    description: "Delete a memory by its full or short hexadecimal ID. If only content is known, call search_memory first and use the returned <Memory id>.",
     source: "builtin",
-    inputSchema: z.object({ id: z.string() }),
+    inputSchema: forgetMemoryInputSchema,
     execute: async (args) => {
       if (!memory) return { ok: false, output: "", error: "memory service not connected" };
-      const r = z.object({ id: z.string() }).safeParse(args);
+      const r = forgetMemoryInputSchema.safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
       try {
         const forgotten = memory.forget(r.data.id);

@@ -163,25 +163,15 @@ export const readTool: ToolDefinition = {
 ```typescript
 // src/packages/core/src/tools/builtin/memory.ts
 
-export const searchMemoryTool: ToolDefinition = {
-  name: "search_memory",
-  description: "Search memory by keywords. Returns matching facts, preferences, and constraints.",
-  source: "builtin",
-  inputSchema: z.object({
-    query: z.string().describe("Search keywords or question"),
-    scope: z.enum(["core", "short", "long"]).default("long"),
-    limit: z.number().optional().default(10),
-  }),
-  execute: async (args) => {
-    // Calls MemoryService
-  },
-  permission: PermissionLevel.READ_ONLY,
-};
+createSearchMemoryTool(memory) // { query, limit? }
+// Returns matching content as <Memory id="short-id" tags="...">.
 
-export const saveMemoryTool: ToolDefinition = { /* ... */ };
-export const traverseMemoryTool: ToolDefinition = { /* ... */ };
-export const linkMemoryTool: ToolDefinition = { /* ... */ };
-export const forgetMemoryTool: ToolDefinition = { /* ... */ };
+createSaveMemoryTool(memory)     // { content, tags? }
+createTraverseMemoryTool(memory) // { startId, maxSteps? }
+createLinkMemoryTool(memory)     // { source, target, relation }
+createForgetMemoryTool(memory)   // { id }
+// forget_memory accepts only a full or unique short hexadecimal ID.
+// When only content is known, call search_memory first to obtain the ID.
 ```
 
 ## 5. Tool Registry
