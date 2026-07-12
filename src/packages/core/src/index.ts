@@ -30,7 +30,7 @@ export {
 } from "./tools/builtin/fs";
 export { createBashTool } from "./tools/builtin/bash";
 export {
-  createSearchMemoryTool, createSaveMemoryTool,
+  createSearchMemoryTool, createReadMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,
 } from "./tools/builtin/memory";
 

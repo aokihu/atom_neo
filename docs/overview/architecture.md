@@ -10,7 +10,7 @@
 |------|------|------|
 | **任务调度** | 事件驱动：task 入队 → 立即触发 pipeline | 无空转延迟，响应时间 O(1) |
 | **上下文管理** | Per-Session 隔离，每个 session 独立实例 | 多 session 并发安全，无需全局锁 |
-| **Memory 操作** | `search_memory` / `save_memory` 注册为 Tool | 统一工具调用路径 |
+| **Memory 操作** | `search_memory` / `read_memory` / `save_memory` 注册为 Tool | 摘要发现与正文读取分离 |
 | **LLM 输出解析** | `streamText` + tool calling（流式输出 + 结构化工具调用）| 流式体验 + 零解析错误 |
 | **Pipeline 组装** | 声明式 `PipelineBuilder`，Element 通过名称引用 | 运行时注册新 pipeline |
 | **通信** | WebSocket 事件流（Core → Client 单向广播） | 可观测，可录制，可重放 |
@@ -363,7 +363,7 @@ GET    /api/metrics            → 运行时指标
 
 ```typescript
 enum PermissionLevel {
-  READ_ONLY = 0,   // read, ls, grep, tree, search_memory, traverse_memory
+  READ_ONLY = 0,   // read, ls, grep, tree, search_memory, read_memory, traverse_memory
   FILE_WRITE = 1,  // + write, cp, mv, save_memory, link_memory, forget_memory
   FULL = 2,        // + bash (需确认)
 }

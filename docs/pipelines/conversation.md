@@ -110,11 +110,7 @@ class CollectContextElement extends BaseElement {
       }
     }
     for (const node of memories) {
-      if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }  // 高频记忆衰减
-      const aging = node.accessCount >= 3 ? ' aging="true"' : "";                     // 中等频率标记老化
-      contextData += `\n<Memory id="${node.id.slice(0,6)}" tags="${node.tags}"${aging}>\n${node.content}\n</Memory>`;
-      this.#memory.incrementAccess(node.id);
-      this.#memory.boostWeight(node.id);
+      contextData += `\n<MemorySummary id="${node.id.slice(0,6)}" tags="${node.tags}">\n${node.summary}\n</MemorySummary>`;
       injectedMemoryCount++;
       memorySearchStatus = "found";
     }
@@ -467,16 +463,16 @@ TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → execu
 1. 先检查当前 Context 中已经注入的事实、查询方法和 Skill。
 2. Prediction 生成单一 `memoryQuery`，`collect-context` 在 LLM 调用前自动搜索 Memory。
 3. 自动搜索未执行时，`webfetch` 保持隐藏；Agent 必须先调用 `search_memory`。
-4. 自动搜索或工具搜索命中普通事实/方法 Memory 时开放 `webfetch`，以便按该方法获取实时数据。
-5. Memory 正文或 tags 包含 Skill 线索时保持 `webfetch` 关闭；必须先成功调用 `skill_load` / `skill_section`。Skill 内容在本轮工具结果中返回，下一 step 才开放 `webfetch`；Skill 不存在或加载失败时允许降级。
+4. 自动搜索或工具搜索命中时只提供 `<MemorySummary>`；Agent 确认候选相关后必须调用 `read_memory(id)`，获得完整 `<Memory>` 前保持 `webfetch` 关闭。
+5. 完整 Memory 是普通事实/方法时开放 `webfetch`；若正文包含 Skill 线索，则继续保持关闭，直到 `skill_load` / `skill_section` 成功。Skill 不存在或加载失败时允许降级。
 6. 搜索为空时，Agent 必须换用不同且更宽的查询重试；自动搜索和工具搜索合计三次不同查询仍为空后才开放 `webfetch`。
 7. 查询去重会忽略年份及“最新/实时”等修饰词；归一化后存在关键词或中文片段重叠的组合视为相似查询，不累计次数。重试必须改用不重叠的同义词、领域词或 Skill 名称。
 8. Memory 服务不可用或搜索异常时直接开放 `webfetch`，避免阻断查询。
 8. 用户消息含明确 `http://` 或 `https://` URL 时允许直接使用 `webfetch`。
 
-`search_memory` 和 Skill 工具对所有 intent 保持可用，避免一次 intent 误分类切断能力发现。MCP 工具不参与本阶段的内置 `webfetch` 门控。
+`search_memory`、`read_memory` 和 Skill 工具对所有 intent 保持可用，避免一次 intent 误分类切断能力发现。MCP 工具不参与本阶段的内置 `webfetch` 门控。
 
-Debug 日志记录 `memoryQuery`、`memorySearchStatus`、不同查询次数、`injectedMemoryCount`、`memorySuggestsSkill`、Skill 加载状态、`webfetchEnabled` 和开放原因，不记录 Memory 正文。
+Debug 日志记录 `memoryQuery`、`memorySearchStatus`、不同查询次数、`injectedMemoryCount`、正文读取状态、`memorySuggestsSkill`、Skill 加载状态、`webfetchEnabled` 和开放原因，不记录 Memory 正文。
 
 `format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
 
@@ -669,7 +665,7 @@ IntentInputSchema = z.object({
 | 字段 | action | 说明 |
 |------|--------|------|
 | `action` | 两者 | `follow_up`（分段续写）或 `retain_memory`（保留已有记忆） |
-| `mem_id` | `retain_memory` | 要保留的记忆 ID（来自 `search_memory` 或 `<Memory id="...">`） |
+| `mem_id` | `retain_memory` | 要保留的记忆 ID（来自 `<MemorySummary>` 或 `<Memory>`） |
 | `next_prompt` | `follow_up` | 下一段续写的方向提示（如 "继续输出第3段"） |
 | `summary` | `follow_up` | 当前段的摘要，供下次续写时上下文注入 |
 | `history_abstract` | 两者 | 对话历史的简短概括 |
