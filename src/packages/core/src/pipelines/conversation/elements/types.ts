@@ -9,6 +9,7 @@ export type ConversationMode =
   | "ready_to_finalize";
 
 export type Message = { role: string; content: string; reasoning_content?: string };
+export type MemorySearchStatus = "not_started" | "found" | "empty" | "unavailable";
 
 export type ConversationFlowState = {
   mode: ConversationMode;
@@ -19,6 +20,7 @@ export type ConversationFlowState = {
   skillContext?: string;
   contextData?: string;
   memorySearchAttempted?: boolean;
+  memorySearchStatus?: MemorySearchStatus;
   injectedMemoryCount?: number;
   systemText?: string;
   userMessages?: Message[];

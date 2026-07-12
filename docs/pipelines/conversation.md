@@ -96,13 +96,18 @@ class CollectContextElement extends BaseElement {
     const memoryQuery = this.#session?.pendingPrediction?.memoryQuery?.trim() || "";
     let memorySearchAttempted = false;
     let injectedMemoryCount = 0;
+    let memorySearchStatus = "not_started";
 
     // Memory injection with <Memory> tags
     let memories = [];
     if (memoryQuery) {
       memorySearchAttempted = true;
-      try { memories = this.#memory ? await this.#memory.search(memoryQuery) : []; }
-      catch { memories = []; } // Memory 不可用时允许继续进入网络查询
+      try {
+        memories = this.#memory ? await this.#memory.search(memoryQuery) : [];
+        memorySearchStatus = this.#memory ? "empty" : "unavailable";
+      } catch {
+        memorySearchStatus = "unavailable";
+      }
     }
     for (const node of memories) {
       if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }  // 高频记忆衰减
@@ -111,6 +116,7 @@ class CollectContextElement extends BaseElement {
       this.#memory.incrementAccess(node.id);
       this.#memory.boostWeight(node.id);
       injectedMemoryCount++;
+      memorySearchStatus = "found";
     }
 
     // Tool execution history injection (from ToolContext)
@@ -124,7 +130,7 @@ class CollectContextElement extends BaseElement {
       this.#session.toolContext.results = results.filter((r: any) => r.topic !== this.#session.currentTopic);
     }
 
-    return { ...input, contextData, memorySearchAttempted, injectedMemoryCount };
+    return { ...input, contextData, memorySearchAttempted, injectedMemoryCount, memorySearchStatus };
   }
 }
 ```
@@ -461,13 +467,16 @@ TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → execu
 1. 先检查当前 Context 中已经注入的事实、查询方法和 Skill。
 2. Prediction 生成单一 `memoryQuery`，`collect-context` 在 LLM 调用前自动搜索 Memory。
 3. 自动搜索未执行时，`webfetch` 保持隐藏；Agent 必须先调用 `search_memory`。
-4. 自动搜索完成（命中、无结果或失败）或 `search_memory` 已调用后，下一 step 才开放 `webfetch`。
-5. Memory 指向 Skill 时，Agent 先使用 `skill_load` / `skill_section` 加载方法，再执行对应查询。
-6. 用户消息含明确 `http://` 或 `https://` URL 时允许直接使用 `webfetch`。
+4. 自动搜索或工具搜索命中 Memory 时开放 `webfetch`，以便按 Memory 中的方法获取实时数据。
+5. 搜索为空时，Agent 必须换用不同且更宽的查询重试；自动搜索和工具搜索合计三次不同查询仍为空后才开放 `webfetch`。
+6. 查询去重会忽略年份及“最新/实时”等修饰词；归一化后存在关键词或中文片段重叠的组合视为相似查询，不累计次数。重试必须改用不重叠的同义词、领域词或 Skill 名称。
+6. Memory 服务不可用或搜索异常时直接开放 `webfetch`，避免阻断查询。
+7. Memory 指向 Skill 时，Agent 先使用 `skill_load` / `skill_section` 加载方法，再执行对应查询。
+8. 用户消息含明确 `http://` 或 `https://` URL 时允许直接使用 `webfetch`。
 
 `search_memory` 和 Skill 工具对所有 intent 保持可用，避免一次 intent 误分类切断能力发现。MCP 工具不参与本阶段的内置 `webfetch` 门控。
 
-Debug 日志记录 `memoryQuery`、`memorySearchAttempted`、`injectedMemoryCount`、`webfetchEnabled` 和开放原因，不记录 Memory 正文。
+Debug 日志记录 `memoryQuery`、`memorySearchStatus`、不同查询次数、`injectedMemoryCount`、`webfetchEnabled` 和开放原因，不记录 Memory 正文。
 
 `format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
 

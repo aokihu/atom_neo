@@ -281,8 +281,7 @@ sandbox/                        # 工作目录（--sandbox 或默认 CWD）
 ├── .atom/                     # Agent 运行时数据目录
 │   ├── installed              # 首次运行标记（空文件）
 │   ├── memory/                # 记忆服务数据
-│   │   ├── memory.db          # 长期记忆数据库
-│   │   └── nodes/             # 记忆节点存储
+│   │   └── memory.db          # 长期记忆数据库（正文、图谱、FTS5）
 │   ├── compiled_prompts/      # 缓存编译后提示词
 │   └── agents_meta.json       # 编译元数据
 ├── logs/                      # 日志输出目录

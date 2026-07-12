@@ -177,8 +177,10 @@ createForgetMemoryTool(memory)   // { id }
 ### Context → Memory → Web 工具门控
 
 - `search_memory` 与 Skill 工具对所有 intent 可用。
-- 未完成自动 Memory 搜索且此前没有 `search_memory` 调用时，AI SDK `prepareStep` 不把内置 `webfetch` 放入 `activeTools`。
-- 自动搜索完成、前一步调用过 `search_memory`、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
+- 未命中 Memory 且不同查询不足三次时，AI SDK `prepareStep` 不把内置 `webfetch` 放入 `activeTools`。
+- Memory 命中、服务不可用、三次不同查询仍为空、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
+- 查询归一化后存在关键词或中文片段重叠时视为相似组合，不累计尝试次数；重试必须使用不重叠的同义词、领域词或 Skill 名称。
+- 重复相同查询不增加尝试次数；Agent 必须删除时间词并改用核心概念、同义词、领域词或 Skill 名称扩大召回。
 - MCP 工具保持原有行为，不参与本阶段门控。
 
 ## 5. Tool Registry

@@ -1,6 +1,6 @@
 # Memory Service — 设计 & API
 
-> **Purpose**: 长期记忆系统设计。基于 SQLite（元数据 + 图谱）+ 文件（内容）+ ripgrep（搜索）。
+> **Purpose**: 长期记忆系统设计。SQLite 是正文、元数据、图谱和 FTS5 检索索引的唯一数据源。
 
 ---
 
@@ -8,17 +8,13 @@
 
 ```
 .atom/memory/
-├── memory.db              # SQLite (bun:sqlite) — 节点元数据 + 图谱边
-└── nodes/
-    ├── abc123.txt          # 纯文本内容（ripgrep 搜索目标）
-    └── def456.txt
+└── memory.db              # SQLite (bun:sqlite) — 正文、元数据、图谱边、FTS5 索引
 ```
 
 ### 设计原则
 
-- **SQLite 存关系和元数据** — 多对多图拓扑，JOIN 查询高效
-- **`.txt` 存内容** — ripgrep 直接扫描文本，无需 DB 提取
-- **一个节点一个文件** — SHA-256 命名，内容即正文
+- **SQLite 单一数据源** — 正文、生命周期和图关系在同一事务中更新
+- **SQLite FTS5 统一搜索** — `trigram` 负责三字符以上子串和 BM25 排序，短词使用索引表上的 `instr()` 兜底
 - **Bun 内置 SQLite** — `import { Database } from "bun:sqlite"`
 
 ## 2. Schema
@@ -26,10 +22,19 @@
 ```sql
 CREATE TABLE nodes (
   id TEXT PRIMARY KEY,             -- SHA-256 of content
+  content TEXT NOT NULL,           -- memory body
   tags TEXT DEFAULT '',             -- comma-separated
   weight REAL DEFAULT 100,          -- 0-100
   created_at INTEGER,
   accessed_at INTEGER
+);
+
+CREATE VIRTUAL TABLE memory_fts USING fts5(
+  content,
+  tags,
+  content='nodes',
+  content_rowid='rowid',
+  tokenize='trigram'
 );
 
 CREATE TABLE edges (
@@ -48,15 +53,15 @@ CREATE TABLE edges (
 class MemoryService extends BaseService {
   readonly name = "memory";
 
-  constructor(params: { dbPath: string; nodesPath: string })
+  constructor(params: { dbPath: string; legacyNodesPath?: string })
 
-  // 全文搜索 — ripgrep + SQLite 元数据排序
+  // 全文搜索 — SQLite FTS5 + 短词兜底 + 元数据排序
   search(query: string, limit?: number): MemoryNode[]
 
   // 图谱遍历 — SQLite edges BFS
   traverse(startId: string, maxSteps?: number): MemoryNode[]
 
-  // 保存记忆 — 写临时文件 + upsert SQLite + 落正式 .txt
+  // 保存记忆 — SQLite transaction upsert，FTS trigger 自动同步
   save(content: string, tags?: string[]): string
 
   // 建立关系
@@ -83,12 +88,21 @@ class MemoryService extends BaseService {
 ## 4. 搜索流程
 
 ```
-Prediction.memoryQuery（单一核心关键词）→ ripgrep --json 扫 nodes/*.txt
-  → 提取匹配文件 hash
-  → SQLite: SELECT * FROM nodes WHERE id IN (...)
-  → 按 weight × recency 排序 → ≤3 条
+查询词 → 拆分空格/标点，忽略纯数字日期
+  → 中文长短语补充双字部分匹配候选
+  → 三字符以上：FTS5 MATCH + bm25(memory_fts)
+  → 两字符等短词：SQLite instr(content/tags) 兜底
+  → 合并 memory_fts 命中的节点 ID
+  → SQLite nodes 直接加载完整节点
+  → 按匹配相关度 + weight × recency 排序 → ≤3 条
   → boostWeight(hit.id) → weight += 5
 ```
+
+例如 `台风 最新 2026` 会删除实时限定词和年份，只保留 `台风`；只要 Memory 正文包含该概念就可进入结果集，不要求完整查询串连续出现。对没有空格的中文长句，会补充连续双字候选，避免“查询一下台风最新动向”无法召回包含“台风”的记忆。
+
+搜索仍是轻量级词法召回，不引入 embedding。Agent 搜索为空时必须继续换用不同且更宽的查询，直到三个不同查询均为空，例如删除时间词并改用不重叠的同义词、领域词或 Skill 名称。仅调整词序、加入年份/新鲜度修饰词，或继续包含已尝试的关键词及中文片段，都视为相似查询且不累计次数。
+
+`memory_fts` 是由 `nodes` external-content 表和 SQLite Trigger 自动维护的派生索引。升级时若检测到旧 `nodes/*.txt`，服务会在事务中把正文迁入 `nodes.content`，重建 FTS5 索引，然后删除已迁移的文本文件。
 
 ## 5. 权重系统
 
@@ -102,7 +116,7 @@ Prediction.memoryQuery（单一核心关键词）→ ripgrep --json 扫 nodes/*.
 | 每日衰减 | weight -= 1（下限 0） |
 | RETAIN_MEMORY 意图 | weight += 5, access_count 重置为 0 |
 
-记忆不会被删除。weight ≤ 0 的记忆仍在数据库和文件系统中，仅搜索排名降至底部。
+记忆不会被自动删除。weight ≤ 0 的记忆仍在数据库中，仅搜索排名降至底部。
 
 **后台定时**：每 5 分钟 `setInterval` 执行一次衰减 + 清理。
 
@@ -119,7 +133,7 @@ SELECT target_id FROM edges WHERE source_id = ?
 
 Prediction 在现有分类调用中额外生成 `memory_query`，例如把“现在查一下台风的信息”提炼为“台风”。`collect-context` 只在该字段非空时执行自动 Memory 搜索，不增加新的 LLM 调用，也不使用本地中文分词。
 
-搜索命中、无结果或异常都会设置 `memorySearchAttempted = true`；异常只记录 Debug 信息，不阻断 Conversation。命中并实际注入的节点数记录在 `injectedMemoryCount`。
+自动搜索会设置 `memorySearchStatus = "found" | "empty" | "unavailable"`。异常只记录 Debug 信息，不阻断 Conversation；空结果要求 Agent 使用互不相似的查询继续检索，三个不同查询均为空后才能进入 Web，命中并实际注入的节点数记录在 `injectedMemoryCount`。
 
 ```typescript
 // collect-context 元素 — Memory 标签包裹

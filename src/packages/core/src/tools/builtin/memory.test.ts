@@ -55,6 +55,21 @@ describe("searchMemoryTool", () => {
     expect(result.output).toContain('<Memory id="abcdef" tags="identifier">');
     expect(result.output).toContain("CODE=9528 is a remembered identifier.");
   });
+
+  test("asks for a non-overlapping retry when no memory matches", async () => {
+    let query = "";
+    const tool = createSearchMemoryTool({
+      search: (value: string) => {
+        query = value;
+        return [];
+      },
+    });
+
+    const result = await tool.execute({ query: "台风 最新 2026" });
+
+    expect(query).toBe("台风 最新 2026");
+    expect(result.output).toContain("different, non-overlapping keywords");
+  });
 });
 
 describe("traverseMemoryTool", () => {
