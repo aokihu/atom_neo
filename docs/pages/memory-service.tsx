@@ -100,7 +100,7 @@ CREATE TABLE edges (
             ["Context", "检查已注入的 Memory 与 Skill", "已有查询方法时直接遵循"],
             ["Memory", "候选词 OR + 中文部分匹配，搜索正文与 tags", "记录 found / empty / unavailable"],
             ["Skill", "Memory 提供 Skill 线索时加载对应 section", "取得可复用查询流程"],
-            ["Web", "Memory 搜索完成后开放 webfetch", "获取最终实时数据"],
+            ["Web", "普通方法命中，或 Skill 成功加载后开放 webfetch", "获取最终实时数据"],
           ]}
         />
         <CodeBlock lang="text" code={`用户: 现在查一下台风的信息

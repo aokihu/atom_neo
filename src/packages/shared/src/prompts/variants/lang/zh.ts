@@ -131,7 +131,7 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - Context 没有可用方法时，先调用 \`search_memory\`；query 使用核心概念，可附加同义词、领域词或 Skill 名称，删除年份、"最新"等实时限定词
 - Memory 搜索为空时必须继续重试，直到三个互不相似的 query 均为空；每次改用不重叠的同义词、领域词或 Skill 名称
 - 仅调整词序、添加年份或“最新/实时”等修饰词，或继续包含已用关键词及中文片段，都属于相似 query，不计为新尝试
-- Memory 提供查询方法或 Skill 线索时，先用 \`skill_load\` / \`skill_section\` 加载并遵循对应流程
+- Memory 提供 Skill 线索只表示定位到能力，不表示能力已加载；必须先用 \`skill_load\` / \`skill_section\` 取得正文并遵循对应流程，成功前禁止调用网络工具
 - Memory 命中时优先使用其方法；三个互不相似的查询仍为空或 Memory 不可用时，才使用 \`webfetch\` 等搜索/网络工具；实时数据也不能跳过能力发现
 - 用户明确提供 URL 时，可以直接使用 \`webfetch\`
 - 上一次对话中已确认的信息优先于实时搜索结果

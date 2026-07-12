@@ -1,4 +1,4 @@
-import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, sanitizeForJSON } from "@atom-neo/shared";
+import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { streamText, tool, zodSchema, stepCountIs } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
@@ -17,6 +17,8 @@ type WebfetchUnlockReason =
   | "skill_context"
   | "memory_found"
   | "memory_unavailable"
+  | "skill_unavailable"
+  | "skill_load_required"
   | "memory_search_exhausted"
   | "memory_search_retry_required"
   | "memory_search_required";
@@ -39,11 +41,13 @@ type MemorySearchStep = {
 export function summarizeMemorySearch(params: {
   automaticQuery: string;
   automaticStatus: MemorySearchStatus;
+  automaticSuggestsSkill?: boolean;
   steps: MemorySearchStep[];
-}): { attemptCount: number; found: boolean; unavailable: boolean } {
+}): { attemptCount: number; found: boolean; unavailable: boolean; suggestsSkill: boolean } {
   const queries: string[] = [];
   let found = params.automaticStatus === "found";
   let unavailable = params.automaticStatus === "unavailable";
+  let suggestsSkill = params.automaticSuggestsSkill ?? false;
 
   const addDistinctQuery = (query: string) => {
     const canonicalQuery = canonicalizeMemorySearchQuery(query);
@@ -64,11 +68,26 @@ export function summarizeMemorySearch(params: {
 
       const output = typeof result.output === "string" ? result.output : "";
       if (output.includes("<Memory id=")) found = true;
+      if (containsSkillHint(output)) suggestsSkill = true;
       if (/memory service not connected|^Error:|tool execution error/i.test(output)) unavailable = true;
     }
   }
 
-  return { attemptCount: queries.length, found, unavailable };
+  return { attemptCount: queries.length, found, unavailable, suggestsSkill };
+}
+
+export function summarizeSkillDiscovery(steps: MemorySearchStep[]): { loaded: boolean; unavailable: boolean } {
+  let loaded = false;
+  let unavailable = false;
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      if (result.toolName !== "skill_load" && result.toolName !== "skill_section") continue;
+      const output = typeof result.output === "string" ? result.output : "";
+      if (/^Loaded (?:skill|section) /i.test(output)) loaded = true;
+      if (/^Error:|not found|tool execution error/i.test(output)) unavailable = true;
+    }
+  }
+  return { loaded, unavailable };
 }
 
 export function selectActiveToolsForStep(params: {
@@ -78,24 +97,25 @@ export function selectActiveToolsForStep(params: {
   memorySearchAttemptCount: number;
   memorySearchFound: boolean;
   memorySearchUnavailable: boolean;
+  memorySuggestsSkill: boolean;
   hasSkillContext: boolean;
+  skillLoaded: boolean;
+  skillUnavailable: boolean;
   hasExplicitUrl: boolean;
 }): ActiveToolSelection {
-  const webfetchUnlockReason: WebfetchUnlockReason = params.hasExplicitUrl
-    ? "explicit_url"
-    : params.hasSkillContext
-      ? "skill_context"
-      : params.memorySearchFound
-        ? "memory_found"
-        : params.memorySearchUnavailable
-          ? "memory_unavailable"
-          : params.memorySearchAttemptCount >= 3
-            ? "memory_search_exhausted"
-            : params.memorySearchAttemptCount > 0
-              ? "memory_search_retry_required"
-              : "memory_search_required";
+  let webfetchUnlockReason: WebfetchUnlockReason;
+  if (params.hasExplicitUrl) webfetchUnlockReason = "explicit_url";
+  else if (params.hasSkillContext || params.skillLoaded) webfetchUnlockReason = "skill_context";
+  else if (params.memorySearchFound && params.memorySuggestsSkill) {
+    webfetchUnlockReason = params.skillUnavailable ? "skill_unavailable" : "skill_load_required";
+  } else if (params.memorySearchFound) webfetchUnlockReason = "memory_found";
+  else if (params.memorySearchUnavailable) webfetchUnlockReason = "memory_unavailable";
+  else if (params.memorySearchAttemptCount >= 3) webfetchUnlockReason = "memory_search_exhausted";
+  else if (params.memorySearchAttemptCount > 0) webfetchUnlockReason = "memory_search_retry_required";
+  else webfetchUnlockReason = "memory_search_required";
   const webfetchEnabled = webfetchUnlockReason !== "memory_search_required"
-    && webfetchUnlockReason !== "memory_search_retry_required";
+    && webfetchUnlockReason !== "memory_search_retry_required"
+    && webfetchUnlockReason !== "skill_load_required";
   const selected = [
     ...getTaskToolNames(params.taskIntent),
     ...params.mcpToolNames,
@@ -180,7 +200,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const hasSkillContext = Boolean(input.skillContext?.trim());
     const automaticQuery = this.#session?.pendingPrediction?.memoryQuery ?? "";
     const automaticStatus = input.memorySearchStatus ?? "not_started";
-    const initialMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps: [] });
+    const automaticSuggestsSkill = input.memorySuggestsSkill ?? false;
+    const initialMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, automaticSuggestsSkill, steps: [] });
     const initialToolSelection = selectActiveToolsForStep({
       taskIntent: this.#taskIntent,
       availableToolNames: tools,
@@ -188,7 +209,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memorySearchAttemptCount: initialMemorySearch.attemptCount,
       memorySearchFound: initialMemorySearch.found,
       memorySearchUnavailable: initialMemorySearch.unavailable,
+      memorySuggestsSkill: initialMemorySearch.suggestsSkill,
       hasSkillContext,
+      skillLoaded: false,
+      skillUnavailable: false,
       hasExplicitUrl,
     });
     this.#builtinToolResults.clear();
@@ -204,6 +228,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memorySearchStatus: automaticStatus,
       memorySearchAttemptCount: initialMemorySearch.attemptCount,
       injectedMemoryCount: input.injectedMemoryCount ?? 0,
+      memorySuggestsSkill: initialMemorySearch.suggestsSkill,
       webfetchEnabled: initialToolSelection.webfetchEnabled,
       webfetchUnlockReason: initialToolSelection.webfetchUnlockReason,
     });
@@ -249,7 +274,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
         prepareStep: ({ stepNumber, steps }) => {
-          const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps });
+          const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, automaticSuggestsSkill, steps });
+          const skillDiscovery = summarizeSkillDiscovery(steps);
           const selection = selectActiveToolsForStep({
             taskIntent: this.#taskIntent,
             availableToolNames: tools,
@@ -257,7 +283,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             memorySearchAttemptCount: memorySearch.attemptCount,
             memorySearchFound: memorySearch.found,
             memorySearchUnavailable: memorySearch.unavailable,
+            memorySuggestsSkill: memorySearch.suggestsSkill,
             hasSkillContext,
+            skillLoaded: skillDiscovery.loaded,
+            skillUnavailable: skillDiscovery.unavailable,
             hasExplicitUrl,
           });
           const selectionKey = `${selection.webfetchEnabled}:${selection.webfetchUnlockReason}`;
@@ -270,6 +299,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               memorySearchAttemptCount: memorySearch.attemptCount,
               memorySearchFound: memorySearch.found,
               memorySearchUnavailable: memorySearch.unavailable,
+              memorySuggestsSkill: memorySearch.suggestsSkill,
+              skillLoaded: skillDiscovery.loaded,
+              skillUnavailable: skillDiscovery.unavailable,
               webfetchEnabled: selection.webfetchEnabled,
               webfetchUnlockReason: selection.webfetchUnlockReason,
             });

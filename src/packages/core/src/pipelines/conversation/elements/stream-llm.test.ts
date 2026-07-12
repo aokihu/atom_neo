@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { containsExplicitUrl, selectActiveToolsForStep, summarizeMemorySearch } from "./stream-llm";
+import { containsExplicitUrl, selectActiveToolsForStep, summarizeMemorySearch, summarizeSkillDiscovery } from "./stream-llm";
 
 const availableToolNames = [
   "read", "write", "search_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
@@ -15,7 +15,10 @@ function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0
     memorySearchAttemptCount: 0,
     memorySearchFound: false,
     memorySearchUnavailable: false,
+    memorySuggestsSkill: false,
     hasSkillContext: false,
+    skillLoaded: false,
+    skillUnavailable: false,
     hasExplicitUrl: false,
     ...overrides,
   });
@@ -38,6 +41,17 @@ describe("selectActiveToolsForStep", () => {
 
     expect(selection.activeTools).toContain("webfetch");
     expect(selection.webfetchUnlockReason).toBe("memory_found");
+  });
+
+  test("requires Skill loading when Memory contains a Skill hint", () => {
+    const locked = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memorySuggestsSkill: true });
+    const loaded = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memorySuggestsSkill: true, skillLoaded: true });
+    const unavailable = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memorySuggestsSkill: true, skillUnavailable: true });
+
+    expect(locked.activeTools).not.toContain("webfetch");
+    expect(locked.webfetchUnlockReason).toBe("skill_load_required");
+    expect(loaded.webfetchUnlockReason).toBe("skill_context");
+    expect(unavailable.webfetchUnlockReason).toBe("skill_unavailable");
   });
 
   test("keeps webfetch locked after one empty search", () => {
@@ -120,6 +134,33 @@ describe("summarizeMemorySearch", () => {
     });
 
     expect(found.found).toBe(true);
+    expect(unavailable.unavailable).toBe(true);
+  });
+
+  test("detects Skill hints in Memory results", () => {
+    const result = summarizeMemorySearch({
+      automaticQuery: "台风",
+      automaticStatus: "found",
+      automaticSuggestsSkill: true,
+      steps: [],
+    });
+    const toolResult = summarizeMemorySearch({
+      automaticQuery: "",
+      automaticStatus: "not_started",
+      steps: [{ toolResults: [{ toolName: "search_memory", input: { query: "台风" }, output: '<Memory id="abc123">使用 Typhoon Skill</Memory>' }] }],
+    });
+
+    expect(result.suggestsSkill).toBe(true);
+    expect(toolResult.suggestsSkill).toBe(true);
+  });
+});
+
+describe("summarizeSkillDiscovery", () => {
+  test("detects successful and unavailable Skill loads", () => {
+    const loaded = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_load", input: { name: "typhoon" }, output: 'Loaded skill "typhoon"\n<skill name="typhoon">...</skill>' }] }]);
+    const unavailable = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_load", input: { name: "missing" }, output: 'Error: Skill "missing" not found' }] }]);
+
+    expect(loaded.loaded).toBe(true);
     expect(unavailable.unavailable).toBe(true);
   });
 });

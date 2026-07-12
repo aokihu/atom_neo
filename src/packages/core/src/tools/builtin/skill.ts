@@ -37,9 +37,10 @@ function createSkillLoadTool(svc: SkillServiceLike): ToolDefinition {
       const { name } = args as { name: string };
       const result = svc.load(name);
       if (!result.ok) return { ok: false, output: result.error ?? "" };
+      const context = svc.buildContext();
       return {
         ok: true,
-        output: `Loaded skill "${name}" with sections: ${result.sections?.join(", ")}`,
+        output: `Loaded skill "${name}" with sections: ${result.sections?.join(", ")}${context ? `\n${context}` : ""}`,
       };
     },
   };
@@ -58,7 +59,8 @@ function createSkillSectionTool(svc: SkillServiceLike): ToolDefinition {
       const { name, section } = args as { name: string; section: string };
       const ok = svc.loadSection(name, section);
       if (!ok) return { ok: false, output: `Section "${section}" not found in skill "${name}"` };
-      return { ok: true, output: `Loaded section "${section}" from skill "${name}"` };
+      const context = svc.buildContext();
+      return { ok: true, output: `Loaded section "${section}" from skill "${name}"${context ? `\n${context}` : ""}` };
     },
   };
 }

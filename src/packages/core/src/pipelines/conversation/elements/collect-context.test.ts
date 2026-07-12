@@ -44,6 +44,7 @@ describe("CollectContextElement Memory discovery", () => {
     expect(result.memorySearchAttempted).toBe(true);
     expect(result.memorySearchStatus).toBe("found");
     expect(result.injectedMemoryCount).toBe(1);
+    expect(result.memorySuggestsSkill).toBe(true);
     expect(result.contextData).toContain('<Memory id="abcdef" tags="skill,typhoon">');
   });
 
@@ -65,6 +66,7 @@ describe("CollectContextElement Memory discovery", () => {
     expect(result.memorySearchAttempted).toBe(true);
     expect(result.memorySearchStatus).toBe("unavailable");
     expect(result.injectedMemoryCount).toBe(0);
+    expect(result.memorySuggestsSkill).toBe(false);
     expect(events.some((event) => event.step === "memory-search-error")).toBe(true);
   });
 
