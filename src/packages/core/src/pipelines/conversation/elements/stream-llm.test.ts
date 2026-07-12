@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { containsExplicitUrl, selectActiveToolsForStep, summarizeMemoryRead, summarizeMemorySearch, summarizeSkillDiscovery } from "./stream-llm";
+import {
+  containsExplicitUrl,
+  pruneConsumedMemoryTraversal,
+  selectActiveToolsForStep,
+  shouldPersistToolResult,
+  summarizeMemoryRead,
+  summarizeMemorySearch,
+  summarizeSkillDiscovery,
+} from "./stream-llm";
 
 const availableToolNames = [
   "read", "write", "search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
@@ -177,5 +185,44 @@ describe("containsExplicitUrl", () => {
     expect(containsExplicitUrl([
       { role: "user", content: "查一下 https://typhoon.example.com" },
     ])).toBe(true);
+  });
+});
+
+describe("transient memory traversal context", () => {
+  const traversalCall = { role: "assistant", content: [{
+    type: "tool-call", toolCallId: "traverse-1", toolName: "traverse_memory", input: { startId: "abc123" },
+  }] };
+  const traversalResult = { role: "tool", content: [{
+    type: "tool-result", toolCallId: "traverse-1", toolName: "traverse_memory",
+    output: { type: "text", value: '<MemorySummary id="abc123">root</MemorySummary>' },
+  }] };
+
+  test("keeps traversal results for the immediate consumer step", () => {
+    const messages = [{ role: "user", content: "browse memory" }, traversalCall, traversalResult] as any;
+    expect(pruneConsumedMemoryTraversal(messages)).toEqual(messages);
+  });
+
+  test("removes traversal calls and results after another tool step", () => {
+    const messages = [
+      { role: "user", content: "browse memory" },
+      traversalCall,
+      traversalResult,
+      { role: "assistant", content: [{
+        type: "tool-call", toolCallId: "read-1", toolName: "read_memory", input: { id: "abc123" },
+      }] },
+      { role: "tool", content: [{
+        type: "tool-result", toolCallId: "read-1", toolName: "read_memory",
+        output: { type: "text", value: '<Memory id="abc123">full</Memory>' },
+      }] },
+    ] as any;
+
+    const pruned = pruneConsumedMemoryTraversal(messages);
+    expect(JSON.stringify(pruned)).not.toContain("traverse_memory");
+    expect(JSON.stringify(pruned)).toContain("read_memory");
+  });
+
+  test("does not persist traversal output across conversations", () => {
+    expect(shouldPersistToolResult("traverse_memory")).toBe(false);
+    expect(shouldPersistToolResult("read_memory")).toBe(true);
   });
 });

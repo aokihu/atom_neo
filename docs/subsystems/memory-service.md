@@ -75,16 +75,16 @@ class MemoryService extends BaseService {
   // 图谱遍历 — SQLite edges BFS
   traverse(startId: string, maxSteps?: number): MemoryNode[]
 
-  // 保存记忆 — 摘要差异不足 20% 时直接复用正文
+  // 保存记忆；supersedesId 在同一事务中建立 new → old 替代关系
   save(content: string, tags?: string[], summary?: string, options?: MemorySaveOptions): string
 
   // 建立关系
-  link(source: string, target: string, relation: string): void
+  link(source: string, target: string, relation: string): boolean
 
   // 删除记忆及关联边；支持短 ID 查回完整 ID
   forget(id: string): boolean
 
-  // 重置记忆生命周期 — RETAIN_MEMORY 意图触发
+  // 确认记忆仍然有效并提高固有权重 — RETAIN_MEMORY 意图触发
   retain(id: string): void
 
   // 将 Context 中的短 ID 查回唯一完整 ID
@@ -94,8 +94,8 @@ class MemoryService extends BaseService {
   has(id: string): boolean
 
   // Service 生命周期
-  async start(): Promise<void>   // 初始化 DB + 启动后台任务
-  async stop(): Promise<void>    // 停止后台任务
+  async start(): Promise<void>   // 启动服务；DB 已在构造时初始化
+  async stop(): Promise<void>    // 停止服务
 }
 ```
 
@@ -109,7 +109,8 @@ class MemoryService extends BaseService {
   → 合并 memory_fts 命中的节点 ID
   → SQLite nodes 加载候选摘要和内部排序字段
   → relevance = 关键词覆盖率 × 70% + BM25 顺序分 × 30%
-  → quality = base × 40% + usage × 30% + graph × 20% + freshness × 10%
+  → selection = 100 × min(1, (read_count + 1) / (retrieval_count + 2))
+  → quality = base × 40% + usage × 25% + graph × 20% + freshness × 10% + selection × 5%
   → final = relevance × 65% + quality × confidence × 35%
   → 排除被 supersedes 的旧节点，返回 ≤3 条摘要并增加 retrieval_count
 ```
@@ -142,7 +143,7 @@ freshness = 100 × exp(-ln(2) × elapsedDays / kindHalfLife)
 | temporary_state | 7 天 |
 | realtime_data | 1 天 |
 
-只有 `read_memory` 算真实使用：先把已有 `usage_score` 懒衰减到当前时间，再 `+1`，同时增加 `read_count`。摘要搜索只增加 `retrieval_count`。`retain_memory` 令 `base_weight += 10`（上限 100）并更新 `last_confirmed_at`，不再重置读取次数。`pinned` 记忆的 freshness 固定为 100。
+只有 `read_memory` 算真实使用：先把已有 `usage_score` 懒衰减到当前时间，再 `+1`，同时增加 `read_count`。自动搜索、`search_memory` 和 `traverse_memory` 每次向 Agent 展示摘要时增加 `retrieval_count`。平滑后的选择率只占质量分 5%，用于轻度降低“反复曝光但从未读取”的候选，不会压过词法相关性。`retain_memory` 令 `base_weight += 10`（上限 100）并更新 `last_confirmed_at`，不再重置读取次数。`pinned` 记忆的 freshness 固定为 100。
 
 ## 6. 遍历流程
 
@@ -151,8 +152,11 @@ SELECT target_id FROM edges WHERE source_id = ?
   → BFS maxSteps=4
   → 入边权重: depends_on/used_by=1, derived_from=0.8, extends=0.7, relates_to=0.3
   → graph = 100 × (1 - exp(-weightedReferences / 3))
-  → 返回关联记忆列表
+  → 返回关联记忆摘要、短 ID、sourceId、relation、depth，并增加 retrieval_count
+  → Agent 确认相关后仍通过 read_memory 读取正文
 ```
+
+`traverse_memory` 是瞬时浏览视图。工具结果只保留给紧接着的一个 AI SDK step，供 Agent 选择要读取的节点；再下一 step 的 `prepareStep` 会裁剪对应 tool-call/tool-result。遍历结果也不写入 Session Tool Context，因此不会进入后续 Conversation。被选中的正文只有通过 `read_memory` 才进入当前工具循环并计为真实使用。
 
 ## 7. 注入 conversation context
 
@@ -227,7 +231,7 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 
 ### 失效与替代
 
-记忆不会因时间自动删除。若存在 `new --supersedes--> old`，旧节点保留供审计，但不参与普通搜索。
+记忆不会因时间自动删除。更新已有事实时，Agent 先搜索并读取旧记忆，再调用 `save_memory({ content, summary, tags, supersedesId })`。MemoryService 在同一个 SQLite 事务中保存新节点并建立 `new --supersedes--> old`；旧 ID 无效、指向自身或事务失败时都不会留下半完成状态。旧节点保留供审计，但不参与普通搜索。
 
 ## 9. 记忆工具
 
@@ -235,8 +239,8 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 |------|------|
 | `search_memory` | 搜索记忆库；只返回摘要和可供后续操作使用的短 ID |
 | `read_memory` | Agent 确认候选相关后，按完整或唯一短 ID 读取完整正文 |
-| `save_memory` | 保存正文、可选摘要和 tags；摘要与正文接近时自动复用正文 |
-| `traverse_memory` | 从记忆 ID 开始图谱遍历 |
+| `save_memory` | 保存正文、可选摘要和 tags；可用 `supersedesId` 原子替代旧记忆 |
+| `traverse_memory` | 瞬时遍历图谱；返回摘要、短 ID、关系、来源和深度，下一 step 后自动卸载 |
 | `link_memory` | 建立记忆关联 |
 | `forget_memory` | 按 ID 删除指定记忆及关联边；支持 Context/搜索结果中的短 ID，不接受正文 |
 

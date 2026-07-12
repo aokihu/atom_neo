@@ -36,6 +36,13 @@ export type MemorySaveOptions = {
   kind?: MemoryKind;
   confidence?: number;
   pinned?: boolean;
+  supersedesId?: string;
+};
+
+export type MemoryTraversalNode = MemoryNode & {
+  sourceId: string | null;
+  relation: string | null;
+  depth: number;
 };
 
 export class MemoryService extends BaseService {
@@ -111,30 +118,24 @@ export class MemoryService extends BaseService {
       .slice(0, limit)
       .map(({ node }) => node);
 
-    const markRetrieved = this.#db.prepare(
-      "UPDATE nodes SET retrieval_count = retrieval_count + 1, accessed_at = ? WHERE id = ?",
-    );
-    const now = this.#now();
-    this.#db.transaction(() => {
-      for (const node of nodes) markRetrieved.run(now, node.id);
-    })();
+    this.#recordRetrievals(nodes.map((node) => node.id));
     return nodes;
   }
 
-  traverse(startId: string, maxSteps = 4): MemoryNode[] {
+  traverse(startId: string, maxSteps = 4): MemoryTraversalNode[] {
     const fullStartId = this.findFullId(startId);
     if (!fullStartId) return [];
     const visited = new Set<string>();
-    const results: MemoryNode[] = [];
-    const queue = [{ id: fullStartId, step: 0 }];
+    const results: MemoryTraversalNode[] = [];
+    const queue = [{ id: fullStartId, depth: 0, sourceId: null as string | null, relation: null as string | null }];
 
     while (queue.length > 0 && results.length < 5) {
-      const { id, step } = queue.shift()!;
-      if (visited.has(id) || step >= maxSteps) continue;
+      const { id, depth, sourceId, relation } = queue.shift()!;
+      if (visited.has(id) || depth >= maxSteps) continue;
       visited.add(id);
 
       const node = this.#loadNode(id);
-      if (node) results.push(node);
+      if (node) results.push({ ...node, sourceId, relation, depth });
 
       const neighbors = this.#db.prepare(
         "SELECT target_id, relation FROM edges WHERE source_id = ?",
@@ -146,10 +147,13 @@ export class MemoryService extends BaseService {
       });
 
       for (const neighbor of neighbors.slice(0, 3)) {
-        if (!visited.has(neighbor.target_id)) queue.push({ id: neighbor.target_id, step: step + 1 });
+        if (!visited.has(neighbor.target_id)) {
+          queue.push({ id: neighbor.target_id, depth: depth + 1, sourceId: id, relation: neighbor.relation });
+        }
       }
     }
 
+    this.#recordRetrievals(results.map((node) => node.id));
     return results;
   }
 
@@ -161,6 +165,13 @@ export class MemoryService extends BaseService {
     const kind = options.kind ?? "stable_fact";
     const confidence = Math.min(1, Math.max(0, options.confidence ?? 1));
     const pinned = options.pinned ? 1 : 0;
+    const supersededMemoryId = options.supersedesId ? this.findFullId(options.supersedesId) : null;
+    if (options.supersedesId && !supersededMemoryId) {
+      throw new Error(`Memory not found: ${options.supersedesId}`);
+    }
+    if (supersededMemoryId === hash) {
+      throw new Error("A memory cannot supersede itself");
+    }
     this.#db.transaction(() => {
       this.#db.run(
         `INSERT INTO nodes (
@@ -184,6 +195,12 @@ export class MemoryService extends BaseService {
           pinned, now, now, now, now, options.kind !== undefined, options.confidence !== undefined,
         ],
       );
+      if (supersededMemoryId) {
+        this.#db.run(
+          "INSERT OR IGNORE INTO edges (source_id, target_id, relation) VALUES (?, ?, 'supersedes')",
+          [hash, supersededMemoryId],
+        );
+      }
     })();
     return hash;
   }
@@ -436,6 +453,8 @@ export class MemoryService extends BaseService {
       baseWeight: node.baseWeight,
       usageScore: node.usageScore,
       usageUpdatedAt: node.usageUpdatedAt,
+      retrievalCount: node.retrievalCount,
+      readCount: node.readCount,
       graphScore: calculateGraphScore(references),
       kind: node.kind,
       confidence: node.confidence,
@@ -450,6 +469,17 @@ export class MemoryService extends BaseService {
     return Boolean(this.#db.prepare(
       "SELECT 1 FROM edges WHERE target_id = ? AND relation = 'supersedes' LIMIT 1",
     ).get(id));
+  }
+
+  #recordRetrievals(ids: string[]): void {
+    if (ids.length === 0) return;
+    const markRetrieved = this.#db.prepare(
+      "UPDATE nodes SET retrieval_count = retrieval_count + 1, accessed_at = ? WHERE id = ?",
+    );
+    const now = this.#now();
+    this.#db.transaction(() => {
+      for (const id of new Set(ids)) markRetrieved.run(now, id);
+    })();
   }
 
   #selectSummary(content: string, summary?: string): string {

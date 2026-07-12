@@ -7,6 +7,7 @@ import {
   calculateGraphScore,
   calculateMemoryQuality,
   calculateRetrievalRelevance,
+  calculateSelectionScore,
   calculateUsageScore,
 } from "./memory-ranking";
 
@@ -34,11 +35,19 @@ describe("memory ranking", () => {
     expect(calculateGraphScore([{ relation: "unknown", sourceBaseWeight: 100 }])).toBe(0);
   });
 
+  test("smooths selection feedback and penalizes repeated unselected retrievals", () => {
+    expect(calculateSelectionScore(0, 0)).toBe(50);
+    expect(calculateSelectionScore(0, 20)).toBeLessThan(5);
+    expect(calculateSelectionScore(10, 10)).toBeGreaterThan(90);
+  });
+
   test("combines intrinsic, usage, graph, freshness, and confidence", () => {
     const quality = calculateMemoryQuality({
       baseWeight: 80,
       usageScore: 4,
       usageUpdatedAt: 100,
+      retrievalCount: 4,
+      readCount: 2,
       graphScore: 50,
       kind: "stable_fact",
       confidence: 1,
@@ -51,6 +60,8 @@ describe("memory ranking", () => {
       baseWeight: 80,
       usageScore: 4,
       usageUpdatedAt: 100,
+      retrievalCount: 4,
+      readCount: 2,
       graphScore: 50,
       kind: "stable_fact",
       confidence: 0.5,

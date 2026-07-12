@@ -38,6 +38,7 @@
 ### 步骤 3：是否需要保存记忆？
 判断标准：对话中产生了值得记录到长期记忆的信息。
 - 新信息需要保存 → 调用 `save_memory`，写入可复用正文、简洁摘要、tags 和准确 kind；正文很短时摘要可以相同，仅在用户明确要求永久保留时设置 pinned。
+- 已有记忆被新事实替代 → 先取得旧记忆 ID，再调用 `save_memory` 并设置 `supersedesId`；不要分别保存和链接。
 - 已注入的旧记忆仍然重要 → 调用 `intent` 工具：
   - `action`: `retain_memory`
   - `mem_id`: 要保留的记忆 ID
@@ -89,7 +90,7 @@
 - `save_memory` — 保存到长期记忆
 - `forget_memory` — 按完整或唯一短 ID 删除指定长期记忆；只有正文时先用 `search_memory` 取得 ID，禁止把正文当作 ID
 - `link_memory` — 链接两条记忆
-- `traverse_memory` — 遍历记忆图谱
+- `traverse_memory` — 瞬时遍历记忆图谱，返回关联摘要、短 ID、关系和深度；结果会在下一 step 后自动卸载
 
 ## 续写规则（被动触发）
 
@@ -107,7 +108,7 @@
 - 查询顺序：当前会话 Context > Memory > 搜索/网络结果
 - 先检查 Context 中已有的事实、查询方法和 Skill
 - Context 没有可用方法时，先用核心概念调用 `search_memory`，可附加同义词、领域词或 Skill 名称，并删除年份、"最新"等实时限定词
-- 自动搜索和 `search_memory` 只返回摘要；确认相关后必须调用 `read_memory`，读取前不能把摘要当作事实或调用网络工具
+- 自动搜索、`search_memory` 和 `traverse_memory` 只返回摘要；确认相关后必须调用 `read_memory`，读取前不能把摘要当作事实或调用网络工具
 - Memory 搜索为空时继续重试，直到三个互不相似的 query 均为空；查询之间不得共享已使用的关键词或中文片段
 - 仅调整词序、年份或实时性修饰词属于相似查询，不计为新尝试
 - Memory 提供 Skill 线索只表示定位到能力；必须先用 `skill_load` / `skill_section` 取得正文并遵循对应流程，成功前禁止调用网络工具

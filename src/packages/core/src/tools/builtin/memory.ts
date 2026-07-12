@@ -21,7 +21,38 @@ const saveMemoryInputSchema = z.object({
   kind: z.enum(["identity", "preference", "stable_fact", "decision", "workflow", "temporary_state", "realtime_data"]).optional(),
   confidence: z.number().min(0).max(1).optional(),
   pinned: z.boolean().optional(),
+  supersedesId: z.string()
+    .regex(/^[a-fA-F0-9]+$/, "Memory ID must be a full or short hexadecimal ID")
+    .optional()
+    .describe("Existing memory ID replaced by this new content"),
 });
+
+function formatMemorySummary(node: any): string {
+  const id = String(node.id).slice(0, 6);
+  const tags = Array.isArray(node.tags) ? node.tags.join(",") : "";
+  return `<MemorySummary id="${id}" tags="${tags}">\n${node.summary}\n</MemorySummary>`;
+}
+
+function toMemorySummaryData(node: any): { id: string; summary: string; tags: string[] } {
+  return { id: node.id, summary: node.summary, tags: node.tags };
+}
+
+function formatMemoryTraversalSummary(node: any): string {
+  const id = String(node.id).slice(0, 6);
+  const tags = Array.isArray(node.tags) ? node.tags.join(",") : "";
+  const sourceId = node.sourceId ? ` sourceId="${String(node.sourceId).slice(0, 6)}"` : "";
+  const relation = node.relation ? ` relation="${node.relation}"` : "";
+  return `<MemorySummary id="${id}" tags="${tags}"${sourceId}${relation} depth="${node.depth}">\n${node.summary}\n</MemorySummary>`;
+}
+
+function toMemoryTraversalSummaryData(node: any) {
+  return {
+    ...toMemorySummaryData(node),
+    sourceId: node.sourceId,
+    relation: node.relation,
+    depth: node.depth,
+  };
+}
 
 export function createSearchMemoryTool(memory?: any): ToolDefinition {
   return {
@@ -35,15 +66,11 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
       if (!r.success) return { ok: false, output: "", error: r.error.message };
       const nodes = await memory.search(r.data.query, r.data.limit);
       if (nodes.length === 0) return { ok: true, output: "No memories found. Retry with a broader query using different, non-overlapping keywords." };
-      const output = nodes.map((n: any) => {
-        const id = String(n.id).slice(0, 6);
-        const tags = Array.isArray(n.tags) ? n.tags.join(",") : "";
-        return `<MemorySummary id="${id}" tags="${tags}">\n${n.summary}\n</MemorySummary>`;
-      }).join("\n");
+      const output = nodes.map(formatMemorySummary).join("\n");
       return {
         ok: true,
         output,
-        data: nodes.map((node: any) => ({ id: node.id, summary: node.summary, tags: node.tags })),
+        data: nodes.map(toMemorySummaryData),
       };
     },
     permission: PermissionLevel.READ_ONLY,
@@ -74,7 +101,7 @@ export function createReadMemoryTool(memory?: any): ToolDefinition {
 export function createSaveMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "save_memory",
-    description: "Save full memory content with an optional concise summary and tags. Omit summary when content is already concise.",
+    description: "Save full memory content with an optional concise summary and tags. Set supersedesId when this content replaces an existing memory.",
     source: "builtin",
     inputSchema: saveMemoryInputSchema,
     execute: async (args) => {
@@ -87,6 +114,7 @@ export function createSaveMemoryTool(memory?: any): ToolDefinition {
           kind: r.data.kind,
           confidence: r.data.confidence,
           pinned: r.data.pinned,
+          supersedesId: r.data.supersedesId,
         });
         return { ok: true, output: `Saved memory: ${id.slice(0, 8)}...`, data: { id } };
       } catch (err) {
@@ -100,7 +128,7 @@ export function createSaveMemoryTool(memory?: any): ToolDefinition {
 export function createTraverseMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "traverse_memory",
-    description: "Traverse memory graph.",
+    description: "Traverse the memory graph and return related summaries. Use read_memory to retrieve selected full content.",
     source: "builtin",
     inputSchema: z.object({ startId: z.string(), maxSteps: z.number().optional().default(4) }),
     execute: async (args) => {
@@ -109,7 +137,11 @@ export function createTraverseMemoryTool(memory?: any): ToolDefinition {
       if (!r.success) return { ok: false, output: "", error: r.error.message };
       const nodes = memory.traverse(r.data.startId, r.data.maxSteps);
       if (nodes.length === 0) return { ok: true, output: "No related memories found." };
-      return { ok: true, output: nodes.map((n: any) => `- ${n.content.slice(0, 100)}`).join("\n"), data: nodes };
+      return {
+        ok: true,
+        output: nodes.map(formatMemoryTraversalSummary).join("\n"),
+        data: nodes.map(toMemoryTraversalSummaryData),
+      };
     },
     permission: PermissionLevel.READ_ONLY,
   };

@@ -50,6 +50,10 @@ export function calculateUsageScore(decayedUsage: number): number {
   return clamp(100 * (1 - Math.exp(-Math.max(0, decayedUsage) / 4)));
 }
 
+export function calculateSelectionScore(readCount: number, retrievalCount: number): number {
+  return clamp(100 * (Math.max(0, readCount) + 1) / (Math.max(0, retrievalCount) + 2));
+}
+
 export function calculateFreshnessScore(params: {
   kind: MemoryKind;
   pinned: boolean;
@@ -77,6 +81,8 @@ export function calculateMemoryQuality(params: {
   baseWeight: number;
   usageScore: number;
   usageUpdatedAt?: number | null;
+  retrievalCount: number;
+  readCount: number;
   graphScore: number;
   kind: MemoryKind;
   confidence: number;
@@ -86,11 +92,13 @@ export function calculateMemoryQuality(params: {
   now: number;
 }): number {
   const usage = calculateUsageScore(calculateDecayedUsage(params.usageScore, params.usageUpdatedAt, params.now));
+  const selection = calculateSelectionScore(params.readCount, params.retrievalCount);
   const freshness = calculateFreshnessScore(params);
   const rawQuality = clamp(params.baseWeight) * 0.4
-    + usage * 0.3
+    + usage * 0.25
     + clamp(params.graphScore) * 0.2
-    + freshness * 0.1;
+    + freshness * 0.1
+    + selection * 0.05;
   return clamp(rawQuality * clamp(params.confidence, 0, 1), 0, 100);
 }
 

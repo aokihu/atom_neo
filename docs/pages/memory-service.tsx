@@ -77,12 +77,12 @@ CREATE TABLE edges (
           rows={[
             [<Badge color="blue">search</Badge>, <code>search(query, limit?)</code>, "候选词 OR 搜索正文/tags，按相关度、权重和时效排序"],
             [<Badge color="blue">getById</Badge>, <code>getById(memoryId)</code>, "将摘要候选的 ID 恢复并读取完整正文"],
-            [<Badge color="green">save</Badge>, <code>save(content, tags?, summary?)</code>, "摘要节省不足 20% 时复用正文"],
-            [<Badge color="purple">traverse</Badge>, <code>traverse(startId, maxSteps?)</code>, "按 ID 从 edges 开始 BFS"],
+            [<Badge color="green">save</Badge>, <code>save(content, tags?, summary?, options?)</code>, "可用 supersedesId 原子替代旧节点"],
+            [<Badge color="purple">traverse</Badge>, <code>traverse(startId, maxSteps?)</code>, "BFS 返回 sourceId、relation、depth，工具层只展示摘要"],
             [<Badge color="blue">findFullId</Badge>, <code>findFullId(memoryId)</code>, "将唯一短 ID 查回完整 ID"],
-            [<Badge color="orange">link</Badge>, <code>link(source, target, relation)</code>, "按完整 ID 建立关系边"],
+            [<Badge color="orange">link</Badge>, <code>link(source, target, relation)</code>, "恢复完整 ID 后建立唯一关系边"],
             [<Badge color="red">forget</Badge>, <code>forget(id)</code>, "按完整 ID 或唯一短 ID 删除节点、正文、索引和关联边"],
-            [<Badge color="blue">retain</Badge>, <code>retain(id)</code>, "重置访问计数并提升权重"],
+            [<Badge color="blue">retain</Badge>, <code>retain(id)</code>, "确认仍然有效并提升 base_weight，不重置读取历史"],
           ]}
         />
       </Section>
@@ -134,14 +134,25 @@ read_memory({ id: "2d4bed" })
         <ComparisonTable
           headers={["事件", "变化"]}
           rows={[
-            ["摘要搜索", "retrieval_count + 1，不提高固有权重"],
+            ["摘要曝光", "自动搜索、search_memory、traverse_memory 均令 retrieval_count +1"],
             ["read_memory", "懒衰减 usage_score 后 +1，read_count +1"],
+            ["选择率", "平滑 read/retrieval 比例占质量分 5%"],
             ["RETAIN_MEMORY", "base_weight +10，更新 last_confirmed_at"],
             ["时间流逝", "动态降低 usage/freshness，不修改 base_weight"],
-            ["supersedes", "旧节点保留审计，但排除普通搜索"],
+            ["supersedes", "save_memory 在事务中保存新节点并替代旧节点"],
             ["pinned", "freshness 固定为 100"],
           ]}
         />
+      </Section>
+
+      <Section title="瞬时图谱浏览">
+        <p><code>traverse_memory</code> 返回摘要、短 ID、来源节点、关系类型和遍历深度。结果仅供紧接着的一个模型 step 选择节点，随后自动从 AI SDK messages 中裁剪，也不会写入跨轮次 Session Tool Context。</p>
+        <CodeBlock lang="xml" code={`<MemorySummary id="a1b2c3" tags="workflow" depth="0">
+根记忆摘要
+</MemorySummary>
+<MemorySummary id="d4e5f6" tags="skill" sourceId="a1b2c3" relation="depends_on" depth="1">
+关联记忆摘要
+</MemorySummary>`} />
       </Section>
 
       <Section title="工具一览">
@@ -150,8 +161,8 @@ read_memory({ id: "2d4bed" })
           rows={[
             [<code>search_memory</code>, "READ_ONLY", "搜索并返回摘要与短 ID"],
             [<code>read_memory</code>, "READ_ONLY", "按完整或唯一短 ID 读取完整正文"],
-            [<code>save_memory</code>, "FILE_WRITE", "保存正文、摘要和标签"],
-            [<code>traverse_memory</code>, "READ_ONLY", "从记忆 ID 遍历图谱"],
+            [<code>save_memory</code>, "FILE_WRITE", "保存正文；supersedesId 可原子替代旧记忆"],
+            [<code>traverse_memory</code>, "READ_ONLY", "瞬时返回摘要、短 ID 和关系元数据"],
             [<code>link_memory</code>, "FILE_WRITE", "关联两条记忆"],
             [<code>forget_memory</code>, "FILE_WRITE", "按完整 ID或唯一短 ID删除记忆"],
           ]}

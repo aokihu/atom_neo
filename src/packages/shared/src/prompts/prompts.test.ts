@@ -20,4 +20,13 @@ describe("Memory discovery prompts", () => {
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");
   });
+
+  test("base prompts keep traversal summary-only and replace memories atomically", () => {
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("`traverse_memory`");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("`supersedesId`");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("原子完成");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("`traverse_memory`");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("`supersedesId`");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("replacement are atomic");
+  });
 });

@@ -52,7 +52,23 @@ describe("saveMemoryTool", () => {
       confidence: undefined,
       kind: undefined,
       pinned: undefined,
+      supersedesId: undefined,
     }]);
+  });
+
+  test("passes a superseded memory ID to the atomic save operation", async () => {
+    let options: Record<string, unknown> = {};
+    const tool = createSaveMemoryTool({
+      save: (_content: string, _tags: string[], _summary: string | undefined, value: Record<string, unknown>) => {
+        options = value;
+        return "abcdef123456";
+      },
+    });
+
+    const result = await tool.execute({ content: "new fact", supersedesId: "abc123" });
+
+    expect(result.ok).toBe(true);
+    expect(options.supersedesId).toBe("abc123");
   });
 });
 
@@ -135,6 +151,34 @@ describe("traverseMemoryTool", () => {
   test("returns placeholder when no memory service", async () => {
     const result = await traverse.execute({ startId: "test" });
     expect(result.ok).toBe(true);
+  });
+
+  test("returns summaries and IDs without exposing full content", async () => {
+    const tool = createTraverseMemoryTool({
+      traverse: () => [{
+        id: "abcdef1234567890",
+        content: "private full memory body",
+        summary: "Related workflow",
+        tags: ["workflow"],
+        sourceId: "1234567890abcdef",
+        relation: "depends_on",
+        depth: 1,
+      }],
+    });
+
+    const result = await tool.execute({ startId: "abcdef" });
+
+    expect(result.output).toContain('<MemorySummary id="abcdef" tags="workflow" sourceId="123456" relation="depends_on" depth="1">');
+    expect(result.output).toContain("Related workflow");
+    expect(result.output).not.toContain("private full memory body");
+    expect(result.data).toEqual([{
+      id: "abcdef1234567890",
+      summary: "Related workflow",
+      tags: ["workflow"],
+      sourceId: "1234567890abcdef",
+      relation: "depends_on",
+      depth: 1,
+    }]);
   });
 });
 

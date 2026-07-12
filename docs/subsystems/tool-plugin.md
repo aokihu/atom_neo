@@ -167,12 +167,13 @@ createSearchMemoryTool(memory) // { query, limit? } -> MemorySummary
 createReadMemoryTool(memory)   // { id } -> Memory
 // search_memory returns <MemorySummary>; read_memory returns <Memory>.
 
-createSaveMemoryTool(memory)     // { content, tags? }
-createTraverseMemoryTool(memory) // { startId, maxSteps? }
+createSaveMemoryTool(memory)     // { content, summary?, tags?, supersedesId? }
+createTraverseMemoryTool(memory) // { startId, maxSteps? } -> MemorySummary[] + relation metadata
 createLinkMemoryTool(memory)     // { source, target, relation }
 createForgetMemoryTool(memory)   // { id }
 // forget_memory accepts only a full or unique short hexadecimal ID.
 // When only content is known, call search_memory first to obtain the ID.
+// Updating a fact uses supersedesId so node creation and replacement are atomic.
 ```
 
 ### Context → Memory → Web 工具门控
@@ -180,6 +181,8 @@ createForgetMemoryTool(memory)   // { id }
 - `search_memory`、`read_memory` 与 Skill 工具对所有 intent 可用。
 - 未命中 Memory 且不同查询不足三次时，AI SDK `prepareStep` 不把内置 `webfetch` 放入 `activeTools`。
 - 搜索命中只表示发现摘要，必须成功执行 `read_memory` 后才视为 Memory 已确认；三次不同查询均无可用候选时可降级。
+- `traverse_memory` 同样只返回摘要和短 ID，不能绕过 `read_memory` 获取正文。
+- 遍历摘要仅供下一 AI SDK step 选择节点；随后由 `prepareStep.messages` 裁剪，且不写入 Session Tool Context。
 - 完整普通 Memory 已读取、服务不可用、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
 - Memory 包含 Skill 线索时，即使已经命中也保持 `webfetch` 关闭；成功执行 `skill_load` / `skill_section` 后开放，Skill 加载失败时允许降级。
 - `skill_load` / `skill_section` 的工具结果包含本轮已加载 Skill 正文，使后续 AI SDK step 可以立即遵循该方法。

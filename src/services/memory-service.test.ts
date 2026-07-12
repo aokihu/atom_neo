@@ -62,6 +62,42 @@ describe("MemoryService save", () => {
     }
   });
 
+  test("atomically saves a replacement and excludes the superseded memory", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const oldId = service.save("project endpoint is api-v1", ["endpoint"]);
+      const newId = service.save("project endpoint is api-v2", ["endpoint"], undefined, {
+        supersedesId: oldId.slice(0, 6),
+      });
+
+      expect((await service.search("project endpoint", 2)).map((node) => node.id)).toEqual([newId]);
+      expect(service.getById(oldId)?.content).toBe("project endpoint is api-v1");
+      const traversal = service.traverse(newId);
+      expect(traversal.map((node) => node.id)).toEqual([newId, oldId]);
+      expect(traversal[0]).toMatchObject({ sourceId: null, relation: null, depth: 0 });
+      expect(traversal[1]).toMatchObject({ sourceId: newId, relation: "supersedes", depth: 1 });
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("rejects invalid or self-referencing replacements without changing storage", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const content = "replacement must stay atomic";
+      const id = service.save(content);
+
+      expect(() => service.save("orphan replacement", [], undefined, { supersedesId: "abcdef" }))
+        .toThrow("Memory not found: abcdef");
+      expect(() => service.save(content, [], undefined, { supersedesId: id }))
+        .toThrow("A memory cannot supersede itself");
+      const orphanId = createHash("sha256").update("orphan replacement").digest("hex");
+      expect(service.getById(orphanId)).toBeNull();
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   test("decays usage lazily and records only full reads", async () => {
     let now = 100 * DAY_MS;
     const { service, dir } = createMemoryService(() => now);
@@ -79,6 +115,24 @@ describe("MemoryService save", () => {
 
       expect(service.getById(id)?.readCount).toBe(2);
       expect(service.getById(id)?.usageScore).toBeCloseTo(1.5, 8);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("counts graph traversal summaries as retrievals", () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const source = service.save("graph source");
+      const target = service.save("graph target");
+      service.link(source, target, "relates_to");
+
+      service.traverse(source);
+
+      expect(service.getById(source)?.retrievalCount).toBe(1);
+      expect(service.getById(target)?.retrievalCount).toBe(1);
+      expect(service.getById(source)?.readCount).toBe(0);
+      expect(service.getById(target)?.readCount).toBe(0);
     } finally {
       cleanup(dir);
     }
@@ -319,7 +373,9 @@ describe("MemoryService findFullId", () => {
 
       expect(service.link(source.slice(0, 6), target.slice(0, 6), "depends_on")).toBe(true);
       expect(service.link(source.slice(0, 6), target.slice(0, 6), "depends_on")).toBe(true);
-      expect(service.traverse(source.slice(0, 6)).map((node) => node.id)).toEqual([source, target]);
+      const traversal = service.traverse(source.slice(0, 6));
+      expect(traversal.map((node) => node.id)).toEqual([source, target]);
+      expect(traversal[1]).toMatchObject({ sourceId: source, relation: "depends_on", depth: 1 });
     } finally {
       cleanup(dir);
     }

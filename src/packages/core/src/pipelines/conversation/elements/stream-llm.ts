@@ -1,6 +1,7 @@
 import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { streamText, tool, zodSchema, stepCountIs } from "ai";
+import { pruneMessages, streamText, tool, zodSchema, stepCountIs } from "ai";
+import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
@@ -39,6 +40,18 @@ export function containsExplicitUrl(messages: Array<{ role: string; content: str
 type MemorySearchStep = {
   toolResults?: Array<{ toolName: string; input: unknown; output: unknown }>;
 };
+
+export function pruneConsumedMemoryTraversal(messages: ModelMessage[]): ModelMessage[] {
+  return pruneMessages({
+    messages,
+    toolCalls: [{ type: "before-last-2-messages", tools: ["traverse_memory"] }],
+    emptyMessages: "remove",
+  });
+}
+
+export function shouldPersistToolResult(toolName: string): boolean {
+  return toolName !== "traverse_memory";
+}
 
 export function summarizeMemorySearch(params: {
   automaticQuery: string;
@@ -296,7 +309,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         maxOutputTokens: this.#maxTokens,
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
-        prepareStep: ({ stepNumber, steps }) => {
+        prepareStep: ({ stepNumber, steps, messages }) => {
           const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps });
           const memoryRead = summarizeMemoryRead(steps);
           const skillDiscovery = summarizeSkillDiscovery(steps);
@@ -334,7 +347,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               webfetchUnlockReason: selection.webfetchUnlockReason,
             });
           }
-          return { activeTools: selection.activeTools };
+          return {
+            activeTools: selection.activeTools,
+            messages: pruneConsumedMemoryTraversal(messages),
+          };
         },
       });
 
@@ -435,7 +451,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
             stepToolCalls.push({ toolName: c.toolName, ok: toolOk });
             allToolCalls.push({ toolName: c.toolName, ok: toolOk });
-            if (this.#session?.addToolResult) {
+            if (shouldPersistToolResult(c.toolName) && this.#session?.addToolResult) {
               this.#session.addToolResult({
                 toolName: c.toolName,
                 topic: this.#session.currentTopic ?? "",
