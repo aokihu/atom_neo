@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents, containsSkillHint, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { ConversationFlowState, MemorySearchStatus } from "./types";
 import { resolveContextLimit } from "../../../constants";
 
@@ -54,7 +54,6 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
     let memorySearchAttempted = false;
     let memorySearchStatus: MemorySearchStatus = "not_started";
     let injectedMemoryCount = 0;
-    let memorySuggestsSkill = false;
     let memories: any[] = [];
 
     if (memoryQuery) {
@@ -73,13 +72,8 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
 
       for (const node of memories) {
-        if (node.accessCount >= 5) { this.#memory.decayWeight(node.id, 10); continue; }
-        const aging = node.accessCount >= 3 ? ' aging="true"' : "";
         const id = node.id.slice(0, 6);
-        contextData += `\n<Memory id="${id}" tags="${node.tags?.join(",") || ""}"${aging}>\n${node.content}\n</Memory>`;
-        if (containsSkillHint(`${node.content}\n${node.tags?.join(" ") || ""}`)) memorySuggestsSkill = true;
-        this.#memory.incrementAccess(node.id);
-        this.#memory.boostWeight(node.id);
+        contextData += `\n<MemorySummary id="${id}" tags="${node.tags?.join(",") || ""}">\n${node.summary}\n</MemorySummary>`;
         injectedMemoryCount++;
       }
       if (memorySearchStatus === "found" && injectedMemoryCount === 0) memorySearchStatus = "empty";
@@ -144,7 +138,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
     }
 
-    this.report(BusEvents.Element.Data, { step: "done", memoryQuery, memorySearchAttempted, memorySearchStatus, injectedMemoryCount, memorySuggestsSkill, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
-    return { ...input, contextData, memorySearchAttempted, memorySearchStatus, injectedMemoryCount, memorySuggestsSkill };
+    this.report(BusEvents.Element.Data, { step: "done", memoryQuery, memorySearchAttempted, memorySearchStatus, injectedMemoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
+    return { ...input, contextData, memorySearchAttempted, memorySearchStatus, injectedMemoryCount };
   }
 }

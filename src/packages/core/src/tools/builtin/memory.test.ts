@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   createSearchMemoryTool,
+  createReadMemoryTool,
   createSaveMemoryTool,
   createTraverseMemoryTool,
   createLinkMemoryTool,
@@ -8,6 +9,7 @@ import {
 } from "./memory";
 
 const search = createSearchMemoryTool();
+const read = createReadMemoryTool();
 const save = createSaveMemoryTool();
 const traverse = createTraverseMemoryTool();
 const link = createLinkMemoryTool();
@@ -32,6 +34,26 @@ describe("saveMemoryTool", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe("disk full");
   });
+
+  test("passes an optional summary to the memory service", async () => {
+    let savedArgs: unknown[] = [];
+    const tool = createSaveMemoryTool({
+      save: (...args: unknown[]) => {
+        savedArgs = args;
+        return "abcdef123456";
+      },
+    });
+
+    const result = await tool.execute({ content: "full memory", summary: "short preview", tags: ["test"] });
+
+    expect(result.ok).toBe(true);
+    expect(savedArgs).toEqual(["full memory", ["test"], "short preview", {
+      baseWeight: undefined,
+      confidence: undefined,
+      kind: undefined,
+      pinned: undefined,
+    }]);
+  });
 });
 
 describe("searchMemoryTool", () => {
@@ -40,11 +62,12 @@ describe("searchMemoryTool", () => {
     expect(result.ok).toBe(true);
   });
 
-  test("returns short IDs with matching memory content", async () => {
+  test("returns short IDs with summaries but not full content", async () => {
     const tool = createSearchMemoryTool({
       search: () => [{
         id: "abcdef1234567890",
         content: "CODE=9528 is a remembered identifier.",
+        summary: "Remembered identifier",
         tags: ["identifier"],
       }],
     });
@@ -52,8 +75,9 @@ describe("searchMemoryTool", () => {
     const result = await tool.execute({ query: "CODE=9528" });
 
     expect(result.ok).toBe(true);
-    expect(result.output).toContain('<Memory id="abcdef" tags="identifier">');
-    expect(result.output).toContain("CODE=9528 is a remembered identifier.");
+    expect(result.output).toContain('<MemorySummary id="abcdef" tags="identifier">');
+    expect(result.output).toContain("Remembered identifier");
+    expect(result.output).not.toContain("CODE=9528 is a remembered identifier.");
   });
 
   test("asks for a non-overlapping retry when no memory matches", async () => {
@@ -69,6 +93,41 @@ describe("searchMemoryTool", () => {
 
     expect(query).toBe("台风 最新 2026");
     expect(result.output).toContain("different, non-overlapping keywords");
+  });
+});
+
+describe("readMemoryTool", () => {
+  test("returns error when no memory service", async () => {
+    const result = await read.execute({ id: "abc123" });
+    expect(result.ok).toBe(false);
+  });
+
+  test("returns full content for a selected summary ID", async () => {
+    let recordedId = "";
+    const tool = createReadMemoryTool({
+      getById: () => ({
+        id: "abcdef1234567890",
+        content: "CODE=9528 is a remembered identifier.",
+        summary: "Remembered identifier",
+        tags: ["identifier"],
+      }),
+      recordRead: (id: string) => { recordedId = id; },
+    });
+
+    const result = await tool.execute({ id: "abcdef" });
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('<Memory id="abcdef" tags="identifier">');
+    expect(result.output).toContain("CODE=9528 is a remembered identifier.");
+    expect(recordedId).toBe("abcdef1234567890");
+  });
+
+  test("returns error when the selected memory is missing", async () => {
+    const tool = createReadMemoryTool({ getById: () => null });
+    const result = await tool.execute({ id: "abc123" });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("Memory not found: abc123");
   });
 });
 

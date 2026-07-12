@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { containsExplicitUrl, selectActiveToolsForStep, summarizeMemorySearch, summarizeSkillDiscovery } from "./stream-llm";
+import { containsExplicitUrl, selectActiveToolsForStep, summarizeMemoryRead, summarizeMemorySearch, summarizeSkillDiscovery } from "./stream-llm";
 
 const availableToolNames = [
-  "read", "write", "search_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
+  "read", "write", "search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
   "skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload",
   "todowrite", "intent", "webfetch", "bash", "mcp_weather",
 ];
@@ -15,6 +15,8 @@ function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0
     memorySearchAttemptCount: 0,
     memorySearchFound: false,
     memorySearchUnavailable: false,
+    memoryRead: false,
+    memoryReadUnavailable: false,
     memorySuggestsSkill: false,
     hasSkillContext: false,
     skillLoaded: false,
@@ -29,6 +31,7 @@ describe("selectActiveToolsForStep", () => {
     const selection = select();
 
     expect(selection.activeTools).toContain("search_memory");
+    expect(selection.activeTools).toContain("read_memory");
     expect(selection.activeTools).toContain("skill_load");
     expect(selection.activeTools).toContain("skill_section");
     expect(selection.activeTools).toContain("mcp_weather");
@@ -36,17 +39,24 @@ describe("selectActiveToolsForStep", () => {
     expect(selection.webfetchUnlockReason).toBe("memory_search_required");
   });
 
-  test("unlocks webfetch after Memory is found", () => {
+  test("requires reading the full Memory after a summary is found", () => {
     const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
+
+    expect(selection.activeTools).not.toContain("webfetch");
+    expect(selection.webfetchUnlockReason).toBe("memory_read_required");
+  });
+
+  test("unlocks webfetch after the selected Memory is read", () => {
+    const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true });
 
     expect(selection.activeTools).toContain("webfetch");
     expect(selection.webfetchUnlockReason).toBe("memory_found");
   });
 
   test("requires Skill loading when Memory contains a Skill hint", () => {
-    const locked = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memorySuggestsSkill: true });
-    const loaded = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memorySuggestsSkill: true, skillLoaded: true });
-    const unavailable = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memorySuggestsSkill: true, skillUnavailable: true });
+    const locked = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true });
+    const loaded = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillLoaded: true });
+    const unavailable = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillUnavailable: true });
 
     expect(locked.activeTools).not.toContain("webfetch");
     expect(locked.webfetchUnlockReason).toBe("skill_load_required");
@@ -125,7 +135,7 @@ describe("summarizeMemorySearch", () => {
     const found = summarizeMemorySearch({
       automaticQuery: "",
       automaticStatus: "not_started",
-      steps: [{ toolResults: [{ toolName: "search_memory", input: { query: "台风" }, output: '<Memory id="abc123">method</Memory>' }] }],
+      steps: [{ toolResults: [{ toolName: "search_memory", input: { query: "台风" }, output: '<MemorySummary id="abc123">method</MemorySummary>' }] }],
     });
     const unavailable = summarizeMemorySearch({
       automaticQuery: "",
@@ -137,21 +147,13 @@ describe("summarizeMemorySearch", () => {
     expect(unavailable.unavailable).toBe(true);
   });
 
-  test("detects Skill hints in Memory results", () => {
-    const result = summarizeMemorySearch({
-      automaticQuery: "台风",
-      automaticStatus: "found",
-      automaticSuggestsSkill: true,
-      steps: [],
-    });
-    const toolResult = summarizeMemorySearch({
-      automaticQuery: "",
-      automaticStatus: "not_started",
-      steps: [{ toolResults: [{ toolName: "search_memory", input: { query: "台风" }, output: '<Memory id="abc123">使用 Typhoon Skill</Memory>' }] }],
-    });
+  test("detects full Memory reads and Skill hints", () => {
+    const result = summarizeMemoryRead([
+      { toolResults: [{ toolName: "read_memory", input: { id: "abc123" }, output: '<Memory id="abc123">使用 Typhoon Skill</Memory>' }] },
+    ]);
 
+    expect(result.read).toBe(true);
     expect(result.suggestsSkill).toBe(true);
-    expect(toolResult.suggestsSkill).toBe(true);
   });
 });
 

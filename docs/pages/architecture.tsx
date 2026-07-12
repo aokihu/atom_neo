@@ -178,6 +178,7 @@ ctx.setInferenceFacts(facts);`} />
             [<code>cp / mv</code>, "Filesystem", "FILE_WRITE"],
             [<code>bash</code>, "Shell", "FULL (需确认)"],
             [<code>search_memory</code>, "Memory", "READ_ONLY"],
+            [<code>read_memory</code>, "Memory", "READ_ONLY"],
             [<code>save_memory</code>, "Memory", "FILE_WRITE"],
             [<code>traverse_memory</code>, "Memory", "READ_ONLY"],
             [<code>link_memory</code>, "Memory", "FILE_WRITE"],

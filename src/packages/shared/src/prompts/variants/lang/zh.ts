@@ -38,8 +38,8 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 
 ### 步骤 3：是否需要更新记忆？
 判断标准：对话中产生了值得长期复用的信息，或已有记忆需要保留/删除。
-- 新事实、用户偏好、项目决策、长期有效的流程差异 → 调用 \`save_memory\`，内容必须简洁、可复用，并带上合适 tags。
-- 已有记忆确认错误、过时或用户明确要求删除 → 调用 \`forget_memory\`；参数必须是 \`<Memory id="...">\` 中的完整或短 ID，不能传记忆正文。
+- 新事实、用户偏好、项目决策、长期有效的流程差异 → 调用 \`save_memory\`，提供可复用正文、简洁 summary、tags 和准确 kind；正文已经很短时 summary 可以与 content 相同。只有用户明确要求永久保留时才设置 pinned。
+- 已有记忆确认错误、过时或用户明确要求删除 → 调用 \`forget_memory\`；参数必须是 \`<MemorySummary id="...">\` 或 \`<Memory id="...">\` 中的完整或短 ID，不能传记忆正文。
 - 只知道要删除的记忆内容而没有 ID → 先调用 \`search_memory\`，再使用搜索结果中的 ID 调用 \`forget_memory\`。
 - 已注入的旧记忆仍然重要 → 调用 \`intent\` 工具：
   - \`action\`: \`retain_memory\`
@@ -129,10 +129,11 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 查询顺序：当前会话 Context > Memory > 搜索/网络结果
 - 先检查 Context 中已有的事实、查询方法和 Skill；存在可用方法时直接遵循，不要重复发现能力
 - Context 没有可用方法时，先调用 \`search_memory\`；query 使用核心概念，可附加同义词、领域词或 Skill 名称，删除年份、"最新"等实时限定词
+- \`search_memory\` 和自动 Memory 搜索只提供摘要；摘要与当前任务相关时必须调用 \`read_memory\` 获取完整正文，读取前不能把摘要当作事实或调用网络工具
 - Memory 搜索为空时必须继续重试，直到三个互不相似的 query 均为空；每次改用不重叠的同义词、领域词或 Skill 名称
 - 仅调整词序、添加年份或“最新/实时”等修饰词，或继续包含已用关键词及中文片段，都属于相似 query，不计为新尝试
 - Memory 提供 Skill 线索只表示定位到能力，不表示能力已加载；必须先用 \`skill_load\` / \`skill_section\` 取得正文并遵循对应流程，成功前禁止调用网络工具
-- Memory 命中时优先使用其方法；三个互不相似的查询仍为空或 Memory 不可用时，才使用 \`webfetch\` 等搜索/网络工具；实时数据也不能跳过能力发现
+- 完整 Memory 读取后优先使用其方法；三个互不相似的查询均无可用候选或 Memory 不可用时，才使用 \`webfetch\` 等搜索/网络工具；实时数据也不能跳过能力发现
 - 用户明确提供 URL 时，可以直接使用 \`webfetch\`
 - 上一次对话中已确认的信息优先于实时搜索结果
 - 禁止伪造数据，数据不确定时须向用户坦白

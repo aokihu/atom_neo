@@ -7,7 +7,7 @@ import {
 import { createBashTool } from "./builtin/bash";
 import { createWebFetchTool } from "./builtin/webfetch";
 import {
-  createSearchMemoryTool, createSaveMemoryTool,
+  createSearchMemoryTool, createReadMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,
 } from "./builtin/memory";
 import { createIntentTool } from "./builtin/intent";
@@ -22,6 +22,7 @@ export function createAllTools(sandbox: string, memory?: any, whitelist?: string
     createTreeTool(sb), createGrepTool(sb), createCpTool(sb), createMvTool(sb),
     createBashTool(sandbox),
     createSearchMemoryTool(memory as any),
+    createReadMemoryTool(memory as any),
     createSaveMemoryTool(memory as any),
     createTraverseMemoryTool(memory as any),
     createLinkMemoryTool(memory as any),

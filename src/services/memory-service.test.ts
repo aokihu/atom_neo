@@ -6,13 +6,15 @@ import { createHash } from "node:crypto";
 import { Database } from "bun:sqlite";
 import { parseMemorySearchTerms } from "@atom-neo/shared";
 import { MemoryService } from "./memory-service";
+import { DAY_MS } from "./memory-ranking";
 
-function createMemoryService(): { service: MemoryService; dir: string } {
+function createMemoryService(now?: () => number): { service: MemoryService; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), "atom-memory-"));
   return {
     service: new MemoryService({
       dbPath: join(dir, "memory.db"),
       legacyNodesPath: join(dir, "nodes"),
+      now,
     }),
     dir,
   };
@@ -26,16 +28,75 @@ describe("MemoryService save", () => {
   test("does not reset lifecycle when saving duplicate content", () => {
     const { service, dir } = createMemoryService();
     try {
-      const id = service.save("stable memory", ["first"]);
-      service.incrementAccess(id);
-      service.decayWeight(id, 25);
+      const id = service.save("stable memory", ["first"], undefined, { baseWeight: 80, kind: "preference", confidence: 0.7 });
+      service.recordRead(id);
 
       expect(service.save("stable memory", ["second"])).toBe(id);
 
       const [node] = service.traverse(id);
-      expect(node.accessCount).toBe(1);
-      expect(node.weight).toBe(75);
+      expect(node.readCount).toBe(1);
+      expect(node.usageScore).toBe(1);
+      expect(node.baseWeight).toBe(80);
+      expect(node.kind).toBe("preference");
+      expect(node.confidence).toBe(0.7);
       expect(node.tags).toEqual(["second"]);
+      expect(node.summary).toBe("stable memory");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("stores a compact summary and reuses content when savings are small", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const content = "台风查询需要先加载对应技能，然后按照技能中的数据源顺序获取最新资料。";
+      const compactId = service.save(content, ["typhoon"], "台风技能查询流程");
+      const similarContent = "1234567890";
+      const reusedId = service.save(similarContent, [], "12345678");
+
+      expect(service.getById(compactId)?.summary).toBe("台风技能查询流程");
+      expect(service.getById(reusedId)?.summary).toBe(similarContent);
+      expect((await service.search("技能查询"))[0]?.id).toBe(compactId);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("decays usage lazily and records only full reads", async () => {
+    let now = 100 * DAY_MS;
+    const { service, dir } = createMemoryService(() => now);
+    try {
+      const id = service.save("usage decay memory");
+
+      await service.search("usage decay");
+      expect(service.getById(id)?.retrievalCount).toBe(1);
+      expect(service.getById(id)?.readCount).toBe(0);
+      expect(service.getById(id)?.usageScore).toBe(0);
+
+      service.recordRead(id);
+      now += 30 * DAY_MS;
+      service.recordRead(id);
+
+      expect(service.getById(id)?.readCount).toBe(2);
+      expect(service.getById(id)?.usageScore).toBeCloseTo(1.5, 8);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("retain confirms a memory without resetting read history", () => {
+    let now = 100 * DAY_MS;
+    const { service, dir } = createMemoryService(() => now);
+    try {
+      const id = service.save("retained decision", [], undefined, { baseWeight: 70, kind: "decision" });
+      service.recordRead(id);
+      now += DAY_MS;
+      service.retain(id.slice(0, 6));
+      const node = service.getById(id)!;
+
+      expect(node.baseWeight).toBe(80);
+      expect(node.readCount).toBe(1);
+      expect(node.lastConfirmedAt).toBe(now);
     } finally {
       cleanup(dir);
     }
@@ -78,9 +139,37 @@ describe("MemoryService save", () => {
       const service = new MemoryService({ dbPath, legacyNodesPath: nodesPath });
 
       expect(service.traverse(id)[0]?.content).toBe(content);
+      expect(service.getById(id)?.summary).toBe(content);
+      expect(service.getById(id)?.baseWeight).toBe(100);
+      expect(service.getById(id)?.readCount).toBe(0);
       expect((await service.search("台风查询"))[0]?.id).toBe(id);
       expect(existsSync(join(nodesPath, `${id}.txt`))).toBe(false);
       expect(existsSync(nodesPath)).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("upgrades the previous FTS schema and backfills summaries", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "atom-memory-schema-"));
+    const dbPath = join(dir, "memory.db");
+    const content = "legacy sqlite typhoon workflow";
+    const id = createHash("sha256").update(content).digest("hex");
+    const db = new Database(dbPath);
+    db.run(`CREATE TABLE nodes (
+      id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '', tags TEXT DEFAULT '',
+      weight REAL DEFAULT 100, access_count INTEGER DEFAULT 0, created_at INTEGER, accessed_at INTEGER
+    )`);
+    db.run("INSERT INTO nodes VALUES (?, ?, 'typhoon', 100, 0, ?, ?)", [id, content, Date.now(), Date.now()]);
+    db.run("CREATE VIRTUAL TABLE memory_fts USING fts5(content, tags, content='nodes', content_rowid='rowid', tokenize='trigram')");
+    db.run("INSERT INTO memory_fts(memory_fts) VALUES ('rebuild')");
+    db.close();
+
+    try {
+      const service = new MemoryService({ dbPath });
+
+      expect(service.getById(id)?.summary).toBe(content);
+      expect((await service.search("typhoon"))[0]?.id).toBe(id);
     } finally {
       cleanup(dir);
     }
@@ -148,6 +237,32 @@ describe("MemoryService search", () => {
       cleanup(dir);
     }
   });
+
+  test("keeps lexical relevance ahead of intrinsic weight", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const exactId = service.save("typhoon weather exact workflow", [], undefined, { baseWeight: 0 });
+      service.save("weather general archive", [], undefined, { baseWeight: 100, pinned: true });
+
+      const results = await service.search("typhoon weather", 2);
+
+      expect(results[0]?.id).toBe(exactId);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("excludes memories superseded through graph relations", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const referencedId = service.save("shared topic alpha");
+      const plainId = service.save("shared topic beta");
+      service.link(referencedId, plainId, "supersedes");
+      expect((await service.search("shared topic", 2)).some((node) => node.id === plainId)).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
 });
 
 describe("MemoryService findFullId", () => {
@@ -191,6 +306,20 @@ describe("MemoryService findFullId", () => {
 
       expect(service.findFullId("not-a-hash")).toBeNull();
       expect(service.has("not-a-hash")).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("links unique graph edges using short IDs", () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const source = service.save("short edge source");
+      const target = service.save("short edge target");
+
+      expect(service.link(source.slice(0, 6), target.slice(0, 6), "depends_on")).toBe(true);
+      expect(service.link(source.slice(0, 6), target.slice(0, 6), "depends_on")).toBe(true);
+      expect(service.traverse(source.slice(0, 6)).map((node) => node.id)).toEqual([source, target]);
     } finally {
       cleanup(dir);
     }

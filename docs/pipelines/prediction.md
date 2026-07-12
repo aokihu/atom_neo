@@ -95,7 +95,7 @@ type IntentPredictionResult = {
 | `creative` | 写长文、设计架构、生成内容 |
 | `conversation` | 不需要外部事实的闲聊、寒暄和讨论 |
 
-每个 intent 通过 `selectActiveToolsForStep()` 控制工具可见性；`search_memory` 与 Skill 工具始终可用，内置 `webfetch` 按 Memory 搜索状态动态开放。
+每个 intent 通过 `selectActiveToolsForStep()` 控制工具可见性；`search_memory`、`read_memory` 与 Skill 工具始终可用，内置 `webfetch` 按摘要搜索、正文读取和 Skill 加载状态动态开放。
 
 ### memoryQuery（Memory 核心查询词）
 

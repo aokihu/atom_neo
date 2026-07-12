@@ -66,7 +66,8 @@ export enum PermissionLevel {
             [<code>tree</code>, "Filesystem", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "目录树结构"],
             [<code>cp</code>, "Filesystem", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "复制文件"],
             [<code>mv</code>, "Filesystem", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "移动/重命名文件"],
-            [<code>search_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按关键词搜索并返回带短 ID 的记忆"],
+            [<code>search_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按关键词搜索并返回摘要与短 ID"],
+            [<code>read_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "确认候选后按 ID 读取完整正文"],
             [<code>save_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "保存新记忆节点"],
             [<code>traverse_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "从记忆 ID 开始图遍历"],
             [<code>link_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "在两个记忆节点间建立关系"],
@@ -76,7 +77,7 @@ export enum PermissionLevel {
           ]}
         />
         <Callout type="info" title="动态工具门控">
-          <code>search_memory</code> 和 Skill 工具对所有 intent 可用。普通 Memory 命中、不可用、三次不同查询仍为空、已有 Skill Context，或用户提供明确 URL 时开放内置 <code>webfetch</code>。Memory 包含 Skill 线索时必须先成功加载 Skill；工具结果会返回本轮已加载正文，之后才开放 Web。相似查询不累计次数。
+          <code>search_memory</code>、<code>read_memory</code> 和 Skill 工具对所有 intent 可用。搜索只返回摘要；Agent 成功读取选中 Memory 的正文后才可开放内置 <code>webfetch</code>。正文包含 Skill 线索时还必须先加载 Skill。三次不同查询均无可用候选、服务不可用或用户提供明确 URL 时允许降级。
         </Callout>
       </Section>
 

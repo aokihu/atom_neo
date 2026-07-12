@@ -17,6 +17,8 @@ type WebfetchUnlockReason =
   | "skill_context"
   | "memory_found"
   | "memory_unavailable"
+  | "memory_read_unavailable"
+  | "memory_read_required"
   | "skill_unavailable"
   | "skill_load_required"
   | "memory_search_exhausted"
@@ -41,13 +43,11 @@ type MemorySearchStep = {
 export function summarizeMemorySearch(params: {
   automaticQuery: string;
   automaticStatus: MemorySearchStatus;
-  automaticSuggestsSkill?: boolean;
   steps: MemorySearchStep[];
-}): { attemptCount: number; found: boolean; unavailable: boolean; suggestsSkill: boolean } {
+}): { attemptCount: number; found: boolean; unavailable: boolean } {
   const queries: string[] = [];
   let found = params.automaticStatus === "found";
   let unavailable = params.automaticStatus === "unavailable";
-  let suggestsSkill = params.automaticSuggestsSkill ?? false;
 
   const addDistinctQuery = (query: string) => {
     const canonicalQuery = canonicalizeMemorySearchQuery(query);
@@ -67,13 +67,30 @@ export function summarizeMemorySearch(params: {
       if (typeof input?.query === "string") addDistinctQuery(input.query);
 
       const output = typeof result.output === "string" ? result.output : "";
-      if (output.includes("<Memory id=")) found = true;
-      if (containsSkillHint(output)) suggestsSkill = true;
+      if (output.includes("<MemorySummary id=")) found = true;
       if (/memory service not connected|^Error:|tool execution error/i.test(output)) unavailable = true;
     }
   }
 
-  return { attemptCount: queries.length, found, unavailable, suggestsSkill };
+  return { attemptCount: queries.length, found, unavailable };
+}
+
+export function summarizeMemoryRead(steps: MemorySearchStep[]): { read: boolean; unavailable: boolean; suggestsSkill: boolean } {
+  let read = false;
+  let unavailable = false;
+  let suggestsSkill = false;
+  for (const step of steps) {
+    for (const result of step.toolResults ?? []) {
+      if (result.toolName !== "read_memory") continue;
+      const output = typeof result.output === "string" ? result.output : "";
+      if (output.includes("<Memory id=")) {
+        read = true;
+        suggestsSkill = containsSkillHint(output);
+      }
+      if (/^Error:|memory service not connected|tool execution error/i.test(output)) unavailable = true;
+    }
+  }
+  return { read, unavailable, suggestsSkill };
 }
 
 export function summarizeSkillDiscovery(steps: MemorySearchStep[]): { loaded: boolean; unavailable: boolean } {
@@ -97,6 +114,8 @@ export function selectActiveToolsForStep(params: {
   memorySearchAttemptCount: number;
   memorySearchFound: boolean;
   memorySearchUnavailable: boolean;
+  memoryRead: boolean;
+  memoryReadUnavailable: boolean;
   memorySuggestsSkill: boolean;
   hasSkillContext: boolean;
   skillLoaded: boolean;
@@ -106,15 +125,18 @@ export function selectActiveToolsForStep(params: {
   let webfetchUnlockReason: WebfetchUnlockReason;
   if (params.hasExplicitUrl) webfetchUnlockReason = "explicit_url";
   else if (params.hasSkillContext || params.skillLoaded) webfetchUnlockReason = "skill_context";
-  else if (params.memorySearchFound && params.memorySuggestsSkill) {
+  else if (params.memoryRead && params.memorySuggestsSkill) {
     webfetchUnlockReason = params.skillUnavailable ? "skill_unavailable" : "skill_load_required";
-  } else if (params.memorySearchFound) webfetchUnlockReason = "memory_found";
+  } else if (params.memoryRead) webfetchUnlockReason = "memory_found";
+  else if (params.memoryReadUnavailable) webfetchUnlockReason = "memory_read_unavailable";
   else if (params.memorySearchUnavailable) webfetchUnlockReason = "memory_unavailable";
   else if (params.memorySearchAttemptCount >= 3) webfetchUnlockReason = "memory_search_exhausted";
+  else if (params.memorySearchFound) webfetchUnlockReason = "memory_read_required";
   else if (params.memorySearchAttemptCount > 0) webfetchUnlockReason = "memory_search_retry_required";
   else webfetchUnlockReason = "memory_search_required";
   const webfetchEnabled = webfetchUnlockReason !== "memory_search_required"
     && webfetchUnlockReason !== "memory_search_retry_required"
+    && webfetchUnlockReason !== "memory_read_required"
     && webfetchUnlockReason !== "skill_load_required";
   const selected = [
     ...getTaskToolNames(params.taskIntent),
@@ -200,8 +222,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const hasSkillContext = Boolean(input.skillContext?.trim());
     const automaticQuery = this.#session?.pendingPrediction?.memoryQuery ?? "";
     const automaticStatus = input.memorySearchStatus ?? "not_started";
-    const automaticSuggestsSkill = input.memorySuggestsSkill ?? false;
-    const initialMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, automaticSuggestsSkill, steps: [] });
+    const initialMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps: [] });
     const initialToolSelection = selectActiveToolsForStep({
       taskIntent: this.#taskIntent,
       availableToolNames: tools,
@@ -209,7 +230,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memorySearchAttemptCount: initialMemorySearch.attemptCount,
       memorySearchFound: initialMemorySearch.found,
       memorySearchUnavailable: initialMemorySearch.unavailable,
-      memorySuggestsSkill: initialMemorySearch.suggestsSkill,
+      memoryRead: false,
+      memoryReadUnavailable: false,
+      memorySuggestsSkill: false,
       hasSkillContext,
       skillLoaded: false,
       skillUnavailable: false,
@@ -228,7 +251,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memorySearchStatus: automaticStatus,
       memorySearchAttemptCount: initialMemorySearch.attemptCount,
       injectedMemoryCount: input.injectedMemoryCount ?? 0,
-      memorySuggestsSkill: initialMemorySearch.suggestsSkill,
+      memoryRead: false,
       webfetchEnabled: initialToolSelection.webfetchEnabled,
       webfetchUnlockReason: initialToolSelection.webfetchUnlockReason,
     });
@@ -274,7 +297,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
         prepareStep: ({ stepNumber, steps }) => {
-          const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, automaticSuggestsSkill, steps });
+          const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps });
+          const memoryRead = summarizeMemoryRead(steps);
           const skillDiscovery = summarizeSkillDiscovery(steps);
           const selection = selectActiveToolsForStep({
             taskIntent: this.#taskIntent,
@@ -283,7 +307,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             memorySearchAttemptCount: memorySearch.attemptCount,
             memorySearchFound: memorySearch.found,
             memorySearchUnavailable: memorySearch.unavailable,
-            memorySuggestsSkill: memorySearch.suggestsSkill,
+            memoryRead: memoryRead.read,
+            memoryReadUnavailable: memoryRead.unavailable,
+            memorySuggestsSkill: memoryRead.suggestsSkill,
             hasSkillContext,
             skillLoaded: skillDiscovery.loaded,
             skillUnavailable: skillDiscovery.unavailable,
@@ -299,7 +325,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               memorySearchAttemptCount: memorySearch.attemptCount,
               memorySearchFound: memorySearch.found,
               memorySearchUnavailable: memorySearch.unavailable,
-              memorySuggestsSkill: memorySearch.suggestsSkill,
+              memoryRead: memoryRead.read,
+              memoryReadUnavailable: memoryRead.unavailable,
+              memorySuggestsSkill: memoryRead.suggestsSkill,
               skillLoaded: skillDiscovery.loaded,
               skillUnavailable: skillDiscovery.unavailable,
               webfetchEnabled: selection.webfetchEnabled,
@@ -673,8 +701,8 @@ function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, p
 function getTaskToolNames(taskIntent: string): string[] {
   const FS_RO = ["read", "grep", "ls", "tree", "glob"];
   const FS_RW = ["write", "edit", "cp", "mv"];
-  const MEMORY = ["search_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory"];
-  const MEMORY_DISCOVERY = ["search_memory"];
+  const MEMORY = ["search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory"];
+  const MEMORY_DISCOVERY = ["search_memory", "read_memory"];
   const SKILL = ["skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload"];
   const CONTROL = ["todowrite", "intent"];
   const SCHEDULE = ["schedule_create", "schedule_list", "schedule_update", "schedule_cancel"];

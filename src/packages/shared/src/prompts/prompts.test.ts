@@ -17,5 +17,7 @@ describe("Memory discovery prompts", () => {
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("三个互不相似的 query");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("three mutually dissimilar queries");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("non-overlapping synonyms");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");
   });
 });

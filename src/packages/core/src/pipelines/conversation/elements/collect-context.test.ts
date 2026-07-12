@@ -21,13 +21,11 @@ describe("CollectContextElement Memory discovery", () => {
         return [{
           id: "abcdef123456",
           content: "查询台风信息时使用 Typhoon Skill。",
+          summary: "台风查询方法",
           tags: ["skill", "typhoon"],
-          accessCount: 0,
+          readCount: 0,
         }];
       },
-      incrementAccess: () => {},
-      boostWeight: () => {},
-      decayWeight: () => {},
     };
     const element = new CollectContextElement({
       name: "collect-context",
@@ -44,8 +42,9 @@ describe("CollectContextElement Memory discovery", () => {
     expect(result.memorySearchAttempted).toBe(true);
     expect(result.memorySearchStatus).toBe("found");
     expect(result.injectedMemoryCount).toBe(1);
-    expect(result.memorySuggestsSkill).toBe(true);
-    expect(result.contextData).toContain('<Memory id="abcdef" tags="skill,typhoon">');
+    expect(result.contextData).toContain('<MemorySummary id="abcdef" tags="skill,typhoon">');
+    expect(result.contextData).toContain("台风查询方法");
+    expect(result.contextData).not.toContain("Typhoon Skill");
   });
 
   test("records failed Memory search as attempted without failing the pipeline", async () => {
@@ -66,7 +65,6 @@ describe("CollectContextElement Memory discovery", () => {
     expect(result.memorySearchAttempted).toBe(true);
     expect(result.memorySearchStatus).toBe("unavailable");
     expect(result.injectedMemoryCount).toBe(0);
-    expect(result.memorySuggestsSkill).toBe(false);
     expect(events.some((event) => event.step === "memory-search-error")).toBe(true);
   });
 
