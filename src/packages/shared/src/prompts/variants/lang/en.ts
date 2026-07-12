@@ -131,7 +131,7 @@ You can use the following tools to load and manage skills — domain operation g
 - If Context has no usable method, call \`search_memory\` with core concepts plus optional synonyms, domain terms, or Skill names; remove years and freshness words such as "latest".
 - If a Memory search is empty, keep retrying until three mutually dissimilar queries are empty; use non-overlapping synonyms, domain terms, or Skill names each time.
 - Reordering words, adding years or freshness terms, or retaining a previous keyword or CJK fragment is a similar query and does not count as a new attempt.
-- If Memory provides a lookup method or Skill hint, load it with \`skill_load\` / \`skill_section\` and follow that workflow first.
+- A Skill hint in Memory only locates a capability; it is not loaded yet. Use \`skill_load\` / \`skill_section\` to obtain and follow its content before calling any network tool.
 - Prefer a method found in Memory. Use \`webfetch\` or other network tools only after three mutually dissimilar queries are empty or Memory is unavailable; real-time data does not bypass capability discovery.
 - If the user provides an explicit URL, \`webfetch\` may be used directly.
 - Information confirmed in prior conversation turns takes precedence over real-time search results.

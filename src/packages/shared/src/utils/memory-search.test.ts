@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, parseMemorySearchTerms } from "./memory-search";
+import { areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./memory-search";
 
 describe("Memory search query parsing", () => {
   test("removes dates and freshness words when a concept is present", () => {
@@ -21,5 +21,11 @@ describe("Memory search query parsing", () => {
     expect(areMemorySearchQueriesSimilar("台风", "台风查询技能")).toBe(true);
     expect(areMemorySearchQueriesSimilar("typhoon skill", "latest typhoon method")).toBe(true);
     expect(areMemorySearchQueriesSimilar("台风", "热带气旋 typhoon")).toBe(false);
+  });
+
+  test("detects explicit Skill hints", () => {
+    expect(containsSkillHint("使用 Typhoon Skill 查询")).toBe(true);
+    expect(containsSkillHint("加载台风查询技能")).toBe(true);
+    expect(containsSkillHint("普通台风事实")).toBe(false);
   });
 });

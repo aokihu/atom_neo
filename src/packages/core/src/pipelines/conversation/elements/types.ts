@@ -22,6 +22,7 @@ export type ConversationFlowState = {
   memorySearchAttempted?: boolean;
   memorySearchStatus?: MemorySearchStatus;
   injectedMemoryCount?: number;
+  memorySuggestsSkill?: boolean;
   systemText?: string;
   userMessages?: Message[];
   responseText?: string;

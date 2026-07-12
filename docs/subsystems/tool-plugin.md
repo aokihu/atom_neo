@@ -178,7 +178,9 @@ createForgetMemoryTool(memory)   // { id }
 
 - `search_memory` 与 Skill 工具对所有 intent 可用。
 - 未命中 Memory 且不同查询不足三次时，AI SDK `prepareStep` 不把内置 `webfetch` 放入 `activeTools`。
-- Memory 命中、服务不可用、三次不同查询仍为空、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
+- 普通 Memory 命中、服务不可用、三次不同查询仍为空、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
+- Memory 包含 Skill 线索时，即使已经命中也保持 `webfetch` 关闭；成功执行 `skill_load` / `skill_section` 后开放，Skill 加载失败时允许降级。
+- `skill_load` / `skill_section` 的工具结果包含本轮已加载 Skill 正文，使后续 AI SDK step 可以立即遵循该方法。
 - 查询归一化后存在关键词或中文片段重叠时视为相似组合，不累计尝试次数；重试必须使用不重叠的同义词、领域词或 Skill 名称。
 - 重复相同查询不增加尝试次数；Agent 必须删除时间词并改用核心概念、同义词、领域词或 Skill 名称扩大召回。
 - MCP 工具保持原有行为，不参与本阶段门控。

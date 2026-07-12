@@ -32,11 +32,12 @@ describe("createSkillTools", () => {
   });
 
   test("skill_load loads skill successfully", async () => {
-    const t = tools.find(x => x.name === "skill_load")!;
+    const t = createSkillTools(makeMockService({ buildContext: () => '<skill name="test">full content</skill>' })).find(x => x.name === "skill_load")!;
     const result = await t.execute({ name: "test" });
     expect(result.ok).toBe(true);
     expect(result.output).toContain("test");
     expect(result.output).toContain("a, b");
+    expect(result.output).toContain("full content");
   });
 
   test("skill_load returns error for unknown skill", async () => {
@@ -47,9 +48,10 @@ describe("createSkillTools", () => {
   });
 
   test("skill_section loads section successfully", async () => {
-    const t = tools.find(x => x.name === "skill_section")!;
+    const t = createSkillTools(makeMockService({ buildContext: () => '<section name="a">section content</section>' })).find(x => x.name === "skill_section")!;
     const result = await t.execute({ name: "test", section: "a" });
     expect(result.ok).toBe(true);
+    expect(result.output).toContain("section content");
   });
 
   test("skill_section returns error for unknown section", async () => {

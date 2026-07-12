@@ -4,6 +4,10 @@ const QUERY_NOISE = new Set([
 ]);
 const MAX_SEARCH_TERMS = 16;
 
+export function containsSkillHint(text: string): boolean {
+  return /(?:\bskill\b|技能)/iu.test(text);
+}
+
 function getConceptTerms(query: string): string[] {
   const segments = query.trim().toLowerCase()
     .split(/[\s,，。！？!?;；:：、/\\|()[\]{}"'`]+/u)

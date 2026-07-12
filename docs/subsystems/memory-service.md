@@ -133,7 +133,7 @@ SELECT target_id FROM edges WHERE source_id = ?
 
 Prediction 在现有分类调用中额外生成 `memory_query`，例如把“现在查一下台风的信息”提炼为“台风”。`collect-context` 只在该字段非空时执行自动 Memory 搜索，不增加新的 LLM 调用，也不使用本地中文分词。
 
-自动搜索会设置 `memorySearchStatus = "found" | "empty" | "unavailable"`。异常只记录 Debug 信息，不阻断 Conversation；空结果要求 Agent 使用互不相似的查询继续检索，三个不同查询均为空后才能进入 Web，命中并实际注入的节点数记录在 `injectedMemoryCount`。
+自动搜索会设置 `memorySearchStatus = "found" | "empty" | "unavailable"`。异常只记录 Debug 信息，不阻断 Conversation；空结果要求 Agent 使用互不相似的查询继续检索，三个不同查询均为空后才能进入 Web。命中并实际注入的节点数记录在 `injectedMemoryCount`；正文或 tags 包含 `Skill` / `技能` 线索时设置 `memorySuggestsSkill`，阻止 `memory_found` 直接开放 Web。
 
 ```typescript
 // collect-context 元素 — Memory 标签包裹
