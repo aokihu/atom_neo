@@ -42,6 +42,7 @@ describe("CollectContextElement Memory discovery", () => {
 
     expect(searchQuery).toBe("台风");
     expect(result.memorySearchAttempted).toBe(true);
+    expect(result.memorySearchStatus).toBe("found");
     expect(result.injectedMemoryCount).toBe(1);
     expect(result.contextData).toContain('<Memory id="abcdef" tags="skill,typhoon">');
   });
@@ -62,6 +63,7 @@ describe("CollectContextElement Memory discovery", () => {
     const result = await element.doProcess({ mode: "streaming", task: {} });
 
     expect(result.memorySearchAttempted).toBe(true);
+    expect(result.memorySearchStatus).toBe("unavailable");
     expect(result.injectedMemoryCount).toBe(0);
     expect(events.some((event) => event.step === "memory-search-error")).toBe(true);
   });
@@ -79,6 +81,7 @@ describe("CollectContextElement Memory discovery", () => {
     const result = await element.doProcess({ mode: "streaming", task: {} });
 
     expect(result.memorySearchAttempted).toBe(true);
+    expect(result.memorySearchStatus).toBe("empty");
     expect(result.injectedMemoryCount).toBe(0);
   });
 
@@ -97,6 +100,7 @@ describe("CollectContextElement Memory discovery", () => {
 
     expect(called).toBe(false);
     expect(result.memorySearchAttempted).toBe(false);
+    expect(result.memorySearchStatus).toBe("not_started");
     expect(result.injectedMemoryCount).toBe(0);
   });
 });

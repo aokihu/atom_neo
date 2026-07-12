@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 
+const searchMemoryInputSchema = z.object({
+  query: z.string().describe("One or more broad concepts, synonyms, domain terms, or Skill names; avoid dates and freshness words"),
+  limit: z.number().optional().default(3),
+});
+
 const forgetMemoryInputSchema = z.object({
   id: z.string()
     .regex(/^[a-fA-F0-9]+$/, "Memory ID must be a full or short hexadecimal ID")
@@ -11,15 +16,15 @@ const forgetMemoryInputSchema = z.object({
 export function createSearchMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "search_memory",
-    description: "Search memory by keywords. Returns matching memories with short IDs for follow-up memory operations.",
+    description: "Search memory with broad terms. Terms are matched independently against content and tags. If empty, retry until three non-overlapping query combinations fail before using webfetch.",
     source: "builtin",
-    inputSchema: z.object({ query: z.string(), limit: z.number().optional().default(3) }),
+    inputSchema: searchMemoryInputSchema,
     execute: async (args) => {
       if (!memory) return { ok: true, output: "(memory service not connected)", data: { results: [] } };
-      const r = z.object({ query: z.string(), limit: z.number().optional().default(3) }).safeParse(args);
+      const r = searchMemoryInputSchema.safeParse(args);
       if (!r.success) return { ok: false, output: "", error: r.error.message };
       const nodes = await memory.search(r.data.query, r.data.limit);
-      if (nodes.length === 0) return { ok: true, output: "No memories found." };
+      if (nodes.length === 0) return { ok: true, output: "No memories found. Retry with a broader query using different, non-overlapping keywords." };
       const output = nodes.map((n: any) => {
         const id = String(n.id).slice(0, 6);
         const tags = Array.isArray(n.tags) ? n.tags.join(",") : "";

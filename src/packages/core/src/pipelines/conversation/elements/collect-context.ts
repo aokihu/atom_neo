@@ -1,7 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
-import type { ConversationFlowState } from "./types";
+import type { ConversationFlowState, MemorySearchStatus } from "./types";
 import { resolveContextLimit } from "../../../constants";
 
 export class CollectContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -52,6 +52,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
 
     const memoryQuery = this.#session?.pendingPrediction?.memoryQuery?.trim() || "";
     let memorySearchAttempted = false;
+    let memorySearchStatus: MemorySearchStatus = "not_started";
     let injectedMemoryCount = 0;
     let memories: any[] = [];
 
@@ -60,9 +61,13 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       try {
         memories = this.#memory ? (await this.#memory.search(memoryQuery)) || [] : [];
         if (!this.#memory) {
+          memorySearchStatus = "unavailable";
           this.report(BusEvents.Element.Data, { step: "memory-search-unavailable", memoryQuery });
+        } else {
+          memorySearchStatus = memories.length > 0 ? "found" : "empty";
         }
       } catch (err) {
+        memorySearchStatus = "unavailable";
         this.report(BusEvents.Element.Data, { step: "memory-search-error", memoryQuery, error: err instanceof Error ? err.message : String(err) });
       }
 
@@ -75,6 +80,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
         this.#memory.boostWeight(node.id);
         injectedMemoryCount++;
       }
+      if (memorySearchStatus === "found" && injectedMemoryCount === 0) memorySearchStatus = "empty";
     }
 
     if (this.#session) {
@@ -136,7 +142,7 @@ export class CollectContextElement extends BaseElement<ConversationFlowState, Co
       }
     }
 
-    this.report(BusEvents.Element.Data, { step: "done", memoryQuery, memorySearchAttempted, injectedMemoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
-    return { ...input, contextData, memorySearchAttempted, injectedMemoryCount };
+    this.report(BusEvents.Element.Data, { step: "done", memoryQuery, memorySearchAttempted, memorySearchStatus, injectedMemoryCount, taskIntent: this.#taskIntent, hasSuggestion: !!this.#session?.evaluatorSuggestion, hasSummary: !!this.#session?.conversationSummary, hasPostCheck: !!this.#session?.postCheckGuidance });
+    return { ...input, contextData, memorySearchAttempted, memorySearchStatus, injectedMemoryCount };
   }
 }

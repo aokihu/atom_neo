@@ -14,5 +14,8 @@ describe("Memory discovery prompts", () => {
   test("base prompts require Memory discovery before webfetch", () => {
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("实时数据也不能跳过能力发现");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("real-time data does not bypass capability discovery");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("三个互不相似的 query");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("three mutually dissimilar queries");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("non-overlapping synonyms");
   });
 });

@@ -16,18 +16,27 @@ export default function DocPage({ content, title, description, category }: DocPa
         <ComparisonTable
           headers={["存储", "内容", "职责"]}
           rows={[
-            [<strong>SQLite nodes</strong>, <code>id, tags, weight, access_count, timestamps</code>, "保存节点身份和生命周期元数据"],
+            [<strong>SQLite nodes</strong>, <code>id, content, tags, weight, access_count, timestamps</code>, "保存正文、节点身份和生命周期元数据"],
             [<strong>SQLite edges</strong>, <code>source_id, target_id, relation</code>, "保存记忆之间的图关系"],
-            [<strong>nodes/*.txt</strong>, "每条记忆一个文本文件", "保存正文并供 ripgrep 搜索"],
+            [<strong>SQLite FTS5</strong>, <code>memory_fts(content, tags)</code>, "external-content trigram 索引、BM25 排序及短词兜底"],
           ]}
         />
         <CodeBlock lang="sql" code={`CREATE TABLE nodes (
   id TEXT PRIMARY KEY,             -- SHA-256 of content
+  content TEXT NOT NULL,
   tags TEXT DEFAULT '',
   weight REAL DEFAULT 100,
   access_count INTEGER DEFAULT 0,
   created_at INTEGER,
   accessed_at INTEGER
+);
+
+CREATE VIRTUAL TABLE memory_fts USING fts5(
+  content,
+  tags,
+  content='nodes',
+  content_rowid='rowid',
+  tokenize='trigram'
 );
 
 CREATE TABLE edges (
@@ -42,7 +51,7 @@ CREATE TABLE edges (
         <ComparisonTable
           headers={["名称", "含义", "使用位置"]}
           rows={[
-            [<Badge color="blue">完整 ID</Badge>, "记忆正文的 64 位 SHA-256", "SQLite 主键、正文文件名、图关系"],
+            [<Badge color="blue">完整 ID</Badge>, "记忆正文的 64 位 SHA-256", "SQLite 主键、图关系"],
             [<Badge color="green">短 ID</Badge>, "完整 ID 的唯一前缀，Context 默认显示前 6 位", "LLM 引用、retain_memory、forget_memory"],
             [<Badge color="orange">key</Badge>, "当前 MemoryService 没有独立业务 key", "旧文档或遗留参数名不代表当前数据字段"],
           ]}
@@ -56,12 +65,12 @@ CREATE TABLE edges (
         <ComparisonTable
           headers={["操作", "方法签名", "说明"]}
           rows={[
-            [<Badge color="blue">search</Badge>, <code>search(query, limit?)</code>, "ripgrep 搜索正文，按权重和时效排序"],
-            [<Badge color="green">save</Badge>, <code>save(content, tags?)</code>, "临时文件 + SQLite upsert，返回完整 ID"],
+            [<Badge color="blue">search</Badge>, <code>search(query, limit?)</code>, "候选词 OR 搜索正文/tags，按相关度、权重和时效排序"],
+            [<Badge color="green">save</Badge>, <code>save(content, tags?)</code>, "SQLite 事务 upsert，FTS trigger 自动同步"],
             [<Badge color="purple">traverse</Badge>, <code>traverse(startId, maxSteps?)</code>, "按 ID 从 edges 开始 BFS"],
             [<Badge color="blue">findFullId</Badge>, <code>findFullId(memoryId)</code>, "将唯一短 ID 查回完整 ID"],
             [<Badge color="orange">link</Badge>, <code>link(source, target, relation)</code>, "按完整 ID 建立关系边"],
-            [<Badge color="red">forget</Badge>, <code>forget(id)</code>, "按完整 ID或唯一短 ID删除节点、正文和关联边"],
+            [<Badge color="red">forget</Badge>, <code>forget(id)</code>, "按完整 ID 或唯一短 ID 删除节点、正文、索引和关联边"],
             [<Badge color="blue">retain</Badge>, <code>retain(id)</code>, "重置访问计数并提升权重"],
           ]}
         />
@@ -77,7 +86,8 @@ CREATE TABLE edges (
   → 读取 <Memory id="2d4bed">
   → forget_memory({ id: "2d4bed" })
   → findFullId("2d4bed")
-  → 删除 edges、nodes 和 nodes/<full-id>.txt`} />
+  → 在 SQLite 事务中删除 edges 和 nodes
+  → Trigger 同步删除 memory_fts 索引`} />
         <Callout type="warn" title="forget_memory 不接受正文">
           如果用户没有提供 ID，Agent 必须先搜索。把记忆正文直接传入 <code>id</code> 会被拒绝，也不会触发删除。
         </Callout>
@@ -88,7 +98,7 @@ CREATE TABLE edges (
           headers={["阶段", "行为", "结果"]}
           rows={[
             ["Context", "检查已注入的 Memory 与 Skill", "已有查询方法时直接遵循"],
-            ["Memory", "使用 Prediction 生成的单一核心关键词自动搜索", "记录是否尝试及注入数量"],
+            ["Memory", "候选词 OR + 中文部分匹配，搜索正文与 tags", "记录 found / empty / unavailable"],
             ["Skill", "Memory 提供 Skill 线索时加载对应 section", "取得可复用查询流程"],
             ["Web", "Memory 搜索完成后开放 webfetch", "获取最终实时数据"],
           ]}
@@ -98,8 +108,8 @@ CREATE TABLE edges (
   → collect-context 搜索 Memory
   → 命中查询方法 / Skill 线索
   → 按方法开放并执行 webfetch`} />
-        <Callout type="info" title="Memory 搜索是网络查询前置条件">
-          自动搜索无结果或失败也视为已经尝试；此时允许进入 Web。用户提供明确 URL 时可直接访问。
+        <Callout type="info" title="空结果需要扩大查询">
+          空结果不会立即开放 Web。Agent 必须使用互不相似且更宽的查询重试；三个不同查询仍为空，或 Memory 不可用时才进入 Web。年份、实时性修饰词及存在关键词或中文片段重叠的组合不累计次数。用户提供明确 URL 时可直接访问。
         </Callout>
       </Section>
 

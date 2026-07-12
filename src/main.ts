@@ -108,7 +108,7 @@ export async function main(): Promise<void> {
   sm.register("agents-compiler", new AgentsCompilerService({ runtime }));
   sm.register("memory", new MemoryService({
     dbPath: runtime.atomDir + "/memory/memory.db",
-    nodesPath: runtime.atomDir + "/memory/nodes",
+    legacyNodesPath: runtime.atomDir + "/memory/nodes",
   }));
   sm.register("skill", new SkillService({ sandbox: args.sandbox }));
   sm.startAll();

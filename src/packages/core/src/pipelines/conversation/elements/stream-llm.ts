@@ -1,4 +1,4 @@
-import { BaseElement, sanitizeForJSON } from "@atom-neo/shared";
+import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, sanitizeForJSON } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { streamText, tool, zodSchema, stepCountIs } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
@@ -9,14 +9,16 @@ import type { TokenUsage } from "../../../session/context";
 import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
-import type { ConversationFlowState } from "./types";
+import type { ConversationFlowState, MemorySearchStatus } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 
 type WebfetchUnlockReason =
   | "explicit_url"
   | "skill_context"
-  | "automatic_memory_search"
-  | "search_memory_called"
+  | "memory_found"
+  | "memory_unavailable"
+  | "memory_search_exhausted"
+  | "memory_search_retry_required"
   | "memory_search_required";
 
 type ActiveToolSelection = {
@@ -30,12 +32,52 @@ export function containsExplicitUrl(messages: Array<{ role: string; content: str
   return /https?:\/\/\S+/i.test(latestUserText);
 }
 
+type MemorySearchStep = {
+  toolResults?: Array<{ toolName: string; input: unknown; output: unknown }>;
+};
+
+export function summarizeMemorySearch(params: {
+  automaticQuery: string;
+  automaticStatus: MemorySearchStatus;
+  steps: MemorySearchStep[];
+}): { attemptCount: number; found: boolean; unavailable: boolean } {
+  const queries: string[] = [];
+  let found = params.automaticStatus === "found";
+  let unavailable = params.automaticStatus === "unavailable";
+
+  const addDistinctQuery = (query: string) => {
+    const canonicalQuery = canonicalizeMemorySearchQuery(query);
+    if (canonicalQuery && !queries.some((existing) => areMemorySearchQueriesSimilar(existing, canonicalQuery))) {
+      queries.push(canonicalQuery);
+    }
+  };
+
+  if (params.automaticStatus !== "not_started" && params.automaticQuery.trim()) {
+    addDistinctQuery(params.automaticQuery);
+  }
+
+  for (const step of params.steps) {
+    for (const result of step.toolResults ?? []) {
+      if (result.toolName !== "search_memory") continue;
+      const input = result.input as { query?: unknown } | null;
+      if (typeof input?.query === "string") addDistinctQuery(input.query);
+
+      const output = typeof result.output === "string" ? result.output : "";
+      if (output.includes("<Memory id=")) found = true;
+      if (/memory service not connected|^Error:|tool execution error/i.test(output)) unavailable = true;
+    }
+  }
+
+  return { attemptCount: queries.length, found, unavailable };
+}
+
 export function selectActiveToolsForStep(params: {
   taskIntent: string;
   availableToolNames: string[];
   mcpToolNames: string[];
-  memorySearchAttempted: boolean;
-  memorySearchCalled: boolean;
+  memorySearchAttemptCount: number;
+  memorySearchFound: boolean;
+  memorySearchUnavailable: boolean;
   hasSkillContext: boolean;
   hasExplicitUrl: boolean;
 }): ActiveToolSelection {
@@ -43,12 +85,17 @@ export function selectActiveToolsForStep(params: {
     ? "explicit_url"
     : params.hasSkillContext
       ? "skill_context"
-      : params.memorySearchAttempted
-        ? "automatic_memory_search"
-        : params.memorySearchCalled
-          ? "search_memory_called"
-          : "memory_search_required";
-  const webfetchEnabled = webfetchUnlockReason !== "memory_search_required";
+      : params.memorySearchFound
+        ? "memory_found"
+        : params.memorySearchUnavailable
+          ? "memory_unavailable"
+          : params.memorySearchAttemptCount >= 3
+            ? "memory_search_exhausted"
+            : params.memorySearchAttemptCount > 0
+              ? "memory_search_retry_required"
+              : "memory_search_required";
+  const webfetchEnabled = webfetchUnlockReason !== "memory_search_required"
+    && webfetchUnlockReason !== "memory_search_retry_required";
   const selected = [
     ...getTaskToolNames(params.taskIntent),
     ...params.mcpToolNames,
@@ -131,12 +178,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const mcpToolNames = Object.keys(mcpCurrent);
     const hasExplicitUrl = containsExplicitUrl(userMessages);
     const hasSkillContext = Boolean(input.skillContext?.trim());
+    const automaticQuery = this.#session?.pendingPrediction?.memoryQuery ?? "";
+    const automaticStatus = input.memorySearchStatus ?? "not_started";
+    const initialMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps: [] });
     const initialToolSelection = selectActiveToolsForStep({
       taskIntent: this.#taskIntent,
       availableToolNames: tools,
       mcpToolNames,
-      memorySearchAttempted: input.memorySearchAttempted ?? false,
-      memorySearchCalled: false,
+      memorySearchAttemptCount: initialMemorySearch.attemptCount,
+      memorySearchFound: initialMemorySearch.found,
+      memorySearchUnavailable: initialMemorySearch.unavailable,
       hasSkillContext,
       hasExplicitUrl,
     });
@@ -148,8 +199,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       toolCount: tools.length,
       activeCount: initialToolSelection.activeTools.length,
       taskIntent: this.#taskIntent,
-      memoryQuery: this.#session?.pendingPrediction?.memoryQuery ?? "",
+      memoryQuery: automaticQuery,
       memorySearchAttempted: input.memorySearchAttempted ?? false,
+      memorySearchStatus: automaticStatus,
+      memorySearchAttemptCount: initialMemorySearch.attemptCount,
       injectedMemoryCount: input.injectedMemoryCount ?? 0,
       webfetchEnabled: initialToolSelection.webfetchEnabled,
       webfetchUnlockReason: initialToolSelection.webfetchUnlockReason,
@@ -196,15 +249,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
         prepareStep: ({ stepNumber, steps }) => {
-          const memorySearchCalled = steps.some((step) =>
-            step.toolCalls.some((call) => call.toolName === "search_memory")
-          );
+          const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps });
           const selection = selectActiveToolsForStep({
             taskIntent: this.#taskIntent,
             availableToolNames: tools,
             mcpToolNames,
-            memorySearchAttempted: input.memorySearchAttempted ?? false,
-            memorySearchCalled,
+            memorySearchAttemptCount: memorySearch.attemptCount,
+            memorySearchFound: memorySearch.found,
+            memorySearchUnavailable: memorySearch.unavailable,
             hasSkillContext,
             hasExplicitUrl,
           });
@@ -215,6 +267,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               step: "tool-policy",
               stepNumber,
               activeCount: selection.activeTools.length,
+              memorySearchAttemptCount: memorySearch.attemptCount,
+              memorySearchFound: memorySearch.found,
+              memorySearchUnavailable: memorySearch.unavailable,
               webfetchEnabled: selection.webfetchEnabled,
               webfetchUnlockReason: selection.webfetchUnlockReason,
             });

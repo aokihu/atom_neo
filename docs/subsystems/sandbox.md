@@ -35,7 +35,8 @@ sandbox/                          # 工作目录（--sandbox 指定或默认 CWD
 ├── .env                          # API Keys（gitignored）
 ├── AGENTS.md                     # 项目开发指引（Agent 行为规范）
 ├── .atom/                        # 【系统】Agent 运行时数据目录
-│   ├── memory.sqlite            # 记忆数据库
+│   ├── memory/                  # 记忆服务数据
+│   │   └── memory.db            # 正文、图谱和 FTS5 索引
 │   └── compiled_prompts/        # 缓存的编译后提示词
 └── ...                           # 用户项目文件
 ```
@@ -49,7 +50,6 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 | `.atom/installed` | **首次运行标记** — 空文件，存在表示已完成安装向导 |
 | `.atom/memory/` | 记忆服务数据目录 |
 | `.atom/memory/memory.db` | 长期记忆数据库（SQLite + FTS5） |
-| `.atom/memory/nodes/` | 记忆节点存储（SHA256 命名） |
 | `.atom/compiled_prompts/` | 缓存的编译后提示词 |
 | `.atom/agents_meta.json` | 编译元数据追踪 |
 

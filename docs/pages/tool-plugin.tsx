@@ -76,7 +76,7 @@ export enum PermissionLevel {
           ]}
         />
         <Callout type="info" title="动态工具门控">
-          <code>search_memory</code> 和 Skill 工具对所有 intent 可用。AI SDK <code>prepareStep</code> 仅在 Memory 搜索已尝试、已有 Skill Context、前一步调用过 <code>search_memory</code>，或用户提供明确 URL 时开放内置 <code>webfetch</code>。
+          <code>search_memory</code> 和 Skill 工具对所有 intent 可用。AI SDK <code>prepareStep</code> 在 Memory 命中、不可用、三次不同查询仍为空、已有 Skill Context，或用户提供明确 URL 时开放内置 <code>webfetch</code>；存在关键词或中文片段重叠的相似组合不累计次数。
         </Callout>
       </Section>
 

@@ -34,7 +34,8 @@ export default function SandboxPage({ content, title, description, category }: D
 ├── .env                     # API Keys
 ├── AGENTS.md               # 项目开发指引
 ├── .atom/                   # Agent 运行时数据
-│   ├── memory.sqlite       # 长期记忆
+│   ├── memory/
+│   │   └── memory.db       # 正文、图谱和 FTS5 索引
 │   └── compiled_prompts/   # 缓存提示词
 └── ...                      # 用户项目文件`} />
       </Section>
@@ -49,7 +50,7 @@ export default function SandboxPage({ content, title, description, category }: D
         <ComparisonTable
           headers={["文件", "用途"]}
           rows={[
-            [<code>.atom/memory.sqlite</code>, "长期记忆数据库（SQLite + FTS5）"],
+            [<code>.atom/memory/memory.db</code>, "长期记忆数据库（正文、图谱、FTS5）"],
             [<code>.atom/compiled_prompts/</code>, "缓存的编译后提示词"],
           ]}
         />
