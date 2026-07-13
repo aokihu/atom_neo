@@ -13,6 +13,24 @@ const memoryIdInputSchema = z.object({
     .describe("Full or short hexadecimal ID from <MemorySummary id=\"...\"> or <Memory id=\"...\">")
 });
 
+const memoryContextRetentionSchema = z.discriminatedUnion("retention", [
+  z.object({
+    retention: z.literal("pinned")
+      .describe("Keep the memory for the current session"),
+  }),
+  z.object({
+    retention: z.literal("ttl")
+      .describe("Keep the memory until its time-to-live expires"),
+    ttlSeconds: z.number().int().positive()
+      .describe("Time-to-live in seconds; reading and injecting the same memory again renews it"),
+  }),
+]);
+
+const readMemoryInputSchema = memoryIdInputSchema.extend({
+  injectToContext: memoryContextRetentionSchema.optional()
+    .describe("Optionally keep the full memory in Context: pinned for the session, or ttl for temporary topic context"),
+});
+
 const saveMemoryInputSchema = z.object({
   content: z.string(),
   summary: z.string().optional().describe("Concise retrieval preview; omit when content is already concise"),
@@ -80,19 +98,41 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
 export function createReadMemoryTool(memory?: any): ToolDefinition {
   return {
     name: "read_memory",
-    description: "Read the full content of a relevant memory selected from search_memory results.",
+    description: "Read the full content of a relevant memory. Optionally inject it into Context with pinned session retention or a temporary topic TTL.",
     source: "builtin",
-    inputSchema: memoryIdInputSchema,
+    inputSchema: readMemoryInputSchema,
     execute: async (args) => {
       if (!memory) return { ok: false, output: "", error: "memory service not connected" };
-      const result = memoryIdInputSchema.safeParse(args);
+      const result = readMemoryInputSchema.safeParse(args);
       if (!result.success) return { ok: false, output: "", error: result.error.message };
       const node = memory.getById(result.data.id);
       if (!node) return { ok: false, output: "", error: `Memory not found: ${result.data.id}` };
       memory.recordRead?.(node.id);
       const id = String(node.id).slice(0, 6);
       const tags = Array.isArray(node.tags) ? node.tags.join(",") : "";
-      return { ok: true, output: `<Memory id="${id}" tags="${tags}">\n${node.content}\n</Memory>`, data: node };
+      const output = `<Memory id="${id}" tags="${tags}">\n${node.content}\n</Memory>`;
+      const retention = result.data.injectToContext;
+      return {
+        ok: true,
+        output,
+        data: node,
+        ...(retention ? {
+          contextInjection: {
+            scope: retention.retention === "pinned" ? "session" as const : "topic" as const,
+            entry: {
+              key: `memory:${node.id}`,
+              source: "memory",
+              channel: "messages" as const,
+              trust: "untrusted" as const,
+              priority: 650,
+              content: [{ role: "assistant", content: output }],
+              ...(retention.retention === "pinned"
+                ? { pinned: true }
+                : { expiresAt: Date.now() + retention.ttlSeconds * 1000 }),
+            },
+          },
+        } : {}),
+      };
     },
     permission: PermissionLevel.READ_ONLY,
   };

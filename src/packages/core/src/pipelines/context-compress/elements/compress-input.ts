@@ -3,9 +3,6 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
 
-const KEEP_COUNT = 20;
-const MAX_MSG_LEN = 2000;
-
 function resolveStrategy(ratio: number): { keepCount: number; maxMsgLen: number; summaryMaxTokens: number } {
   if (ratio >= 1.2) return { keepCount: 1, maxMsgLen: 200, summaryMaxTokens: 1600 };
   if (ratio >= 0.9) return { keepCount: 2, maxMsgLen: 300, summaryMaxTokens: 1200 };
@@ -30,7 +27,9 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
   async doProcess(input: any): Promise<CompressFlowState> {
     const msgs: Array<{ role: string; content: string; timestamp: number }> =
       this.#session?.messages ?? [];
-    const dialog = msgs.filter(m => m.role === "user" || m.role === "assistant");
+    const dialog = msgs
+      .filter(m => m.role === "user" || m.role === "assistant")
+      .map(m => ({ ...m }));
 
     const ratio = this.#session?.compressRatio ?? 0.5;
     const strategy = resolveStrategy(ratio);
@@ -57,6 +56,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
       task: input.task,
       session: this.#session,
       archiveMessages: toCompress,
+      keepCount: keepCountFromSafe,
       summaryText,
       summaryMaxTokens: strategy.summaryMaxTokens,
     };

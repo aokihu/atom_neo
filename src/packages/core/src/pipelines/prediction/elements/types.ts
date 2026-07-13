@@ -1,5 +1,6 @@
 import type { IntentPredictionResult } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import type { SkillServiceLike } from "../../../skills/types";
 
 export type PredictionMode = "initial" | "predicting" | "routing";
 
@@ -22,4 +23,5 @@ export type PredictionPipelineDeps = {
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
   configContextLimit?: number;
+  skillService?: SkillServiceLike;
 };

@@ -3,7 +3,7 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { pruneMessages, streamText, tool, zodSchema, stepCountIs } from "ai";
 import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import type { ToolDefinition } from "@atom-neo/shared";
+import type { ToolContextInjection, ToolDefinition, ToolGuardState } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
@@ -12,27 +12,78 @@ import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState, MemorySearchStatus } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
+import type { SkillServiceLike } from "../../../skills/types";
+import type { ContextService } from "../../../context/context-service";
 
-type WebfetchUnlockReason =
+type WebfetchGuardReason =
   | "explicit_url"
   | "skill_context"
   | "memory_found"
   | "memory_unavailable"
   | "memory_read_unavailable"
-  | "memory_read_required"
   | "skill_unavailable"
+  | "capability_discovery_complete"
+  | "memory_review_required"
+  | "skill_search_required"
   | "skill_load_required"
-  | "memory_search_exhausted"
-  | "memory_search_retry_required"
   | "memory_search_required";
 
 type ActiveToolSelection = {
   activeTools: string[];
-  webfetchEnabled: boolean;
-  webfetchUnlockReason: WebfetchUnlockReason;
+  webfetchAllowed: boolean;
+  webfetchGuardReason: WebfetchGuardReason;
+  webfetchGuardMessage?: string;
 };
 
-export function containsExplicitUrl(messages: Array<{ role: string; content: string }>): boolean {
+function resolveWebfetchGuardMessage(reason: WebfetchGuardReason): string | undefined {
+  switch (reason) {
+    case "memory_search_required":
+      return "Call search_memory with the task's core concept, then retry webfetch.";
+    case "memory_review_required":
+      return "Memory candidates exist. Call read_memory for a relevant candidate; if none is relevant, call skill_list, then retry webfetch.";
+    case "skill_search_required":
+      return "Memory has no usable result. Call skill_list, then retry webfetch if no relevant Skill exists.";
+    case "skill_load_required":
+      return "Memory points to a Skill. Call skill_load or skill_section, then retry webfetch.";
+  }
+}
+
+function canExecuteWebfetch(reason: WebfetchGuardReason): boolean {
+  switch (reason) {
+    case "explicit_url":
+    case "skill_context":
+    case "memory_found":
+    case "memory_unavailable":
+    case "memory_read_unavailable":
+    case "skill_unavailable":
+    case "capability_discovery_complete":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function toWebfetchGuardState(selection: ActiveToolSelection): ToolGuardState {
+  return {
+    webfetch: {
+      allowed: selection.webfetchAllowed,
+      reason: selection.webfetchGuardReason,
+      ...(selection.webfetchGuardMessage ? { message: selection.webfetchGuardMessage } : {}),
+    },
+  };
+}
+
+export function resolveModelInput(input: Pick<
+  ConversationFlowState,
+  "contextSnapshot" | "systemText" | "userMessages"
+>) {
+  return {
+    systemText: input.contextSnapshot?.content ?? input.systemText ?? "",
+    userMessages: input.userMessages ?? [],
+  };
+}
+
+export function containsExplicitUrl(messages: ReadonlyArray<{ role: string; content: string }>): boolean {
   const latestUserText = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
   return /https?:\/\/\S+/i.test(latestUserText);
 }
@@ -51,6 +102,29 @@ export function pruneConsumedMemoryTraversal(messages: ModelMessage[]): ModelMes
 
 export function shouldPersistToolResult(toolName: string): boolean {
   return toolName !== "traverse_memory";
+}
+
+export function injectToolContext(params: {
+  contextService: ContextService;
+  injection: ToolContextInjection;
+  sessionId: string;
+  topicId?: string;
+  contextOwner?: ConversationFlowState["contextOwner"];
+  stepId?: string;
+}): ToolContextInjection["scope"] {
+  const scope = params.injection.scope === "topic" && !params.topicId
+    ? "session"
+    : params.injection.scope;
+  const owner = scope === "session"
+    ? { sessionId: params.sessionId }
+    : scope === "topic"
+      ? { sessionId: params.sessionId, topicId: params.topicId }
+      : {
+          ...params.contextOwner,
+          ...(scope === "step" ? { stepId: params.stepId } : {}),
+        };
+  params.contextService.put({ ...params.injection, scope, owner });
+  return scope;
 }
 
 export function summarizeMemorySearch(params: {
@@ -106,18 +180,20 @@ export function summarizeMemoryRead(steps: MemorySearchStep[]): { read: boolean;
   return { read, unavailable, suggestsSkill };
 }
 
-export function summarizeSkillDiscovery(steps: MemorySearchStep[]): { loaded: boolean; unavailable: boolean } {
+export function summarizeSkillDiscovery(steps: MemorySearchStep[]): { checked: boolean; loaded: boolean; unavailable: boolean } {
+  let checked = false;
   let loaded = false;
   let unavailable = false;
   for (const step of steps) {
     for (const result of step.toolResults ?? []) {
+      if (result.toolName === "skill_list") checked = true;
       if (result.toolName !== "skill_load" && result.toolName !== "skill_section") continue;
       const output = typeof result.output === "string" ? result.output : "";
       if (/^Loaded (?:skill|section) /i.test(output)) loaded = true;
       if (/^Error:|not found|tool execution error/i.test(output)) unavailable = true;
     }
   }
-  return { loaded, unavailable };
+  return { checked, loaded, unavailable };
 }
 
 export function selectActiveToolsForStep(params: {
@@ -131,36 +207,37 @@ export function selectActiveToolsForStep(params: {
   memoryReadUnavailable: boolean;
   memorySuggestsSkill: boolean;
   hasSkillContext: boolean;
+  skillChecked: boolean;
   skillLoaded: boolean;
   skillUnavailable: boolean;
   hasExplicitUrl: boolean;
 }): ActiveToolSelection {
-  let webfetchUnlockReason: WebfetchUnlockReason;
-  if (params.hasExplicitUrl) webfetchUnlockReason = "explicit_url";
-  else if (params.hasSkillContext || params.skillLoaded) webfetchUnlockReason = "skill_context";
+  let webfetchGuardReason: WebfetchGuardReason;
+  if (params.hasExplicitUrl) webfetchGuardReason = "explicit_url";
+  else if (params.hasSkillContext || params.skillLoaded) webfetchGuardReason = "skill_context";
   else if (params.memoryRead && params.memorySuggestsSkill) {
-    webfetchUnlockReason = params.skillUnavailable ? "skill_unavailable" : "skill_load_required";
-  } else if (params.memoryRead) webfetchUnlockReason = "memory_found";
-  else if (params.memoryReadUnavailable) webfetchUnlockReason = "memory_read_unavailable";
-  else if (params.memorySearchUnavailable) webfetchUnlockReason = "memory_unavailable";
-  else if (params.memorySearchAttemptCount >= 3) webfetchUnlockReason = "memory_search_exhausted";
-  else if (params.memorySearchFound) webfetchUnlockReason = "memory_read_required";
-  else if (params.memorySearchAttemptCount > 0) webfetchUnlockReason = "memory_search_retry_required";
-  else webfetchUnlockReason = "memory_search_required";
-  const webfetchEnabled = webfetchUnlockReason !== "memory_search_required"
-    && webfetchUnlockReason !== "memory_search_retry_required"
-    && webfetchUnlockReason !== "memory_read_required"
-    && webfetchUnlockReason !== "skill_load_required";
+    webfetchGuardReason = params.skillUnavailable ? "skill_unavailable" : "skill_load_required";
+  } else if (params.memoryRead) webfetchGuardReason = "memory_found";
+  else if (params.memoryReadUnavailable) webfetchGuardReason = "memory_read_unavailable";
+  else if (params.memorySearchUnavailable) webfetchGuardReason = "memory_unavailable";
+  else if (params.memorySearchFound && params.skillChecked) webfetchGuardReason = "capability_discovery_complete";
+  else if (params.memorySearchFound) webfetchGuardReason = "memory_review_required";
+  else if (params.memorySearchAttemptCount > 0 && params.skillChecked) webfetchGuardReason = "capability_discovery_complete";
+  else if (params.memorySearchAttemptCount > 0) webfetchGuardReason = "skill_search_required";
+  else webfetchGuardReason = "memory_search_required";
+  const webfetchGuardMessage = resolveWebfetchGuardMessage(webfetchGuardReason);
+  const webfetchAllowed = canExecuteWebfetch(webfetchGuardReason);
   const selected = [
     ...getTaskToolNames(params.taskIntent),
     ...params.mcpToolNames,
-    ...(webfetchEnabled ? ["webfetch"] : []),
+    "webfetch",
   ];
   const available = new Set(params.availableToolNames);
   return {
     activeTools: [...new Set(selected)].filter((name) => available.has(name)),
-    webfetchEnabled,
-    webfetchUnlockReason,
+    webfetchAllowed,
+    webfetchGuardReason,
+    ...(webfetchGuardMessage ? { webfetchGuardMessage } : {}),
   };
 }
 
@@ -179,6 +256,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #mcpToolsRef?: { current: Record<string, any> };
   #mcpToolNamesCount = 0;
   #builtinToolResults = new Map<string, ToolExecutionStatus[]>();
+  #toolGuardState = { current: {} as ToolGuardState };
+  #skillService?: SkillServiceLike;
+  #contextService: ContextService;
 
   constructor(params: {
     name: string;
@@ -195,6 +275,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     taskIntent?: string;
     session?: any;
     configContextLimit?: number;
+    skillService?: SkillServiceLike;
+    contextService: ContextService;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -206,7 +288,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#session = params.session;
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
-    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#builtinToolResults, this.#session);
+    this.#skillService = params.skillService;
+    this.#contextService = params.contextService;
+    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#builtinToolResults, this.#toolGuardState, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
     const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
     this.#mcpToolsRef = params.mcpToolsRef;
@@ -221,8 +305,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       return { ...input, mode: "executing", responseText: "(no API key configured)" };
     }
 
-    const userMessages = input.userMessages ?? [];
-    const systemText = input.systemText ?? "";
+    const { userMessages, systemText } = resolveModelInput(input);
     const mcpCurrent = this.#mcpToolsRef?.current ?? {};
     if (Object.keys(mcpCurrent).length > this.#mcpToolNamesCount) {
       const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
@@ -247,10 +330,12 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memoryReadUnavailable: false,
       memorySuggestsSkill: false,
       hasSkillContext,
+      skillChecked: false,
       skillLoaded: false,
       skillUnavailable: false,
       hasExplicitUrl,
     });
+    this.#toolGuardState.current = toWebfetchGuardState(initialToolSelection);
     this.#builtinToolResults.clear();
     this.report(BusEvents.Element.Data, {
       step: "starting LLM call",
@@ -265,8 +350,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memorySearchAttemptCount: initialMemorySearch.attemptCount,
       injectedMemoryCount: input.injectedMemoryCount ?? 0,
       memoryRead: false,
-      webfetchEnabled: initialToolSelection.webfetchEnabled,
-      webfetchUnlockReason: initialToolSelection.webfetchUnlockReason,
+      webfetchAllowed: initialToolSelection.webfetchAllowed,
+      webfetchGuardReason: initialToolSelection.webfetchGuardReason,
+      snapshotId: input.contextSnapshot?.id ?? "",
     });
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
@@ -292,6 +378,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let finishReason = "";
       let tokenOverflow = false;
       let streamErrorCode = 0;
+      let streamFailed = false;
       const allToolCalls: { toolName: string; ok: boolean }[] = [];
 
       try {
@@ -299,6 +386,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         const STREAM_TIMEOUT_MS = resolveTimeout(difficulty);
         const abortController = new AbortController();
         let reportedToolSelection = "";
+        let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
+        let latestPreparedStep = -1;
+        const completeStep = (stepNumber: number) => {
+          if (stepNumber < 0) return;
+          this.bus.emit(BusEvents.Context.StepCompleted as any, {
+            sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+            taskId: input.task?.id ?? "task",
+            stepId: String(stepNumber),
+          } as any);
+        };
 
         const streamResult = streamText({
         model,
@@ -310,6 +407,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         providerOptions: this.#providerOptions,
         abortSignal: abortController.signal,
         prepareStep: ({ stepNumber, steps, messages }) => {
+          if (latestPreparedStep !== stepNumber) completeStep(latestPreparedStep);
+          latestPreparedStep = stepNumber;
           const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps });
           const memoryRead = summarizeMemoryRead(steps);
           const skillDiscovery = summarizeSkillDiscovery(steps);
@@ -324,11 +423,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             memoryReadUnavailable: memoryRead.unavailable,
             memorySuggestsSkill: memoryRead.suggestsSkill,
             hasSkillContext,
+            skillChecked: skillDiscovery.checked,
             skillLoaded: skillDiscovery.loaded,
             skillUnavailable: skillDiscovery.unavailable,
             hasExplicitUrl,
           });
-          const selectionKey = `${selection.webfetchEnabled}:${selection.webfetchUnlockReason}`;
+          this.#toolGuardState.current = toWebfetchGuardState(selection);
+          const selectionKey = `${selection.webfetchAllowed}:${selection.webfetchGuardReason}`;
           if (selectionKey !== reportedToolSelection) {
             reportedToolSelection = selectionKey;
             this.report(BusEvents.Element.Data, {
@@ -341,15 +442,57 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               memoryRead: memoryRead.read,
               memoryReadUnavailable: memoryRead.unavailable,
               memorySuggestsSkill: memoryRead.suggestsSkill,
+              skillChecked: skillDiscovery.checked,
               skillLoaded: skillDiscovery.loaded,
               skillUnavailable: skillDiscovery.unavailable,
-              webfetchEnabled: selection.webfetchEnabled,
-              webfetchUnlockReason: selection.webfetchUnlockReason,
+              webfetchAllowed: selection.webfetchAllowed,
+              webfetchGuardReason: selection.webfetchGuardReason,
+            });
+          }
+          const nextSkillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
+          let instructions: string | undefined;
+          if (nextSkillRevision !== skillRevision) {
+            skillRevision = nextSkillRevision;
+            const skillContext = this.#skillService?.buildContext(this.#session?.sessionId) ?? "";
+            const owner = {
+              sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+              ...(this.#session?.currentTopic ? { topicId: this.#session.currentTopic } : {}),
+            };
+            const scope = this.#session?.currentTopic ? "topic" as const : "session" as const;
+            if (skillContext) {
+              this.#contextService.put({
+                scope,
+                owner,
+                entry: {
+                  key: "topic-skills",
+                  source: "skill-service",
+                  channel: "instructions",
+                  trust: "trusted",
+                  priority: 600,
+                  content: skillContext,
+                },
+              });
+            } else {
+              this.#contextService.remove(scope, owner, "topic-skills");
+            }
+            const stepSnapshot = this.#contextService.createSnapshot({
+              ...input.contextOwner,
+              stepId: String(stepNumber),
+            });
+            instructions = stepSnapshot.content;
+            this.bus.emit(BusEvents.Context.SnapshotRelease as any, { snapshotId: stepSnapshot.id } as any);
+            this.report(BusEvents.Element.Data, {
+              step: "step-snapshot-created",
+              stepNumber,
+              snapshotId: stepSnapshot.id,
+              revision: nextSkillRevision,
+              skillContextLength: skillContext.length,
             });
           }
           return {
             activeTools: selection.activeTools,
             messages: pruneConsumedMemoryTraversal(messages),
+            ...(instructions === undefined ? {} : { instructions }),
           };
         },
       });
@@ -451,6 +594,22 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
             stepToolCalls.push({ toolName: c.toolName, ok: toolOk });
             allToolCalls.push({ toolName: c.toolName, ok: toolOk });
+            if (toolOk && status?.contextInjection) {
+              const scope = injectToolContext({
+                contextService: this.#contextService,
+                injection: status.contextInjection,
+                sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+                topicId: this.#session?.currentTopic || undefined,
+                contextOwner: input.contextOwner,
+                stepId: String(this.#stepCounter.count),
+              });
+              this.report(BusEvents.Element.Data, {
+                step: "tool-context-injected",
+                toolName: c.toolName,
+                scope,
+                key: status.contextInjection.entry.key,
+              });
+            }
             if (shouldPersistToolResult(c.toolName) && this.#session?.addToolResult) {
               this.#session.addToolResult({
                 toolName: c.toolName,
@@ -459,6 +618,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
                 ok: toolOk,
                 output: toolOutput,
                 error: toolError,
+              });
+              this.#appendToolHistory({
+                toolName: c.toolName,
+                ok: toolOk,
+                output: toolOutput,
               });
             }
             continue;
@@ -471,18 +635,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
           if (pt === "error") {
             const err = (chunk as any).error ?? {};
+            streamFailed = true;
             if (err.statusCode) streamErrorCode = err.statusCode;
             this.report(BusEvents.Element.Data, { step: "stream-llm-error", errorName: err.name, statusCode: err.statusCode, message: (err.message ?? "").slice(0, 500), responseBody: (err.responseBody ?? "").slice(0, 500) });
             continue;
           }
 
           if (pt === "abort") {
+            streamFailed = true;
             this.report(BusEvents.Element.Data, { step: "abort", level: "warn" });
             continue;
           }
         }
       } finally {
         clearTimeout(timeoutTimer);
+        completeStep(latestPreparedStep);
       }
 
       if (!completeDetected && textBuffer.length > 0) {
@@ -524,6 +691,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             tokenUsage: { total: 0 },
             intents: [],
             tokenOverflow: true,
+            contextSnapshotAccepted: false,
           };
         }
       }
@@ -541,6 +709,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           ),
         ]);
       } catch (err: any) {
+        streamFailed = true;
         this.report(BusEvents.Element.Data, { step: "response-error", level: "warn", error: err?.message ?? String(err) });
         response = { messages: [] };
         if (!finishReason) finishReason = "error";
@@ -554,6 +723,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           ),
         ]);
       } catch (err: any) {
+        streamFailed = true;
         this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
         usage = { totalTokens: 0 };
         if (!finishReason) finishReason = "error";
@@ -588,6 +758,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         chainAction,
         tokenOverflow,
         errorStatusCode: streamErrorCode,
+        contextSnapshotAccepted: !timedOut && !streamFailed,
       };
     } catch (err: any) {
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
@@ -602,6 +773,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           chainAction: "follow_up",
           tokenOverflow: false,
           errorStatusCode: err.statusCode ?? 0,
+          contextSnapshotAccepted: false,
         };
       }
       return {
@@ -610,15 +782,44 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         responseText: sanitizeForJSON(`Error: ${err?.message ?? String(err)}`),
         tokenOverflow,
         errorStatusCode: err.statusCode ?? 0,
+        contextSnapshotAccepted: false,
       };
     }
   }
+
+  #appendToolHistory(result: { toolName: string; ok: boolean; output: string }): void {
+    const sessionId = this.#session?.sessionId ?? "default";
+    const topicId = this.#session?.currentTopic || undefined;
+    const scope = topicId ? "topic" as const : "session" as const;
+    const owner = { sessionId, ...(topicId ? { topicId } : {}) };
+    const current = this.#contextService.get(scope, owner, "tool-history");
+    const previous = Array.isArray(current?.content)
+      ? current.content.map(message => message.content).join("\n")
+      : "[Tool Execution History]";
+    const time = new Date().toISOString().slice(11, 19);
+    const line = `- [${time}] ${result.toolName}: ${result.ok ? "ok" : "error"}${result.output ? ` — ${result.output.slice(0, 80)}` : ""}`;
+    this.#contextService.put({
+      scope,
+      owner,
+      entry: {
+        key: "tool-history",
+        source: "tool-runtime",
+        channel: "messages",
+        trust: "untrusted",
+        priority: 500,
+        consumeOnCommit: true,
+        content: [{ role: "assistant", content: `${previous}\n${line}` }],
+      },
+    });
+  }
+
 }
 
 type ToolExecutionStatus = {
   ok: boolean;
   output: string;
   error?: string;
+  contextInjection?: ToolContextInjection;
 };
 
 function pushToolExecutionStatus(
@@ -647,6 +848,7 @@ function buildAllAiTools(
   report: (event: string, payload: Record<string, unknown>) => void,
   stepCounter: { count: number },
   toolResults: Map<string, ToolExecutionStatus[]>,
+  guardState: { current: ToolGuardState },
   session?: any,
 ): Record<string, any> {
   const result: Record<string, any> = {};
@@ -661,11 +863,28 @@ function buildAllAiTools(
             const start = Date.now();
             try {
               report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
-              const r = await t.execute(args, { abortSignal: opts?.abortSignal });
+              const r = await t.execute(args, {
+                abortSignal: opts?.abortSignal,
+                sessionId: session?.sessionId,
+                guardState: guardState.current,
+              });
               const duration = Date.now() - start;
               report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: r.ok });
+              if (!r.ok && r.error?.startsWith("TOOL_GUARD_BLOCKED")) {
+                report(BusEvents.Element.Data, {
+                  step: "tool-guard-blocked",
+                  toolName: t.name,
+                  stepCount: sc,
+                  reason: guardState.current[t.name]?.reason,
+                });
+              }
               const output = r.output || (r.data === undefined ? "" : JSON.stringify(r.data));
-              pushToolExecutionStatus(toolResults, t.name, { ok: r.ok, output, error: r.error });
+              pushToolExecutionStatus(toolResults, t.name, {
+                ok: r.ok,
+                output,
+                error: r.error,
+                contextInjection: r.contextInjection,
+              });
               if (t.name === "todowrite" && r.ok && session?.setTodoState) {
                 session.setTodoState((args as any).todos ?? []);
               }

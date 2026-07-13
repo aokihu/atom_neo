@@ -3,8 +3,17 @@ import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "..
 import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
+import { initPromptRegistry } from "@atom-neo/shared";
+import { ContextService } from "../../context/context-service";
+
+function makeContextService(bus: ReturnType<typeof makeBus>) {
+  const service = new ContextService(bus, { sweepIntervalMs: 0 });
+  service.start();
+  return service;
+}
 
 beforeAll(() => {
+  initPromptRegistry();
   registerFollowUpEvaluatorElements();
   registerSharedElements();
 });
@@ -85,6 +94,7 @@ describe("evaluator-analyze", () => {
 describe("evaluate-finalize", () => {
   test("healthy creates conversation task", async () => {
     const bus = makeBus();
+    const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
     const session = { sessionId: "s1", addMessage: () => {} };
 
@@ -92,6 +102,7 @@ describe("evaluate-finalize", () => {
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
       orchestrator: makeMockOrchestrator(capture),
+      contextService,
     });
 
     await el.doProcess({
@@ -106,6 +117,7 @@ describe("evaluate-finalize", () => {
 
   test("looping writes suggestion and creates task", async () => {
     const bus = makeBus();
+    const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
     const session = { sessionId: "s1", addMessage: () => {} };
 
@@ -113,6 +125,7 @@ describe("evaluate-finalize", () => {
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
       orchestrator: makeMockOrchestrator(capture),
+      contextService,
     });
 
     await el.doProcess({
@@ -121,12 +134,14 @@ describe("evaluate-finalize", () => {
       evaluation: { health: "looping", suggestion: "try differently", upgradeModel: false, reason: "repeating" },
     });
 
-    expect(session.evaluatorSuggestion).toBe("try differently");
+    expect(contextService.get("session", { sessionId: "s1" }, "evaluator-suggestion")?.content)
+      .toContain("try differently");
     expect(capture.enqueued.pipeline).toBe("conversation");
   });
 
   test("stuck does not create task, appends termination message", async () => {
     const bus = makeBus();
+    const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
     let addedMsg: any = null;
     const session = {
@@ -138,6 +153,7 @@ describe("evaluate-finalize", () => {
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
       orchestrator: makeMockOrchestrator(capture),
+      contextService,
     });
 
     await el.doProcess({
@@ -154,6 +170,7 @@ describe("evaluate-finalize", () => {
 
   test("uses fallback when no evaluation", async () => {
     const bus = makeBus();
+    const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
     const session = { sessionId: "s1", addMessage: () => {} };
 
@@ -161,6 +178,7 @@ describe("evaluate-finalize", () => {
     const el = new Ctor({
       name: "evaluate-finalize", kind: "sink", bus,
       orchestrator: makeMockOrchestrator(capture),
+      contextService,
     });
 
     await el.doProcess({
@@ -175,12 +193,14 @@ describe("evaluate-finalize", () => {
 describe("follow-up-evaluator pipeline DSL", () => {
   test("followUpEvaluatorPipeline builds without errors", () => {
     const bus = makeBus();
+    const contextService = makeContextService(bus);
     const pipeline = followUpEvaluatorPipeline({
       session: { sessionId: "s1" },
       task: { id: "t1" },
       apiKey: "sk-test",
       model: "deepseek-v4-flash",
       orchestrator: makeMockOrchestrator(null),
+      contextService,
     }).build(bus);
 
     expect(pipeline.name).toBe("follow-up-evaluator");

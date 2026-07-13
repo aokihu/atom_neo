@@ -48,6 +48,27 @@ describe("SessionStore", () => {
     expect(store.size).toBe(2);
   });
 
+  test("refreshes recency on get before LRU eviction", () => {
+    const store = new SessionStore(2);
+    store.get("first");
+    store.get("second");
+    store.get("first");
+    store.get("third");
+
+    expect(store.has("first")).toBe(true);
+    expect(store.has("second")).toBe(false);
+  });
+
+  test("sweeps idle sessions", () => {
+    const store = new SessionStore(10, undefined, 100);
+    store.get("idle");
+
+    const closed = store.sweepIdle(Date.now() + 101);
+
+    expect(closed).toEqual(["idle"]);
+    expect(store.has("idle")).toBe(false);
+  });
+
   test("calls closed handler on eviction", () => {
     const handler = mock(() => {});
     const store = new SessionStore(1);

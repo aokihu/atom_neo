@@ -4,10 +4,19 @@ import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { PostConversationFlowState } from "./types";
 import { FALLBACK_ANALYSIS, STALL_THRESHOLD } from "./types";
 import { trigramSimilarity } from "../../shared/trigram";
+import type { ContextService } from "../../../context/context-service";
 
 export class PostConversationFinalizeElement extends BaseElement<PostConversationFlowState, PipelineResult> {
-  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap> }) {
+  #contextService: ContextService;
+
+  constructor(params: {
+    name: string;
+    kind: string;
+    bus: PipelineEventBus<PipelineEventMap>;
+    contextService: ContextService;
+  }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
+    this.#contextService = params.contextService;
   }
 
   async doProcess(input: PostConversationFlowState): Promise<PipelineResult> {
@@ -39,7 +48,20 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
         input.session.addPostCheckFingerprint(fp);
       }
 
-      input.session.postCheckGuidance = resolvePrompt(PromptKey.GUIDANCE_RETRY);
+      const topicId = input.session.currentTopic || undefined;
+      this.#contextService.put({
+        scope: topicId ? "topic" : "session",
+        owner: { sessionId: input.session.sessionId, ...(topicId ? { topicId } : {}) },
+        entry: {
+          key: "post-check-guidance",
+          source: "post-conversation",
+          channel: "instructions",
+          trust: "trusted",
+          priority: 860,
+          consumeOnCommit: true,
+          content: resolvePrompt(PromptKey.GUIDANCE_RETRY),
+        },
+      });
       this.report(BusEvents.Conversation.Chain, {
         sessionId: input.session.sessionId,
         chatId: input.task?.chatId ?? "",

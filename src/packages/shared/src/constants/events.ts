@@ -39,6 +39,15 @@ export const BusEvents = {
     Started: "session.started",
     Closed: "session.closed",
   },
+  Context: {
+    CoreStopped: "context.core.stopped",
+    WorkspaceChanged: "context.workspace.changed",
+    WorkspaceClosed: "context.workspace.closed",
+    TopicChanged: "context.topic.changed",
+    StepCompleted: "context.step.completed",
+    SnapshotCommit: "context.snapshot.commit",
+    SnapshotRelease: "context.snapshot.release",
+  },
 } as const;
 
 export const WsMessages = {

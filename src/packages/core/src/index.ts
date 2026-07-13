@@ -16,6 +16,9 @@ export type {
 } from "@atom-neo/shared";
 
 export { SessionStore } from "./session/store";
+export { compileContextSnapshot } from "./context/compiler";
+export type { CompileContextOptions, ContextCompilation } from "./context/compiler";
+export { ContextService } from "./context/context-service";
 
 // Tools
 export { ToolRegistry } from "./tools/registry";

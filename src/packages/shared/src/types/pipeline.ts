@@ -105,6 +105,13 @@ export type DomainEventMap = {
   };
   "session.started": { sessionId: string };
   "session.closed": { sessionId: string };
+  "context.core.stopped": Record<string, never>;
+  "context.workspace.changed": { workspaceId: string; previousWorkspaceId?: string };
+  "context.workspace.closed": { workspaceId: string };
+  "context.topic.changed": { sessionId: string; previousTopicId?: string; topicId: string };
+  "context.step.completed": { sessionId: string; taskId: string; stepId: string };
+  "context.snapshot.commit": { snapshotId: string };
+  "context.snapshot.release": { snapshotId: string };
 };
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;

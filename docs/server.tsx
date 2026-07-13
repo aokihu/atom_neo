@@ -30,6 +30,7 @@ import ArchitecturePage from "./pages/architecture";
 import BootstrapPage from "./pages/bootstrap";
 import CodingConventionsPage from "./pages/coding-conventions";
 import ConfigurationPage from "./pages/configuration";
+import ContextManagementPage from "./pages/context-management";
 import DependencyInjectionPage from "./pages/dependency-injection";
 import ElementDesignPage from "./pages/element-design";
 import EnvironmentSetupPage from "./pages/environment-setup";
@@ -60,6 +61,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   bootstrap: BootstrapPage,
   "coding-conventions": CodingConventionsPage,
   configuration: ConfigurationPage,
+  "context-management": ContextManagementPage,
   "dependency-injection": DependencyInjectionPage,
   "element-design": ElementDesignPage,
   "environment-setup": EnvironmentSetupPage,

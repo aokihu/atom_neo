@@ -4,10 +4,12 @@ import { BusEvents } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import { archiveMessages } from "../../../session/archiver";
 import type { CompressFlowState } from "./types";
+import type { ContextService } from "../../../context/context-service";
 
 export class CompressFinalizeElement extends BaseElement<CompressFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
   #sandbox: string;
+  #contextService: ContextService;
 
   constructor(params: {
     name: string;
@@ -15,10 +17,12 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator: InternalTaskOrchestrator;
     sandbox: string;
+    contextService: ContextService;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
     this.#sandbox = params.sandbox;
+    this.#contextService = params.contextService;
   }
 
   async doProcess(input: CompressFlowState): Promise<PipelineResult> {
@@ -35,16 +39,28 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Pipe
     }
 
     const before = session.messages?.length ?? 0;
+    const keepCount = input.keepCount ?? 20;
     if (typeof session.replaceEarlyMessages === "function") {
-      session.replaceEarlyMessages(20);
+      session.replaceEarlyMessages(keepCount);
     }
     const removed = before - (session.messages?.length ?? 0);
 
-    this.report(BusEvents.Element.Data, { step: "messages cleaned", removed, hasSummary: !!input.summary, summaryLen: input.summary?.length ?? 0 });
+    this.report(BusEvents.Element.Data, { step: "messages cleaned", removed, keepCount, hasSummary: !!input.summary, summaryLen: input.summary?.length ?? 0 });
 
     if (input.summary) {
       const label = "[对话历史摘要]";
-      session.conversationSummary = `${label}\n${input.summary}`;
+      this.#contextService.put({
+        scope: "session",
+        owner: { sessionId },
+        entry: {
+          key: "conversation-summary",
+          source: "context-compress",
+          channel: "messages",
+          trust: "untrusted",
+          priority: 700,
+          content: [{ role: "assistant", content: `${label}\n${input.summary}` }],
+        },
+      });
     }
 
     this.report(BusEvents.Element.Data, { step: "scheduling retry conversation", sessionId, parentTaskId: input.task.parentTaskId });

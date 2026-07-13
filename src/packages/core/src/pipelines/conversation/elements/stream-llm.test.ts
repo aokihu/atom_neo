@@ -1,19 +1,37 @@
 import { describe, expect, test } from "bun:test";
+import { decode } from "@toon-format/toon";
 import {
   containsExplicitUrl,
+  injectToolContext,
   pruneConsumedMemoryTraversal,
+  resolveModelInput,
   selectActiveToolsForStep,
   shouldPersistToolResult,
   summarizeMemoryRead,
   summarizeMemorySearch,
   summarizeSkillDiscovery,
 } from "./stream-llm";
+import { ContextService } from "../../../context/context-service";
+import { makeBus } from "../../test-helpers";
 
 const availableToolNames = [
   "read", "write", "search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
   "skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload",
   "todowrite", "intent", "webfetch", "bash", "mcp_weather",
 ];
+
+test("uses the TOON Snapshot only as system text", () => {
+  const userMessages = [{ role: "user", content: "current request" }];
+
+  expect(resolveModelInput({
+    contextSnapshot: { id: "snapshot-1", content: "context[1]{content}:\n  workspace rules" },
+    systemText: "legacy system",
+    userMessages,
+  })).toEqual({
+    systemText: "context[1]{content}:\n  workspace rules",
+    userMessages,
+  });
+});
 
 function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0]> = {}) {
   return selectActiveToolsForStep({
@@ -27,6 +45,7 @@ function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0
     memoryReadUnavailable: false,
     memorySuggestsSkill: false,
     hasSkillContext: false,
+    skillChecked: false,
     skillLoaded: false,
     skillUnavailable: false,
     hasExplicitUrl: false,
@@ -35,7 +54,7 @@ function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0
 }
 
 describe("selectActiveToolsForStep", () => {
-  test("keeps Memory and Skill discovery active while webfetch is locked", () => {
+  test("keeps webfetch visible while its guard requires Memory discovery", () => {
     const selection = select();
 
     expect(selection.activeTools).toContain("search_memory");
@@ -43,22 +62,27 @@ describe("selectActiveToolsForStep", () => {
     expect(selection.activeTools).toContain("skill_load");
     expect(selection.activeTools).toContain("skill_section");
     expect(selection.activeTools).toContain("mcp_weather");
-    expect(selection.activeTools).not.toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_search_required");
+    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.webfetchAllowed).toBe(false);
+    expect(selection.webfetchGuardReason).toBe("memory_search_required");
+    expect(selection.webfetchGuardMessage).toContain("search_memory");
   });
 
-  test("requires reading the full Memory after a summary is found", () => {
+  test("keeps webfetch visible and asks the Agent to review a Memory candidate", () => {
     const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
 
-    expect(selection.activeTools).not.toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_read_required");
+    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.webfetchAllowed).toBe(false);
+    expect(selection.webfetchGuardReason).toBe("memory_review_required");
+    expect(selection.webfetchGuardMessage).toContain("read_memory");
   });
 
   test("unlocks webfetch after the selected Memory is read", () => {
     const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true });
 
     expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_found");
+    expect(selection.webfetchAllowed).toBe(true);
+    expect(selection.webfetchGuardReason).toBe("memory_found");
   });
 
   test("requires Skill loading when Memory contains a Skill hint", () => {
@@ -66,45 +90,65 @@ describe("selectActiveToolsForStep", () => {
     const loaded = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillLoaded: true });
     const unavailable = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillUnavailable: true });
 
-    expect(locked.activeTools).not.toContain("webfetch");
-    expect(locked.webfetchUnlockReason).toBe("skill_load_required");
-    expect(loaded.webfetchUnlockReason).toBe("skill_context");
-    expect(unavailable.webfetchUnlockReason).toBe("skill_unavailable");
+    expect(locked.activeTools).toContain("webfetch");
+    expect(locked.webfetchAllowed).toBe(false);
+    expect(locked.webfetchGuardReason).toBe("skill_load_required");
+    expect(loaded.webfetchGuardReason).toBe("skill_context");
+    expect(unavailable.webfetchGuardReason).toBe("skill_unavailable");
   });
 
-  test("keeps webfetch locked after one empty search", () => {
+  test("asks for Skill discovery after one empty Memory search", () => {
     const selection = select({ memorySearchAttemptCount: 1 });
 
-    expect(selection.activeTools).not.toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_search_retry_required");
+    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.webfetchAllowed).toBe(false);
+    expect(selection.webfetchGuardReason).toBe("skill_search_required");
+    expect(selection.webfetchGuardMessage).toContain("skill_list");
   });
 
-  test("keeps webfetch locked after two different empty searches", () => {
-    const selection = select({ memorySearchAttemptCount: 2 });
+  test("allows webfetch after Memory and Skill discovery complete", () => {
+    const selection = select({ memorySearchAttemptCount: 1, skillChecked: true });
 
-    expect(selection.activeTools).not.toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_search_retry_required");
+    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.webfetchAllowed).toBe(true);
+    expect(selection.webfetchGuardReason).toBe("capability_discovery_complete");
   });
 
-  test("unlocks webfetch after three different empty searches", () => {
+  test("does not use repeated Memory searches as a Skill-discovery substitute", () => {
     const selection = select({ memorySearchAttemptCount: 3 });
 
     expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_search_exhausted");
+    expect(selection.webfetchAllowed).toBe(false);
+    expect(selection.webfetchGuardReason).toBe("skill_search_required");
+  });
+
+  test("lets the Agent dismiss an irrelevant Memory candidate by checking Skills", () => {
+    const selection = select({ memorySearchAttemptCount: 3, memorySearchFound: true, skillChecked: true });
+
+    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.webfetchAllowed).toBe(true);
+    expect(selection.webfetchGuardReason).toBe("capability_discovery_complete");
   });
 
   test("unlocks webfetch when Memory is unavailable", () => {
     const selection = select({ memorySearchAttemptCount: 1, memorySearchUnavailable: true });
 
     expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchUnlockReason).toBe("memory_unavailable");
+    expect(selection.webfetchAllowed).toBe(true);
+    expect(selection.webfetchGuardReason).toBe("memory_unavailable");
   });
 
   test("allows explicit URLs and loaded Skill context to bypass Memory search", () => {
-    expect(select({ hasExplicitUrl: true }).webfetchUnlockReason).toBe("explicit_url");
-    expect(select({ hasSkillContext: true }).webfetchUnlockReason).toBe("skill_context");
+    expect(select({ hasExplicitUrl: true }).webfetchGuardReason).toBe("explicit_url");
+    expect(select({ hasSkillContext: true }).webfetchGuardReason).toBe("skill_context");
     expect(select({ hasExplicitUrl: true }).activeTools).toContain("webfetch");
     expect(select({ hasSkillContext: true }).activeTools).toContain("webfetch");
+  });
+
+  test("keeps webfetch visible for every intent", () => {
+    for (const taskIntent of ["conversation", "question", "creative", "instruction"]) {
+      expect(select({ taskIntent }).activeTools).toContain("webfetch");
+    }
   });
 
   test("makes every Skill tool active for information questions", () => {
@@ -166,6 +210,13 @@ describe("summarizeMemorySearch", () => {
 });
 
 describe("summarizeSkillDiscovery", () => {
+  test("detects that the Skill catalog was checked", () => {
+    const result = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_list", input: {}, output: "[]" }] }]);
+
+    expect(result.checked).toBe(true);
+    expect(result.loaded).toBe(false);
+  });
+
   test("detects successful and unavailable Skill loads", () => {
     const loaded = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_load", input: { name: "typhoon" }, output: 'Loaded skill "typhoon"\n<skill name="typhoon">...</skill>' }] }]);
     const unavailable = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_load", input: { name: "missing" }, output: 'Error: Skill "missing" not found' }] }]);
@@ -224,5 +275,130 @@ describe("transient memory traversal context", () => {
   test("does not persist traversal output across conversations", () => {
     expect(shouldPersistToolResult("traverse_memory")).toBe(false);
     expect(shouldPersistToolResult("read_memory")).toBe(true);
+  });
+});
+
+describe("persistent tool context", () => {
+  test("keeps an explicitly injected TTL Memory in the current topic", () => {
+    const bus = makeBus();
+    const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
+    contextService.start();
+    const injection = {
+      scope: "topic" as const,
+      entry: {
+        key: "memory:abcdef",
+        source: "memory",
+        channel: "messages" as const,
+        trust: "untrusted" as const,
+        priority: 650,
+        content: [{ role: "assistant", content: "persistent memory" }],
+        expiresAt: Date.now() + 60_000,
+      },
+    };
+
+    expect(injectToolContext({
+      contextService,
+      injection,
+      sessionId: "s1",
+      topicId: "topic-a",
+    })).toBe("topic");
+
+    const snapshot = contextService.createSnapshot({ sessionId: "s1", topicId: "topic-a" });
+    contextService.commitSnapshot(snapshot.id);
+    const data = decode(snapshot.content) as { context: Array<Record<string, unknown>> };
+    expect(data.context[0]?.content).toBe("persistent memory");
+    expect(contextService.get(
+      "topic",
+      { sessionId: "s1", topicId: "topic-a" },
+      "memory:abcdef",
+    )).toBeDefined();
+  });
+
+  test("falls back to session scope when there is no active topic", () => {
+    const bus = makeBus();
+    const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
+    contextService.start();
+    const scope = injectToolContext({
+      contextService,
+      sessionId: "s1",
+      injection: {
+        scope: "topic",
+        entry: {
+          key: "memory:abcdef",
+          source: "memory",
+          channel: "messages",
+          trust: "untrusted",
+          priority: 650,
+          content: [{ role: "assistant", content: "persistent memory" }],
+          expiresAt: Date.now() + 60_000,
+        },
+      },
+    });
+
+    expect(scope).toBe("session");
+    expect(contextService.get("session", { sessionId: "s1" }, "memory:abcdef")).toBeDefined();
+  });
+
+  test("keeps pinned Memory at session scope even when a topic is active", () => {
+    const contextService = new ContextService(makeBus(), { sweepIntervalMs: 0 });
+    contextService.start();
+    const scope = injectToolContext({
+      contextService,
+      sessionId: "s1",
+      topicId: "topic-a",
+      injection: {
+        scope: "session",
+        entry: {
+          key: "memory:address",
+          source: "memory",
+          channel: "messages",
+          trust: "untrusted",
+          priority: 650,
+          pinned: true,
+          content: [{ role: "assistant", content: "family address" }],
+        },
+      },
+    });
+
+    expect(scope).toBe("session");
+    expect(contextService.get("session", { sessionId: "s1" }, "memory:address")?.pinned).toBe(true);
+    expect(contextService.get(
+      "topic",
+      { sessionId: "s1", topicId: "topic-a" },
+      "memory:address",
+    )).toBeUndefined();
+  });
+
+  test("renews the expiry when the same TTL Memory is injected again", () => {
+    const contextService = new ContextService(makeBus(), { sweepIntervalMs: 0 });
+    contextService.start();
+    const inject = (expiresAt: number) => injectToolContext({
+      contextService,
+      sessionId: "s1",
+      topicId: "topic-a",
+      injection: {
+        scope: "topic",
+        entry: {
+          key: "memory:weather",
+          source: "memory",
+          channel: "messages",
+          trust: "untrusted",
+          priority: 650,
+          expiresAt,
+          content: [{ role: "assistant", content: "weather workflow" }],
+        },
+      },
+    });
+
+    inject(100);
+    inject(200);
+
+    const owner = { sessionId: "s1", topicId: "topic-a" };
+    expect(contextService.get("topic", owner, "memory:weather")?.revision).toBe(2);
+    expect(contextService.get("topic", owner, "memory:weather")?.expiresAt).toBe(200);
+    contextService.sweepExpired(150);
+    expect(contextService.get("topic", owner, "memory:weather")).toBeDefined();
+    contextService.sweepExpired(200);
+    expect(contextService.get("topic", owner, "memory:weather")).toBeUndefined();
   });
 });

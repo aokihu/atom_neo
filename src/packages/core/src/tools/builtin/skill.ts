@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDefinition } from "@atom-neo/shared";
+import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
 import type { SkillServiceLike } from "../../skills/types";
 
 export function createSkillTools(svc: SkillServiceLike): ToolDefinition[] {
@@ -33,14 +33,13 @@ function createSkillLoadTool(svc: SkillServiceLike): ToolDefinition {
     inputSchema: z.object({
       name: z.string().describe("Skill name"),
     }),
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name } = args as { name: string };
-      const result = svc.load(name);
+      const result = svc.load(name, opts?.sessionId);
       if (!result.ok) return { ok: false, output: result.error ?? "" };
-      const context = svc.buildContext();
       return {
         ok: true,
-        output: `Loaded skill "${name}" with sections: ${result.sections?.join(", ")}${context ? `\n${context}` : ""}`,
+        output: `Loaded skill "${name}" with sections: ${result.sections?.join(", ")}`,
       };
     },
   };
@@ -55,12 +54,11 @@ function createSkillSectionTool(svc: SkillServiceLike): ToolDefinition {
       name: z.string().describe("Skill name"),
       section: z.string().describe("Section name"),
     }),
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name, section } = args as { name: string; section: string };
-      const ok = svc.loadSection(name, section);
+      const ok = svc.loadSection(name, section, opts?.sessionId);
       if (!ok) return { ok: false, output: `Section "${section}" not found in skill "${name}"` };
-      const context = svc.buildContext();
-      return { ok: true, output: `Loaded section "${section}" from skill "${name}"${context ? `\n${context}` : ""}` };
+      return { ok: true, output: `Loaded section "${section}" from skill "${name}"` };
     },
   };
 }
@@ -74,9 +72,9 @@ function createSkillRemoveSectionTool(svc: SkillServiceLike): ToolDefinition {
       name: z.string().describe("Skill name"),
       section: z.string().describe("Section name"),
     }),
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name, section } = args as { name: string; section: string };
-      const ok = svc.removeSection(name, section);
+      const ok = svc.removeSection(name, section, opts?.sessionId);
       if (!ok) return { ok: false, output: `Section "${section}" not found in skill "${name}"` };
       return { ok: true, output: `Removed section "${section}" from skill "${name}"` };
     },
@@ -91,9 +89,9 @@ function createSkillUnloadTool(svc: SkillServiceLike): ToolDefinition {
     inputSchema: z.object({
       name: z.string().describe("Skill name"),
     }),
-    execute: async (args: unknown) => {
+    execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name } = args as { name: string };
-      svc.unload(name);
+      svc.unload(name, opts?.sessionId);
       return { ok: true, output: `Unloaded skill "${name}"` };
     },
   };

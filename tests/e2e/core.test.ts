@@ -109,6 +109,25 @@ describe("E2E: Core HTTP API", () => {
     expect([200, 404]).toContain(r.status);
   });
 
+  test("DELETE /api/sessions/:id explicitly closes the session", async () => {
+    await fetch(`${BASE}/api/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "e2e-close",
+        chatId: "e2e-close-chat",
+        data: { text: "close me" },
+      }),
+    });
+
+    const closed = await fetch(`${BASE}/api/sessions/e2e-close`, { method: "DELETE" });
+    const body: any = await closed.json();
+    expect(body).toEqual({ ok: true, sessionId: "e2e-close" });
+
+    const read = await fetch(`${BASE}/api/sessions/e2e-close`);
+    expect(await read.json()).toEqual([]);
+  });
+
   test("404 for unknown path", async () => {
     const r = await fetch(`${BASE}/api/unknown`);
     expect(r.status).toBe(404);

@@ -136,6 +136,73 @@ describe("readMemoryTool", () => {
     expect(result.output).toContain('<Memory id="abcdef" tags="identifier">');
     expect(result.output).toContain("CODE=9528 is a remembered identifier.");
     expect(recordedId).toBe("abcdef1234567890");
+    expect(result.contextInjection).toBeUndefined();
+  });
+
+  test("requests a pinned session projection when explicitly selected", async () => {
+    const tool = createReadMemoryTool({
+      getById: () => ({
+        id: "abcdef1234567890",
+        content: "Persistent workflow guidance.",
+        summary: "Workflow guidance",
+        tags: ["workflow"],
+      }),
+    });
+
+    const result = await tool.execute({
+      id: "abcdef",
+      injectToContext: { retention: "pinned" },
+    });
+
+    expect(result.contextInjection).toEqual({
+      scope: "session",
+      entry: {
+        key: "memory:abcdef1234567890",
+        source: "memory",
+        channel: "messages",
+        trust: "untrusted",
+        priority: 650,
+        pinned: true,
+        content: [{
+          role: "assistant",
+          content: '<Memory id="abcdef" tags="workflow">\nPersistent workflow guidance.\n</Memory>',
+        }],
+      },
+    });
+  });
+
+  test("requests a temporary topic projection with an explicit expiry", async () => {
+    const tool = createReadMemoryTool({
+      getById: () => ({
+        id: "abcdef1234567890",
+        content: "How to query the weather.",
+        summary: "Weather workflow",
+        tags: ["weather"],
+      }),
+    });
+    const before = Date.now();
+
+    const result = await tool.execute({
+      id: "abcdef",
+      injectToContext: { retention: "ttl", ttlSeconds: 900 },
+    });
+
+    const expiresAt = result.contextInjection?.entry.expiresAt;
+    expect(result.contextInjection?.scope).toBe("topic");
+    expect(result.contextInjection?.entry.pinned).toBeUndefined();
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 900_000);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + 900_000);
+  });
+
+  test("rejects a ttl projection without ttlSeconds", async () => {
+    const tool = createReadMemoryTool({ getById: () => null });
+    const result = await tool.execute({
+      id: "abcdef",
+      injectToContext: { retention: "ttl" },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("ttlSeconds");
   });
 
   test("returns error when the selected memory is missing", async () => {

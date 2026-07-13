@@ -179,15 +179,18 @@ createForgetMemoryTool(memory)   // { id }
 ### Context → Memory → Web 工具门控
 
 - `search_memory`、`read_memory` 与 Skill 工具对所有 intent 可用。
-- 未命中 Memory 且不同查询不足三次时，AI SDK `prepareStep` 不把内置 `webfetch` 放入 `activeTools`。
-- 搜索命中只表示发现摘要，必须成功执行 `read_memory` 后才视为 Memory 已确认；三次不同查询均无可用候选时可降级。
+- 内置 `webfetch` 对所有 intent 始终可见，由 Agent 自主决定何时调用。
+- AI SDK `prepareStep` 只汇总 Memory 与 Skill 的发现状态，并通过 `ToolExecuteOptions.guardState` 交给 ToolGuard，不再隐藏 `webfetch`。
+- ToolGuard 在真正执行网络请求前检查状态；前置条件不足时不访问网络，返回 `TOOL_GUARD_BLOCKED` 和下一步操作。
+- 搜索命中只表示发现摘要，必须成功执行 `read_memory` 后才视为 Memory 已确认。
+- Memory 搜索为空时，Guard 要求 Agent 执行 `skill_list`；Skill 已检查后再次调用 `webfetch` 即可执行。
+- Memory 存在候选时，Guard 提示 Agent 读取相关候选；若候选不相关，Agent 可检查 Skill 后再次调用 `webfetch`，无需由 Pipeline 判断语义相关性。
 - `traverse_memory` 同样只返回摘要和短 ID，不能绕过 `read_memory` 获取正文。
 - 遍历摘要仅供下一 AI SDK step 选择节点；随后由 `prepareStep.messages` 裁剪，且不写入 Session Tool Context。
-- 完整普通 Memory 已读取、服务不可用、已有 Skill Context，或用户提供明确 URL 时开放 `webfetch`。
-- Memory 包含 Skill 线索时，即使已经命中也保持 `webfetch` 关闭；成功执行 `skill_load` / `skill_section` 后开放，Skill 加载失败时允许降级。
+- 完整普通 Memory 已读取、Memory 与 Skill 均未发现可用能力、服务不可用、已有 Skill Context，或用户提供明确 URL 时允许执行 `webfetch`。
+- Memory 包含 Skill 线索时，即使已经命中也继续拦截 `webfetch`；成功执行 `skill_load` / `skill_section` 后允许执行，Skill 加载失败时允许降级。
 - `skill_load` / `skill_section` 的工具结果包含本轮已加载 Skill 正文，使后续 AI SDK step 可以立即遵循该方法。
-- 查询归一化后存在关键词或中文片段重叠时视为相似组合，不累计尝试次数；重试必须使用不重叠的同义词、领域词或 Skill 名称。
-- 重复相同查询不增加尝试次数；Agent 必须删除时间词并改用核心概念、同义词、领域词或 Skill 名称扩大召回。
+- Agent 可以自主扩大 Memory 查询，但 Guard 不再强制累计三次不同查询。
 - MCP 工具保持原有行为，不参与本阶段门控。
 
 ## 5. Tool Registry

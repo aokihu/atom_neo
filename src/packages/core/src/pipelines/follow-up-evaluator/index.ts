@@ -6,6 +6,7 @@ import {
   EvaluateFinalizeElement,
 } from "./elements";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
+import type { ContextService } from "../../context/context-service";
 
 export function registerFollowUpEvaluatorElements(): void {
   registerElement("evaluator-input", EvaluatorInputElement);
@@ -22,6 +23,7 @@ export function followUpEvaluatorPipeline(deps: {
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
   configContextLimit?: number;
+  contextService: ContextService;
 }) {
   return pipeline("follow-up-evaluator")
     .source("evaluator-input", { session: deps.session })
@@ -32,5 +34,10 @@ export function followUpEvaluatorPipeline(deps: {
       maxTokens: deps.maxTokens,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .sink("evaluate-finalize", { orchestrator: deps.orchestrator, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
+    .sink("evaluate-finalize", {
+      orchestrator: deps.orchestrator,
+      contextService: deps.contextService,
+      configContextLimit: deps.configContextLimit,
+      maxTokens: deps.maxTokens,
+    });
 }

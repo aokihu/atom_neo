@@ -44,6 +44,16 @@ const PATH_ARGS: Record<string, string[]> = {
 
 const LIST_TOOLS = new Set(["ls", "tree"]);
 
+function checkDynamicPolicy(tool: ToolDefinition, opts?: ToolExecuteOptions): ToolResult | null {
+  const decision = opts?.guardState?.[tool.name];
+  if (!decision || decision.allowed) return null;
+  return {
+    ok: false,
+    output: "",
+    error: `TOOL_GUARD_BLOCKED [${decision.reason}]: ${decision.message ?? "Complete the required precondition and retry."}`,
+  };
+}
+
 function preCheck(
   tool: ToolDefinition,
   args: unknown,
@@ -100,7 +110,7 @@ export function createToolGuard(
     get(target, prop) {
       if (prop !== "execute") return Reflect.get(target, prop);
       return async (args: unknown, opts?: ToolExecuteOptions) => {
-        const blocked = preCheck(target, args, sandbox, resolvedWl);
+        const blocked = checkDynamicPolicy(target, opts) ?? preCheck(target, args, sandbox, resolvedWl);
         if (blocked) return blocked;
         const result = await target.execute(args, opts);
         return postFilter(target, result);

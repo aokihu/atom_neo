@@ -3,6 +3,7 @@ export { CollectPromptsElement } from "./collect-prompts";
 export { LoadSystemPromptElement } from "./load-system-prompt";
 export { FetchAgentsPromptElement } from "./fetch-agents-prompt";
 export { CollectContextElement } from "./collect-context";
+export { RecordContextElement } from "./record-context";
 export { FormatSystemMessagesElement } from "./format-system-messages";
 export { FormatUserMessagesElement } from "./format-user-messages";
 export { StreamLLMElement } from "./stream-llm";

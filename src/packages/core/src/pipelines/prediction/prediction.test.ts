@@ -3,6 +3,7 @@ import { registerPredictionElements, predictionPipeline } from "../index";
 import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
+import { ContextService } from "../../context/context-service";
 import { parseIntentPrediction } from "./elements/predict-intent";
 
 beforeAll(() => {
@@ -190,7 +191,7 @@ describe("prediction pipeline elements", () => {
       orchestrator: makeMockOrchestrator(capture),
     });
 
-    await el.doProcess({
+    await (el as any).doProcess({
       mode: "routing",
       task: { id: "t1", chatId: "c1", payload: [] },
       session,
@@ -199,6 +200,45 @@ describe("prediction pipeline elements", () => {
 
     expect(session.pendingPrediction.difficulty).toBe("medium");
     expect(capture.enqueued.pipeline).toBe("conversation");
+  });
+
+  test("predict-finalize clears topic skill context when the topic changes", async () => {
+    const session = { sessionId: "s1", currentTopic: "old", resetForNewTopic: (topic: string) => { session.currentTopic = topic; } };
+    const cleared: string[] = [];
+    const bus = makeBus();
+    const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
+    contextService.start();
+    contextService.put({
+      scope: "topic",
+      owner: { sessionId: "s1", topicId: "old" },
+      entry: {
+        key: "old-topic",
+        source: "test",
+        channel: "instructions",
+        trust: "trusted",
+        priority: 1,
+        content: "old",
+      },
+    });
+    const Ctor = resolveElement("predict-finalize");
+    const el = new Ctor({
+      name: "predict-finalize",
+      kind: "sink",
+      bus,
+      orchestrator: makeMockOrchestrator(null),
+      skillService: { clearScope: (sessionId: string) => cleared.push(sessionId) },
+    });
+
+    await (el as any).doProcess({
+      mode: "routing",
+      task: { id: "t1", chatId: "c1" },
+      session,
+      userMessage: "new task",
+      prediction: { difficulty: "easy", modelProfile: "fast", intent: "conversation", contextRelevance: "standalone", memoryQuery: "", topic: "new", reasoning: "changed" },
+    });
+
+    expect(cleared).toEqual(["s1"]);
+    expect(contextService.bucketCount).toBe(0);
   });
 });
 

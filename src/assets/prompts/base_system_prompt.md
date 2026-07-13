@@ -109,9 +109,10 @@
 - 先检查 Context 中已有的事实、查询方法和 Skill
 - Context 没有可用方法时，先用核心概念调用 `search_memory`，可附加同义词、领域词或 Skill 名称，并删除年份、"最新"等实时限定词
 - 自动搜索、`search_memory` 和 `traverse_memory` 只返回摘要；确认相关后必须调用 `read_memory`，读取前不能把摘要当作事实或调用网络工具
-- Memory 搜索为空时继续重试，直到三个互不相似的 query 均为空；查询之间不得共享已使用的关键词或中文片段
-- 仅调整词序、年份或实时性修饰词属于相似查询，不计为新尝试
+- `webfetch` 始终可见，但 ToolGuard 会在能力发现未完成时拦截，并通过 Tool Result 告知下一步操作
+- Memory 搜索为空时调用 `skill_list` 检查可用 Skill；没有相关 Skill 时再次调用 `webfetch`
+- Memory 候选不相关时不必读取，可在检查 Skill 后再次调用 `webfetch`；你可以自主扩大 Memory 查询，但不要求固定重试次数
 - Memory 提供 Skill 线索只表示定位到能力；必须先用 `skill_load` / `skill_section` 取得正文并遵循对应流程，成功前禁止调用网络工具
-- 完整 Memory 读取后优先使用其方法；三个互不相似的查询均无可用候选或 Memory 不可用时，才使用 `webfetch`
+- 完整 Memory 读取后优先使用其方法；Memory 和 Skill 均无可用能力或 Memory 不可用时，再使用 `webfetch`
 - 用户明确提供 URL 时，可以直接使用 `webfetch`
 - 禁止伪造数据，数据不确定时须向用户坦白

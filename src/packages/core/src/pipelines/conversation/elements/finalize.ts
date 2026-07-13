@@ -33,6 +33,8 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       throw new Error("FinalizeElement: expected ready_to_finalize");
     }
 
+    this.#completeSnapshot(input);
+
     if (input.tokenOverflow) {
       return this.#handleOverflow(input);
     }
@@ -98,5 +100,17 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       reasoningContent: input.reasoningContent,
       tokenUsage: input.tokenUsage,
     };
+  }
+
+  #completeSnapshot(input: ConversationFlowState): void {
+    if (!input.contextSnapshot) return;
+    const event = input.contextSnapshotAccepted && !input.tokenOverflow
+      ? BusEvents.Context.SnapshotCommit
+      : BusEvents.Context.SnapshotRelease;
+    this.bus.emit(event as any, { snapshotId: input.contextSnapshot.id } as any);
+    this.report(BusEvents.Element.Data, {
+      step: event === BusEvents.Context.SnapshotCommit ? "snapshot-committed" : "snapshot-released",
+      snapshotId: input.contextSnapshot.id,
+    });
   }
 }

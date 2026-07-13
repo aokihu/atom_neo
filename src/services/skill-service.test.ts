@@ -83,8 +83,10 @@ describe("SkillService", () => {
   test("load() is idempotent", async () => {
     await svc.start();
     svc.load("test-skill");
+    const revision = svc.getRevision();
     const { sections } = svc.load("test-skill");
     expect(sections).toEqual(["ssh", "firewall", "deploy"]);
+    expect(svc.getRevision()).toBe(revision);
   });
 
   test("loadSection() activates a single section", async () => {
@@ -160,6 +162,21 @@ describe("SkillService", () => {
     expect(ctx).toContain("<section name=\"firewall\">");
     expect(ctx).toContain("ufw allow 80/tcp");
     expect(ctx).not.toContain("<section name=\"deploy\">");
+  });
+
+  test("isolates active sections by session", async () => {
+    await svc.start();
+    svc.loadSection("test-skill", "ssh", "session-a");
+    svc.loadSection("test-skill", "firewall", "session-b");
+
+    expect(svc.buildContext("session-a")).toContain("ssh user@host");
+    expect(svc.buildContext("session-a")).not.toContain("ufw allow");
+    expect(svc.buildContext("session-b")).toContain("ufw allow");
+    expect(svc.buildContext("session-b")).not.toContain("ssh user@host");
+
+    svc.clearScope("session-a");
+    expect(svc.buildContext("session-a")).toBe("");
+    expect(svc.buildContext("session-b")).toContain("ufw allow");
   });
 
   test("stop() clears all state", async () => {
