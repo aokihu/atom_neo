@@ -19,5 +19,9 @@ export type PostConversationFlowState = {
   predictedTaskIntent: string;
   stepCount: number;
   assistantParts: number;
+  assistantLength: number;
+  activeTodoCount: number;
+  finishReason: string;
+  completeDetected: boolean;
   analysis?: AnalysisResult;
 };

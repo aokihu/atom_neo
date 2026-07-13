@@ -202,6 +202,8 @@ Scoring criteria:
 - "needs_user_input": The AI asked the user a clarifying follow-up question about missing information (e.g., "Please tell me the city name", "Please provide the file path", "Please upload an image", "Please specify the model"), and the conversation needs user input to proceed
 
 Key judgment rules:
+- If TODO State still contains pending/in_progress work, or the response tail clearly stops midway through the requested output → blocked
+- For long responses, inspect both Response Head and Response Tail; do not mark satisfactory only because the opening is complete
 - If the AI called search/query tools and reported "no results found", while providing alternative search suggestions or explaining the search process → satisfactory (AI searched thoroughly, the empty result is due to data limitations, not AI failure)
 - Short replies (≤50 chars) containing intent words → first check if it's a legitimate clarification:
   Clarification patterns: "Please tell me...", "Please enter...", "Please provide...", "Please select...", "Which...", "What..." → needs_user_input

@@ -122,4 +122,16 @@ describe("compileContextSnapshot", () => {
       { trust: "trusted", scope: "task", channel: "messages", source: "test", content: "memory" },
     ]);
   });
+
+  test("sanitizes unsafe Unicode before TOON encoding", () => {
+    const { snapshot } = compileContextSnapshot([
+      fragment({ key: "text", content: "broken \uD800 escape \\u12" }),
+      fragment({ key: "runtime", channel: "runtime", content: { nested: "broken \uDFFF escape \\u" } }),
+    ]);
+    const [runtime, text] = rows(snapshot);
+
+    expect(snapshot.content.isWellFormed()).toBe(true);
+    expect(text?.content).toBe("broken � escape ");
+    expect(decode(String(runtime?.content))).toEqual({ nested: "broken � escape " });
+  });
 });

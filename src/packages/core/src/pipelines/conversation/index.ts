@@ -92,6 +92,6 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       contextService: deps.contextService,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .boundary("check-follow-up", { memory: deps.memory })
+    .boundary("check-follow-up", { memory: deps.memory, session: deps.session })
     .sink("finalize", { orchestrator: deps.orchestrator, session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }
