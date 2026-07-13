@@ -6,11 +6,13 @@ import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { EvaluatorFlowState } from "./types";
 import { FALLBACK_EVALUATOR } from "./types";
 import { calcTokenRatio, applyCompressRatio } from "../../shared";
+import type { ContextService } from "../../../context/context-service";
 
 export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
   #configContextLimit: number;
   #maxTokens: number;
+  #contextService: ContextService;
 
   constructor(params: {
     name: string;
@@ -19,11 +21,13 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     orchestrator: InternalTaskOrchestrator;
     configContextLimit?: number;
     maxTokens?: number;
+    contextService: ContextService;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
+    this.#contextService = params.contextService;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<PipelineResult> {
@@ -43,9 +47,44 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
       return { type: "complete", task: input.task, output: `evaluator: stuck — ${reason}` };
     }
 
-    if (health !== "healthy") {
-      input.session.evaluatorSuggestion = suggestion;
-      input.session.upgradeModel = upgradeModel ?? false;
+    const owner = {
+      sessionId: input.session.sessionId,
+      ...(input.session.currentTopic ? { topicId: input.session.currentTopic } : {}),
+    };
+    const scope = input.session.currentTopic ? "topic" as const : "session" as const;
+    if (health !== "healthy" && suggestion) {
+      this.#contextService.put({
+        scope,
+        owner,
+        entry: {
+          key: "evaluator-suggestion",
+          source: "follow-up-evaluator",
+          channel: "instructions",
+          trust: "trusted",
+          priority: 850,
+          consumeOnCommit: true,
+          content: resolvePrompt(PromptKey.CONTEXT_EVALUATOR_HINT).replace("%s", suggestion),
+        },
+      });
+    } else {
+      this.#contextService.remove(scope, owner, "evaluator-suggestion");
+    }
+    if (health !== "healthy" && upgradeModel) {
+      this.#contextService.put({
+        scope,
+        owner,
+        entry: {
+          key: "model-upgrade",
+          source: "follow-up-evaluator",
+          channel: "instructions",
+          trust: "trusted",
+          priority: 840,
+          consumeOnCommit: true,
+          content: resolvePrompt(PromptKey.CONTEXT_MODEL_UPGRADE),
+        },
+      });
+    } else {
+      this.#contextService.remove(scope, owner, "model-upgrade");
     }
 
     const tu = input.session?.tokenUsage?.total ?? 0;

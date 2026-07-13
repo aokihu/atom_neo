@@ -5,6 +5,7 @@ import {
   LoadSystemPromptElement,
   FetchAgentsPromptElement,
   CollectContextElement,
+  RecordContextElement,
   FormatSystemMessagesElement,
   FormatUserMessagesElement,
   StreamLLMElement,
@@ -16,12 +17,14 @@ import {
 import { DEFAULT_MAX_TOKENS } from "../../constants";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../skills/types";
+import type { ContextService } from "../../context/context-service";
 
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement);
   registerElement("load-system-prompt", LoadSystemPromptElement);
   registerElement("fetch-agents-prompt", FetchAgentsPromptElement);
   registerElement("collect-context", CollectContextElement);
+  registerElement("record-context", RecordContextElement);
   registerElement("format-system-messages", FormatSystemMessagesElement);
   registerElement("format-user-messages", FormatUserMessagesElement);
   registerElement("stream-llm", StreamLLMElement);
@@ -51,21 +54,28 @@ export type ConversationPipelineDeps = {
   sandbox?: string;
   orchestrator?: InternalTaskOrchestrator;
   skillService?: SkillServiceLike;
+  contextService: ContextService;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
   return pipeline("conversation")
     .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
-    .transform("load-system-prompt", { providerModel: deps.providerModel })
-    .transform("fetch-agents-prompt", {
-      getCompiledPrompt: deps.getCompiledPrompt ?? (() => ""),
+    .transform("record-context", {
+      contextService: deps.contextService,
+      memory: deps.memory,
+      sandbox: deps.sandbox,
+      session: deps.session,
+      providerModel: deps.providerModel,
+      configContextLimit: deps.configContextLimit,
+      taskIntent: deps.intent,
+      getCompiledPrompt: deps.getCompiledPrompt,
+      skillService: deps.skillService,
     })
-    .transform("inject-skill-context", { skillService: deps.skillService ?? {
-      list: () => [], load: () => ({ ok: false, error: "" }), loadSection: () => false, removeSection: () => false, unload: () => {}, buildContext: () => "",
-    } as SkillServiceLike })
-    .transform("collect-context", { memory: deps.memory, sandbox: deps.sandbox, session: deps.session, providerModel: deps.providerModel, configContextLimit: deps.configContextLimit, taskIntent: deps.intent })
-    .transform("format-system-messages", {})
-    .transform("format-user-messages", {})
+    .transform("collect-context", {
+      contextService: deps.contextService,
+      configContextLimit: deps.configContextLimit,
+      maxTokens: deps.maxTokens,
+    })
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-v4-flash",
@@ -78,6 +88,8 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       taskIntent: deps.intent,
       session: deps.session,
       configContextLimit: deps.configContextLimit,
+      skillService: deps.skillService,
+      contextService: deps.contextService,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .boundary("check-follow-up", { memory: deps.memory })

@@ -28,6 +28,7 @@
 | [pipeline-dev.md](./core/pipeline-dev.md) | Element 接口、Pipeline Builder DSL、Event Bus (三合一) | 创建 Element/Pipeline |
 | [tool-plugin.md](./subsystems/tool-plugin.md) | Tool 插件接口 | 创建 Tool |
 | [session.md](./core/session.md) | Per-Session 上下文、Topic 跟踪、压缩状态、TUI 会话生命周期 | 操作会话 |
+| [context-management.md](./context-management.md) | Context 六层所有权、Snapshot、Receipt、自动卸载与预算 | 修改 Context 注入或生命周期 |
 | [memory-service.md](./subsystems/memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
 | [configuration.md](./subsystems/configuration.md) | 配置加载优先级、格式 | 添加配置项 |
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |

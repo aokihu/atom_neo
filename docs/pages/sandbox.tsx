@@ -25,6 +25,9 @@ export default function SandboxPage({ content, title, description, category }: D
         <Callout type="tip" title="路径校验">
           所有 Tool 操作的路径在 <code>sandboxPath()</code> 函数中校验，越界路径会被拒绝。
         </Callout>
+        <Callout type="info" title="动态 Tool Guard">
+          Tool 可以保持对 Agent 可见，同时在执行前检查动态策略。首个接入的是 <code>webfetch</code>：前置能力发现未完成时返回 <code>TOOL_GUARD_BLOCKED</code> 和下一步操作，不发起网络请求。
+        </Callout>
       </Section>
 
       {/* ── Directory Structure ── */}

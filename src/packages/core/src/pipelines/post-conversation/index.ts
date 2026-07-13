@@ -5,6 +5,7 @@ import {
   AnalyzeResultElement,
   PostConversationFinalizeElement,
 } from "./elements";
+import type { ContextService } from "../../context/context-service";
 
 export function registerPostConversationElements(): void {
   registerElement("post-collect-input", CollectInputElement);
@@ -20,6 +21,7 @@ export function postConversationPipeline(deps: {
   baseUrl?: string;
   maxTokens?: number;
   configContextLimit?: number;
+  contextService: ContextService;
 }) {
   return pipeline("post-conversation")
     .source("post-collect-input", { session: deps.session })
@@ -30,5 +32,5 @@ export function postConversationPipeline(deps: {
       maxTokens: deps.maxTokens,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .sink("post-finalize", {});
+    .sink("post-finalize", { contextService: deps.contextService });
 }

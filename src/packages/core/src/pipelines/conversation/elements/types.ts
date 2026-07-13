@@ -1,9 +1,10 @@
-import type { IntentRequest } from "@atom-neo/shared";
+import type { ContextOwner, ContextSnapshot, IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
 
 export type ConversationMode =
   | "initial"
   | "streaming"
+  | "context_recorded"
   | "formatted"
   | "executing"
   | "ready_to_finalize";
@@ -18,7 +19,11 @@ export type ConversationFlowState = {
   systemPrompt?: string;
   compiledAgentsPrompt?: string;
   skillContext?: string;
+  skillContextRevision?: number;
   contextData?: string;
+  contextOwner?: ContextOwner;
+  contextSnapshot?: ContextSnapshot;
+  contextSnapshotAccepted?: boolean;
   memorySearchAttempted?: boolean;
   memorySearchStatus?: MemorySearchStatus;
   injectedMemoryCount?: number;

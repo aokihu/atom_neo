@@ -6,6 +6,7 @@ import {
   CompressFinalizeElement,
 } from "./elements";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
+import type { ContextService } from "../../context/context-service";
 
 export function registerContextCompressElements(): void {
   registerElement("compress-input", CompressInputElement);
@@ -23,6 +24,7 @@ export function contextCompressPipeline(deps: {
   sandbox: string;
   configContextLimit?: number;
   maxTokens?: number;
+  contextService: ContextService;
 }) {
   return pipeline("context-compress")
     .source("compress-input", { session: deps.session })
@@ -35,5 +37,6 @@ export function contextCompressPipeline(deps: {
     .sink("compress-finalize", {
       orchestrator: deps.orchestrator,
       sandbox: deps.sandbox,
+      contextService: deps.contextService,
     });
 }

@@ -53,7 +53,7 @@ collect-prompts (source)
 | 5 | `collect-context` | transform | 使用 Prediction 的核心关键词检索并注入 Memory，同时构建运行时上下文 |
 | 6 | `format-system-messages` | transform | 合并 system prompt + agent prompt + skill + context |
 | 7 | `format-user-messages` | transform | 组装 user message 数组，切换 mode → `formatted` |
-| 8 | `stream-llm` | transform | 核心：调用 LLM，并按 step 动态开放工具 |
+| 8 | `stream-llm` | transform | 核心：调用 LLM，并按 step 更新 ToolGuard 状态 |
 | 9 | `check-follow-up` | boundary | 根据意图和 finishReason 决定 chainAction |
 | 10 | `finalize` | sink | 发出 `Conversation.Chain` 事件 → server.ts 统一调度 |
 
@@ -190,7 +190,7 @@ const streamResult = streamText({
   providerOptions: this.#providerOptions,
   abortSignal: abortController.signal,
   prepareStep: ({ steps }) => {
-    const activeTools = selectActiveToolsForStep({
+    const selection = selectActiveToolsForStep({
       taskIntent,
       memorySearchAttempted: input.memorySearchAttempted,
       hasSkillContext: Boolean(input.skillContext?.trim()),
@@ -199,7 +199,8 @@ const streamResult = streamText({
         step.toolCalls.some(call => call.toolName === "search_memory")
       ),
     });
-    return { activeTools };
+    guardState.current = toWebfetchGuardState(selection);
+    return { activeTools: selection.activeTools }; // webfetch 始终包含在内
   },
 });
 ```
@@ -362,7 +363,7 @@ initial
 | `model` | `runtime.getResolvedModel(difficulty).model` | `"deepseek-v4-flash"` |
 | `stopWhen` | `config.json → conversation.maxSteps` → `stepCountIs(N)` | `stepCountIs(50)` |
 | `maxOutputTokens` | `config.json → transport.maxOutputTokens` | `4096` |
-| `tools` | 全部工具（启动时一次性加载），通过 `prepareStep.activeTools` 按 intent 过滤 | `createAllTools()` |
+| `tools` | 全部工具（启动时一次性加载）；其他工具按 intent 过滤，`webfetch` 始终可见 | `createAllTools()` |
 | `providerOptions` | `{ deepseek: { thinking: { type: ... } } }` | thinking=disabled |
 
 > **v6 迁移说明**：`maxSteps` 已移除，改用 `stopWhen: stepCountIs(N)` 控制多步工具循环。`maxTokens` 已更名为 `maxOutputTokens`。`allowSystemInMessages` 已废弃（v6 中 system message 始终允许）。
@@ -462,17 +463,17 @@ TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → execu
 
 1. 先检查当前 Context 中已经注入的事实、查询方法和 Skill。
 2. Prediction 生成单一 `memoryQuery`，`collect-context` 在 LLM 调用前自动搜索 Memory。
-3. 自动搜索未执行时，`webfetch` 保持隐藏；Agent 必须先调用 `search_memory`。
-4. 自动搜索或工具搜索命中时只提供 `<MemorySummary>`；Agent 确认候选相关后必须调用 `read_memory(id)`，获得完整 `<Memory>` 前保持 `webfetch` 关闭。
-5. 完整 Memory 是普通事实/方法时开放 `webfetch`；若正文包含 Skill 线索，则继续保持关闭，直到 `skill_load` / `skill_section` 成功。Skill 不存在或加载失败时允许降级。
-6. 搜索为空时，Agent 必须换用不同且更宽的查询重试；自动搜索和工具搜索合计三次不同查询仍为空后才开放 `webfetch`。
-7. 查询去重会忽略年份及“最新/实时”等修饰词；归一化后存在关键词或中文片段重叠的组合视为相似查询，不累计次数。重试必须改用不重叠的同义词、领域词或 Skill 名称。
-8. Memory 服务不可用或搜索异常时直接开放 `webfetch`，避免阻断查询。
-8. 用户消息含明确 `http://` 或 `https://` URL 时允许直接使用 `webfetch`。
+3. `webfetch` 始终出现在可用工具中；自动搜索未执行时，首次调用由 ToolGuard 拦截并要求 `search_memory`。
+4. 自动搜索或工具搜索命中时只提供 `<MemorySummary>`；候选相关时 Agent 调用 `read_memory(id)`，不相关时继续检查 Skill。
+5. 完整 Memory 是普通事实/方法时允许执行 `webfetch`；若正文包含 Skill 线索，则继续拦截，直到 `skill_load` / `skill_section` 成功。Skill 不存在或加载失败时允许降级。
+6. Memory 搜索为空时，Guard 要求 Agent 调用 `skill_list`；检查完成后再次调用 `webfetch` 即可执行。
+7. Agent 可以自主扩大 Memory 查询，但 Guard 不再强制累计三次不同查询。
+8. Memory 服务不可用或搜索异常时直接允许执行 `webfetch`，避免阻断查询。
+9. 用户消息含明确 `http://` 或 `https://` URL 时允许直接执行 `webfetch`。
 
 `search_memory`、`read_memory` 和 Skill 工具对所有 intent 保持可用，避免一次 intent 误分类切断能力发现。MCP 工具不参与本阶段的内置 `webfetch` 门控。
 
-Debug 日志记录 `memoryQuery`、`memorySearchStatus`、不同查询次数、`injectedMemoryCount`、正文读取状态、`memorySuggestsSkill`、Skill 加载状态、`webfetchEnabled` 和开放原因，不记录 Memory 正文。
+Debug 日志记录 `memoryQuery`、`memorySearchStatus`、`injectedMemoryCount`、正文读取状态、`memorySuggestsSkill`、Skill 检查与加载状态、`webfetchAllowed`、Guard 原因和拦截事件，不记录 Memory 正文。
 
 `format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
 

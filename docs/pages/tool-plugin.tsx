@@ -77,7 +77,7 @@ export enum PermissionLevel {
           ]}
         />
         <Callout type="info" title="动态工具门控">
-          <code>search_memory</code>、<code>traverse_memory</code> 都只返回摘要；遍历摘要仅保留给下一模型 step，随后自动裁剪且不进入 Session Tool Context。Agent 成功执行 <code>read_memory</code> 读取正文后才可开放内置 <code>webfetch</code>。正文包含 Skill 线索时还必须先加载 Skill。
+          内置 <code>webfetch</code> 始终可见。Agent 调用后，ToolGuard 在网络请求前检查 Memory 与 Skill 状态；条件不足时返回下一步操作而不访问网络。Memory 候选相关时先用 <code>read_memory</code>，不相关时检查 <code>skill_list</code>，完成能力发现后重试 <code>webfetch</code>。
         </Callout>
       </Section>
 

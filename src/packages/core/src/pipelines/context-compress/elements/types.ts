@@ -5,6 +5,7 @@ export type CompressFlowState = {
   task: any;
   session: any;
   archiveMessages: Array<{ role: string; content: string; timestamp: number }>;
+  keepCount?: number;
   summaryText: string;
   summary?: string;
   summaryMaxTokens: number;

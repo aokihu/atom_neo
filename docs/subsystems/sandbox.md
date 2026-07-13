@@ -23,7 +23,10 @@
 |------|---------|---------|
 | PRE (执行前) | 路径黑名单（.atom）+ 白名单 | read, write, ls, tree, grep, cp, mv |
 | PRE (执行前) | bash 命令含 `.atom` 字串 | bash |
+| PRE (执行前) | 动态工具策略与前置条件 | webfetch（首个接入工具） |
 | POST (执行后) | 输出结果中移除 `.atom` 条目 | ls, tree, grep |
+
+动态策略通过 `ToolExecuteOptions.guardState` 随本次模型步骤传入。被拦截的工具保持可见，ToolGuard 返回 `TOOL_GUARD_BLOCKED` 和下一步操作，不调用原始 `execute`。
 
 **bash 工具**额外受 `.atom` 命令字串检查限制，但对沙箱外路径不做白名单拦截（shell 命令解析复杂，后续增强）。
 

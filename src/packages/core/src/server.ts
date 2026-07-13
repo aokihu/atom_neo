@@ -33,6 +33,7 @@ import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
 import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
+import { ContextService } from "./context/context-service";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -164,6 +165,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
         configContextLimit: resolvedContextLimit,
+        skillService,
       }).build(bus);
     },
 
@@ -179,7 +181,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       };
 
       const DIFFICULTY_PROFILE: Record<string, string> = { mygod: "advanced", hard: "balanced" };
-      const effectiveProfile = session.upgradeModel
+      const topicId = session.currentTopic || undefined;
+      const upgradeModel = contextService.get(
+        topicId ? "topic" : "session",
+        { sessionId: session.sessionId, ...(topicId ? { topicId } : {}) },
+        "model-upgrade",
+      );
+      const effectiveProfile = upgradeModel
         ? "advanced"
         : DIFFICULTY_PROFILE[prediction.difficulty] ?? prediction.modelProfile;
 
@@ -209,6 +217,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         sandbox,
         orchestrator,
         skillService,
+        contextService,
       }).build(bus);
     },
 
@@ -220,6 +229,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         apiKey, model, baseUrl, maxTokens,
         orchestrator,
         configContextLimit: resolvedContextLimit,
+        contextService,
       }).build(bus);
     },
 
@@ -235,6 +245,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         sandbox,
         configContextLimit: resolvedContextLimit,
         maxTokens,
+        contextService,
       }).build(bus);
     },
 
@@ -245,6 +256,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey, model, baseUrl, maxTokens,
         configContextLimit: resolvedContextLimit,
+        contextService,
       }).build(bus);
     },
   };
@@ -265,6 +277,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
+  const contextService = new ContextService(bus);
+  contextService.start();
   bus.on(BusEvents.Task.Activated, (p) => {
     const sid = p.task.sessionId;
     if (sid) {
@@ -370,7 +384,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   logger.info("schedule tools registered", { count: scheduleTools.length, restored: hookManager.list().length });
 
   sessionStore.onCreated((sid) => bus.emit(BusEvents.Session.Started as any, { sessionId: sid }));
-  sessionStore.onClosed((sid) => bus.emit(BusEvents.Session.Closed as any, { sessionId: sid }));
+  sessionStore.onClosed((sid) => {
+    skillService?.clearScope?.(sid);
+    bus.emit(BusEvents.Session.Closed as any, { sessionId: sid });
+  });
+  const sessionSweepTimer = setInterval(() => sessionStore.sweepIdle(), 60_000);
+  sessionSweepTimer.unref?.();
 
   bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: string } }) => {
     const p = e.payload;
@@ -524,6 +543,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         const sid = url.pathname.split("/").pop()!;
         return Response.json(sessionStore.has(sid) ? sessionStore.get(sid).messages : []);
       }
+      if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "DELETE") {
+        const sid = url.pathname.split("/").pop()!;
+        sessionStore.delete(sid);
+        return Response.json({ ok: true, sessionId: sid });
+      }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
         return taskCancelHandler(taskQueue, req, url.pathname.split("/").pop()!);
       }
@@ -536,5 +560,5 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   logger.info("core ready", { port: server.port, address: host });
-  return { port: server.port!, tools: allTools.map((t: any) => t.name), toolInfos, mcpServerInfos, stop: () => { hookManager.stop(); mcpHealthStopRef.current(); taskEngine.stop(); server.stop(); closeMCPClients(mcpClients); } };
+  return { port: server.port!, tools: allTools.map((t: any) => t.name), toolInfos, mcpServerInfos, stop: () => { clearInterval(sessionSweepTimer); hookManager.stop(); mcpHealthStopRef.current(); taskEngine.stop(); bus.emit(BusEvents.Context.CoreStopped, {}); contextService.stop(); server.stop(); closeMCPClients(mcpClients); } };
 }

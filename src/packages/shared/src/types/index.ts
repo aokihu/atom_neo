@@ -29,7 +29,14 @@ export type {
 } from "./memory";
 
 export { PermissionLevel } from "./tool";
-export type { ToolDefinition, ToolResult, ToolExecuteOptions } from "./tool";
+export type {
+  ToolDefinition,
+  ToolResult,
+  ToolExecuteOptions,
+  ToolContextInjection,
+  ToolGuardDecision,
+  ToolGuardState,
+} from "./tool";
 
 export { PipelineResultType, PipelineEnqueueTransition } from "./pipeline";
 export type {
@@ -59,3 +66,26 @@ export type {
   MemoryScopeState,
   ContinuationContext,
 } from "./session";
+
+export type {
+  ContextScope,
+  ContextChannel,
+  ContextRetention,
+  ContextTrust,
+  ContextLifecycleState,
+  ContextSnapshotStatus,
+  ContextLifecycleEvent,
+  ContextOwner,
+  ContextLifecycle,
+  ContextMessage,
+  ContextEntry,
+  ContextBucket,
+  ContextPutRequest,
+  ContextSnapshotRequest,
+  ContextFragment,
+  ContextReceipt,
+  ContextManifestEntry,
+  ContextSnapshot,
+  SnapshotRecordRef,
+  ContextSnapshotState,
+} from "./context";

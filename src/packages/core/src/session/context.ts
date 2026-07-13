@@ -19,11 +19,12 @@ export type TodoItem = {
 export class SessionContext {
   readonly sessionId: string;
 
-  // Transient per-request fields (set/cleared within a single task chain)
-  evaluatorSuggestion?: string;
-  upgradeModel?: boolean;
-  pendingPrediction?: any;
-  conversationSummary?: string;
+  #pendingPrediction?: any;
+
+  get pendingPrediction(): any { return this.#pendingPrediction; }
+  set pendingPrediction(value: any) {
+    this.#pendingPrediction = value;
+  }
   pendingCompressRatio?: number;
   compressing: boolean = false;
   compressRetry: number = 0;
@@ -178,10 +179,6 @@ export class SessionContext {
     this.#toolContext = { mode: "idle", results: [] };
     this.#continuationContext = null;
     this.#postCheckFingerprints = [];
-    this.evaluatorSuggestion = undefined;
-    this.upgradeModel = undefined;
-    this.conversationSummary = undefined;
-    (this as any).postCheckGuidance = undefined;
   }
 
   toJSON(): Record<string, unknown> {
