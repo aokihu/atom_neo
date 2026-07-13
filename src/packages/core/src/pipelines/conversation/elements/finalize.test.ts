@@ -62,4 +62,36 @@ describe("FinalizeElement context snapshot", () => {
     expect(contextService.get("session", { sessionId: "s1" }, "evaluator-suggestion")).toBeDefined();
     expect(contextService.inspectSnapshot(input.contextSnapshot.id)?.status).toBe("released");
   });
+
+  test("defers post-check until Task.Completed persists the assistant message", async () => {
+    const { element, input } = createFixture();
+    const result = await (element as any).doProcess({
+      ...input,
+      responseText: "done",
+      finishReason: "stop",
+    });
+
+    expect(result.shouldPostCheck).toBe(true);
+    expect(result.chainAction).toBeUndefined();
+    expect(result.finishReason).toBe("stop");
+  });
+
+  test("returns the chain decision instead of scheduling before persistence", async () => {
+    const { element, input } = createFixture();
+    const result = await (element as any).doProcess({
+      ...input,
+      responseText: "partial",
+      chainAction: "follow_up",
+    });
+
+    expect(result.chainAction).toBe("follow_up");
+    expect(result.shouldPostCheck).toBe(false);
+  });
+
+  test("does not request a post-check after a non-recoverable error", async () => {
+    const { element, input } = createFixture(400);
+    const result = await (element as any).doProcess(input);
+
+    expect(result.shouldPostCheck).toBe(false);
+  });
 });

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { encode } from "@toon-format/toon";
+import { sanitizeForJSON } from "@atom-neo/shared";
 import type {
   ContextFragment,
   ContextManifestEntry,
@@ -144,7 +145,9 @@ function toSnapshotRow(fragment: ContextFragment) {
 }
 
 function formatContent(content: ContextFragment["content"]): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map(message => message.content).join("\n\n");
-  return encode(content);
+  if (typeof content === "string") return sanitizeForJSON(content);
+  if (Array.isArray(content)) return sanitizeForJSON(content.map(message => message.content).join("\n\n"));
+  return encode(content, {
+    replacer: (_key, value) => typeof value === "string" ? sanitizeForJSON(value) : value,
+  });
 }

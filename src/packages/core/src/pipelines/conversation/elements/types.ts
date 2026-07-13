@@ -41,4 +41,6 @@ export type ConversationFlowState = {
   tokenUsage?: TokenUsage;
   tokenOverflow?: boolean;
   errorStatusCode?: number;
+  finishReason?: string;
+  completeDetected?: boolean;
 };

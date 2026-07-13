@@ -16,6 +16,10 @@ export type TodoItem = {
   priority: "high" | "medium" | "low";
 };
 
+export function hasActiveTodos(todos?: readonly TodoItem[]): boolean {
+  return todos?.some(todo => todo.status === "pending" || todo.status === "in_progress") ?? false;
+}
+
 export class SessionContext {
   readonly sessionId: string;
 

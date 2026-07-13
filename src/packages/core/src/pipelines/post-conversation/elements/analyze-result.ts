@@ -52,7 +52,8 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
 
       const prompt = [
         `用户请求: ${input.userMessage.slice(0, 500)}`,
-        `AI回复: ${input.assistantResponse.slice(0, 3000)}`,
+        `AI回复元数据: parts=${input.assistantParts}, chars=${input.assistantLength}, activeTodos=${input.activeTodoCount}, finishReason=${input.finishReason || "unknown"}, completeDetected=${input.completeDetected}`,
+        `AI回复摘要: ${input.assistantResponse.slice(0, 3000)}`,
         `预期任务: ${TASK_INTENT_DESC[input.predictedTaskIntent] ?? "对话交流"}`,
       ].join("\n");
 

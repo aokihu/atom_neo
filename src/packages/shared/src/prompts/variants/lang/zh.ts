@@ -200,6 +200,8 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - "needs_user_input": AI向用户追问了缺失信息(如"请告诉我城市名称"、"请提供文件路径"、"请上传图片"、"请说明具体型号")，对话需要等待用户回复才能继续
 
 关键判断规则:
+- 回复元数据或摘要中的 TODO State 仍有 pending/in_progress，或长回复尾部明显停在用户要求的中间部分 → blocked
+- 长回复必须结合 Response Head 与 Response Tail 判断，不得只因开头内容完整就判定 satisfactory
 - AI调用搜索/查询工具后告知"未找到相关信息"，并给出了替代查询建议或说明了查询过程 → satisfactory（AI已尽力搜索，结果为数据源所限，不是AI未完成任务）
 - 回复较短(≤50字)且包含"搜索"、"查询"、"尝试"、"让我"、"看看"等表态词 → 先判断是否是善意的追问澄清:
   追问模式: "请告诉我...", "请输入...", "请提供...", "请选择...", "哪个...", "请问..." → needs_user_input

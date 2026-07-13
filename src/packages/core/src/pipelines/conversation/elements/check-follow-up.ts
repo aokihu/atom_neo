@@ -2,19 +2,23 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { IntentRequestType } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
+import { hasActiveTodos } from "../../../session/context";
 import type { ConversationFlowState } from "./types";
 
 export class CheckFollowUpElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #memory: any;
+  #session: any;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     memory?: any;
+    session?: any;
   }) {
     super({ name: params.name, kind: "boundary", bus: params.bus });
     this.#memory = params.memory;
+    this.#session = params.session;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -50,7 +54,16 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
       }
     }
 
-    this.report(BusEvents.Element.Data, { step: "done", chainAction: "none" });
-    return { ...input, mode: "ready_to_finalize" };
+    const activeTodos = hasActiveTodos(this.#session?.todoState);
+    const nonRecoverableError = (input.errorStatusCode ?? 0) >= 400;
+    const chainAction = nonRecoverableError
+      ? undefined
+      : input.chainAction ?? (activeTodos ? "follow_up" : undefined);
+    this.report(BusEvents.Element.Data, {
+      step: "done",
+      chainAction: chainAction ?? "none",
+      reason: nonRecoverableError ? "non_recoverable_error" : activeTodos ? "active_todos" : input.chainAction ? "stream" : "complete",
+    });
+    return { ...input, mode: "ready_to_finalize", chainAction };
   }
 }

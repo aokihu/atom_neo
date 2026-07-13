@@ -758,6 +758,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         chainAction,
         tokenOverflow,
         errorStatusCode: streamErrorCode,
+        finishReason,
+        completeDetected,
         contextSnapshotAccepted: !timedOut && !streamFailed,
       };
     } catch (err: any) {
@@ -773,6 +775,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           chainAction: "follow_up",
           tokenOverflow: false,
           errorStatusCode: err.statusCode ?? 0,
+          finishReason: "error",
+          completeDetected: false,
           contextSnapshotAccepted: false,
         };
       }
@@ -782,6 +786,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         responseText: sanitizeForJSON(`Error: ${err?.message ?? String(err)}`),
         tokenOverflow,
         errorStatusCode: err.statusCode ?? 0,
+        finishReason: "error",
+        completeDetected: false,
         contextSnapshotAccepted: false,
       };
     }

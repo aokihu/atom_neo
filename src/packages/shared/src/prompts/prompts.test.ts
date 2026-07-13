@@ -31,4 +31,11 @@ describe("Memory discovery prompts", () => {
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("`supersedesId`");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("replacement are atomic");
   });
+
+  test("result analysis checks long-response tails and active TODOs", () => {
+    expect(zhBases[PromptKey.ANALYZE_RESULT]).toContain("Response Head 与 Response Tail");
+    expect(zhBases[PromptKey.ANALYZE_RESULT]).toContain("pending/in_progress");
+    expect(enBases[PromptKey.ANALYZE_RESULT]).toContain("Response Head and Response Tail");
+    expect(enBases[PromptKey.ANALYZE_RESULT]).toContain("pending/in_progress");
+  });
 });

@@ -34,6 +34,7 @@ import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
 import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 import { ContextService } from "./context/context-service";
+import { hasActiveTodos } from "./session/context";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -63,6 +64,10 @@ type CompletedResult = PipelineResult & {
   responseText?: string;
   reasoningContent?: string;
   tokenUsage?: { total: number };
+  chainAction?: "follow_up";
+  shouldPostCheck?: boolean;
+  finishReason?: string;
+  completeDetected?: boolean;
 };
 
 interface ServiceProvider {
@@ -308,6 +313,10 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         timestamp: Date.now(),
         pipeline: p.task.pipeline,
         visible: p.task.pipeline === "conversation",
+        metadata: {
+          finishReason: result.finishReason ?? "",
+          completeDetected: result.completeDetected ?? false,
+        },
         ...(reasoningContent ? { reasoningContent } : {}),
       };
       sessionStore.get(sid).addMessage(msg);
@@ -318,6 +327,26 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
     if (sid && result.tokenUsage) {
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
+    }
+    if (sid && p.task.pipeline === "conversation") {
+      const payload = {
+        sessionId: sid,
+        chatId: p.task.chatId,
+        parentTaskId: p.task.parentTaskId ?? p.task.id,
+      };
+      if (result.chainAction) {
+        logger.debug("conversation completed: scheduling chain after persistence", { action: result.chainAction, sessionId: sid });
+        bus.emit(BusEvents.Conversation.Chain as any, {
+          name: "task-completed",
+          payload: { ...payload, action: result.chainAction },
+        } as any);
+      } else if (result.shouldPostCheck) {
+        logger.debug("conversation completed: scheduling post-conversation after persistence", { sessionId: sid });
+        bus.emit(BusEvents.Conversation.Idle as any, {
+          name: "task-completed",
+          payload,
+        } as any);
+      }
     }
     const accumulated = sessionStore.get(sid).tokenUsage;
       broadcaster.broadcastToSession(sid, {
@@ -414,11 +443,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       session.pendingPrediction.contextRelevance = "continuation";
     }
 
-    const hasActiveTodos = session.todoState?.some(
-      (t: any) => t.status !== "completed" && t.status !== "cancelled",
-    );
+    const hasUnfinishedTodos = hasActiveTodos(session.todoState);
 
-    if (hasActiveTodos) {
+    if (hasUnfinishedTodos) {
       logger.debug("conversation chain: active todos, skipping evaluator, scheduling follow-up", { chainDepth: session.chainDepth });
       session.incrementChainDepth();
       orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);

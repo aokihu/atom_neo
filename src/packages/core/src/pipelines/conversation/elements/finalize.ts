@@ -46,23 +46,12 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       this.report(BusEvents.Element.Data, { step: "complete", chainAction: "none" });
       if (input.errorStatusCode && input.errorStatusCode >= 400) {
         this.report(BusEvents.Element.Data, { step: "skip post-check, non-recoverable error", errorStatusCode: input.errorStatusCode });
-      } else {
-        this.report(BusEvents.Conversation.Idle, {
-          sessionId: input.task.sessionId,
-          chatId: input.task.chatId,
-          parentTaskId: input.task.parentTaskId ?? input.task.id,
-        });
+        return this.#complete(input);
       }
-      return this.#complete(input);
+      return this.#complete(input, true);
     }
 
-    this.report(BusEvents.Element.Data, { step: "scheduling chain", chainAction: input.chainAction });
-    this.report(BusEvents.Conversation.Chain, {
-      sessionId: input.task.sessionId,
-      chatId: input.task.chatId,
-      parentTaskId: input.task.parentTaskId ?? input.task.id,
-      action: input.chainAction,
-    });
+    this.report(BusEvents.Element.Data, { step: "defer chain until task completed", chainAction: input.chainAction });
     return this.#complete(input);
   }
 
@@ -92,13 +81,17 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     return this.#complete(input);
   }
 
-  #complete(input: ConversationFlowState) {
+  #complete(input: ConversationFlowState, shouldPostCheck = false) {
     return {
       type: "complete" as const,
       task: input.task,
       output: input.responseText,
       reasoningContent: input.reasoningContent,
       tokenUsage: input.tokenUsage,
+      chainAction: input.chainAction,
+      shouldPostCheck,
+      finishReason: input.finishReason,
+      completeDetected: input.completeDetected,
     };
   }
 
