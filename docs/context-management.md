@@ -86,7 +86,7 @@ Core producers / record-context
   -> context-collect
        1. createSnapshot: 选择匹配 Owner 的 active Bucket
        2. select: 去重、信任分区、预算选择
-       3. sanitize: 修复孤立代理字符和不完整的字面量 hex escape
+       3. sanitize: 使用 `String.toWellFormed()` 修复孤立代理字符
        4. compile: 使用 @toon-format/toon 将选中的 Entry 确定性编码
        5. freeze: 生成精简的不可变 ContextSnapshot
   -> stream-llm
@@ -96,7 +96,7 @@ Core producers / record-context
 
 `record-context` 只负责把 Prompt、Workspace、Skill、Memory 和运行状态等 Context 来源适配成统一 Entry；Conversation history 与当前用户消息不写入 ContextService。`context-collect` 是很薄的 Pipeline 边界，只向 ContextService 请求 Snapshot。ContextService 是 Context 的唯一 Owner；Pipeline 和 Session 不保存可变 Context 容器。
 
-Unicode 净化发生在每个 Fragment 的原始字符串上：普通文本和 Message 数组复用 `sanitizeForJSON`，结构化内容通过 TOON `encode` 的 `replacer` 递归净化字符串字段。编码完成的 TOON 不再进行字符串替换，因此 Snapshot 保持可解码，同时不会把孤立代理字符带入 DeepSeek 请求。
+Unicode 净化发生在每个 Fragment 的原始字符串上：普通文本和 Message 数组直接调用 `String.toWellFormed()`，结构化内容通过 TOON `encode` 的 `replacer` 递归处理字符串字段。字面量 `\u`、Windows 路径和代码片段保持原样；编码完成的 TOON 不再进行字符串替换。
 
 ## 5. Snapshot 与 Receipt
 

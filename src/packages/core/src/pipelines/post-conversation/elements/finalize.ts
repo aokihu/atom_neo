@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BusEvents, PromptKey, resolvePrompt, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState } from "./types";
 import { FALLBACK_ANALYSIS, STALL_THRESHOLD } from "./types";
 import { trigramSimilarity } from "../../shared/trigram";
@@ -33,7 +33,7 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
         return { type: "complete", task: input.task, output: `post-conversation: blocked, awaiting user judgment — ${reason}` };
       }
 
-      const fp = fingerprint?.slice(0, 50) ?? "";
+      const fp = fingerprint ? substringWellFormed(fingerprint, 0, 50) : "";
       if (fp) {
         const prev = input.session?.postCheckFingerprints ?? ([] as string[]);
         let maxSim = 0;

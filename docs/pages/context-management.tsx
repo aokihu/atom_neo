@@ -59,7 +59,7 @@ export default function ContextManagementPage({ content, title, description, cat
           snapshot.content 作为单独 System Message；Conversation Messages 和 Tool Definitions 不进入 TOON Snapshot。
         </Callout>
         <Callout type="warn" title="先净化，再编码">
-          Fragment 字符串在编码前修复孤立代理字符和不完整 hex escape；结构化内容使用 TOON replacer 递归处理。禁止编码后替换 TOON 文本，否则会破坏反斜杠转义。
+          Fragment 字符串在编码前通过 String.toWellFormed() 修复孤立代理字符；结构化内容使用 TOON replacer 递归处理。字面量 \u、Windows 路径和代码片段保持原样。
         </Callout>
       </Section>
 

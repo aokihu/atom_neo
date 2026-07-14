@@ -123,15 +123,22 @@ describe("compileContextSnapshot", () => {
     ]);
   });
 
-  test("sanitizes unsafe Unicode before TOON encoding", () => {
+  test("repairs lone surrogates before TOON encoding", () => {
     const { snapshot } = compileContextSnapshot([
-      fragment({ key: "text", content: "broken \uD800 escape \\u12" }),
-      fragment({ key: "runtime", channel: "runtime", content: { nested: "broken \uDFFF escape \\u" } }),
+      fragment({ key: "text", content: "broken \uD800 text" }),
+      fragment({ key: "runtime", channel: "runtime", content: { nested: "broken \uDFFF text" } }),
     ]);
     const [runtime, text] = rows(snapshot);
 
     expect(snapshot.content.isWellFormed()).toBe(true);
-    expect(text?.content).toBe("broken � escape ");
-    expect(decode(String(runtime?.content))).toEqual({ nested: "broken � escape " });
+    expect(text?.content).toBe("broken � text");
+    expect(decode(String(runtime?.content))).toEqual({ nested: "broken � text" });
+  });
+
+  test("preserves literal escapes and paths", () => {
+    const content = String.raw`Windows C:\users\alice; regex /\u4e00-\u9fff/; literal \u12`;
+    const { snapshot } = compileContextSnapshot([fragment({ content })]);
+
+    expect(rows(snapshot)[0]?.content).toBe(content);
   });
 });
