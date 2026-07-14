@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents, PromptKey } from "@atom-neo/shared";
+import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
 import { FALLBACK_ANALYSIS } from "./types";
 import { callLLM, parseJsonFromLLMResponse } from "../../shared";
@@ -51,9 +51,9 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       };
 
       const prompt = [
-        `用户请求: ${input.userMessage.slice(0, 500)}`,
+        `用户请求: ${substringWellFormed(input.userMessage, 0, 500)}`,
         `AI回复元数据: parts=${input.assistantParts}, chars=${input.assistantLength}, activeTodos=${input.activeTodoCount}, finishReason=${input.finishReason || "unknown"}, completeDetected=${input.completeDetected}`,
-        `AI回复摘要: ${input.assistantResponse.slice(0, 3000)}`,
+        `AI回复摘要: ${substringWellFormed(input.assistantResponse, 0, 3000)}`,
         `预期任务: ${TASK_INTENT_DESC[input.predictedTaskIntent] ?? "对话交流"}`,
       ].join("\n");
 
@@ -82,10 +82,10 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
     } catch (err: any) {
       this.report(BusEvents.Element.Data, {
         step: "error, fallback",
-        error: err?.message?.slice(0, 300),
+        error: err?.message ? substringWellFormed(err.message, 0, 300) : undefined,
         errorName: err?.name,
         statusCode: err?.statusCode,
-        responseBody: (err?.responseBody ?? "").slice(0, 200),
+        responseBody: substringWellFormed(err?.responseBody ?? "", 0, 200),
       });
       return { ...input, mode: "acting", analysis: FALLBACK_ANALYSIS };
     }

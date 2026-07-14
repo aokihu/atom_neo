@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
-import { BusEvents, WsMessages, sanitizeForJSON } from "@atom-neo/shared";
+import { BusEvents, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource, TaskState } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -301,7 +301,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
     logger.info("task completed", {
       taskId: p.task.id,
-      output: result.output?.slice(0, LOG_OUTPUT_MAX_LEN),
+      output: result.output ? substringWellFormed(result.output, 0, LOG_OUTPUT_MAX_LEN) : undefined,
     });
     const sid = p.task.sessionId;
     const output = sanitizeForJSON(result.responseText || result.output || "");
@@ -364,7 +364,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error: String(p.error) });
-    logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
+    logger.error("task failed", { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) });
     const sid = p.task.sessionId;
     if (sid) {
       broadcaster.broadcastToSession(sid, {
@@ -382,7 +382,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     logger.debug("pipeline element done", { pipeline: p.pipelineName, element: p.elementName, durationMs: p.durationMs });
   });
   bus.on(BusEvents.Pipeline.ElementFailed, (p) => {
-    logger.warn("pipeline element failed", { pipeline: p.pipelineName, element: p.elementName, error: String(p.error).slice(0, 200) });
+    logger.warn("pipeline element failed", { pipeline: p.pipelineName, element: p.elementName, error: substringWellFormed(String(p.error), 0, 200) });
   });
   bus.on(BusEvents.Element.Data, (e) => {
     const { step, level, ...data } = e.payload;

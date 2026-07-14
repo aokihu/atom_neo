@@ -1,4 +1,4 @@
-import { BaseElement } from "@atom-neo/shared";
+import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { TodoItem } from "../../../session/context";
@@ -31,17 +31,18 @@ export function buildAssistantReview(parts: readonly AssistantPart[], todos: rea
   );
   const activeLabels = activeTodos
     .slice(0, 3)
-    .map(todo => `${todo.status}: ${todo.content.slice(0, 80)}`)
+    .map(todo => `${todo.status}: ${substringWellFormed(todo.content, 0, 80)}`)
     .join(" | ");
+  const lastContent = parts.at(-1)!.content;
   const response = [
     `[Response State] parts=${parts.length}, chars=${assistantLength}, finishReason=${finishReason || "unknown"}, completeDetected=${completeDetected}`,
     todos.length > 0
       ? `[TODO State] completed=${counts.completed}, in_progress=${counts.in_progress}, pending=${counts.pending}, cancelled=${counts.cancelled}${activeLabels ? `; active=${activeLabels}` : ""}`
       : "[TODO State] none",
     "[Response Head]",
-    parts[0].content.slice(0, 700),
+    substringWellFormed(parts[0].content, 0, 700),
     "[Response Tail]",
-    parts.at(-1)!.content.slice(-1300),
+    substringWellFormed(lastContent, Math.max(0, lastContent.length - 1300)),
   ].join("\n");
   return { response, assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected };
 }

@@ -125,12 +125,11 @@ server.ts 启动
 
 ### sanatizeForJSON（共享工具函数）
 
-所有 LLM 输出在存储到 session 之前经过双层净化，定义在 `@atom-neo/shared` (`src/packages/shared/src/utils/sanitize.ts`):
+所有 LLM 输出在存储到 session 之前修复孤立 Unicode 代理字符，定义在 `@atom-neo/shared` (`src/packages/shared/src/utils/sanitize.ts`):
 
-| 层 | 技术 | 激活点 |
-|----|------|-------|
-| `String.toWellFormed()` | ES2024 标准，修复孤立代理对 | stream-llm.ts (源头) |
-| 正则 `\\u[0-9a-fA-F]{0,4}` | 剥离字面量 hex escape 文本 | server.ts (防线) |
+| 技术 | 激活点 |
+|------|-------|
+| `String.toWellFormed()` | stream-llm.ts（源头）与 server.ts（防线）；保留字面量 `\u` |
 
 ### TODO 执行提示词变化
 

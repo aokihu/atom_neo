@@ -379,9 +379,7 @@ initial
 
 > **v6 迁移说明**：`maxSteps` 已移除，改用 `stopWhen: stepCountIs(N)` 控制多步工具循环。`maxTokens` 已更名为 `maxOutputTokens`。`allowSystemInMessages` 已废弃（v6 中 system message 始终允许）。
 
-**输出净化**：所有 LLM 输出在流式结束后经过 `sanitizeForJSON()` 双层净化：
-1. `String.toWellFormed()` 修复非法 Unicode 代理对
-2. 正则剥离字面量 `\uXXXX` 文本序列
+**输出净化**：所有 LLM 输出在流式结束后经过 `sanitizeForJSON()`，内部只调用 `String.toWellFormed()` 修复孤立 Unicode 代理字符。字面量 `\uXXXX` 属于合法文本，必须保留。
 
 **溢出检测**：`stepCount===0 && fullTextLen===0 && ratio > 0.8` 才判定 token 溢出，ratio ≤ 0.8 时报 `stream-error-not-overflow` 避免误判。
 
@@ -569,18 +567,19 @@ if (t.name === "todowrite" && r.ok && session?.setTodoState) {
 
 ## 10. Unicode 净化（sanitizeForJSON）
 
-所有 LLM 输出的文本在存储前经过双层净化，防止模型输出的非法 Unicode 字符污染会话历史导致后续 API 400 错误：
+所有 LLM 输出的文本在存储前修复孤立 Unicode 代理字符，防止异常 UTF-16 数据污染会话历史并导致后续 API 400 错误：
 
-| 层 | 技术 | 处理目标 |
-|----|------|----------|
-| **第 1 层** | `String.toWellFormed()` (ES2024) | 孤立代理 codepoint → U+FFFD |
-| **第 2 层** | 正则 `\\u[0-9a-fA-F]{0,4}` | 字面量 `\uXXXX` 文本序列 → decode/strip |
+| 技术 | 处理目标 |
+|------|----------|
+| `String.toWellFormed()` | 孤立代理 codepoint → U+FFFD；保留字面量 `\u`、路径与代码 |
 
 净化点：
 - `stream-llm.ts` — `fullText` 返回前（源头）
 - `server.ts` — assistant message 存储前（防线）
 
 共享工具函数 `sanitizeForJSON` 定义在 `@atom-neo/shared`。
+
+需要按长度提取文本时统一使用 `substringWellFormed(text, start, end)`：先通过 `substring()` 截取，再调用 `toWellFormed()` 修复截断边界可能产生的孤立代理字符。
 
 ## 11. Deps
 

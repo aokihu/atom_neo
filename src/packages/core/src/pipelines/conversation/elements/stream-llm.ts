@@ -1,4 +1,4 @@
-import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON } from "@atom-neo/shared";
+import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { pruneMessages, streamText, tool, zodSchema, stepCountIs } from "ai";
 import type { ModelMessage } from "ai";
@@ -803,7 +803,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       ? current.content.map(message => message.content).join("\n")
       : "[Tool Execution History]";
     const time = new Date().toISOString().slice(11, 19);
-    const line = `- [${time}] ${result.toolName}: ${result.ok ? "ok" : "error"}${result.output ? ` — ${result.output.slice(0, 80)}` : ""}`;
+    const line = `- [${time}] ${result.toolName}: ${result.ok ? "ok" : "error"}${result.output ? ` — ${substringWellFormed(result.output, 0, 80)}` : ""}`;
     this.#contextService.put({
       scope,
       owner,
