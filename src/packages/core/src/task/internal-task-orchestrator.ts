@@ -37,6 +37,13 @@ export class InternalTaskOrchestrator {
     });
   }
 
+  scheduleTodoContinuation(sessionId: string, chatId: string, parentTaskId: string): void {
+    this.#schedule("conversation", {
+      sessionId, chatId, parentTaskId,
+      payload: [{ type: "text", data: "请继续执行当前 TODO；完成后更新 TODO 状态，再处理下一项。" }],
+    });
+  }
+
   schedulePostConversation(sessionId: string, chatId: string, parentTaskId: string): void {
     this.#schedule("post-conversation", { sessionId, chatId, parentTaskId });
   }

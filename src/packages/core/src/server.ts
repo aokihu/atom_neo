@@ -1,5 +1,5 @@
 import { PipelineEventBus } from "@atom-neo/shared";
-import type { FullEventMap } from "@atom-neo/shared";
+import type { ConversationChainAction, ConversationContinuationAction, FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
 import { BusEvents, WsMessages, sanitizeForJSON } from "@atom-neo/shared";
@@ -34,7 +34,7 @@ import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
 import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 import { ContextService } from "./context/context-service";
-import { hasActiveTodos } from "./session/context";
+import { decideTodoContinuation } from "./session/context";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -64,7 +64,7 @@ type CompletedResult = PipelineResult & {
   responseText?: string;
   reasoningContent?: string;
   tokenUsage?: { total: number };
-  chainAction?: "follow_up";
+  chainAction?: ConversationContinuationAction;
   shouldPostCheck?: boolean;
   finishReason?: string;
   completeDetected?: boolean;
@@ -420,7 +420,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const sessionSweepTimer = setInterval(() => sessionStore.sweepIdle(), 60_000);
   sessionSweepTimer.unref?.();
 
-  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: string } }) => {
+  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: ConversationChainAction } }) => {
     const p = e.payload;
     const session = sessionStore.get(p.sessionId);
     logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
@@ -439,25 +439,30 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       return;
     }
 
+    const depth = session.chainDepth;
+
+    if (p.action === "continue_todo") {
+      const decision = decideTodoContinuation(session.todoState, depth, maxChainDepth);
+      if (decision === "complete") {
+        logger.debug("conversation chain: TODO continuation completed, ending chain", { todoCount: session.todoState.length });
+        return;
+      }
+      if (decision === "limit_reached") {
+        logger.debug("conversation chain: TODO continuation depth exceeded, ending chain", { depth, maxChainDepth });
+        return;
+      }
+      if (session.pendingPrediction) {
+        session.pendingPrediction.contextRelevance = "continuation";
+      }
+      session.incrementChainDepth();
+      orchestrator.scheduleTodoContinuation(p.sessionId, p.chatId, p.parentTaskId);
+      return;
+    }
+
     if (session.pendingPrediction) {
       session.pendingPrediction.contextRelevance = "continuation";
     }
 
-    const hasUnfinishedTodos = hasActiveTodos(session.todoState);
-
-    if (hasUnfinishedTodos) {
-      logger.debug("conversation chain: active todos, skipping evaluator, scheduling follow-up", { chainDepth: session.chainDepth });
-      session.incrementChainDepth();
-      orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);
-      return;
-    }
-
-    if (session.todoState && session.todoState.length > 0) {
-      logger.debug("conversation chain: all todos completed, ending chain", { todoCount: session.todoState.length });
-      return;
-    }
-
-    const depth = session.chainDepth;
     if (depth >= maxChainDepth) {
       logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });
       orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId);

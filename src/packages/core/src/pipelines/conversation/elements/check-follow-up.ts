@@ -25,6 +25,7 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
     if (input.mode !== "executing") return input;
 
     const intents = input.intents ?? [];
+    const nonRecoverableError = (input.errorStatusCode ?? 0) >= 400;
 
     for (const intent of intents) {
       if (intent.request === IntentRequestType.RETAIN_MEMORY && this.#memory) {
@@ -35,6 +36,11 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
           this.#memory.retain(fullMemoryId);
         }
       }
+    }
+
+    if (nonRecoverableError) {
+      this.report(BusEvents.Element.Data, { step: "done", chainAction: "none", reason: "non_recoverable_error" });
+      return { ...input, mode: "ready_to_finalize", chainAction: undefined };
     }
 
     for (const intent of intents) {
@@ -55,14 +61,11 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
     }
 
     const activeTodos = hasActiveTodos(this.#session?.todoState);
-    const nonRecoverableError = (input.errorStatusCode ?? 0) >= 400;
-    const chainAction = nonRecoverableError
-      ? undefined
-      : input.chainAction ?? (activeTodos ? "follow_up" : undefined);
+    const chainAction = input.chainAction ?? (activeTodos ? "continue_todo" : undefined);
     this.report(BusEvents.Element.Data, {
       step: "done",
       chainAction: chainAction ?? "none",
-      reason: nonRecoverableError ? "non_recoverable_error" : activeTodos ? "active_todos" : input.chainAction ? "stream" : "complete",
+      reason: input.chainAction ? "stream" : activeTodos ? "active_todos" : "complete",
     });
     return { ...input, mode: "ready_to_finalize", chainAction };
   }

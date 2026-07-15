@@ -162,7 +162,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     if (todos?.length) {
       const icons: Record<string, string> = { pending: "⬜", in_progress: "🔄", completed: "✅", cancelled: "❌" };
       const lines = todos.map((todo: any) => `- ${icons[todo.status] ?? "⬜"} [${todo.priority}] ${todo.content}`);
-      parts.push(`⚠️  一次只能执行一个任务。完成当前任务后需调用 todowrite 更新进度，再调用 intent(action: follow_up) 继续。\n当前任务进度:\n${lines.join("\n")}`);
+      parts.push(`⚠️  一次只能执行一个任务。完成当前任务后调用 todowrite 更新进度并正常结束当前回复，系统会自动继续 active TODO。\n当前任务进度:\n${lines.join("\n")}`);
     }
     const difficulty = this.#session.pendingPrediction?.difficulty ?? "medium";
     if (difficulty === "hard" || difficulty === "mygod") {

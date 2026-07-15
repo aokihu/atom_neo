@@ -36,13 +36,14 @@ initial
 
 ## 触发条件
 
-server.ts 的 `Conversation.Chain` handler 在以下场景调度 follow-up：
+server.ts 的 `Conversation.Chain` handler 只在无计划续写场景调度 follow-up：
 
 | 条件 | chainDepth 处理 |
 |------|-----------------|
-| `action === "follow_up"` 且 `hasActiveTodos`（有活跃 TODO 项） | incrementChainDepth → scheduleFollowUp |
 | `action === "follow_up"` 且 depth 未超限 | incrementChainDepth → scheduleFollowUp |
 | `action === "post_check_retry"` 且 depth 未超限 | incrementChainDepth → scheduleFollowUp |
+
+Active TODO 不属于 follow-up。它使用 `action === "continue_todo"` 和独立的 TODO continuation 提示；两者只共用 `Conversation.Chain` 这一调度通道。
 
 ## 设计要点
 

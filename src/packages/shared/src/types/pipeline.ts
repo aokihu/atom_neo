@@ -34,6 +34,9 @@ export type PipelineResult =
 
 export type FlowState = { mode: string };
 
+export type ConversationContinuationAction = "follow_up" | "continue_todo";
+export type ConversationChainAction = ConversationContinuationAction | "post_check_retry";
+
 export type PipelineEventMap = {
   "element.state-changed": {
     name: string;
@@ -101,7 +104,7 @@ export type DomainEventMap = {
     sessionId: string;
     chatId: string;
     parentTaskId: string;
-    action: "follow_up";
+    action: ConversationChainAction;
   };
   "session.started": { sessionId: string };
   "session.closed": { sessionId: string };

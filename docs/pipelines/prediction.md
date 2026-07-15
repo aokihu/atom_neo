@@ -73,7 +73,7 @@ type IntentPredictionResult = {
 |-----|------|---------|
 | `easy` | 单步问答 | 直接回答，无需 todo |
 | `medium` | 中等复杂度 | 视情况判断是否用 `todowrite` |
-| `hard` | 复杂多步任务 | 必须用 `todowrite` 逐项执行，每项完成后更新进度并调用 intent(follow_up) |
+| `hard` | 复杂多步任务 | 必须用 `todowrite` 逐项执行，每项完成后更新进度并正常结束当前回复，由 `continue_todo` 推进下一项 |
 | `mygod` | 超大规模任务 | 同 hard，且每步完成后必须验证结果 |
 
 ### modelProfile（模型选择）

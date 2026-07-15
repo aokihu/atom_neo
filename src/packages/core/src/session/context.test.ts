@@ -1,5 +1,23 @@
 import { describe, test, expect } from "bun:test";
-import { SessionContext } from "./context";
+import { decideTodoContinuation, SessionContext } from "./context";
+
+describe("decideTodoContinuation", () => {
+  const activeTodo = [{ content: "write report", status: "in_progress" as const, priority: "high" as const }];
+
+  test("continues an active TODO below the chain limit", () => {
+    expect(decideTodoContinuation(activeTodo, 4, 5)).toBe("continue");
+  });
+
+  test("stops an active TODO at the chain limit", () => {
+    expect(decideTodoContinuation(activeTodo, 5, 5)).toBe("limit_reached");
+  });
+
+  test("ends when every TODO is terminal", () => {
+    expect(decideTodoContinuation([
+      { content: "write report", status: "completed", priority: "high" },
+    ], 1, 5)).toBe("complete");
+  });
+});
 
 describe("SessionContext", () => {
   test("initializes with sessionId", () => {
