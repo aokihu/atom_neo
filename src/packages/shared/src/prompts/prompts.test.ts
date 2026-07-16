@@ -39,3 +39,14 @@ describe("Memory discovery prompts", () => {
     expect(enBases[PromptKey.ANALYZE_RESULT]).toContain("pending/in_progress");
   });
 });
+
+describe("Continuation prompts", () => {
+  test("keeps TODO progression separate from follow-up in both languages", () => {
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("系统会根据 active TODO 自动进入下一项");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("system continues from the active TODO");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).not.toContain("`todowrite` → `intent`");
+    expect(enBases[PromptKey.BASE_SYSTEM]).not.toContain("`todowrite` → `intent`");
+    expect(zhBases[PromptKey.CONTEXT_DIFFICULTY_RULES]).not.toContain("action: follow_up");
+    expect(enBases[PromptKey.CONTEXT_DIFFICULTY_RULES]).not.toContain("action: follow_up");
+  });
+});

@@ -12,4 +12,4 @@
 | `elements/types.ts` | Post-conversation FlowState 与分析结果类型 |
 | `index.ts` | 注册 Element 并构建 Pipeline |
 
-Active TODO 由 conversation 的 `check-follow-up` 直接处理，不进入本 Pipeline。这里是模糊结果的质量兜底，不是任务完成状态机。
+Active TODO 由 conversation 的 `check-follow-up` 生成 `continue_todo`，不进入本 Pipeline。这里是模糊结果的质量兜底，不是任务完成状态机。

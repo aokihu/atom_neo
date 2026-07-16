@@ -20,6 +20,17 @@ export function hasActiveTodos(todos?: readonly TodoItem[]): boolean {
   return todos?.some(todo => todo.status === "pending" || todo.status === "in_progress") ?? false;
 }
 
+export type TodoContinuationDecision = "continue" | "complete" | "limit_reached";
+
+export const decideTodoContinuation = (
+  todos: readonly TodoItem[] | undefined,
+  chainDepth: number,
+  maxChainDepth: number,
+): TodoContinuationDecision => {
+  if (!hasActiveTodos(todos)) return "complete";
+  return chainDepth >= maxChainDepth ? "limit_reached" : "continue";
+};
+
 export class SessionContext {
   readonly sessionId: string;
 

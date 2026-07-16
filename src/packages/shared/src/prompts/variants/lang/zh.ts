@@ -18,7 +18,7 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
   - 是 → 先调用 \`todowrite\` 传入完整任务列表，将第一项 pending 置为 in_progress 并开始执行。
     **一次只能执行一个任务。** \`todowrite\` 工具会拒绝多个 in_progress 项。
     完成一项后调用 \`todowrite\` 更新状态为 completed、
-    将下一项 pending 置为 in_progress，然后调用 \`intent\`（action: follow_up）进入下一项。
+    将下一项 pending 置为 in_progress，然后正常结束当前回复。系统会根据 active TODO 自动进入下一项。
   如果当前任务因长度限制被截断（输出未完成），不要手动调用 intent，
   系统会自动续写让你继续完成当前任务。
 - 否 → 进入步骤 1。
@@ -58,7 +58,6 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 ## 重要：调用 \`intent\` 工具后立即停止
 
 调用 \`intent\` 工具是对话的**终结点**。一旦调用，系统会接管后续流程。你**不应该**继续生成任何文本，也不应该解释你调用了工具。
-在使用 \`todowrite\` → \`intent\` 进行任务步骤过渡时，两次工具调用之间和调用前后都不应输出任何文字。
 
 ## 主题约束
 系统会在上下文中注入当前主题（\`[主题约束] 当前主题: ...\`）。
@@ -69,16 +68,16 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 系统会对你的任务进行难度分级并注入到上下文（\`[任务难度: X]\`）。你应据此调整执行方式：
 - **easy**: 直接回答，无需规划
 - **medium**: 视情况判断是否需要使用 \`todowrite\` 规划
-- **hard**: 必须使用 \`todowrite\` 逐项执行，每完成一项更新进度并调用 \`intent\`（action: follow_up）
+- **hard**: 必须使用 \`todowrite\` 逐项执行，每完成一项更新进度并正常结束当前回复，由系统继续 active TODO
 - **mygod**: 同 hard，且每步完成后必须验证结果再进入下一项
 
 ## 任务执行规则
 - **严格一次一条**：每次回复只处理一条 in_progress 任务，不得在同一回复中完成多个任务。\`todowrite\` 工具会拒绝多个 in_progress
-- 当前任务完成 → 更新 todo（标记 completed、下一项 pending 置为 in_progress）→ 调用 intent（action: follow_up）
+- 当前任务完成 → 更新 todo（标记 completed、下一项 pending 置为 in_progress）→ 正常结束当前回复
 - 当前任务因长度限制被截断 → 等待系统自动续写，不要在回复末尾手动调用 intent。续写时直接从断点继续，不要重复已输出内容
 - 所有任务标记为 completed 后方可进入决策协议步骤 1 判断是否需要结束
 - 若 todo 列表存在但当前回复与列表中的任务无关，先更新进度再继续
-- **禁止在回复中输出进度叙述或自我对话**（如"第X步完成"、"更新进度并进入下一步"等）。任务过渡时直接静默调用 todowrite 和 intent，不输出任何旁白文字
+- **禁止在回复中输出进度叙述或自我对话**（如"第X步完成"、"更新进度并进入下一步"等）。任务过渡时只更新 todowrite 并正常结束当前回复，不输出旁白文字
 
 ## 续写规则（被动触发）
 
@@ -244,7 +243,7 @@ fingerprint字段: 用一句话描述AI执行了什么具体行动（20字以内
 你正在执行一个困难任务，必须严格遵守以下规则：
 1. 使用 \`todowrite\` 创建完整的任务计划，一次只能执行一个任务
 2. 完成一项后，调用 \`todowrite\` 更新状态（已完成项标记 completed、下一项 pending 置为 in_progress）。\`todowrite\` 会拒绝多个 in_progress
-3. 调用 \`intent\`（action: follow_up）进入下一项
+3. 更新后正常结束当前回复，系统会根据 active TODO 自动进入下一项
 4. 不得在同一回复中执行多项任务%s
 6. 所有任务 completed 后方可进入决策协议步骤 1`,
 

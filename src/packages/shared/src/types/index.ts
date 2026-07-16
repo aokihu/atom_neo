@@ -42,6 +42,8 @@ export { PipelineResultType, PipelineEnqueueTransition } from "./pipeline";
 export type {
   PipelineResult,
   FlowState,
+  ConversationContinuationAction,
+  ConversationChainAction,
   PipelineEventMap,
   CoreEventMap,
   DomainEventMap,

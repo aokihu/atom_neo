@@ -104,9 +104,11 @@ prepareStep: 从 ContextService 获取新 Snapshot
       <Section title="长任务的 Turn 生命周期">
         <CodeBlock lang="text" code={`LLM Turn 结束
   ↓ check-follow-up
-active TODO ── 是 ──→ follow_up
+输出中断 ── 是 ──→ follow_up（无计划续写）
      │ 否
-     ↓
+     ↓ active TODO
+continue_todo（有计划续跑）
+     ↓ TODO 已完成或达到自动续跑上限
 Task.Completed 保存 Assistant
      ↓
 post-conversation 读取回复头尾 + TODO/结束状态`} />
@@ -119,7 +121,7 @@ post-conversation 读取回复头尾 + TODO/结束状态`} />
           ]}
         />
         <Callout type="ok" title="确定性优先">
-          模型的 finishReason=stop 只结束当前生成；只要仍有 pending/in_progress TODO，系统就自动续写。质量检查只接收长回复的开头、结尾、总长度和结构化状态，不重复注入全文。
+          follow_up 只处理长度耗尽、可恢复错误或显式续写；正常停止后若仍有 pending/in_progress TODO，则由 continue_todo 推进计划，并在达到 chainDepth 上限时停止自动续跑。质量检查只接收长回复的开头、结尾、总长度和结构化状态，不重复注入全文。
         </Callout>
       </Section>
 

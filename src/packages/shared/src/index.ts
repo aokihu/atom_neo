@@ -36,6 +36,8 @@ export type {
   ToolGuardState,
   PipelineResult,
   FlowState,
+  ConversationContinuationAction,
+  ConversationChainAction,
   PipelineEventMap,
   CoreEventMap,
   DomainEventMap,

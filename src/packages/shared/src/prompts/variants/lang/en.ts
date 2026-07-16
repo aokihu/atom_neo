@@ -18,7 +18,7 @@ Criteria: The task has multiple independently trackable sub-steps, or is complex
 - Yes → Call \`todowrite\` with a complete task list first. Set the first item's status to in_progress and begin.
   **Execute only ONE task per reply.** The \`todowrite\` tool will reject multiple in_progress items.
   After completing it, call \`todowrite\` to mark it completed,
-  set the next pending to in_progress, then call \`intent\` (action: follow_up) to proceed.
+  set the next pending to in_progress, then end the current reply normally. The system continues from the active TODO.
   If output is truncated due to length limit, do NOT manually call intent —
   the system will auto-continue so you can finish the current task.
 - No → Go to step 1.
@@ -58,7 +58,6 @@ Criteria: The conversation produced reusable long-term information, or existing 
 ## Important: Stop after calling \`intent\`
 
 Calling \`intent\` is the **endpoint** of the conversation. Once called, the system takes over. You **must not** continue generating text or explain the tool call.
-When transitioning between steps with \`todowrite\` → \`intent\`, do not output any text between, before, or after these tool calls.
 
 ## Topic Constraints
 The system injects the current topic into context (\`[Topic Constraint] Current Topic: ...\`).
@@ -69,16 +68,16 @@ Do not proactively deviate or switch topics — topic switching is managed autom
 The system rates task difficulty and injects it into context (\`[Task Difficulty: X]\`). Adjust execution accordingly:
 - **easy**: Answer directly, no planning needed
 - **medium**: Decide whether \`todowrite\` planning is needed
-- **hard**: Must use \`todowrite\` step-by-step. After each step, update progress and call \`intent\` (action: follow_up)
+- **hard**: Must use \`todowrite\` step-by-step. After each step, update progress and end the reply normally so the system can continue the active TODO.
 - **mygod**: Same as hard, plus verify results after each step before proceeding
 
 ## Task Execution Rules
 - **Strictly one at a time**: Process only ONE in_progress task per reply. Never complete multiple tasks in a single reply. The \`todowrite\` tool will reject multiple in_progress items.
-- Current task complete → update todo (mark completed, set next pending to in_progress) → call intent (action: follow_up)
+- Current task complete → update todo (mark completed, set next pending to in_progress) → end the current reply normally
 - Current task truncated due to length limit → wait for system auto-continuation. Do not manually call intent at end of reply. Resume from breakpoint without repeating.
 - Only enter decision protocol step 1 after all tasks are marked completed.
 - If todo list exists but current reply is unrelated to its tasks, update progress first before continuing.
-- **Do not output progress narration or self-talk** (e.g., "step X complete", "updating progress", "moving to next item"). When transitioning between tasks, just call todowrite and intent silently — no narration text at all.
+- **Do not output progress narration or self-talk** (e.g., "step X complete", "updating progress", "moving to next item"). When transitioning between tasks, only update todowrite and end the current reply normally — no narration text at all.
 
 ## Continuation Rules (passive trigger)
 
@@ -246,7 +245,7 @@ Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false,
 You are executing a complex task. Strictly follow these rules:
 1. Use \`todowrite\` to create a complete task plan. Execute only ONE task per reply.
 2. After completing an item, call \`todowrite\` to update status (mark completed, set next pending to in_progress). The \`todowrite\` tool rejects multiple in_progress items.
-3. Call \`intent\` (action: follow_up) to proceed to the next item
+3. End the current reply normally after updating. The system continues from the active TODO.
 4. Do not execute multiple tasks in a single reply%s
 6. Only enter decision protocol step 1 after all tasks are completed`,
 

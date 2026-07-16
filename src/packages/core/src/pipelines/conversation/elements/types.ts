@@ -1,4 +1,4 @@
-import type { ContextOwner, ContextSnapshot, IntentRequest } from "@atom-neo/shared";
+import type { ContextOwner, ContextSnapshot, ConversationContinuationAction, IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
 
 export type ConversationMode =
@@ -36,7 +36,7 @@ export type ConversationFlowState = {
     nextPrompt: string;
     avoidRepeat: string;
   };
-  chainAction?: "follow_up";
+  chainAction?: ConversationContinuationAction;
   intents?: IntentRequest[];
   tokenUsage?: TokenUsage;
   tokenOverflow?: boolean;

@@ -138,13 +138,14 @@ Context Snapshot 成功并不代表整个用户任务完成。长任务以 Sessi
 ```text
 LLM Turn 结束
   -> check-follow-up 检查 active TODO
-       -> 有 pending/in_progress: chainAction=follow_up
+       -> 输出中断: chainAction=follow_up
+       -> 正常结束且有 pending/in_progress: chainAction=continue_todo
        -> 全部 completed/cancelled: 允许结束
   -> Task.Completed 先保存 Assistant 消息
   -> 再调度下一轮 Conversation 或 post-conversation
 ```
 
-这样下一轮 Snapshot 和 Conversation Messages 都建立在已提交的上一轮结果之上，避免续写重复，也避免 post-conversation 在消息落盘前误判为空回复。质量检查不注入完整长文本，只使用回复开头、结尾、长度、TODO 状态和模型结束原因。
+这样下一轮 Snapshot 和 Conversation Messages 都建立在已提交的上一轮结果之上，避免续写重复，也避免 post-conversation 在消息落盘前误判为空回复。`follow_up` 只处理输出边界中断，`continue_todo` 只处理结构化计划推进。质量检查不注入完整长文本，只使用回复开头、结尾、长度、TODO 状态和模型结束原因。
 
 ## 8. 预算策略
 
