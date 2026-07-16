@@ -352,7 +352,7 @@ Client → GET /api/health
       sessions: 42,
       memory: { connected: true, size: "12MB" },
       tools: { registered: 15, builtin: 12, mcp: 3 },
-      version: "0.13.0"
+      version: "1.8.0"
     }
 ```
 
