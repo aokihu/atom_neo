@@ -92,7 +92,7 @@ describe("E2E: Core HTTP API", () => {
     expect(messages.some((m: any) => m.role === "user")).toBe(true);
   });
 
-  test("DELETE /api/tasks/:id cancels or returns 404", async () => {
+  test("DELETE /api/tasks/:id cancels the matching session task chain or returns 404", async () => {
     const create = await fetch(`${BASE}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -104,7 +104,7 @@ describe("E2E: Core HTTP API", () => {
     });
     const { taskId }: any = await create.json();
 
-    const r = await fetch(`${BASE}/api/tasks/${taskId}`, { method: "DELETE" });
+    const r = await fetch(`${BASE}/api/tasks/${taskId}?sessionId=e2e-s3`, { method: "DELETE" });
     // Task may already be processed by TaskEngine
     expect([200, 404]).toContain(r.status);
   });

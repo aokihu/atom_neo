@@ -5,12 +5,19 @@ export enum TaskSource {
   INTERNAL = "internal",
 }
 
+export enum TaskPriority {
+  EXTERNAL = 10,
+  INTERNAL = 50,
+  USER_CANCEL = 100,
+}
+
 export enum TaskState {
   WAITING = "waiting",
   PENDING = "pending",
   PROCESSING = "processing",
   COMPLETED = "completed",
   FAILED = "failed",
+  CANCELLED = "cancelled",
   FOLLOW_UP = "follow_up",
   DISPATCHED = "dispatched",
   SUSPEND = "suspend",

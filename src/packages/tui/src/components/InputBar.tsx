@@ -22,10 +22,16 @@ interface InputBarProps {
   onHelp?: () => void;
   onClear?: () => void;
   onCompact?: () => void;
+  onCancelTask?: () => void;
+  onCancelHint?: (hint: string | null) => void;
   disabled?: boolean;
 }
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled = false }: InputBarProps) {
+export function isDoubleEscape(lastPressTime: number, now: number, windowMs = 2000): boolean {
+  return lastPressTime > 0 && now - lastPressTime < windowMs;
+}
+
+export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
   const taRef = useRef<TextareaRenderable>(null);
@@ -34,6 +40,8 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
   const navigatingRef = useRef(false);
   const menuSelectedRef = useRef(0);
   const fillFlag = useRef(0);
+  const lastCancelPressRef = useRef(0);
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
 
   const [filter, setFilter] = useState("");
@@ -49,6 +57,16 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
   useEffect(() => { menuSelectedRef.current = menuSelected; }, [menuSelected]);
 
   useEffect(() => { if (disabled) taRef.current?.setText(""); }, [disabled]);
+  useEffect(() => {
+    if (sessionBusy) return;
+    lastCancelPressRef.current = 0;
+    if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+    cancelTimerRef.current = null;
+    onCancelHint?.(null);
+  }, [sessionBusy, onCancelHint]);
+  useEffect(() => () => {
+    if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+  }, []);
 
   const handleContentChange = useCallback(() => {
     if (disabled) return;
@@ -97,6 +115,29 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
       taRef.current?.setText("");
       setContent("");
       setFilter("");
+      return;
+    }
+
+    if (event.name === "escape" && sessionBusy) {
+      event.preventDefault();
+      const now = Date.now();
+      if (isDoubleEscape(lastCancelPressRef.current, now)) {
+        lastCancelPressRef.current = 0;
+        if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+        cancelTimerRef.current = null;
+        onCancelHint?.("Cancelling current task...");
+        onCancelTask?.();
+        return;
+      }
+
+      lastCancelPressRef.current = now;
+      if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
+      cancelTimerRef.current = setTimeout(() => {
+        lastCancelPressRef.current = 0;
+        cancelTimerRef.current = null;
+        onCancelHint?.(null);
+      }, 2000);
+      onCancelHint?.("Press ESC again within 2s to cancel current task");
       return;
     }
 
@@ -151,7 +192,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, disabled 
       ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
       navigatingRef.current = false;
     }
-  }, [disabled, showMenu, cmdMatches, navigateUp, navigateDown, setDraft]);
+  }, [disabled, showMenu, sessionBusy, cmdMatches, navigateUp, navigateDown, setDraft, onCancelTask, onCancelHint]);
 
   return (
     <box flexShrink={0}>

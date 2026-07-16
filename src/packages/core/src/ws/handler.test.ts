@@ -70,4 +70,38 @@ describe("WebSocket session persistence", () => {
     expect(store.get("url-session").messages).toHaveLength(0);
     expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("Failed to persist"))).toBe(true);
   });
+
+  test("cancels through TaskEngine using the URL session", () => {
+    const cancel = mock(() => true);
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      taskEngine: { cancel } as any,
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskCancel,
+      payload: { taskId: "task-1", sessionId: "payload-session" },
+    }));
+
+    expect(cancel).toHaveBeenCalledWith("task-1", "url-session");
+    expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("\"currentState\":\"cancelled\""))).toBe(true);
+  });
+
+  test("does not reveal a task owned by another session", () => {
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      taskEngine: { cancel: () => false } as any,
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskCancel,
+      payload: { taskId: "other-session-task" },
+    }));
+
+    expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("Task not found"))).toBe(true);
+  });
 });

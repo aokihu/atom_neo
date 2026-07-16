@@ -4,6 +4,7 @@ import { TuiClient } from "./ws-client";
 
 class FakeWebSocket {
   static current: FakeWebSocket | undefined;
+  sent: string[] = [];
   onopen?: () => void;
   onmessage?: (event: { data: string }) => void;
   onerror?: () => void;
@@ -13,7 +14,7 @@ class FakeWebSocket {
     FakeWebSocket.current = this;
   }
 
-  send(_message: string): void {}
+  send(message: string): void { this.sent.push(message); }
   close(): void { this.onclose?.(); }
 
   emit(type: string, payload: Record<string, unknown>): void {
@@ -90,6 +91,49 @@ describe("TuiClient task correlation", () => {
 
     await expect(client.send("checkpoint fails")).rejects.toThrow("persist failed");
     await expect(client.send("missing id")).rejects.toThrow("Invalid task submission response");
+    client.close();
+  });
+
+  test("cancels the active task over the session WebSocket", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId: "s1" });
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    socket.emit(WsMessages.Server.SessionReady, { sessionId: "s1" });
+    await connected;
+
+    expect(client.cancelActiveTask()).toBe(false);
+    socket.emit(WsMessages.Server.SessionTaskActive, { active: true, taskId: "task-1" });
+    expect(client.cancelActiveTask()).toBe(true);
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({
+      type: WsMessages.Client.TaskCancel,
+      payload: { taskId: "task-1" },
+    });
+
+    socket.emit(WsMessages.Server.SessionTaskActive, { active: false, taskId: "task-1" });
+    expect(client.cancelActiveTask()).toBe(false);
+    client.close();
+  });
+
+  test("marks a user cancellation as TaskCancelledError", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    globalThis.fetch = (async () => Response.json({ taskId: "root-1" })) as unknown as typeof fetch;
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId: "s1" });
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    socket.emit(WsMessages.Server.SessionReady, { sessionId: "s1" });
+    await connected;
+
+    const request = client.send("cancel me");
+    await nextTurn();
+    socket.emit(WsMessages.Server.TaskFailed, {
+      taskId: "conversation-1",
+      rootTaskId: "root-1",
+      code: "PIPELINE_ABORTED",
+      error: "Task cancelled by user",
+    });
+
+    await expect(request).rejects.toMatchObject({ name: "TaskCancelledError" });
     client.close();
   });
 });

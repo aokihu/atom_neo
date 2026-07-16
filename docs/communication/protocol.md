@@ -64,6 +64,18 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 }
 ```
 
+Core 从当前 WebSocket 的 `/ws/:sessionId` 连接读取 Session 归属，不信任客户端 payload
+提供的 Session。只有 `taskId` 属于当前 Session 时才能取消。Core 使用该 Task 的
+`chainId` 作为取消边界：
+
+- 同一 Chain 的排队任务：全部从 TaskQueue 移除；
+- 同一 Chain 的执行中任务：全部触发 Task AbortSignal；
+- 同一 Chain 的 staged 派生任务：全部从 Orchestrator 丢弃；
+- 其他 Session 或不存在的任务：返回错误，不泄露其他 Session 的任务状态。
+
+成功取消后的成员 Task 状态为 `cancelled`。用户取消属于最高优先级控制操作，不等待普通
+Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation 的后续成员残留。
+
 ### 3.3 `ping`
 
 ```typescript
@@ -103,7 +115,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
   payload: {
     taskId: string;
     previousState: string;
-    currentState: string;    // waiting|pending|processing|completed|failed|follow_up|dispatched|suspended
+    currentState: string;    // waiting|pending|processing|completed|failed|cancelled|follow_up|dispatched|suspended
   }
 }
 ```
@@ -236,6 +248,7 @@ content = content.substring(0, offset) + textDelta;
   payload: {
     taskId: string;
     rootTaskId: string;  // Task chainId: original external task, or this task for independent work
+    code?: string;       // PIPELINE_ABORTED when cancelled by the user
     error: string;
   }
 }

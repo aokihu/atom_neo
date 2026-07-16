@@ -109,7 +109,9 @@ export class TuiClient {
           if (index < 0) return;
           const pending = this.#pending.splice(index, 1)[0];
           const err = p.error ?? "Unknown error";
-          pending.reject(new Error(String(err)));
+          const error = new Error(String(err));
+          if (p.code === "PIPELINE_ABORTED") error.name = "TaskCancelledError";
+          pending.reject(error);
         },
         [WsMessages.Server.SessionTaskActive]: (p) => {
           const { active, taskId } = p;
@@ -170,8 +172,20 @@ export class TuiClient {
   close(): void {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));
     this.#pending = [];
+    this.#activeTaskIds.clear();
     this.#ws?.close();
     this.#ready = false;
+  }
+
+  cancelActiveTask(): boolean {
+    if (!this.#ws || !this.#ready) return false;
+    const taskId = [...this.#activeTaskIds].at(-1);
+    if (!taskId) return false;
+    this.#ws.send(JSON.stringify({
+      type: WsMessages.Client.TaskCancel,
+      payload: { taskId },
+    }));
+    return true;
   }
 
   sendCompact(): void {

@@ -176,6 +176,14 @@ Independent WS Compact has no ownerTaskId → enqueue immediately`} />
             ["TUI", "只展示 Server 广播的 Session/Task/Token 状态", "不直接读写 Session 文件"],
           ]}
         />
+        <Callout type="info" title="双 ESC 取消执行中 Task">
+          Session busy 时第一次按 <code>ESC</code> 显示取消提示；2 秒内再次按
+          <code>ESC</code>，TUI 使用当前 <code>SessionTaskActive.taskId</code> 发送
+          <code>event.task.cancel</code>。Core 校验 WebSocket Session 归属后解析
+          <code>chainId</code>，以最高控制优先级移除整条 Chain 的排队任务、中止执行中
+          Task，并丢弃 staged 派生任务。成功后的 <code>Task cancelled by user</code>
+          提示在 2 秒后自动隐藏，普通错误消息不自动移除。
+        </Callout>
       </Section>
     </div>
   );

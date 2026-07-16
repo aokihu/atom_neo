@@ -340,6 +340,13 @@ send() resolve/reject → sessionBusy = false → 一切清空
 | `sessionBusy && (有文本 \|\| 工具运行中)` | 隐藏 | `⏳ processing...` |
 | `!sessionBusy` | 隐藏 | 隐藏 |
 
+执行中按一次 `ESC` 显示取消提示；2 秒内再次按 `ESC`，TUI 使用当前
+`SessionTaskActive.taskId` 发送 `event.task.cancel`。Core 从该 Task 解析 `chainId`，
+一次性取消同一 Session 中整条 Task Chain 的 queued、processing 与 staged 成员。
+取消完成后显示 `Task cancelled by user` 临时提示，并在 2 秒后自动移除；同时由
+`SessionTaskActive(active=false)` 结束 busy 状态。取消失败保留普通错误消息。
+命令菜单打开时，第一次 `ESC` 只关闭菜单，不计入任务取消。
+
 ## 4. 关键设计
 
 - **sessionBusy 覆盖链式任务** — `send()` 的 await 等到根 TaskCompleted 才 resolve

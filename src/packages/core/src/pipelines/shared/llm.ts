@@ -10,6 +10,7 @@ export async function callLLM(params: {
   systemKey: PromptKey;
   prompt: string;
   maxTokens: number;
+  abortSignal?: AbortSignal;
 }): Promise<string> {
   const provider = createDeepSeek({ apiKey: params.apiKey, baseURL: params.baseUrl });
   const model = provider(params.model);
@@ -19,6 +20,7 @@ export async function callLLM(params: {
     prompt: params.prompt,
     maxOutputTokens: params.maxTokens,
     temperature: 0,
+    abortSignal: params.abortSignal,
   });
   return result.text.trim();
 }

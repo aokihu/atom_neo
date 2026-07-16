@@ -16,4 +16,5 @@ export type CompressFlowState = {
   summary?: string;
   summaryError?: string;
   summaryMaxTokens: number;
+  abortSignal?: AbortSignal;
 };

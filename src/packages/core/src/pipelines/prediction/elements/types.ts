@@ -12,6 +12,7 @@ export type PredictionFlowState = {
   contextMessages?: string;
   prediction?: IntentPredictionResult;
   error?: string;
+  abortSignal?: AbortSignal;
 };
 
 export type PredictionPipelineDeps = {

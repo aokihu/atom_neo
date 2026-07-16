@@ -44,6 +44,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
         systemKey: PromptKey.COMPRESS_SUMMARIZE,
         prompt: input.summaryText,
         maxTokens: input.summaryMaxTokens || 600,
+        abortSignal: input.abortSignal,
       });
       const summaryError = summary.trim() ? undefined : "summary model returned empty text";
       this.report(BusEvents.Element.Data, { step: "generated", summaryLen: summary.length });

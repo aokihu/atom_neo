@@ -52,7 +52,7 @@ const examples = {
   payload: {
     taskId: string;
     previousState: string;
-    currentState: string;
+    currentState: "waiting" | "pending" | "processing" | "completed" | "failed" | "cancelled";
   };
 }`,
   elementStarted: `{
@@ -139,6 +139,7 @@ content = content.substring(0, offset) + textDelta;`,
   payload: {
     taskId: string;
     rootTaskId: string;  // Task chainId: external root, or this task when independent
+    code?: string;       // PIPELINE_ABORTED when cancelled by the user
     error: string;
   };
 }`,
@@ -285,8 +286,24 @@ export default function DocPage({ content, title, description, category }: DocPa
         <CodeBlock lang="typescript" code={examples.taskSubmit} />
 
         <h3 id={slugify("3.2 task.cancel")}>3.2 task.cancel</h3>
-        <p>Request cancellation of a previously submitted task.</p>
+        <p>
+          Request cancellation of a queued or running task. Core derives the Session from the
+          current <code>/ws/:sessionId</code> connection and only cancels a matching Task.
+          The matching Task resolves its <code>chainId</code>: every queued member is removed,
+          every running member receives an AbortSignal, and staged descendants are discarded.
+          Cancellation is a highest-priority control operation and cancelled member Tasks enter
+          the <code>cancelled</code> state.
+        </p>
         <CodeBlock lang="typescript" code={examples.taskCancel} />
+        <Callout type="info" title="Cancellation boundary is the Task Chain">
+          Prediction, Conversation, follow-up, context-compress, and post-conversation are
+          cancelled together when they share the resolved <code>chainId</code>. Independent Tasks
+          use their own ID as the chain ID.
+        </Callout>
+        <Callout type="warn" title="Session ownership is mandatory">
+          The payload only identifies <code>taskId</code>. Core must not trust a client-provided
+          Session ID or reveal whether the same Task ID exists in another Session.
+        </Callout>
 
         <h3 id={slugify("3.3 ping")}>3.3 ping</h3>
         <p>Keep-alive heartbeat sent periodically by the client.</p>
@@ -308,7 +325,7 @@ export default function DocPage({ content, title, description, category }: DocPa
         <p>
           Emitted whenever the task transitions between states.
           Possible states: <code>waiting</code>, <code>pending</code>, <code>processing</code>,
-          <code>completed</code>, <code>failed</code>, <code>follow_up</code>,
+          <code>completed</code>, <code>failed</code>, <code>cancelled</code>, <code>follow_up</code>,
           <code>dispatched</code>, <code>suspended</code>.
         </p>
         <CodeBlock lang="typescript" code={examples.taskStateChanged} />

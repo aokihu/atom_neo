@@ -396,8 +396,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     orchestrator.discardTask(p.task.id);
-    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error: String(p.error) });
-    logger.error("task failed", { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) });
+    const cancelled = p.task.state === TaskState.CANCELLED;
+    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: p.task.state, error: String(p.error) });
+    const logContext = { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) };
+    if (cancelled) logger.info("task cancelled", logContext);
+    else logger.error("task failed", logContext);
     const sid = p.task.sessionId;
     if (sid && !sessionStore.save(sid, "task_failed")) {
       logger.warn("session checkpoint failed after task failure", { sessionId: sid, taskId: p.task.id });
@@ -409,6 +412,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         payload: {
           taskId: p.task.id,
           rootTaskId: p.task.chainId,
+          ...(cancelled ? { code: "PIPELINE_ABORTED" } : {}),
           error: String(p.error),
         },
       });
@@ -534,7 +538,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
   });
 
-  const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
+  const taskEngine = new TaskEngine({
+    bus,
+    queue: taskQueue,
+    pipelineBuilders,
+    discardChain: (chainId, sessionId) => orchestrator.discardChain(chainId, sessionId),
+  });
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
@@ -546,6 +555,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     logger,
     orchestrator,
     sessionStore,
+    taskEngine,
     isStopping: () => stopping,
   });
 
@@ -597,9 +607,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
         const taskId = url.pathname.split("/").pop()!;
-        const response = taskCancelHandler(taskQueue, req, taskId);
-        if (response.ok) sessionStore.releaseTask(taskId);
-        return response;
+        return taskCancelHandler(taskEngine, req, taskId);
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
         return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);

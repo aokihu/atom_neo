@@ -58,11 +58,17 @@ export function createBashTool(sandbox: string): ToolDefinition {
         const out = stdout.trim();
         const err = stderr.trim();
 
+        if (opts?.abortSignal?.aborted) {
+          return { ok: false, output: out, error: "Command cancelled" };
+        }
         if (exitCode === 0) {
           return { ok: true, output: out || err || "(no output)" };
         }
         return { ok: false, output: out || "", error: err || `exit code ${exitCode}` };
       } catch (err: any) {
+        if (opts?.abortSignal?.aborted) {
+          return { ok: false, output: "", error: "Command cancelled" };
+        }
         return { ok: false, output: "", error: `Command timed out after ${timeout}ms` };
       }
     },

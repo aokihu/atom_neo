@@ -419,7 +419,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         stopWhen: stepCountIs(this.#maxSteps),
         maxOutputTokens: this.#maxTokens,
         providerOptions: this.#providerOptions,
-        abortSignal: abortController.signal,
+        abortSignal: input.abortSignal
+          ? AbortSignal.any([abortController.signal, input.abortSignal])
+          : abortController.signal,
         prepareStep: ({ stepNumber, steps, messages }) => {
           if (latestPreparedStep !== stepNumber) completeStep(latestPreparedStep);
           latestPreparedStep = stepNumber;

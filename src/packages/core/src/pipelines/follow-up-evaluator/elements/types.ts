@@ -20,4 +20,5 @@ export type EvaluatorFlowState = {
   session: any;
   recentSummary: string;
   evaluation?: EvaluatorResult;
+  abortSignal?: AbortSignal;
 };

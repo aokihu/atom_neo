@@ -351,7 +351,7 @@ type ServerEvent =
 ```
 POST   /api/tasks              → 提交任务（返回 taskId）
 GET    /api/tasks/:id          → 查询任务状态
-DELETE /api/tasks/:id          → 取消任务
+DELETE /api/tasks/:id?sessionId=:sid → 校验 Session 并取消整条 Task Chain
 WS     /ws/:sessionId          → WebSocket 事件流（双向）
 GET    /api/health             → 健康检查
 GET    /api/metrics            → 运行时指标

@@ -101,10 +101,15 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
       if (!client) throw new Error("Not connected");
       await client.send(text);
     } catch (err: any) {
-      useChatStore.getState().addMessage({
-        role: "error", content: err.message,
-        id: useChatStore.getState().generateId(), timestamp: Date.now(),
-      });
+      const cancelled = err?.name === "TaskCancelledError";
+      const message = {
+        role: cancelled ? "info" as const : "error" as const,
+        content: cancelled ? "Task cancelled by user" : err.message,
+        id: useChatStore.getState().generateId(),
+        timestamp: Date.now(),
+      };
+      if (cancelled) useChatStore.getState().addTransientMessage(message, 2_000);
+      else useChatStore.getState().addMessage(message);
     }
   }, []);
 
@@ -120,5 +125,9 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     clientRef.current?.sendCompact();
   }, []);
 
-  return { send, clearMessages, addMessage, compact };
+  const cancel = useCallback(() => {
+    return clientRef.current?.cancelActiveTask() ?? false;
+  }, []);
+
+  return { send, clearMessages, addMessage, compact, cancel };
 }

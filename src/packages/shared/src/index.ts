@@ -2,6 +2,7 @@
 export {
   TaskSource,
   TaskState,
+  TaskPriority,
   IntentRequestType,
   IntentRequestSource,
   PermissionLevel,
