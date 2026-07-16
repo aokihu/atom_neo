@@ -21,11 +21,19 @@
 // All messages follow this envelope:
 type WSMessage<T extends string, P = Record<string, unknown>> = {
   type: T;
-  seq: number;       // Monotonic sequence number (Core assigns)
+  seq: number;       // Sender-assigned sequence number
   ts: number;        // Unix timestamp ms
   payload: P;
 };
 ```
+
+Client → Core 消息由 Client 自行分配 `seq`。Core → Client 消息由同一个 WebSocket
+Broadcaster 在进程生命周期内统一分配严格递增的 `seq`：
+
+- 每个逻辑消息只分配一次序号；
+- 同一次全局或 Session 广播的所有接收者看到相同序号；
+- Session 客户端可能看到序号间隙，因为其他 Session 的定向消息仍会占用全局序号；
+- 客户端可使用 `seq` 判断乱序或重复，但不能要求收到的序号连续。
 
 ---
 
@@ -36,7 +44,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 ```typescript
 {
   type: "event.task.submit",
-  seq: 0,            // Client assigns, Core echoes in response
+  seq: 0,            // Client assigns
   ts: 1700000000000,
   payload: {
     sessionId: string;

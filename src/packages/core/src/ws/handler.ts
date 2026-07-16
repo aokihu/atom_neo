@@ -20,15 +20,9 @@ type ServerContext = {
   isStopping?: () => boolean;
 };
 
-let seq = 0;
-
 export function createWsHandlers(ctx: ServerContext) {
   function send(ws: ServerWebSocket<unknown>, type: string, payload: unknown) {
-    try {
-      ws.send(JSON.stringify({ type, seq: ++seq, ts: Date.now(), payload }));
-    } catch (err) {
-      ctx.logger?.error("ws send failed", { error: errorMessage(err) });
-    }
+    ctx.broadcaster.send(ws, type, payload);
   }
 
   return {

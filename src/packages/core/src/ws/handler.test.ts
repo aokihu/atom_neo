@@ -23,6 +23,21 @@ const submit = (handlers: ReturnType<typeof createWsHandlers>, ws: any, sessionI
 };
 
 describe("WebSocket session persistence", () => {
+  test("uses the broadcaster sequence for direct WebSocket responses", () => {
+    const broadcaster = new Broadcaster();
+    const handlers = createWsHandlers({
+      broadcaster,
+      taskQueue: new TaskQueue(),
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.open(ws);
+    broadcaster.broadcastToSession("url-session", "server-event", {});
+
+    const messages = ws.send.mock.calls.map(([value]: [string]) => JSON.parse(value));
+    expect(messages.map((message: { seq: number }) => message.seq)).toEqual([1, 2]);
+  });
+
   test("uses the URL session and checkpoints before enqueue", () => {
     const checkpoint = mock(() => {});
     const store = new SessionStore(10, undefined, 0, {

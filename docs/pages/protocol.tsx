@@ -5,7 +5,7 @@ import { PageHeader, Section, CodeBlock, Callout, ComparisonTable, Badge, slugif
 const examples = {
   envelope: `type WSMessage<T extends string, P = Record<string, unknown>> = {
   type: T;
-  seq: number;       // Monotonic sequence number assigned by Core
+  seq: number;       // Sender-assigned sequence number
   ts: number;        // Unix timestamp in milliseconds
   payload: P;
 };`,
@@ -275,6 +275,13 @@ export default function DocPage({ content, title, description, category }: DocPa
       <Section id="common-envelope" title="Common Envelope">
         <p>All messages follow a standard envelope with sequence number and timestamp.</p>
         <CodeBlock lang="typescript" code={examples.envelope} />
+        <Callout type="info" title="Core outbound sequence">
+          Client messages use a client-assigned sequence. Every Core outbound message uses one
+          process-wide, strictly increasing sequence allocated by the WebSocket Broadcaster.
+          A broadcast allocates one value shared by all recipients. Session clients may observe
+          gaps caused by messages routed to other Sessions, so sequence values are ordered but
+          not necessarily contiguous for an individual client.
+        </Callout>
       </Section>
 
       {/* ── Section 3: Client → Core Events ── */}

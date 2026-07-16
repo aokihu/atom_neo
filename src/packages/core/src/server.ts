@@ -147,18 +147,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         toolCount: names.filter(n => toolServers[n] === cfg.name).length,
       }));
 
-      broadcaster.broadcast({
-        type: WsMessages.Server.MCPConnected,
-        ts: Date.now(), seq: 0,
-        payload: { servers: mcpServerInfos, toolInfos: names.map(name => ({ name, source: "mcp" as const, description: (tools[name] as any)?.description ?? "", online: true })) },
+      broadcaster.broadcast(WsMessages.Server.MCPConnected, {
+        servers: mcpServerInfos,
+        toolInfos: names.map(name => ({ name, source: "mcp" as const, description: (tools[name] as any)?.description ?? "", online: true })),
       });
 
       const healthStop = startMCPHealthCheck(clients, matchedConfigs, toolServers, (statuses) => {
-        broadcaster.broadcast({
-          type: WsMessages.Server.MCPToolStatus,
-          ts: Date.now(), seq: 0,
-          payload: { servers: statuses },
-        });
+        broadcaster.broadcast(WsMessages.Server.MCPToolStatus, { servers: statuses });
         for (const s of statuses) {
           const info = mcpServerInfos.find(i => i.name === s.name);
           if (info) info.online = s.online;
@@ -298,10 +293,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     if (sid) {
       sessionStore.acquireTask(p.task.id, sid);
       sessionRef.current = { sessionId: sid, chatId: p.task.chatId ?? "default" };
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: true, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: true,
+        taskId: p.task.id,
       });
     }
   });
@@ -344,15 +338,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error });
       logger.warn("session checkpoint failed after task completion", { sessionId: sid, taskId: p.task.id });
       orchestrator.discardTask(p.task.id);
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.TaskFailed,
-        ts: Date.now(), seq: 0,
-        payload: { taskId: p.task.id, rootTaskId: p.task.chainId, error },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
+        taskId: p.task.id,
+        rootTaskId: p.task.chainId,
+        error,
       });
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: false, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: false,
+        taskId: p.task.id,
       });
       return;
     }
@@ -382,15 +375,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     orchestrator.commitTask(p.task.id);
     if (sid) {
       const accumulated = sessionStore.get(sid).tokenUsage;
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.TaskCompleted,
-        ts: Date.now(), seq: 0,
-        payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", reasoningContent, tokenUsage: accumulated },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskCompleted, {
+        taskId: p.task.id,
+        parentTaskId: p.task.parentTaskId,
+        output: result.output ?? "",
+        reasoningContent,
+        tokenUsage: accumulated,
       });
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: false, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: false,
+        taskId: p.task.id,
       });
     }
   });
@@ -406,20 +400,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       logger.warn("session checkpoint failed after task failure", { sessionId: sid, taskId: p.task.id });
     }
     if (sid) {
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.TaskFailed,
-        ts: Date.now(), seq: 0,
-        payload: {
-          taskId: p.task.id,
-          rootTaskId: p.task.chainId,
-          ...(cancelled ? { code: "PIPELINE_ABORTED" } : {}),
-          error: String(p.error),
-        },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
+        taskId: p.task.id,
+        rootTaskId: p.task.chainId,
+        ...(cancelled ? { code: "PIPELINE_ABORTED" } : {}),
+        error: String(p.error),
       });
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: false, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: false,
+        taskId: p.task.id,
       });
     }
   });

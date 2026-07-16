@@ -52,6 +52,7 @@ describe("Transport bridge", () => {
       WsMessages.Server.TransportToolStepFinished,
       WsMessages.Server.TransportToolGroupComplete,
     ]);
+    expect(messages.map((message: { seq: number }) => message.seq)).toEqual([1, 2, 3, 4, 5, 6]);
     for (const message of messages) {
       expect(message.payload.sessionId).toBe("session-a");
       expect(message.payload.taskId).toBe("task-a");

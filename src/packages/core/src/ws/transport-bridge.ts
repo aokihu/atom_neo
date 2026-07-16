@@ -13,12 +13,7 @@ export function registerTransportBridge(
   broadcaster: Broadcaster,
 ): void {
   const send = (type: string, payload: TransportPayload) => {
-    broadcaster.broadcastToSession(payload.sessionId, {
-      type,
-      ts: Date.now(),
-      seq: 0,
-      payload,
-    });
+    broadcaster.broadcastToSession(payload.sessionId, type, payload);
   };
 
   bus.on(BusEvents.Transport.Reason, ({ payload }) => {
