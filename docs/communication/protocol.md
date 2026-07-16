@@ -195,7 +195,6 @@ content = content.substring(0, offset) + textDelta;
     sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: string;     // builtin | plugin | mcp
     toolCallId: string;
     input: unknown;         // Tool-specific input
   }
@@ -213,15 +212,16 @@ content = content.substring(0, offset) + textDelta;
     sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: string;
     toolCallId: string;
-    ok: boolean;
-    output?: string;        // Tool result text
-    error?: string;         // Error message if failed
-    durationMs: number;
+    result?: unknown;       // Tool output when execution completes
+    error?: unknown;        // Present when execution fails
   }
 }
 ```
+
+Tool 是否成功由 `error` 是否存在判断：成功事件携带 `result`，失败事件携带 `error`。
+执行耗时、Tool 来源与聚合成功数属于 Core 内部观测或 step/group 汇总信息，不在单次
+ToolFinished WebSocket payload 中重复发送。Builtin 与 MCP Tool 必须使用相同的失败语义。
 
 `event.transport.reason`、`event.transport.tool.step-finished` 和
 `event.transport.tool.group-complete` 遵循相同的归属规则：payload 必须包含产生事件的

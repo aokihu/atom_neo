@@ -262,7 +262,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #configContextLimit: number;
   #mcpToolsRef?: { current: Record<string, any> };
   #mcpToolNamesCount = 0;
-  #builtinToolResults = new Map<string, ToolExecutionStatus[]>();
+  #toolResults = new Map<string, ToolExecutionStatus[]>();
   #toolGuardState = { current: {} as ToolGuardState };
   #skillService?: SkillServiceLike;
   #contextService: ContextService;
@@ -297,9 +297,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
-    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#builtinToolResults, this.#toolGuardState, this.#session);
+    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGuardState, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
-    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
+    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults);
     this.#mcpToolsRef = params.mcpToolsRef;
     this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
     this.#aiTools = { ...builtinTools, ...wrappedMCP };
@@ -322,7 +322,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const { userMessages, systemText } = resolveModelInput(input);
     const mcpCurrent = this.#mcpToolsRef?.current ?? {};
     if (Object.keys(mcpCurrent).length > this.#mcpToolNamesCount) {
-      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
+      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults);
       this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
       Object.assign(this.#aiTools, wrappedMCP);
     }
@@ -350,7 +350,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       hasExplicitUrl,
     });
     this.#toolGuardState.current = toWebfetchGuardState(initialToolSelection);
-    this.#builtinToolResults.clear();
+    this.#toolResults.clear();
     this.report(BusEvents.Element.Data, {
       step: "starting LLM call",
       model: this.#model,
@@ -600,7 +600,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           if (pt === "tool-result") {
             const c = chunk as any;
             if (c.toolName === "intent") continue;
-            const status = takeToolExecutionStatus(this.#builtinToolResults, c.toolName);
+            const status = takeToolExecutionStatus(this.#toolResults, c.toolName);
             const rawResult = c.output ?? c.result;
             const toolOutput = String(c.output ?? c.result ?? status?.output ?? "");
             const toolError = c.error ?? status?.error;
@@ -865,6 +865,16 @@ function takeToolExecutionStatus(
   return status;
 }
 
+function stringifyToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output === undefined) return "";
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
+
 function buildAllAiTools(
   tools: ToolDefinition[],
   report: (event: string, payload: Record<string, unknown>) => void,
@@ -925,7 +935,12 @@ function buildAllAiTools(
   return result;
 }
 
-function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }): Record<string, any> {
+export function wrapMCPAiTools(
+  mcpTools: Record<string, any>,
+  report: (event: string, payload: Record<string, unknown>) => void,
+  stepCounter: { count: number },
+  toolResults: Map<string, ToolExecutionStatus[]>,
+): Record<string, any> {
   const wrapped: Record<string, any> = {};
   for (const [name, t] of Object.entries(mcpTools)) {
     const origExecute = (t as any).execute;
@@ -943,11 +958,14 @@ function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, p
           const result = await origExecute(args, opts);
           const duration = Date.now() - start;
           report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: name, stepCount: sc, source: "mcp", duration });
+          pushToolExecutionStatus(toolResults, name, { ok: true, output: stringifyToolOutput(result) });
           return result;
         } catch (err: any) {
           const duration = Date.now() - start;
-          report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: name, stepCount: sc, source: "mcp", duration, error: err?.message ?? String(err) });
-          return `MCP tool error: ${err?.message ?? String(err)}`;
+          const error = err?.message ?? String(err);
+          report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: name, stepCount: sc, source: "mcp", duration, error });
+          pushToolExecutionStatus(toolResults, name, { ok: false, output: "", error });
+          return `MCP tool error: ${error}`;
         }
       },
     };

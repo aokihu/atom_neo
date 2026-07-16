@@ -30,4 +30,20 @@ describe("chat store task completion", () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(useChatStore.getState().messages).toEqual([persistent]);
   });
+
+  test("uses result and error to finish tool entries", () => {
+    useChatStore.getState().handleToolEvent({ name: "weather", callId: "success", input: {} });
+    useChatStore.getState().handleToolEvent({ name: "weather", callId: "success", result: "sunny" });
+    useChatStore.getState().handleToolEvent({ name: "weather", callId: "failure", input: {} });
+    useChatStore.getState().handleToolEvent({ name: "weather", callId: "failure", error: "offline" });
+
+    const group = useChatStore.getState().messages[0];
+    expect(group).toMatchObject({
+      role: "tool-group",
+      entries: [
+        { toolCallId: "success", phase: "done", detail: "sunny" },
+        { toolCallId: "failure", phase: "error", detail: "offline" },
+      ],
+    });
+  });
 });

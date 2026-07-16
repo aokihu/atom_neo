@@ -10,6 +10,7 @@ import {
   summarizeMemoryRead,
   summarizeMemorySearch,
   summarizeSkillDiscovery,
+  wrapMCPAiTools,
 } from "./stream-llm";
 import { ContextService } from "../../../context/context-service";
 import { makeBus } from "../../test-helpers";
@@ -31,6 +32,27 @@ test("uses the TOON Snapshot only as system text", () => {
     systemText: "context[1]{content}:\n  workspace rules",
     userMessages,
   });
+});
+
+test("wrapMCPAiTools records success and failure for transport completion", async () => {
+  const statuses = new Map<string, any[]>();
+  const wrapped = wrapMCPAiTools({
+    weather: { execute: async () => ({ temperature: 20 }) },
+    broken: { execute: async () => { throw new Error("offline"); } },
+  }, () => {}, { count: 0 }, statuses);
+
+  expect(await wrapped.weather.execute({})).toEqual({ temperature: 20 });
+  expect(statuses.get("weather")).toEqual([{
+    ok: true,
+    output: "{\"temperature\":20}",
+  }]);
+
+  expect(await wrapped.broken.execute({})).toBe("MCP tool error: offline");
+  expect(statuses.get("broken")).toEqual([{
+    ok: false,
+    output: "",
+    error: "offline",
+  }]);
 });
 
 function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0]> = {}) {

@@ -97,7 +97,6 @@ content = content.substring(0, offset) + textDelta;`,
     sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: "builtin" | "plugin" | "mcp";
     toolCallId: string;
     input: unknown;
   };
@@ -110,12 +109,9 @@ content = content.substring(0, offset) + textDelta;`,
     sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: string;
     toolCallId: string;
-    ok: boolean;
-    output?: string;
-    error?: string;
-    durationMs: number;
+    result?: unknown;
+    error?: unknown;
   };
 }`,
   taskCompleted: `{
@@ -351,14 +347,20 @@ export default function DocPage({ content, title, description, category }: DocPa
         <CodeBlock lang="typescript" code={examples.deltaAssembly} />
 
         <h3 id={slugify("4.6 transport.tool.started")}>4.6 transport.tool.started</h3>
-        <p>Emitted when a tool invocation begins. Includes tool metadata and input.</p>
+        <p>Emitted when a tool invocation begins. Includes the tool identity and input.</p>
         <CodeBlock lang="typescript" code={examples.toolStarted} />
 
         <h3 id={slugify("4.7 transport.tool.finished")}>4.7 transport.tool.finished</h3>
         <p>
-          Emitted when a tool invocation completes, including output, error status, and duration.
+          Emitted when a tool invocation completes. Successful calls carry <code>result</code>;
+          failed calls carry <code>error</code>.
         </p>
         <CodeBlock lang="typescript" code={examples.toolFinished} />
+        <Callout type="info" title="Result and error are the wire contract">
+          Tool source, duration, and the internal <code>ok</code> flag remain Core observability
+          data. They are not duplicated in the per-call WebSocket event. Builtin and MCP tools use
+          the same <code>result</code>/<code>error</code> completion semantics.
+        </Callout>
         <Callout type="info" title="Session-scoped transport events">
           <code>event.transport.reason</code>, <code>event.transport.tool.step-finished</code> and{" "}
           <code>event.transport.tool.group-complete</code> follow the same ownership contract:
