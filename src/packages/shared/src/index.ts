@@ -12,6 +12,7 @@ export type {
   UUID,
   ISOTimeString,
   TaskItem,
+  TaskOrigin,
   TaskPayload,
   TaskToolCall,
   TaskToolReport,
@@ -109,7 +110,7 @@ export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";
 export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
-export { normalizeError, errorMessage, truncate, slugify, sanitizeForJSON, sleep, debounce, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
+export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
 
 // ── Constants ──
 export { BusEvents, WsMessages } from "./constants";

@@ -34,7 +34,7 @@ describe("evaluator-input", () => {
       name: "evaluator-input", kind: "source", bus, session,
     });
 
-    const result = await el.doProcess({ mode: "initial", task: { id: "t1" } });
+    const result = await el.process({ mode: "initial", task: { id: "t1" } });
     expect(result.mode).toBe("analyzing");
     expect(result.recentSummary).toContain("user: hello");
     expect(result.recentSummary).toContain("assistant: hi there");
@@ -49,7 +49,7 @@ describe("evaluator-input", () => {
       name: "evaluator-input", kind: "source", bus, session,
     });
 
-    const result = await el.doProcess({ mode: "initial", task: { id: "t1" } });
+    const result = await el.process({ mode: "initial", task: { id: "t1" } });
     expect(result.mode).toBe("analyzing");
     expect(result.recentSummary).toBe("");
   });
@@ -64,7 +64,7 @@ describe("evaluator-analyze", () => {
       apiKey: "", model: "deepseek-v4-flash",
     });
 
-    const result = await el.doProcess({
+    const result = await el.process({
       mode: "analyzing", task: { id: "t1" }, session: null,
       recentSummary: "user: hello\nassistant: hi",
     });
@@ -82,7 +82,7 @@ describe("evaluator-analyze", () => {
       apiKey: "sk-test", model: "deepseek-v4-flash",
     });
 
-    const result = await el.doProcess({
+    const result = await el.process({
       mode: "analyzing", task: { id: "t1" }, session: null,
       recentSummary: "",
     });
@@ -105,7 +105,7 @@ describe("evaluate-finalize", () => {
       contextService,
     });
 
-    await el.doProcess({
+    await el.process({
       mode: "intervening", task: { id: "t1", chatId: "c1", parentTaskId: "root" },
       session, recentSummary: "",
       evaluation: { health: "healthy", suggestion: "", upgradeModel: false, reason: "" },
@@ -128,7 +128,7 @@ describe("evaluate-finalize", () => {
       contextService,
     });
 
-    await el.doProcess({
+    await el.process({
       mode: "intervening", task: { id: "t1", chatId: "c1", parentTaskId: "root" },
       session, recentSummary: "",
       evaluation: { health: "looping", suggestion: "try differently", upgradeModel: false, reason: "repeating" },
@@ -156,7 +156,7 @@ describe("evaluate-finalize", () => {
       contextService,
     });
 
-    await el.doProcess({
+    await el.process({
       mode: "intervening", task: { id: "t1", chatId: "c1", parentTaskId: "root" },
       session, recentSummary: "",
       evaluation: { health: "stuck", suggestion: "", upgradeModel: false, reason: "dead end" },
@@ -181,7 +181,7 @@ describe("evaluate-finalize", () => {
       contextService,
     });
 
-    await el.doProcess({
+    await el.process({
       mode: "intervening", task: { id: "t1", chatId: "c1", parentTaskId: "root" },
       session, recentSummary: "",
     });

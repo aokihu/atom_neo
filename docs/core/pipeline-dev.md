@@ -295,7 +295,9 @@ export type PipelineEventMap = {
 
 export type CoreEventMap = {
   "task.enqueued": { task: TaskItem };
+  "task.activated": { task: TaskItem };
   "task.completed": { task: TaskItem; result: PipelineResult };
+  "task.committed": { task: TaskItem; result: PipelineResult };
   "task.failed": { task: TaskItem; error: unknown };
 };
 

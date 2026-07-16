@@ -41,6 +41,7 @@ describe("createContinuationTask", () => {
     const parent = createTaskItem({
       sessionId: "s1", chatId: "c1", pipeline: "conv",
       source: TaskSource.EXTERNAL, payload: [],
+      origin: { type: "hook", hookId: "hook-1" },
     });
 
     const child = createContinuationTask({
@@ -53,5 +54,6 @@ describe("createContinuationTask", () => {
     expect(child.chainId).toBe(parent.chainId);
     expect(child.sessionId).toBe(parent.sessionId);
     expect(child.source).toBe(TaskSource.INTERNAL);
+    expect(child.origin).toEqual(parent.origin);
   });
 });

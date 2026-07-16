@@ -27,4 +27,54 @@ describe("InternalTaskOrchestrator continuations", () => {
     expect(tasks[0].payload[0].data).toContain("继续执行当前 TODO");
     expect(tasks[0].payload[0].data).not.toContain("上次中断处继续");
   });
+
+  test("releases staged downstream tasks only after the parent commits", () => {
+    const { orchestrator, tasks } = createOrchestrator();
+    orchestrator.beginTask({ id: "parent" } as any);
+    orchestrator.scheduleConversation("s1", "c1", "parent", undefined, undefined, "parent");
+
+    expect(tasks).toHaveLength(0);
+    orchestrator.commitTask("parent");
+    expect(tasks).toHaveLength(1);
+  });
+
+  test("discards staged downstream tasks when the parent checkpoint fails", () => {
+    const { orchestrator, tasks } = createOrchestrator();
+    orchestrator.beginTask({ id: "parent" } as any);
+    orchestrator.scheduleCompress("s1", "c1", "parent", undefined, "parent");
+
+    orchestrator.discardTask("parent");
+    expect(tasks).toHaveLength(0);
+  });
+
+  test("does not stage an independent compact request under the active task", () => {
+    const { orchestrator, tasks } = createOrchestrator();
+    orchestrator.beginTask({ id: "parent" } as any);
+
+    orchestrator.scheduleCompress("s1", "c1", "manual");
+    orchestrator.discardTask("parent");
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].parentTaskId).toBe("manual");
+  });
+
+  test("propagates Hook origin to staged continuation tasks", () => {
+    const { orchestrator, tasks } = createOrchestrator();
+    orchestrator.beginTask({ id: "parent", chainId: "root", origin: { type: "hook", hookId: "hook-1" } } as any);
+    orchestrator.scheduleFollowUp("s1", "c1", "parent", "parent");
+
+    orchestrator.commitTask("parent");
+    expect(tasks[0].origin).toEqual({ type: "hook", hookId: "hook-1" });
+    expect(tasks[0].chainId).toBe("root");
+  });
+
+  test("rejects an explicit owner that is no longer active", () => {
+    const { orchestrator, tasks } = createOrchestrator();
+
+    expect(() => orchestrator.scheduleFollowUp("s1", "c1", "root", "missing"))
+      .toThrow("Task owner is not active: missing");
+    expect(() => orchestrator.scheduleFollowUp("s1", "c1", "root", ""))
+      .toThrow("Task owner is not active:");
+    expect(tasks).toHaveLength(0);
+  });
 });

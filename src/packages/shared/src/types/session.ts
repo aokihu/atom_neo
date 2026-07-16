@@ -1,6 +1,7 @@
 import type { ToolResult } from "./tool";
 
 export type SessionMessage = {
+  seq?: number;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;

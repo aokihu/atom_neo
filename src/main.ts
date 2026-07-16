@@ -144,7 +144,7 @@ export async function main(): Promise<void> {
         },
       });
     } finally {
-      core.stop();
+      await core.stop();
     }
     return;
   }

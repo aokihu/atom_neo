@@ -33,6 +33,32 @@ describe("SessionContext", () => {
     expect(ctx.messages.length).toBe(2);
     expect(ctx.messages[0].role).toBe("user");
     expect(ctx.messages[1].content).toBe("hi");
+    expect(ctx.messages.map(message => message.seq)).toEqual([1, 2]);
+  });
+
+  test("removes only messages selected by stable sequence", () => {
+    const ctx = new SessionContext("s1");
+    ctx.addMessage({ role: "user", content: "one", timestamp: 1 });
+    ctx.addMessage({ role: "assistant", content: "hidden", timestamp: 2, visible: false });
+    ctx.addMessage({ role: "assistant", content: "three", timestamp: 3 });
+
+    expect(ctx.removeMessages([1, 3])).toBe(2);
+    expect(ctx.messages.map(message => message.content)).toEqual(["hidden"]);
+  });
+
+  test("exports and restores durable state while resetting runtime locks", () => {
+    const ctx = new SessionContext("s1", 10);
+    ctx.addMessage({ role: "user", content: "hello", timestamp: 11 });
+    ctx.setTodoState([{ content: "continue", status: "in_progress", priority: "high" }]);
+    ctx.compressing = true;
+    const archives = { segmentCount: 0, archivedMessageCount: 0, latestMessageCount: 1, nextSegment: 1 };
+    const state = ctx.exportState({ checkpointRevision: 1, status: "suspended", archives, reason: "shutdown" });
+
+    const restored = SessionContext.restore(state, ctx.messages);
+    expect(restored.createdAt).toBe(10);
+    expect(restored.todoState[0]?.content).toBe("continue");
+    expect(restored.compressing).toBe(false);
+    expect(restored.messages[0]?.seq).toBe(1);
   });
 
   test("manages inference facts", () => {

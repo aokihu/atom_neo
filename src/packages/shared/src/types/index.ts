@@ -3,6 +3,7 @@ export type { UUID, ISOTimeString } from "./primitive";
 export { TaskSource, TaskState } from "./task";
 export type {
   TaskItem,
+  TaskOrigin,
   TaskPayload,
   TaskToolCall,
   TaskToolReport,

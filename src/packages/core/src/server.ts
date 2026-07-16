@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationChainAction, ConversationContinuationAction, FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
-import { BusEvents, WsMessages, sanitizeForJSON } from "@atom-neo/shared";
+import { BusEvents, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource, TaskState } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -35,6 +35,7 @@ import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
 import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 import { ContextService } from "./context/context-service";
 import { decideTodoContinuation } from "./session/context";
+import { SessionPersistenceService } from "./session/persistence-service";
 
 const API_PREFIX = "/api/";
 const LOG_OUTPUT_MAX_LEN = 200;
@@ -83,7 +84,7 @@ export type CoreDeps = {
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
-export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; toolInfos: { name: string; source: string; description: string; online?: boolean }[]; mcpServerInfos: { name: string; online: boolean; toolCount: number }[]; stop: () => void }> {
+export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; toolInfos: { name: string; source: string; description: string; online?: boolean }[]; mcpServerInfos: { name: string; online: boolean; toolCount: number }[]; stop: () => Promise<void> }> {
   const { port, host, logger, sm, runtime } = deps;
   const sandbox: string = runtime.sandbox ?? "";
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
@@ -109,7 +110,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     return compiler?.getCompiledPrompt() ?? "";
   };
 
-  const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? []);
+  const bus = new PipelineEventBus<FullEventMap>();
+  bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
+  const contextService = new ContextService(bus);
+  contextService.start();
+  const persistence = new SessionPersistenceService(sandbox, contextService);
+  const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx), undefined, persistence);
+
+  const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? [], persistence);
   if (skillService) {
     allTools.push(...createSkillTools(skillService));
   }
@@ -251,6 +259,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         configContextLimit: resolvedContextLimit,
         maxTokens,
         contextService,
+        persistence,
       }).build(bus);
     },
 
@@ -266,9 +275,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     },
   };
 
-  const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx));
   const toolRegistry = new ToolRegistry();
-  registerBuiltinTools(toolRegistry, sandbox, runtime?.appConfig?.permission?.whitelist ?? []);
+  registerBuiltinTools(toolRegistry, sandbox, runtime?.appConfig?.permission?.whitelist ?? [], persistence);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
   initPromptRegistry();
@@ -280,13 +288,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   registerPostConversationElements();
   registerSharedElements();
 
-  const bus = new PipelineEventBus<FullEventMap>();
-  bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
-  const contextService = new ContextService(bus);
-  contextService.start();
+  bus.on(BusEvents.Task.Enqueued, ({ task }) => {
+    if (task.sessionId) sessionStore.acquireTask(task.id, task.sessionId);
+  });
   bus.on(BusEvents.Task.Activated, (p) => {
+    orchestrator.beginTask(p.task);
     const sid = p.task.sessionId;
     if (sid) {
+      sessionStore.acquireTask(p.task.id, sid);
       sessionRef.current = { sessionId: sid, chatId: p.task.chatId ?? "default" };
       broadcaster.broadcastToSession(sid, {
         type: WsMessages.Server.SessionTaskActive,
@@ -297,11 +306,10 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
   bus.on(BusEvents.Task.Completed, (p) => {
     const result = p.result as CompletedResult;
-    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.COMPLETED, result });
 
-    logger.info("task completed", {
+    logger.info("task pipeline completed", {
       taskId: p.task.id,
-      output: result.output?.slice(0, LOG_OUTPUT_MAX_LEN),
+      output: result.output ? substringWellFormed(result.output, 0, LOG_OUTPUT_MAX_LEN) : undefined,
     });
     const sid = p.task.sessionId;
     const output = sanitizeForJSON(result.responseText || result.output || "");
@@ -328,11 +336,33 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     if (sid && result.tokenUsage) {
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
     }
+    const checkpointed = !sid || sessionStore.save(sid, "task_completed");
+    if (!checkpointed) {
+      const error = "Session checkpoint failed after task completion";
+      p.task.state = TaskState.FAILED;
+      taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error });
+      logger.warn("session checkpoint failed after task completion", { sessionId: sid, taskId: p.task.id });
+      orchestrator.discardTask(p.task.id);
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.TaskFailed,
+        ts: Date.now(), seq: 0,
+        payload: { taskId: p.task.id, rootTaskId: p.task.chainId, error },
+      });
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.SessionTaskActive,
+        ts: Date.now(), seq: 0,
+        payload: { active: false, taskId: p.task.id },
+      });
+      return;
+    }
+    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.COMPLETED, result });
+    bus.emit(BusEvents.Task.Committed, { task: p.task, result: p.result });
     if (sid && p.task.pipeline === "conversation") {
       const payload = {
         sessionId: sid,
         chatId: p.task.chatId,
         parentTaskId: p.task.parentTaskId ?? p.task.id,
+        ownerTaskId: p.task.id,
       };
       if (result.chainAction) {
         logger.debug("conversation completed: scheduling chain after persistence", { action: result.chainAction, sessionId: sid });
@@ -348,13 +378,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         } as any);
       }
     }
-    const accumulated = sessionStore.get(sid).tokenUsage;
+    orchestrator.commitTask(p.task.id);
+    if (sid) {
+      const accumulated = sessionStore.get(sid).tokenUsage;
       broadcaster.broadcastToSession(sid, {
         type: WsMessages.Server.TaskCompleted,
         ts: Date.now(), seq: 0,
         payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", reasoningContent, tokenUsage: accumulated },
       });
-    if (sid) {
       broadcaster.broadcastToSession(sid, {
         type: WsMessages.Server.SessionTaskActive,
         ts: Date.now(), seq: 0,
@@ -363,16 +394,35 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     }
   });
   bus.on(BusEvents.Task.Failed, (p) => {
+    orchestrator.discardTask(p.task.id);
     taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error: String(p.error) });
-    logger.error("task failed", { taskId: p.task.id, error: String(p.error).slice(0, 200) });
+    logger.error("task failed", { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) });
     const sid = p.task.sessionId;
+    if (sid && !sessionStore.save(sid, "task_failed")) {
+      logger.warn("session checkpoint failed after task failure", { sessionId: sid, taskId: p.task.id });
+    }
     if (sid) {
+      broadcaster.broadcastToSession(sid, {
+        type: WsMessages.Server.TaskFailed,
+        ts: Date.now(), seq: 0,
+        payload: {
+          taskId: p.task.id,
+          rootTaskId: p.task.chainId,
+          error: String(p.error),
+        },
+      });
       broadcaster.broadcastToSession(sid, {
         type: WsMessages.Server.SessionTaskActive,
         ts: Date.now(), seq: 0,
         payload: { active: false, taskId: p.task.id },
       });
     }
+  });
+  bus.on(BusEvents.Task.Completed, ({ task }) => {
+    sessionStore.releaseTask(task.id);
+  });
+  bus.on(BusEvents.Task.Failed, ({ task }) => {
+    sessionStore.releaseTask(task.id);
   });
 
   bus.on(BusEvents.Pipeline.ElementStarted, (p) => {
@@ -382,7 +432,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     logger.debug("pipeline element done", { pipeline: p.pipelineName, element: p.elementName, durationMs: p.durationMs });
   });
   bus.on(BusEvents.Pipeline.ElementFailed, (p) => {
-    logger.warn("pipeline element failed", { pipeline: p.pipelineName, element: p.elementName, error: String(p.error).slice(0, 200) });
+    logger.warn("pipeline element failed", { pipeline: p.pipelineName, element: p.elementName, error: substringWellFormed(String(p.error), 0, 200) });
   });
   bus.on(BusEvents.Element.Data, (e) => {
     const { step, level, ...data } = e.payload;
@@ -420,7 +470,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const sessionSweepTimer = setInterval(() => sessionStore.sweepIdle(), 60_000);
   sessionSweepTimer.unref?.();
 
-  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; action: ConversationChainAction } }) => {
+  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string; action: ConversationChainAction } }) => {
     const p = e.payload;
     const session = sessionStore.get(p.sessionId);
     logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
@@ -435,7 +485,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session.pendingPrediction.contextRelevance = "continuation";
       }
       session.incrementChainDepth();
-      orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);
+      orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
       return;
     }
 
@@ -455,7 +505,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session.pendingPrediction.contextRelevance = "continuation";
       }
       session.incrementChainDepth();
-      orchestrator.scheduleTodoContinuation(p.sessionId, p.chatId, p.parentTaskId);
+      orchestrator.scheduleTodoContinuation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
       return;
     }
 
@@ -465,29 +515,37 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
     if (depth >= maxChainDepth) {
       logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });
-      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId);
+      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
       return;
     }
     if (depth >= 3 && depth % 3 === 0) {
       logger.debug("conversation chain: periodic evaluator", { depth, action: p.action });
-      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId);
+      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
       return;
     }
     session.incrementChainDepth();
-    orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId);
+    orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
   });
 
-  bus.on(BusEvents.Conversation.Idle as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string } }) => {
+  bus.on(BusEvents.Conversation.Idle as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string } }) => {
     const p = e.payload;
     logger.debug("conversation idle: scheduling post-conversation check", { sessionId: p.sessionId });
-    orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId);
+    orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
   });
 
   const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
-  const wsHandlers = createWsHandlers({ broadcaster, taskQueue, bus, logger, orchestrator });
+  const wsHandlers = createWsHandlers({
+    broadcaster,
+    taskQueue,
+    bus,
+    logger,
+    orchestrator,
+    sessionStore,
+    isStopping: () => stopping,
+  });
 
   // Bridge: bus transport.reason → WebSocket broadcaster for reasoning streaming
   bus.on(BusEvents.Transport.Reason as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
@@ -543,6 +601,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     });
   });
 
+  let stopping = false;
   const server = Bun.serve({
     port: port || 3100,
     hostname: host,
@@ -562,26 +621,37 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
 
       if (url.pathname === `${API_PREFIX}tasks` && method === "POST") {
+        if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
         const body = await req.json().catch(() => ({})) as TaskRequestBody;
-        const session = sessionStore.get(body.sessionId ?? "default");
-        if (body.data?.text) {
-          session.addMessage({ role: "user", content: body.data.text, timestamp: Date.now() });
-          session.resetChainDepth();
-          session.originalSource = "external";
+        const normalized = {
+          ...body,
+          sessionId: body.sessionId ?? "default",
+          chatId: body.chatId ?? "default",
+        };
+        if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text)) {
+          return Response.json({ error: "Failed to persist session message" }, { status: 500 });
         }
-        return createTaskHandler(taskQueue, body, bus);
+        return createTaskHandler(taskQueue, normalized, bus);
       }
       if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "GET") {
         const sid = url.pathname.split("/").pop()!;
-        return Response.json(sessionStore.has(sid) ? sessionStore.get(sid).messages : []);
+        const session = sessionStore.load(sid);
+        return session
+          ? Response.json(session.messages)
+          : Response.json({ error: "Session not found" }, { status: 404 });
       }
       if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "DELETE") {
         const sid = url.pathname.split("/").pop()!;
-        sessionStore.delete(sid);
+        if (!sessionStore.delete(sid)) {
+          return Response.json({ error: "Session is active" }, { status: 409 });
+        }
         return Response.json({ ok: true, sessionId: sid });
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
-        return taskCancelHandler(taskQueue, req, url.pathname.split("/").pop()!);
+        const taskId = url.pathname.split("/").pop()!;
+        const response = taskCancelHandler(taskQueue, req, taskId);
+        if (response.ok) sessionStore.releaseTask(taskId);
+        return response;
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
         return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
@@ -591,6 +661,42 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     websocket: wsHandlers,
   });
 
+  let stopPromise: Promise<void> | null = null;
+  const stop = (): Promise<void> => {
+    if (stopPromise) return stopPromise;
+    stopPromise = (async () => {
+      stopping = true;
+      clearInterval(sessionSweepTimer);
+      server.stop(false);
+      hookManager.stop();
+      scheduleService.stop();
+      while (!await taskEngine.drain({ timeoutMs: 30_000 })) {
+        logger.warn("waiting for queued and active tasks before shutdown");
+      }
+      sessionStore.suspendAll("shutdown");
+      const failedCheckpoints = sessionStore.size;
+      if (failedCheckpoints > 0) {
+        logger.error("session checkpoint failed during shutdown", { remaining: failedCheckpoints });
+        throw new Error(`Failed to persist ${failedCheckpoints} session(s) during shutdown`);
+      }
+      mcpHealthStopRef.current();
+      bus.emit(BusEvents.Context.CoreStopped, {});
+      contextService.stop();
+      await closeMCPClients(mcpClients);
+      await server.stop(true);
+    })().catch(error => {
+      stopPromise = null;
+      throw error;
+    });
+    return stopPromise;
+  };
+
   logger.info("core ready", { port: server.port, address: host });
-  return { port: server.port!, tools: allTools.map((t: any) => t.name), toolInfos, mcpServerInfos, stop: () => { clearInterval(sessionSweepTimer); hookManager.stop(); mcpHealthStopRef.current(); taskEngine.stop(); bus.emit(BusEvents.Context.CoreStopped, {}); contextService.stop(); server.stop(); closeMCPClients(mcpClients); } };
+  return {
+    port: server.port!,
+    tools: allTools.map((t: any) => t.name),
+    toolInfos,
+    mcpServerInfos,
+    stop,
+  };
 }

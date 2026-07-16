@@ -12,10 +12,17 @@ import {
 } from "./builtin/memory";
 import { createIntentTool } from "./builtin/intent";
 import { createTodoWriteTool } from "./builtin/todowrite";
+import { createHistoryTools } from "./builtin/history";
+import type { SessionPersistenceService } from "../session/persistence-service";
 import { createToolGuard } from "./guard";
 
 /** Create all builtin tool definitions (fs, bash, memory) for a sandbox. */
-export function createAllTools(sandbox: string, memory?: any, whitelist?: string[]): ToolDefinition[] {
+export function createAllTools(
+  sandbox: string,
+  memory?: any,
+  whitelist?: string[],
+  persistence?: SessionPersistenceService,
+): ToolDefinition[] {
   const sb = createSandbox(sandbox);
   const raw: ToolDefinition[] = [
     createReadTool(sb), createWriteTool(sb), createLsTool(sb),
@@ -31,12 +38,18 @@ export function createAllTools(sandbox: string, memory?: any, whitelist?: string
     createTodoWriteTool(),
     createWebFetchTool(),
     createGlobTool(sb), createEditTool(sb),
+    ...(persistence ? createHistoryTools(persistence) : []),
   ];
   return raw.map(t => createToolGuard(t, sandbox, whitelist ?? []));
 }
 
-export function registerBuiltinTools(registry: ToolRegistry, sandbox: string, whitelist?: string[]): void {
-  for (const t of createAllTools(sandbox, undefined, whitelist)) {
+export function registerBuiltinTools(
+  registry: ToolRegistry,
+  sandbox: string,
+  whitelist?: string[],
+  persistence?: SessionPersistenceService,
+): void {
+  for (const t of createAllTools(sandbox, undefined, whitelist, persistence)) {
     registry.register(t);
   }
 }

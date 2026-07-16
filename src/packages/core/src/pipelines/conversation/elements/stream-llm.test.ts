@@ -3,7 +3,7 @@ import { decode } from "@toon-format/toon";
 import {
   containsExplicitUrl,
   injectToolContext,
-  pruneConsumedMemoryTraversal,
+  pruneConsumedTransientTools,
   resolveModelInput,
   selectActiveToolsForStep,
   shouldPersistToolResult,
@@ -17,7 +17,7 @@ import { makeBus } from "../../test-helpers";
 const availableToolNames = [
   "read", "write", "search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
   "skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload",
-  "todowrite", "intent", "webfetch", "bash", "mcp_weather",
+  "todowrite", "intent", "webfetch", "bash", "search_history", "read_history", "mcp_weather",
 ];
 
 test("uses the TOON Snapshot only as system text", () => {
@@ -147,7 +147,10 @@ describe("selectActiveToolsForStep", () => {
 
   test("keeps webfetch visible for every intent", () => {
     for (const taskIntent of ["conversation", "question", "creative", "instruction"]) {
-      expect(select({ taskIntent }).activeTools).toContain("webfetch");
+      const activeTools = select({ taskIntent }).activeTools;
+      expect(activeTools).toContain("webfetch");
+      expect(activeTools).toContain("search_history");
+      expect(activeTools).toContain("read_history");
     }
   });
 
@@ -250,7 +253,7 @@ describe("transient memory traversal context", () => {
 
   test("keeps traversal results for the immediate consumer step", () => {
     const messages = [{ role: "user", content: "browse memory" }, traversalCall, traversalResult] as any;
-    expect(pruneConsumedMemoryTraversal(messages)).toEqual(messages);
+    expect(pruneConsumedTransientTools(messages)).toEqual(messages);
   });
 
   test("removes traversal calls and results after another tool step", () => {
@@ -267,13 +270,39 @@ describe("transient memory traversal context", () => {
       }] },
     ] as any;
 
-    const pruned = pruneConsumedMemoryTraversal(messages);
+    const pruned = pruneConsumedTransientTools(messages);
     expect(JSON.stringify(pruned)).not.toContain("traverse_memory");
     expect(JSON.stringify(pruned)).toContain("read_memory");
   });
 
+  test("removes consumed history chunks after the next tool step", () => {
+    const messages = [
+      { role: "user", content: "verify the original" },
+      { role: "assistant", content: [{
+        type: "tool-call", toolCallId: "history-1", toolName: "read_history", input: { archiveId: "message-000001" },
+      }] },
+      { role: "tool", content: [{
+        type: "tool-result", toolCallId: "history-1", toolName: "read_history",
+        output: { type: "text", value: "archived text" },
+      }] },
+      { role: "assistant", content: [{
+        type: "tool-call", toolCallId: "search-1", toolName: "search_memory", input: { query: "next" },
+      }] },
+      { role: "tool", content: [{
+        type: "tool-result", toolCallId: "search-1", toolName: "search_memory",
+        output: { type: "text", value: "none" },
+      }] },
+    ] as any;
+
+    const pruned = pruneConsumedTransientTools(messages);
+    expect(JSON.stringify(pruned)).not.toContain("read_history");
+    expect(JSON.stringify(pruned)).toContain("search_memory");
+  });
+
   test("does not persist traversal output across conversations", () => {
     expect(shouldPersistToolResult("traverse_memory")).toBe(false);
+    expect(shouldPersistToolResult("search_history")).toBe(false);
+    expect(shouldPersistToolResult("read_history")).toBe(false);
     expect(shouldPersistToolResult("read_memory")).toBe(true);
   });
 });

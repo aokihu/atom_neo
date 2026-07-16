@@ -1,4 +1,4 @@
-import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON } from "@atom-neo/shared";
+import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { pruneMessages, streamText, tool, zodSchema, stepCountIs } from "ai";
 import type { ModelMessage } from "ai";
@@ -92,16 +92,21 @@ type MemorySearchStep = {
   toolResults?: Array<{ toolName: string; input: unknown; output: unknown }>;
 };
 
-export function pruneConsumedMemoryTraversal(messages: ModelMessage[]): ModelMessage[] {
+export function pruneConsumedTransientTools(messages: ModelMessage[]): ModelMessage[] {
   return pruneMessages({
     messages,
-    toolCalls: [{ type: "before-last-2-messages", tools: ["traverse_memory"] }],
+    toolCalls: [{
+      type: "before-last-2-messages",
+      tools: ["traverse_memory", "search_history", "read_history"],
+    }],
     emptyMessages: "remove",
   });
 }
 
 export function shouldPersistToolResult(toolName: string): boolean {
-  return toolName !== "traverse_memory";
+  return toolName !== "traverse_memory"
+    && toolName !== "search_history"
+    && toolName !== "read_history";
 }
 
 export function injectToolContext(params: {
@@ -230,6 +235,8 @@ export function selectActiveToolsForStep(params: {
   const selected = [
     ...getTaskToolNames(params.taskIntent),
     ...params.mcpToolNames,
+    "search_history",
+    "read_history",
     "webfetch",
   ];
   const available = new Set(params.availableToolNames);
@@ -491,7 +498,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
           return {
             activeTools: selection.activeTools,
-            messages: pruneConsumedMemoryTraversal(messages),
+            messages: pruneConsumedTransientTools(messages),
             ...(instructions === undefined ? {} : { instructions }),
           };
         },
@@ -803,7 +810,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       ? current.content.map(message => message.content).join("\n")
       : "[Tool Execution History]";
     const time = new Date().toISOString().slice(11, 19);
-    const line = `- [${time}] ${result.toolName}: ${result.ok ? "ok" : "error"}${result.output ? ` — ${result.output.slice(0, 80)}` : ""}`;
+    const line = `- [${time}] ${result.toolName}: ${result.ok ? "ok" : "error"}${result.output ? ` — ${substringWellFormed(result.output, 0, 80)}` : ""}`;
     this.#contextService.put({
       scope,
       owner,

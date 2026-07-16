@@ -117,6 +117,7 @@ export type TaskCompletedPayload = {
 
 export type TaskFailedPayload = {
   taskId: string;
+  rootTaskId: string;
   error: string;
 };
 

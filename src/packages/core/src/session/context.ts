@@ -7,6 +7,12 @@ import type {
   MemoryScopeState,
   ContinuationContext,
 } from "@atom-neo/shared";
+import type {
+  PersistedSessionState,
+  PersistedSessionStatus,
+  SessionArchiveState,
+  SessionCheckpointReason,
+} from "./types";
 
 export type TokenUsage = { total: number };
 
@@ -33,6 +39,7 @@ export const decideTodoContinuation = (
 
 export class SessionContext {
   readonly sessionId: string;
+  readonly createdAt: number;
 
   #pendingPrediction?: any;
 
@@ -46,12 +53,8 @@ export class SessionContext {
   compressRatio: number = 0;
 
   #messages: SessionMessage[] = [];
+  #nextMessageSeq: number = 1;
 
-  replaceEarlyMessages(keep: number): number {
-    const removed = Math.max(0, this.#messages.length - keep);
-    this.#messages = this.#messages.slice(-keep);
-    return removed;
-  }
   #inferenceFacts: InferenceFact[] = [];
   #toolContext: ToolContext = { mode: "idle", results: [] };
   #memoryScopes: MemoryScopeState = {
@@ -68,8 +71,9 @@ export class SessionContext {
   #currentTopic: string | null = null;
   #postCheckFingerprints: string[] = [];
 
-  constructor(sessionId: string) {
+  constructor(sessionId: string, createdAt = Date.now()) {
     this.sessionId = sessionId;
+    this.createdAt = createdAt;
   }
 
   #lastSafeMsgCount: number = 0;
@@ -82,6 +86,7 @@ export class SessionContext {
 
   get chainDepth(): number { return this.#chainDepth; }
   incrementChainDepth(): void { this.#chainDepth++; }
+  setChainDepth(depth: number): void { this.#chainDepth = depth; }
   resetChainDepth(): void { this.#chainDepth = 0; }
 
   get originalSource(): string | undefined { return this.#originalSource; }
@@ -92,7 +97,17 @@ export class SessionContext {
   }
 
   addMessage(msg: SessionMessage): void {
-    this.#messages.push(msg);
+    const seq = msg.seq ?? this.#nextMessageSeq;
+    this.#messages.push({ ...msg, seq });
+    this.#nextMessageSeq = Math.max(this.#nextMessageSeq, seq + 1);
+  }
+
+  removeMessages(seqs: readonly number[]): number {
+    const selected = new Set(seqs);
+    const before = this.#messages.length;
+    this.#messages = this.#messages.filter(message => message.seq === undefined || !selected.has(message.seq));
+    this.#lastSafeMsgCount = Math.min(this.#lastSafeMsgCount, this.#messages.length);
+    return before - this.#messages.length;
   }
 
   get inferenceFacts(): readonly InferenceFact[] {
@@ -196,6 +211,55 @@ export class SessionContext {
     this.#postCheckFingerprints = [];
   }
 
+  exportState(params: {
+    checkpointRevision: number;
+    status: PersistedSessionStatus;
+    archives: SessionArchiveState;
+    reason?: SessionCheckpointReason;
+  }): PersistedSessionState {
+    const now = Date.now();
+    const closed = params.status !== "active";
+    const ended = params.status === "completed" || params.status === "failed";
+    return {
+      schemaVersion: 1,
+      checkpointRevision: params.checkpointRevision,
+      sessionId: this.sessionId,
+      status: params.status,
+      createdAt: this.createdAt,
+      updatedAt: now,
+      ...(closed ? { closedAt: now } : {}),
+      ...(ended ? { endedAt: now } : {}),
+      ...(params.reason ? { closeReason: params.reason } : {}),
+      currentTopic: this.#currentTopic,
+      chainDepth: this.#chainDepth,
+      todoState: structuredClone(this.#todoState),
+      continuationContext: this.#continuationContext ? { ...this.#continuationContext } : null,
+      inferenceFacts: structuredClone(this.#inferenceFacts),
+      tokenUsage: { ...this.#tokenUsage },
+      contextTokens: this.#contextTokens,
+      nextMessageSeq: this.#nextMessageSeq,
+      archives: { ...params.archives },
+    };
+  }
+
+  static restore(state: PersistedSessionState, messages: readonly SessionMessage[]): SessionContext {
+    const session = new SessionContext(state.sessionId, state.createdAt);
+    for (const message of messages) session.addMessage(message);
+    session.#nextMessageSeq = Math.max(
+      state.nextMessageSeq,
+      ...messages.map(message => (message.seq ?? 0) + 1),
+    );
+    session.#inferenceFacts = structuredClone(state.inferenceFacts ?? []);
+    session.#continuationContext = state.continuationContext ? { ...state.continuationContext } : null;
+    session.#tokenUsage = { ...state.tokenUsage };
+    session.#contextTokens = state.contextTokens ?? 0;
+    session.#chainDepth = state.chainDepth ?? 0;
+    session.#todoState = structuredClone(state.todoState ?? []);
+    session.#currentTopic = state.currentTopic ?? null;
+    session.#lastSafeMsgCount = session.#messages.length;
+    return session;
+  }
+
   toJSON(): Record<string, unknown> {
     return {
       sessionId: this.sessionId,
@@ -205,6 +269,7 @@ export class SessionContext {
       memoryScopes: this.#memoryScopes,
       hasContinuation: this.#continuationContext !== null,
       tokenUsage: this.#tokenUsage,
+      nextMessageSeq: this.#nextMessageSeq,
     };
   }
 }

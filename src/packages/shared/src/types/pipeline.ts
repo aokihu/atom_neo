@@ -13,7 +13,7 @@ export enum PipelineEnqueueTransition {
 }
 
 export type PipelineResult =
-  | { type: typeof PipelineResultType.Complete; task: TaskItem }
+  | { type: typeof PipelineResultType.Complete; task: TaskItem; output?: string }
   | {
       type: typeof PipelineResultType.Enqueue;
       transition: PipelineEnqueueTransition;
@@ -70,6 +70,7 @@ export type CoreEventMap = {
   "task.enqueued": { task: TaskItem };
   "task.activated": { task: TaskItem };
   "task.completed": { task: TaskItem; result: PipelineResult };
+  "task.committed": { task: TaskItem; result: PipelineResult };
   "task.failed": { task: TaskItem; error: unknown };
   "pipeline.result": { task: TaskItem; result: PipelineResult };
 };
@@ -104,7 +105,14 @@ export type DomainEventMap = {
     sessionId: string;
     chatId: string;
     parentTaskId: string;
+    ownerTaskId?: string;
     action: ConversationChainAction;
+  };
+  "conversation.idle": {
+    sessionId: string;
+    chatId: string;
+    parentTaskId: string;
+    ownerTaskId?: string;
   };
   "session.started": { sessionId: string };
   "session.closed": { sessionId: string };

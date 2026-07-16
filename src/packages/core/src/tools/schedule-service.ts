@@ -25,6 +25,7 @@ export class ScheduleService {
   #tasks = new Map<string, ScheduledTask>();
   #jobs = new Map<string, CronJob>();
   #timers = new Map<string, TimerHandle>();
+  #stopped = false;
 
   constructor(queue: TaskQueue, persistPath: string, logger: Logger) {
     this.#queue = queue;
@@ -68,7 +69,7 @@ export class ScheduleService {
       nextFireAt,
     };
     this.#tasks.set(record.id, record);
-    if (record.enabled) this.#startJob(record);
+    if (record.enabled && !this.#stopped) this.#startJob(record);
     this.#persist();
     this.#logger.info("schedule task created", { id: record.id, name: record.name, type, schedule, delayMs, intervalMs });
     return record;
@@ -103,7 +104,7 @@ export class ScheduleService {
 
     if (wasEnabled !== task.enabled || scheduleChanged) {
       this.#stopJob(id);
-      if (task.enabled) {
+      if (task.enabled && !this.#stopped) {
         const now = Date.now();
         task.nextFireAt = task.type === "delay" ? now + task.delayMs
           : task.type === "interval" ? now + task.intervalMs
@@ -143,6 +144,7 @@ export class ScheduleService {
   }
 
   stop(): void {
+    this.#stopped = true;
     for (const id of this.#jobs.keys()) this.#stopJob(id);
     for (const id of this.#timers.keys()) this.#clearTimer(id);
     this.#persist();
@@ -188,6 +190,7 @@ export class ScheduleService {
   }
 
   #fire(task: ScheduledTask): void {
+    if (this.#stopped) return;
     task.lastFiredAt = Date.now();
     if (task.type === "cron") {
       task.nextFireAt = Bun.cron.parse(task.schedule)?.getTime();

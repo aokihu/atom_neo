@@ -1,6 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
+import { appendCurrentUserMessage } from "./types";
 import type { ConversationFlowState, Message } from "./types";
 
 export class FormatUserMessagesElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -16,8 +17,7 @@ export class FormatUserMessagesElement extends BaseElement<ConversationFlowState
       if (m.role === "tool") continue;
       messages.push({ role: m.role, content: m.content });
     }
-    const text = input.task?.payload?.[0]?.data;
-    if (text) messages.push({ role: "user" as const, content: text });
+    appendCurrentUserMessage(messages, input.task?.payload?.[0]?.data);
 
     this.report(BusEvents.Element.Data, { step: "done", messageCount: messages.length });
     return { ...input, mode: "formatted", userMessages: messages };

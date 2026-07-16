@@ -227,14 +227,13 @@ content = content.substring(0, offset) + textDelta;
   ts: 1700000000009,
   payload: {
     taskId: string;
-    error: {
-      message: string;
-      elementName?: string;  // Which element failed
-      code?: string;         // Machine-readable error code
-    }
+    rootTaskId: string;  // Task chainId: original external task, or this task for independent work
+    error: string;
   }
 }
 ```
+
+客户端按 `rootTaskId` 匹配待处理请求。找不到对应请求时忽略该失败通知，不能按 FIFO 移除其他请求。
 
 ### 4.10 `pong`
 

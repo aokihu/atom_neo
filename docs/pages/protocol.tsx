@@ -2,19 +2,219 @@ import React from "react";
 import type { DocPageProps } from "./shared";
 import { PageHeader, Section, CodeBlock, Callout, ComparisonTable, Badge, slugify } from "./shared";
 
-function extractCodeBlocks(content: string): string[] {
-  const blocks: string[] = [];
-  const re = /```typescript\n([\s\S]*?)```/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    blocks.push(m[1]);
-  }
-  return blocks;
-}
+const examples = {
+  envelope: `type WSMessage<T extends string, P = Record<string, unknown>> = {
+  type: T;
+  seq: number;       // Monotonic sequence number assigned by Core
+  ts: number;        // Unix timestamp in milliseconds
+  payload: P;
+};`,
+  taskSubmit: `{
+  type: "event.task.submit",
+  seq: 0,
+  ts: 1700000000000,
+  payload: {
+    sessionId: string;
+    chatId: string;
+    pipeline: string;
+    source: TaskSource;
+    data: {
+      text?: string;
+      toolReport?: TaskToolReport;
+    };
+  };
+}`,
+  taskCancel: `{
+  type: "event.task.cancel",
+  seq: 0,
+  ts: 1700000000000,
+  payload: { taskId: string };
+}`,
+  ping: `{
+  type: "ping",
+  seq: 0,
+  ts: 1700000000000,
+  payload: {};
+}`,
+  taskCreated: `{
+  type: "event.task.created",
+  seq: 1,
+  ts: 1700000000001,
+  payload: {
+    taskId: string;
+    state: "waiting" | "pending" | "processing";
+  };
+}`,
+  taskStateChanged: `{
+  type: "event.task.state-changed",
+  seq: 2,
+  ts: 1700000000002,
+  payload: {
+    taskId: string;
+    previousState: string;
+    currentState: string;
+  };
+}`,
+  elementStarted: `{
+  type: "event.pipeline.element.started",
+  seq: 3,
+  ts: 1700000000003,
+  payload: {
+    taskId: string;
+    elementName: string;
+    elementKind: "source" | "transform" | "boundary" | "sink";
+  };
+}`,
+  elementFinished: `{
+  type: "event.pipeline.element.finished",
+  seq: 4,
+  ts: 1700000000004,
+  payload: {
+    taskId: string;
+    elementName: string;
+    elementKind: string;
+    durationMs: number;
+  };
+}`,
+  transportDelta: `{
+  type: "event.transport.delta",
+  seq: 5,
+  ts: 1700000000005,
+  payload: {
+    taskId: string;
+    textDelta: string;
+    offset: number;
+  };
+}`,
+  deltaAssembly: `// Position-aware assembly; do not blindly append.
+content = content.substring(0, offset) + textDelta;`,
+  toolStarted: `{
+  type: "event.transport.tool.started",
+  seq: 6,
+  ts: 1700000000006,
+  payload: {
+    taskId: string;
+    toolName: string;
+    toolSource: "builtin" | "plugin" | "mcp";
+    toolCallId: string;
+    input: unknown;
+  };
+}`,
+  toolFinished: `{
+  type: "event.transport.tool.finished",
+  seq: 7,
+  ts: 1700000000007,
+  payload: {
+    taskId: string;
+    toolName: string;
+    toolSource: string;
+    toolCallId: string;
+    ok: boolean;
+    output?: string;
+    error?: string;
+    durationMs: number;
+  };
+}`,
+  taskCompleted: `{
+  type: "event.task.completed",
+  seq: 8,
+  ts: 1700000000008,
+  payload: {
+    taskId: string;
+    result: {
+      type: string;
+      transition?: string;
+      childTaskId?: string;
+      parentTaskId?: string;
+    };
+  };
+}`,
+  taskFailed: `{
+  type: "event.task.failed",
+  seq: 9,
+  ts: 1700000000009,
+  payload: {
+    taskId: string;
+    rootTaskId: string;  // Task chainId: external root, or this task when independent
+    error: string;
+  };
+}`,
+  pong: `{
+  type: "pong",
+  seq: 10,
+  ts: 1700000000010,
+  payload: {};
+}`,
+  replayStart: `{
+  type: "event.pipeline.replay-start",
+  seq: 0,
+  ts: 1700000000000,
+  payload: {
+    sessionId: string;
+    taskId: string;
+  };
+}`,
+  replayEvent: `{
+  type: "replay.event",
+  seq: 1,
+  ts: 1700000000001,
+  payload: {
+    taskId: string;
+    event: WSServerEvent;
+  };
+}`,
+  replayEnd: `{
+  type: "event.pipeline.replay-end",
+  seq: 999,
+  ts: 1700000000100,
+  payload: {
+    sessionId: string;
+    taskId: string;
+    totalEvents: number;
+  };
+}`,
+  eventRegistry: `export const ClientEventTypes = [
+  "task.submit",
+  "task.cancel",
+  "ping",
+] as const;
+
+export const ServerEventTypes = [
+  "task.created",
+  "task.state-changed",
+  "pipeline.element.started",
+  "pipeline.element.finished",
+  "transport.delta",
+  "transport.tool.started",
+  "transport.tool.finished",
+  "task.completed",
+  "task.failed",
+  "pong",
+  "replay.start",
+  "replay.event",
+  "replay.end",
+] as const;`,
+  gatewayApiAuth: `POST /api/tasks
+Authorization: Bearer eyJhbG...
+
+// JWT payload
+{
+  sub: "user-id",
+  permissionLevel: 0 | 1 | 2,
+  exp: 1700000000,
+  iat: 1699996400,
+}`,
+  gatewayClientAuth: `POST /gateway/status
+Authorization: Bearer 550e8400-e29b-41d4-a716-446655440000`,
+  errorCodes: `"PIPELINE_ABORTED"          // Signal cancelled
+"ELEMENT_FAILED"            // Element threw an error
+"TOOL_PERMISSION_DENIED"    // Tool level exceeds permission
+"RATE_LIMIT_EXCEEDED"       // Gateway rate limit hit
+"SESSION_NOT_FOUND"         // Invalid session ID
+"INVALID_PAYLOAD"           // Message fails validation`,
+} as const;
 
 export default function DocPage({ content, title, description, category }: DocPageProps) {
-  const blocks = extractCodeBlocks(content);
-
   return (
     <div className="doc-page">
       <PageHeader
@@ -54,7 +254,7 @@ export default function DocPage({ content, title, description, category }: DocPa
         <Callout type="info" title="Transport Rules">
           <ul>
             <li><strong>Core Side</strong>: WebSocket server at <code>ws://host:port/ws/:sessionId</code></li>
-            <li><strong>Gateway Side</strong>: Proxies WebSocket connections, verifies JWT in initial handshake</li>
+            <li><strong>Gateway Side</strong>: Handles authenticated HTTP APIs only; does not proxy WebSocket</li>
             <li><strong>TUI Side</strong>: Direct WebSocket connection to Core (localhost, no auth)</li>
             <li><strong>Message Format</strong>: JSON, one message per frame</li>
           </ul>
@@ -64,7 +264,7 @@ export default function DocPage({ content, title, description, category }: DocPa
       {/* ── Section 2: Common Envelope ── */}
       <Section id="common-envelope" title="Common Envelope">
         <p>All messages follow a standard envelope with sequence number and timestamp.</p>
-        <CodeBlock lang="typescript" code={blocks[0]} />
+        <CodeBlock lang="typescript" code={examples.envelope} />
       </Section>
 
       {/* ── Section 3: Client → Core Events ── */}
@@ -73,15 +273,15 @@ export default function DocPage({ content, title, description, category }: DocPa
 
         <h3 id={slugify("3.1 task.submit")}>3.1 task.submit</h3>
         <p>Submit a new pipeline task for execution. The <code>data</code> field carries pipeline-specific input.</p>
-        <CodeBlock lang="typescript" code={blocks[1]} />
+        <CodeBlock lang="typescript" code={examples.taskSubmit} />
 
         <h3 id={slugify("3.2 task.cancel")}>3.2 task.cancel</h3>
         <p>Request cancellation of a previously submitted task.</p>
-        <CodeBlock lang="typescript" code={blocks[2]} />
+        <CodeBlock lang="typescript" code={examples.taskCancel} />
 
         <h3 id={slugify("3.3 ping")}>3.3 ping</h3>
         <p>Keep-alive heartbeat sent periodically by the client.</p>
-        <CodeBlock lang="typescript" code={blocks[3]} />
+        <CodeBlock lang="typescript" code={examples.ping} />
       </Section>
 
       {/* ── Section 4: Core → Client Events ── */}
@@ -93,7 +293,7 @@ export default function DocPage({ content, title, description, category }: DocPa
 
         <h3 id={slugify("4.1 task.created")}>4.1 task.created</h3>
         <p>Emitted when a task is created and enters the engine queue.</p>
-        <CodeBlock lang="typescript" code={blocks[4]} />
+        <CodeBlock lang="typescript" code={examples.taskCreated} />
 
         <h3 id={slugify("4.2 task.state-changed")}>4.2 task.state-changed</h3>
         <p>
@@ -102,44 +302,48 @@ export default function DocPage({ content, title, description, category }: DocPa
           <code>completed</code>, <code>failed</code>, <code>follow_up</code>,
           <code>dispatched</code>, <code>suspended</code>.
         </p>
-        <CodeBlock lang="typescript" code={blocks[5]} />
+        <CodeBlock lang="typescript" code={examples.taskStateChanged} />
 
         <h3 id={slugify("4.3 pipeline.element.started")}>4.3 pipeline.element.started</h3>
         <p>Emitted when a pipeline element begins execution. The <code>elementKind</code> identifies the element role.</p>
-        <CodeBlock lang="typescript" code={blocks[6]} />
+        <CodeBlock lang="typescript" code={examples.elementStarted} />
 
         <h3 id={slugify("4.4 pipeline.element.finished")}>4.4 pipeline.element.finished</h3>
         <p>Emitted when a pipeline element completes, including execution duration.</p>
-        <CodeBlock lang="typescript" code={blocks[7]} />
+        <CodeBlock lang="typescript" code={examples.elementFinished} />
 
         <h3 id={slugify("4.5 transport.delta")}>4.5 transport.delta</h3>
         <p>Streaming incremental text sent from the LLM during response generation.</p>
-        <CodeBlock lang="typescript" code={blocks[8]} />
+        <CodeBlock lang="typescript" code={examples.transportDelta} />
+        <CodeBlock lang="typescript" code={examples.deltaAssembly} />
 
         <h3 id={slugify("4.6 transport.tool.started")}>4.6 transport.tool.started</h3>
         <p>Emitted when a tool invocation begins. Includes tool metadata and input.</p>
-        <CodeBlock lang="typescript" code={blocks[9]} />
+        <CodeBlock lang="typescript" code={examples.toolStarted} />
 
         <h3 id={slugify("4.7 transport.tool.finished")}>4.7 transport.tool.finished</h3>
         <p>
           Emitted when a tool invocation completes, including output, error status, and duration.
         </p>
-        <CodeBlock lang="typescript" code={blocks[10]} />
+        <CodeBlock lang="typescript" code={examples.toolFinished} />
 
         <h3 id={slugify("4.8 task.completed")}>4.8 task.completed</h3>
         <p>
           Emitted when a task finishes successfully. The <code>result</code> payload indicates
           the completion type and any child/parent task transitions.
         </p>
-        <CodeBlock lang="typescript" code={blocks[11]} />
+        <CodeBlock lang="typescript" code={examples.taskCompleted} />
 
         <h3 id={slugify("4.9 task.failed")}>4.9 task.failed</h3>
-        <p>Emitted when a task terminates with an error. The payload includes the failing element and error code.</p>
-        <CodeBlock lang="typescript" code={blocks[12]} />
+        <p>
+          Emitted when a task terminates with an error. The <code>rootTaskId</code> binds the failure to
+          its original request; clients must ignore failures that do not match a pending request.
+        </p>
+        <CodeBlock lang="typescript" code={examples.taskFailed} />
 
         <h3 id={slugify("4.10 pong")}>4.10 pong</h3>
         <p>Response to the client <code>ping</code> event.</p>
-        <CodeBlock lang="typescript" code={blocks[13]} />
+        <CodeBlock lang="typescript" code={examples.pong} />
       </Section>
 
       {/* ── Section 5: Pipeline Replay Events ── */}
@@ -156,15 +360,15 @@ export default function DocPage({ content, title, description, category }: DocPa
 
         <h3 id={slugify("5.1 replay.start")}>5.1 replay.start</h3>
         <p>Signals the start of a pipeline replay session for a specific task.</p>
-        <CodeBlock lang="typescript" code={blocks[14]} />
+        <CodeBlock lang="typescript" code={examples.replayStart} />
 
         <h3 id={slugify("5.2 replay.event")}>5.2 replay.event</h3>
         <p>Emitted for each recorded event during replay. The <code>event</code> field wraps any server event.</p>
-        <CodeBlock lang="typescript" code={blocks[15]} />
+        <CodeBlock lang="typescript" code={examples.replayEvent} />
 
         <h3 id={slugify("5.3 replay.end")}>5.3 replay.end</h3>
         <p>Signals the end of a replay session with the total event count.</p>
-        <CodeBlock lang="typescript" code={blocks[16]} />
+        <CodeBlock lang="typescript" code={examples.replayEnd} />
       </Section>
 
       {/* ── Section 6: Event Type Registry ── */}
@@ -173,21 +377,22 @@ export default function DocPage({ content, title, description, category }: DocPa
           This registry is the source of truth for all event type strings. The TypeScript
           <code>as const</code> assertion ensures type-safety across the entire codebase.
         </Callout>
-        <CodeBlock lang="typescript" code={blocks[17]} />
+        <CodeBlock lang="typescript" code={examples.eventRegistry} />
       </Section>
 
       {/* ── Section 7: Gateway Authentication ── */}
       <Section id="gateway-auth" title="Gateway Authentication">
         <p>
-          The Gateway validates a JWT token during the WebSocket upgrade handshake.
-          The JWT is sent as a <code>Bearer</code> token in the <code>Authorization</code> header.
+          Gateway only proxies HTTP requests. External <code>/api/*</code> calls use JWT Bearer
+          authentication; internal <code>/gateway/*</code> calls use an in-memory Client Token.
         </p>
-        <CodeBlock lang="typescript" code={blocks[18]} />
-        <Callout type="info" title="WebSocket Upgrade">
-          Request: <code>GET ws://gateway:3000/ws/:sessionId</code> with
-          header <code>Authorization: Bearer &lt;jwt&gt;</code>.
-          The JWT payload includes <code>sub</code>, <code>sessionId</code>,
-          <code>permissions</code>, <code>exp</code>, and <code>iat</code> claims.
+        <h3 id={slugify("7.1 api JWT")}>7.1 /api/* — JWT Bearer Token</h3>
+        <CodeBlock lang="text" code={examples.gatewayApiAuth} />
+        <h3 id={slugify("7.2 gateway Client Token")}>7.2 /gateway/* — Client Token</h3>
+        <CodeBlock lang="text" code={examples.gatewayClientAuth} />
+        <Callout type="info" title="WebSocket 直连 Core">
+          Gateway 不代理 WebSocket，也不执行 JWT upgrade。TUI 直接连接 Core 的
+          <code>/ws/:sessionId</code> 端点。
         </Callout>
       </Section>
 
@@ -205,7 +410,7 @@ export default function DocPage({ content, title, description, category }: DocPa
             [<code>INVALID_PAYLOAD</code>, "Message failed schema validation"],
           ]}
         />
-        <CodeBlock lang="typescript" code={blocks[19]} />
+        <CodeBlock lang="text" code={examples.errorCodes} />
       </Section>
     </div>
   );

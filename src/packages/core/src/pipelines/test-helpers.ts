@@ -1,5 +1,6 @@
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
+import type { InternalTaskOrchestrator } from "../task/internal-task-orchestrator";
 
 export function makeBus() {
   return new PipelineEventBus<FullEventMap>();
@@ -13,5 +14,5 @@ export function makeMockOrchestrator(capture: { enqueued: any } | null) {
     scheduleEvaluator: () => {},
     scheduleCompress: () => {},
     scheduleFollowUp: () => {},
-  };
+  } as unknown as InternalTaskOrchestrator;
 }
