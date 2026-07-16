@@ -1,5 +1,5 @@
 import type { TaskItem, TaskState } from "./types/task";
-import type { PipelineResult } from "./types/pipeline";
+import type { PipelineResult, TransportEventIdentity } from "./types/pipeline";
 
 // Client → Core
 export type ClientEvent =
@@ -31,6 +31,10 @@ export type ServerEvent =
       payload: ElementFinishedPayload;
     }
   | {
+      type: "event.transport.reason";
+      payload: TransportReasonPayload;
+    }
+  | {
       type: "event.transport.delta";
       payload: TransportDeltaPayload;
     }
@@ -45,6 +49,10 @@ export type ServerEvent =
   | {
       type: "event.transport.tool.step-finished";
       payload: ToolStepFinishedPayload;
+    }
+  | {
+      type: "event.transport.tool.group-complete";
+      payload: ToolGroupCompletePayload;
     }
   | {
       type: "event.task.completed";
@@ -80,30 +88,38 @@ export type ElementFinishedPayload = {
   durationMs: number;
 };
 
-export type TransportDeltaPayload = {
-  taskId: string;
+export type TransportReasonPayload = TransportEventIdentity & {
   textDelta: string;
   offset: number;
 };
 
-export type ToolStartedPayload = {
-  taskId: string;
+export type TransportDeltaPayload = TransportEventIdentity & {
+  textDelta: string;
+  offset: number;
+};
+
+export type ToolStartedPayload = TransportEventIdentity & {
   toolName: string;
   toolCallId: string;
   input: unknown;
 };
 
-export type ToolFinishedPayload = {
-  taskId: string;
+export type ToolFinishedPayload = TransportEventIdentity & {
   toolName: string;
   toolCallId: string;
   result?: unknown;
   error?: unknown;
 };
 
-export type ToolStepFinishedPayload = {
-  taskId: string;
+export type ToolStepFinishedPayload = TransportEventIdentity & {
   stepNumber: number;
+  total: number;
+  success: number;
+  failed: number;
+  toolNames: string[];
+};
+
+export type ToolGroupCompletePayload = TransportEventIdentity & {
   total: number;
   success: number;
   failed: number;

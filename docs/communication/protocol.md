@@ -11,6 +11,7 @@
 - **Gateway Side**: HTTP reverse proxy. Verifies JWT for `/api/*` routes, validates Client Token for `/gateway/*` routes. Forwards authenticated requests to Core. WebSocket connections bypass Gateway and connect directly to Core.
 - **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
 - **Message Format**: JSON, one message per frame
+- **Session Routing**: Task-scoped `event.transport.*` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
 
 ---
 
@@ -146,6 +147,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
   seq: 5,
   ts: 1700000000005,
   payload: {
+    sessionId: string;
     taskId: string;
     textDelta: string;       // Incremental visible text
     offset: number;          // Position in the full message text where this delta starts
@@ -170,6 +172,7 @@ content = content.substring(0, offset) + textDelta;
   seq: 6,
   ts: 1700000000006,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
     toolSource: string;     // builtin | plugin | mcp
@@ -187,6 +190,7 @@ content = content.substring(0, offset) + textDelta;
   seq: 7,
   ts: 1700000000007,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
     toolSource: string;
@@ -198,6 +202,10 @@ content = content.substring(0, offset) + textDelta;
   }
 }
 ```
+
+`event.transport.reason`、`event.transport.tool.step-finished` 和
+`event.transport.tool.group-complete` 遵循相同的归属规则：payload 必须包含产生事件的
+`sessionId` 与 `taskId`，并且只能发送到对应 Session 的 WebSocket 客户端。
 
 ### 4.8 `task.completed`
 

@@ -11,6 +11,7 @@ import { TaskEngine } from "./task-engine";
 import { SessionStore } from "./session/store";
 import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
+import { registerTransportBridge } from "./ws/transport-bridge";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
 import { ToolRegistry } from "./tools/registry";
@@ -537,6 +538,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
+  registerTransportBridge(bus, broadcaster);
   const wsHandlers = createWsHandlers({
     broadcaster,
     taskQueue,
@@ -545,60 +547,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     orchestrator,
     sessionStore,
     isStopping: () => stopping,
-  });
-
-  // Bridge: bus transport.reason → WebSocket broadcaster for reasoning streaming
-  bus.on(BusEvents.Transport.Reason as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
-    const { textDelta, offset } = ev.payload;
-    if (textDelta) {
-      broadcaster.broadcast({ type: WsMessages.Server.TransportReason, ts: Date.now(), seq: 0, payload: { textDelta, offset } });
-    }
-  });
-
-  // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
-  // BaseElement.report() wraps payload in { name, payload } — FullEventMap doesn't reflect this yet
-  bus.on(BusEvents.Transport.Delta as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
-    const textDelta = ev.payload.textDelta;
-    const offset = ev.payload.offset ?? 0;
-    if (textDelta) {
-      broadcaster.broadcast({ type: WsMessages.Server.TransportDelta, ts: Date.now(), seq: 0, payload: { textDelta, offset } });
-    }
-  });
-
-  // Bridge: bus transport.tool.started → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolStarted as any, (ev: { name: string; payload: { toolName: string; toolCallId: string; input: unknown } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolStarted,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", toolName: ev.payload.toolName, toolCallId: ev.payload.toolCallId, input: ev.payload.input },
-    });
-  });
-
-  // Bridge: bus transport.tool.finished → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolFinished as any, (ev: { name: string; payload: { toolName: string; toolCallId: string; result?: unknown; error?: unknown } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolFinished,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", toolName: ev.payload.toolName, toolCallId: ev.payload.toolCallId, result: ev.payload.result, error: ev.payload.error },
-    });
-  });
-
-  // Bridge: bus transport.tool.step-finished → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolStepFinished as any, (ev: { name: string; payload: { stepNumber: number; total: number; success: number; failed: number; toolNames: string[] } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolStepFinished,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", ...ev.payload },
-    });
-  });
-
-  // Bridge: bus transport.tool.group-complete → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolGroupComplete as any, (ev: { name: string; payload: { total: number; success: number; failed: number; toolNames: string[] } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolGroupComplete,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", ...ev.payload },
-    });
   });
 
   let stopping = false;

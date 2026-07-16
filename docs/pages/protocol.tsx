@@ -81,6 +81,7 @@ const examples = {
   seq: 5,
   ts: 1700000000005,
   payload: {
+    sessionId: string;
     taskId: string;
     textDelta: string;
     offset: number;
@@ -93,6 +94,7 @@ content = content.substring(0, offset) + textDelta;`,
   seq: 6,
   ts: 1700000000006,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
     toolSource: "builtin" | "plugin" | "mcp";
@@ -105,6 +107,7 @@ content = content.substring(0, offset) + textDelta;`,
   seq: 7,
   ts: 1700000000007,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
     toolSource: string;
@@ -257,6 +260,12 @@ export default function DocPage({ content, title, description, category }: DocPa
             <li><strong>Gateway Side</strong>: Handles authenticated HTTP APIs only; does not proxy WebSocket</li>
             <li><strong>TUI Side</strong>: Direct WebSocket connection to Core (localhost, no auth)</li>
             <li><strong>Message Format</strong>: JSON, one message per frame</li>
+            <li>
+              <strong>Session Routing</strong>: Task-scoped <code>event.transport.*</code> events
+              carry <code>sessionId</code> and <code>taskId</code>, and are only sent to clients
+              connected through the matching <code>/ws/:sessionId</code> endpoint. System-level
+              events such as MCP status remain global.
+            </li>
           </ul>
         </Callout>
       </Section>
@@ -326,6 +335,12 @@ export default function DocPage({ content, title, description, category }: DocPa
           Emitted when a tool invocation completes, including output, error status, and duration.
         </p>
         <CodeBlock lang="typescript" code={examples.toolFinished} />
+        <Callout type="info" title="Session-scoped transport events">
+          <code>event.transport.reason</code>, <code>event.transport.tool.step-finished</code> and{" "}
+          <code>event.transport.tool.group-complete</code> follow the same ownership contract:
+          their payloads include the producing <code>sessionId</code> and <code>taskId</code>, and
+          Core only sends them to that Session&apos;s WebSocket clients.
+        </Callout>
 
         <h3 id={slugify("4.8 task.completed")}>4.8 task.completed</h3>
         <p>
