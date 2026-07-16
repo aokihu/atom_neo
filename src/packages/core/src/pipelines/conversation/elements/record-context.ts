@@ -9,6 +9,7 @@ import type {
 import { DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import type { ContextService } from "../../../context/context-service";
 import type { SkillServiceLike } from "../../../skills/types";
+import { appendCurrentUserMessage } from "./types";
 import type { ConversationFlowState, MemorySearchStatus } from "./types";
 
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -86,8 +87,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     const userMessages = (input.prompts ?? [])
       .filter(prompt => prompt.role !== "tool")
       .map(prompt => ({ role: prompt.role, content: prompt.content }));
-    const currentText = input.task?.payload?.[0]?.data;
-    if (currentText) userMessages.push({ role: "user", content: currentText });
+    appendCurrentUserMessage(userMessages, input.task?.payload?.[0]?.data);
     this.report(BusEvents.Element.Data, {
       step: "done",
       memoryQuery: memoryResult.query,

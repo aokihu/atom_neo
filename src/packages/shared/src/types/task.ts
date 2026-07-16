@@ -16,6 +16,8 @@ export enum TaskState {
   SUSPEND = "suspend",
 }
 
+export type TaskOrigin = { type: "hook"; hookId: string };
+
 export type TaskItem = {
   readonly id: string;
   readonly chainId: string;
@@ -27,6 +29,7 @@ export type TaskItem = {
   readonly priority: number;
   readonly createdAt: number;
   readonly payload: TaskPayload[];
+  readonly origin?: TaskOrigin;
   state: TaskState;
   updatedAt: number;
 };

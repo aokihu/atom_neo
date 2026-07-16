@@ -77,8 +77,10 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       input.task.sessionId,
       input.task.chatId,
       input.task.parentTaskId ?? input.task.id,
+      input.task.payload,
+      input.task.id,
     );
-    return this.#complete(input);
+    return this.#complete({ ...input, chainAction: undefined });
   }
 
   #complete(input: ConversationFlowState, shouldPostCheck = false) {

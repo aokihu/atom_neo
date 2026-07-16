@@ -11,6 +11,7 @@ export class TaskEngine {
   #bus: PipelineEventBus<CoreEventMap>;
   #queue: TaskQueue;
   #running = false;
+  #processing = false;
   #timeoutMs: number;
   #pipelineBuilders: Record<string, PipelineBuilder>;
 
@@ -37,17 +38,26 @@ export class TaskEngine {
     this.#running = false;
   }
 
-  async drain(params: { timeoutMs?: number }): Promise<void> {
+  async drain(params: { timeoutMs?: number }): Promise<boolean> {
     const deadline = Date.now() + (params.timeoutMs ?? 30_000);
-    this.stop();
-    while (this.#queue.processing > 0 && Date.now() < deadline) {
+    this.#onTaskEnqueued();
+    while (this.#queue.size > 0 && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 100));
     }
+    const drained = this.#queue.size === 0;
+    if (drained) this.stop();
+    return drained;
   }
 
   #onTaskEnqueued(): void {
-    if (!this.#running) return;
-    Promise.resolve().then(() => this.#processNext());
+    if (!this.#running || this.#processing || this.#queue.size === 0) return;
+    this.#processing = true;
+    Promise.resolve()
+      .then(() => this.#processNext())
+      .finally(() => {
+        this.#processing = false;
+        this.#onTaskEnqueued();
+      });
   }
 
   async #processNext(): Promise<void> {
@@ -80,8 +90,6 @@ export class TaskEngine {
     } finally {
       removePipeline(task.id);
     }
-
-    this.#onTaskEnqueued();
   }
 
   async #executeTask(task: TaskItem): Promise<any> {

@@ -104,9 +104,12 @@ export class TuiClient {
           if (tu) this.#onTokenUsage?.(tu.total);
         },
         [WsMessages.Server.TaskFailed]: (p) => {
-          const pending = this.#pending.shift();
+          const rootTaskId = p.rootTaskId ?? p.taskId;
+          const index = this.#pending.findIndex(pending => pending.rootTaskId === rootTaskId);
+          if (index < 0) return;
+          const pending = this.#pending.splice(index, 1)[0];
           const err = p.error ?? "Unknown error";
-          if (pending) pending.reject(new Error(String(err)));
+          pending.reject(new Error(String(err)));
         },
         [WsMessages.Server.SessionTaskActive]: (p) => {
           const { active, taskId } = p;
@@ -142,7 +145,12 @@ export class TuiClient {
         sessionId: this.#sessionId, chatId: this.#chatId, data: { text },
       }),
     });
-    const { taskId } = await res.json();
+    const response = await res.json().catch(() => ({})) as { taskId?: unknown; error?: unknown };
+    if (!res.ok) throw new Error(String(response.error ?? `Task submission failed (${res.status})`));
+    if (typeof response.taskId !== "string" || !response.taskId) {
+      throw new Error("Invalid task submission response");
+    }
+    const taskId = response.taskId;
 
     return new Promise<string>((resolve, reject) => {
       this.#pending.push({ resolve, reject, text: "", rootTaskId: taskId });

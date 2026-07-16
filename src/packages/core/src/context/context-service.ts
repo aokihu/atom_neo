@@ -48,6 +48,24 @@ type MutableSnapshotState = {
   leasedBucketIds: string[];
 };
 
+export type PersistedContextBucket = {
+  scope: Extract<ContextScope, "session" | "topic">;
+  owner: ContextOwner;
+  lifecycle: {
+    expiresAt?: number;
+    expireOn: readonly ContextLifecycleEvent[];
+  };
+  entries: ContextEntry[];
+};
+
+export type PersistedContextState = {
+  schemaVersion: 1;
+  checkpointRevision: number;
+  savedAt: number;
+  sessionId: string;
+  buckets: PersistedContextBucket[];
+};
+
 const SCOPE_RETENTION: Record<ContextScope, "pinned" | "session" | "topic" | "task" | "step"> = {
   system: "pinned",
   workspace: "pinned",
@@ -362,6 +380,71 @@ export class ContextService {
       inputBudget: state.inputBudget,
       prefixHash: state.prefixHash,
     });
+  }
+
+  exportSessionState(sessionId: string, checkpointRevision = 0): PersistedContextState {
+    const now = Date.now();
+    const buckets = [...this.#buckets.values()]
+      .filter(bucket => bucket.lifecycle.state === "active"
+        && bucket.owner.sessionId === sessionId
+        && (bucket.scope === "session" || bucket.scope === "topic")
+        && (bucket.lifecycle.expiresAt === undefined || bucket.lifecycle.expiresAt > now))
+      .flatMap(bucket => {
+        const entries = [...bucket.entries.values()]
+          .filter(entry => !entry.consumeOnCommit && (entry.expiresAt === undefined || entry.expiresAt > now))
+          .map(entry => structuredClone(entry));
+        if (entries.length === 0) return [];
+        return [{
+          scope: bucket.scope as PersistedContextBucket["scope"],
+          owner: { ...bucket.owner },
+          lifecycle: {
+            expiresAt: bucket.lifecycle.expiresAt,
+            expireOn: [...bucket.lifecycle.expireOn],
+          },
+          entries,
+        }];
+      });
+    return {
+      schemaVersion: 1,
+      checkpointRevision,
+      savedAt: now,
+      sessionId,
+      buckets,
+    };
+  }
+
+  restoreSessionState(state: PersistedContextState): number {
+    if (state.schemaVersion !== 1) throw new Error(`Unsupported context schema: ${state.schemaVersion}`);
+    const now = Date.now();
+    for (const [id, bucket] of this.#buckets) {
+      if (bucket.owner.sessionId === state.sessionId
+        && (bucket.scope === "session" || bucket.scope === "topic")) {
+        this.#buckets.delete(id);
+        this.#bucketLeases.delete(id);
+      }
+    }
+
+    let restored = 0;
+    for (const bucket of state.buckets) {
+      if (bucket.owner.sessionId !== state.sessionId) continue;
+      if (bucket.lifecycle.expiresAt !== undefined && bucket.lifecycle.expiresAt <= now) continue;
+      for (const persistedEntry of bucket.entries) {
+        if (persistedEntry.consumeOnCommit) continue;
+        if (persistedEntry.expiresAt !== undefined && persistedEntry.expiresAt <= now) continue;
+        const { revision: _revision, ...entry } = persistedEntry;
+        this.put({
+          scope: bucket.scope,
+          owner: bucket.owner,
+          lifecycle: {
+            expiresAt: bucket.lifecycle.expiresAt,
+            expireOn: bucket.lifecycle.expireOn,
+          },
+          entry,
+        });
+        restored++;
+      }
+    }
+    return restored;
   }
 
   get bucketCount(): number { return this.#buckets.size; }

@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { PredictionFlowState } from "./types";
 import type { SkillServiceLike } from "../../../skills/types";
@@ -57,10 +57,12 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
       input.task.chatId,
       input.task.id,
       input.task.payload ?? [],
+      undefined,
+      input.task.id,
     );
 
     return {
-      type: "complete",
+      type: PipelineResultType.Complete,
       task: input.task,
       output: `prediction: difficulty=${prediction.difficulty}, modelProfile=${prediction.modelProfile}, intent=${prediction.intent}, contextRelevance=${prediction.contextRelevance}, memoryQuery=${prediction.memoryQuery}, topic=${prediction.topic}, reasoning=${prediction.reasoning}`,
     };

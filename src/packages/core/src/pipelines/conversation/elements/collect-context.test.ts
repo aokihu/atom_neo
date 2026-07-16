@@ -171,4 +171,14 @@ describe("conversation context pipeline", () => {
     ]);
     expect(Object.isFrozen(result.contextSnapshot)).toBe(true);
   });
+
+  test("does not duplicate a user message already checkpointed in the session", async () => {
+    const { result } = await buildSnapshot({ session: makeSession("") }, {
+      mode: "streaming",
+      task: { id: "t1", payload: [{ data: "current request" }] },
+      prompts: [{ role: "user", content: "current request" }],
+    });
+
+    expect(result.userMessages?.map(message => message.content)).toEqual(["current request"]);
+  });
 });

@@ -144,6 +144,7 @@ export type CoreEventMap = {
   "task.enqueued": { task: TaskItem };
   "task.activated": { task: TaskItem };
   "task.completed": { task: TaskItem; result: PipelineResult };
+  "task.committed": { task: TaskItem; result: PipelineResult };
   "task.failed": { task: TaskItem; error: unknown };
   "pipeline.result": { task: TaskItem; result: PipelineResult };
 };
@@ -159,6 +160,18 @@ export type DomainEventMap = {
 
 // Combined event map:
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;`} />
+      </Section>
+
+      <Section title="Task 完成与提交">
+        <CodeBlock lang="text" code={`task.completed
+  → update Session
+  → checkpoint
+      ├── success → task.committed → hooks + downstream tasks
+      └── failure → no committed event`} />
+        <Callout type="info" title="Completed 不等于已持久化">
+          需要依赖 durable Session 状态的监听器应订阅 <code>task.committed</code>，不能直接从
+          <code>task.completed</code> 启动下一项工作。
+        </Callout>
       </Section>
 
       {/* ── Register Custom Events ── */}

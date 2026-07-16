@@ -10,7 +10,7 @@
 
 import { readFile, readdir, watch } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { renderToString } from "react-dom/server";
 import React from "react";
 
@@ -30,6 +30,8 @@ import ArchitecturePage from "./pages/architecture";
 import BootstrapPage from "./pages/bootstrap";
 import CodingConventionsPage from "./pages/coding-conventions";
 import ConfigurationPage from "./pages/configuration";
+import ConversationPage from "./pages/conversation";
+import ContextCompressPage from "./pages/context-compress";
 import ContextManagementPage from "./pages/context-management";
 import DependencyInjectionPage from "./pages/dependency-injection";
 import ElementDesignPage from "./pages/element-design";
@@ -38,8 +40,9 @@ import ErrorHandlingPage from "./pages/error-handling";
 import EventBusPage from "./pages/event-bus";
 import MemoryServicePage from "./pages/memory-service";
 import NamingConventionsPage from "./pages/naming-conventions";
-import PipelineBuilderPage from "./pages/pipeline-builder";
+import PostConversationPage from "./pages/post-conversation";
 import ProjectStructurePage from "./pages/project-structure";
+import PromptsPage from "./pages/prompts";
 import ProtocolPage from "./pages/protocol";
 import SandboxPage from "./pages/sandbox";
 import SessionContextPage from "./pages/session-context";
@@ -61,19 +64,22 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   bootstrap: BootstrapPage,
   "coding-conventions": CodingConventionsPage,
   configuration: ConfigurationPage,
+  conversation: ConversationPage,
+  "context-compress": ContextCompressPage,
   "context-management": ContextManagementPage,
   "dependency-injection": DependencyInjectionPage,
   "element-design": ElementDesignPage,
   "environment-setup": EnvironmentSetupPage,
   "error-handling": ErrorHandlingPage,
-  "event-bus": EventBusPage,
   "memory-service": MemoryServicePage,
   "naming-conventions": NamingConventionsPage,
-  "pipeline-builder": PipelineBuilderPage,
+  "pipeline-dev": EventBusPage,
+  "post-conversation": PostConversationPage,
   "project-structure": ProjectStructurePage,
+  prompts: PromptsPage,
   protocol: ProtocolPage,
   sandbox: SandboxPage,
-  "session-context": SessionContextPage,
+  session: SessionContextPage,
   testing: TestingPage,
   "tool-plugin": ToolPluginPage,
   "type-system": TypeSystemPage,
@@ -92,12 +98,12 @@ const HOST = "0.0.0.0";
 let docCache: DocEntry[] = [];
 
 async function loadDocs(): Promise<DocEntry[]> {
-  const files = await readdir(DOCS_DIR);
+  const files = await readdir(DOCS_DIR, { recursive: true });
   const entries: DocEntry[] = [];
 
   for (const file of files) {
     if (!file.endsWith(".md") || file === "index.md") continue;
-    const slug = file.replace(/\.md$/, "");
+    const slug = basename(file, ".md");
     const path = join(DOCS_DIR, file);
     const md = await readFile(path, "utf-8");
     entries.push({
@@ -237,7 +243,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
 async function watchDocs() {
   try {
-    const watcher = watch(DOCS_DIR, { recursive: false });
+    const watcher = watch(DOCS_DIR, { recursive: true });
     for await (const event of watcher) {
       if (event.filename?.endsWith(".md")) {
         console.log("  [watch] reloading docs...");

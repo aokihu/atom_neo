@@ -1,5 +1,5 @@
 import { TaskSource, TaskState } from "@atom-neo/shared";
-import type { TaskItem, TaskPayload } from "@atom-neo/shared";
+import type { TaskItem, TaskOrigin, TaskPayload } from "@atom-neo/shared";
 
 let nextId = 0;
 
@@ -15,6 +15,7 @@ export function createTaskItem(params: {
   payload: TaskPayload[];
   parentTaskId?: string | null;
   chainId?: string;
+  origin?: TaskOrigin;
 }): TaskItem {
   const id = generateId("task");
   const chainId = params.chainId ?? id;
@@ -31,6 +32,7 @@ export function createTaskItem(params: {
     priority: params.source === TaskSource.EXTERNAL ? 10 : 5,
     createdAt: now,
     payload: params.payload,
+    ...(params.origin ? { origin: params.origin } : {}),
     state: TaskState.WAITING,
     updatedAt: now,
   };
@@ -49,5 +51,6 @@ export function createContinuationTask(params: {
     payload: params.payload,
     parentTaskId: params.parentTask.id,
     chainId: params.parentTask.chainId,
+    origin: params.parentTask.origin,
   });
 }

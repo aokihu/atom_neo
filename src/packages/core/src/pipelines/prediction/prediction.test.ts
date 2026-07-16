@@ -38,7 +38,7 @@ describe("prediction pipeline elements", () => {
       task: { payload: [{ data: "hello world" }] },
     });
 
-    const result = await el.doProcess({ mode: "initial", task: { payload: [{ data: "hello world" }] } });
+    const result = await el.process({ mode: "initial", task: { payload: [{ data: "hello world" }] } });
     expect(result.mode).toBe("predicting");
     expect(result.userMessage).toBe("hello world");
   });
@@ -63,7 +63,7 @@ describe("prediction pipeline elements", () => {
       task: { payload: [{ data: "你搜索了吗" }] },
     });
 
-    const result = await el.doProcess({ mode: "initial", task: { payload: [{ data: "你搜索了吗" }] } });
+    const result = await el.process({ mode: "initial", task: { payload: [{ data: "你搜索了吗" }] } });
     expect(result.userMessage).toBe("你搜索了吗");
     expect(result.contextMessages).toBeDefined();
     expect(result.contextMessages).toContain("能够介绍一下杭州的景点吗");
@@ -81,7 +81,7 @@ describe("prediction pipeline elements", () => {
       task: { payload: [{ data: "hello" }] },
     });
 
-    const result = await el.doProcess({ mode: "initial", task: { payload: [{ data: "hello" }] } });
+    const result = await el.process({ mode: "initial", task: { payload: [{ data: "hello" }] } });
     expect(result.userMessage).toBe("hello");
     expect(result.contextMessages).toBe("");
   });
@@ -97,7 +97,7 @@ describe("prediction pipeline elements", () => {
       task: { payload: [] },
     });
 
-    const result = await el.doProcess({ mode: "initial", task: { payload: [] } });
+    const result = await el.process({ mode: "initial", task: { payload: [] } });
     expect(result.mode).toBe("predicting");
     expect(result.userMessage).toBe("");
   });
@@ -113,7 +113,7 @@ describe("prediction pipeline elements", () => {
       model: "deepseek-v4-flash",
     });
 
-    const result = await el.doProcess({
+    const result = await el.process({
       mode: "predicting",
       task: {},
       session: null,
@@ -137,7 +137,7 @@ describe("prediction pipeline elements", () => {
       model: "deepseek-v4-flash",
     });
 
-    const result = await el.doProcess({
+    const result = await el.process({
       mode: "predicting",
       task: {},
       session: null,
@@ -150,7 +150,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
     const bus = makeBus();
-    const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }], currentTopic: null, resetForNewTopic: () => {} };
+    const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }], currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
@@ -161,7 +161,7 @@ describe("prediction pipeline elements", () => {
       orchestrator: makeMockOrchestrator(capture),
     });
 
-    const result = await el.doProcess({
+    const result = await el.process({
       mode: "routing",
       task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
@@ -180,7 +180,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-finalize uses fallback when no prediction", async () => {
     const bus = makeBus();
-    const session = { sessionId: "s1", currentTopic: null, resetForNewTopic: () => {} };
+    const session = { sessionId: "s1", currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
@@ -191,7 +191,7 @@ describe("prediction pipeline elements", () => {
       orchestrator: makeMockOrchestrator(capture),
     });
 
-    await (el as any).doProcess({
+    await (el as any).process({
       mode: "routing",
       task: { id: "t1", chatId: "c1", payload: [] },
       session,
@@ -229,7 +229,7 @@ describe("prediction pipeline elements", () => {
       skillService: { clearScope: (sessionId: string) => cleared.push(sessionId) },
     });
 
-    await (el as any).doProcess({
+    await (el as any).process({
       mode: "routing",
       task: { id: "t1", chatId: "c1" },
       session,

@@ -59,7 +59,7 @@ export default function ContextManagementPage({ content, title, description, cat
           snapshot.content 作为单独 System Message；Conversation Messages 和 Tool Definitions 不进入 TOON Snapshot。
         </Callout>
         <Callout type="warn" title="先净化，再编码">
-          Fragment 字符串在编码前修复孤立代理字符和不完整 hex escape；结构化内容使用 TOON replacer 递归处理。禁止编码后替换 TOON 文本，否则会破坏反斜杠转义。
+          Fragment 字符串在编码前通过 String.toWellFormed() 修复孤立代理字符；结构化内容使用 TOON replacer 递归处理。字面量 \u、Windows 路径和代码片段保持原样。
         </Callout>
       </Section>
 
@@ -110,13 +110,14 @@ prepareStep: 从 ContextService 获取新 Snapshot
 continue_todo（有计划续跑）
      ↓ TODO 已完成或达到自动续跑上限
 Task.Completed 保存 Assistant
+     ↓ checkpoint → Task.Committed
      ↓
 post-conversation 读取回复头尾 + TODO/结束状态`} />
         <ComparisonTable
           headers={["边界", "负责判断", "不负责"]}
           rows={[
             [<code>check-follow-up</code>, "TODO 是否全部完成", "不猜测文章质量"],
-            [<code>Task.Completed</code>, "先保存消息再调度", "不提前启动下一任务"],
+            [<code>Task.Committed</code>, "checkpoint 成功后放行调度", "不提前启动下一任务"],
             [<code>post-conversation</code>, "模糊结果的语义质量", "不替代 active TODO 状态机"],
           ]}
         />

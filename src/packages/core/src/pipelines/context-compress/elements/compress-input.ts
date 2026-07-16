@@ -1,62 +1,68 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
+import type { ContextService } from "../../../context/context-service";
 import type { CompressFlowState } from "./types";
 
-function resolveStrategy(ratio: number): { keepCount: number; maxMsgLen: number; summaryMaxTokens: number } {
-  if (ratio >= 1.2) return { keepCount: 1, maxMsgLen: 200, summaryMaxTokens: 1600 };
-  if (ratio >= 0.9) return { keepCount: 2, maxMsgLen: 300, summaryMaxTokens: 1200 };
-  if (ratio >= 0.6) return { keepCount: 5, maxMsgLen: 500, summaryMaxTokens: 800 };
-  if (ratio >= 0.3) return { keepCount: 10, maxMsgLen: 1000, summaryMaxTokens: 600 };
-  return { keepCount: 20, maxMsgLen: 2000, summaryMaxTokens: 400 };
+function resolveStrategy(ratio: number): { keepCount: number; summaryMaxTokens: number } {
+  if (ratio >= 1.2) return { keepCount: 1, summaryMaxTokens: 1600 };
+  if (ratio >= 0.9) return { keepCount: 2, summaryMaxTokens: 1200 };
+  if (ratio >= 0.6) return { keepCount: 5, summaryMaxTokens: 800 };
+  if (ratio >= 0.3) return { keepCount: 10, summaryMaxTokens: 600 };
+  return { keepCount: 20, summaryMaxTokens: 400 };
 }
 
 export class CompressInputElement extends BaseElement<any, CompressFlowState> {
   #session: any;
+  #contextService: ContextService;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     session: any;
+    contextService: ContextService;
   }) {
     super({ name: params.name, kind: "source", bus: params.bus });
     this.#session = params.session;
+    this.#contextService = params.contextService;
   }
 
   async doProcess(input: any): Promise<CompressFlowState> {
-    const msgs: Array<{ role: string; content: string; timestamp: number }> =
-      this.#session?.messages ?? [];
-    const dialog = msgs
-      .filter(m => m.role === "user" || m.role === "assistant")
-      .map(m => ({ ...m }));
+    const messages = [...(this.#session?.messages ?? [])].map(message => ({ ...message }));
 
     const ratio = this.#session?.compressRatio ?? 0.5;
     const strategy = resolveStrategy(ratio);
 
     const safeCount = this.#session?.lastSafeMsgCount ?? 0;
-    const keepFromSafe = safeCount > 0 ? dialog.slice(safeCount) : [];
-    const keepCountFromSafe = keepFromSafe.length > 0 ? keepFromSafe.length : Math.min(strategy.keepCount, dialog.length);
-    const toCompress = dialog.slice(0, dialog.length - keepCountFromSafe);
-    const toKeep = dialog.slice(-keepCountFromSafe);
+    const keepFromSafe = safeCount > 0 && safeCount < messages.length ? messages.length - safeCount : 0;
+    const keepCount = keepFromSafe > 0 ? keepFromSafe : Math.min(strategy.keepCount, messages.length);
+    const archiveMessages = messages.slice(0, messages.length - keepCount);
+    const summaryMessages = archiveMessages.filter(message =>
+      message.visible !== false && (message.role === "user" || message.role === "assistant"));
+    const previous = this.#contextService.get(
+      "session",
+      { sessionId: this.#session?.sessionId ?? "default" },
+      "conversation-summary",
+    )?.content;
+    const previousSummary = Array.isArray(previous)
+      ? previous.map(message => message.content).join("\n")
+      : typeof previous === "string" ? previous : "";
+    const summaryText = [
+      previousSummary ? `Previous cumulative summary:\n${previousSummary}` : "",
+      summaryMessages.length > 0
+        ? `New archived messages:\n${summaryMessages.map(message => `${message.role}: ${message.content}`).join("\n")}`
+        : "",
+    ].filter(Boolean).join("\n\n");
 
-    for (const m of toKeep) {
-      if (m.content.length > strategy.maxMsgLen) {
-        m.content = m.content.slice(0, strategy.maxMsgLen) + "...(truncated)";
-      }
-    }
-
-    const summaryText = toCompress
-      .map(m => `${m.role}: ${m.content}`)
-      .join("\n");
-
-    this.report(BusEvents.Element.Data, { step: "done", totalMsgs: dialog.length, toCompress: toCompress.length, keep: keepCountFromSafe, safeCount, ratio: ratio.toFixed(2), strategy: JSON.stringify(strategy), mode: safeCount > 0 ? "safe_boundary" : "default" });
+    this.report(BusEvents.Element.Data, { step: "done", totalMsgs: messages.length, toCompress: archiveMessages.length, keep: keepCount, safeCount, ratio: ratio.toFixed(2), strategy: JSON.stringify(strategy), mode: keepFromSafe > 0 ? "safe_boundary" : "default" });
     return {
-      mode: "summarizing",
+      mode: "archiving",
       task: input.task,
       session: this.#session,
-      archiveMessages: toCompress,
-      keepCount: keepCountFromSafe,
+      archiveMessages,
+      summaryMessages,
+      keepCount,
       summaryText,
       summaryMaxTokens: strategy.summaryMaxTokens,
     };

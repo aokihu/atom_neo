@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BusEvents, PipelineResultType, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { EvaluatorFlowState } from "./types";
@@ -44,7 +44,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
         ? input.session.addMessage({ role: "assistant", content: termMsg, visible: true, pipeline: "follow-up-evaluator", timestamp: Date.now() })
         : null;
       this.report(BusEvents.Element.Data, { step: "stuck, stopping chain", reason });
-      return { type: "complete", task: input.task, output: `evaluator: stuck — ${reason}` };
+      return { type: PipelineResultType.Complete, task: input.task, output: `evaluator: stuck — ${reason}` };
     }
 
     const owner = {
@@ -90,10 +90,10 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
     const tu = input.session?.tokenUsage?.total ?? 0;
     const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
     const effectiveLimit = (this.#configContextLimit ?? DEFAULT_CONTEXT_LIMIT) - this.#maxTokens;
-    if (tu > effectiveLimit * 0.8 && health !== "stuck") {
+    if (tu > effectiveLimit * 0.8) {
       if (input.session.compressing) {
         this.report(BusEvents.Element.Data, { step: "compress already in progress, skipping" });
-        return { type: "complete", task: input.task, output: `evaluator: compress already in progress` };
+        return { type: PipelineResultType.Complete, task: input.task, output: `evaluator: compress already in progress` };
       }
 
       applyCompressRatio(input.session, ratio);
@@ -108,18 +108,23 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
         input.session.sessionId,
         input.task.chatId,
         input.task.parentTaskId ?? input.task.id,
+        undefined,
+        input.task.id,
       );
-      return { type: "complete", task: input.task, output: `evaluator: health=${health}, compress scheduled` };
+      return { type: PipelineResultType.Complete, task: input.task, output: `evaluator: health=${health}, compress scheduled` };
     }
 
     this.#orchestrator.scheduleConversation(
       input.session.sessionId,
       input.task.chatId,
       input.task.parentTaskId ?? input.task.id,
+      undefined,
+      undefined,
+      input.task.id,
     );
 
     return {
-      type: "complete",
+      type: PipelineResultType.Complete,
       task: input.task,
       output: `evaluator: health=${health}`,
     };

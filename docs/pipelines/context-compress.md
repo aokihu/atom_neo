@@ -28,27 +28,37 @@
 ## Element 链
 
 ```
-compress-input (source) → compress-summarize (transform) → compress-finalize (sink)
+compress-input (source)
+  → compress-archive (transform)
+  → compress-summarize (transform)
+  → compress-finalize (sink)
 ```
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `compress-input` | source | 读取 `session.compressRatio` 确定 5 档策略，分割对话消息。保留最近 N 条，归档旧消息并拼接为 summaryText |
-| 2 | `compress-summarize` | transform | 调用 LLM（**独立 basic profile 模型**）生成 500 字以内摘要。失败时 `compressRatio += 0.4` 自动升级 |
-| 3 | `compress-finalize` | sink | 归档旧消息到磁盘、调用 `replaceEarlyMessages(keepCount)` 清理 session、设置 `compressing=false`、调度续写 |
+| 1 | `compress-input` | source | 从 Session 原始消息中选择完整前缀；可见 user/assistant 消息单独用于摘要 |
+| 2 | `compress-archive` | transform | 通过 `SessionPersistenceService` 可靠写入不可变 `message-{n}.jsonl`；失败时停止提交 |
+| 3 | `compress-summarize` | transform | 使用“旧累计摘要 + 本次可见消息”生成新的累计摘要 |
+| 4 | `compress-finalize` | sink | checkpoint latest/context/session，成功后按 `seq` 清理内存前缀并恢复原 Conversation |
 
 ## FlowState
 
 ```typescript
-type CompressMode = "initial" | "summarizing" | "finalizing";
+type CompressMode = "initial" | "archiving" | "summarizing" | "finalizing";
 
 type CompressFlowState = {
   mode: CompressMode;
   task: any;
   session: any;             // 含 compressRatio, compressing, compressRetry
-  archiveMessages: Array<{ role: string; content: string; timestamp: number }>;
+  archiveMessages: SessionMessage[]; // Session 原始消息的完整前缀
+  summaryMessages: SessionMessage[]; // archiveMessages 中可见的 user/assistant
+  archiveReceipt?: ArchiveReceipt;
+  archiveError?: string;
+  keepCount?: number;
   summaryText: string;
   summary?: string;
+  summaryError?: string;
+  summaryMaxTokens: number;
 };
 ```
 
@@ -56,9 +66,10 @@ type CompressFlowState = {
 
 ```
 initial
-  → compress-input:      分割消息（保留 20，归档其余） → summarizing
-  → compress-summarize:  LLM 生成摘要                  → finalizing
-  → compress-finalize:   归档 + 清理 + 调度              → PipelineResult
+  → compress-input:      选择原始消息前缀                    → archiving
+  → compress-archive:    写不可变 JSONL                     → summarizing
+  → compress-summarize:  旧摘要 + 新消息生成累计摘要         → finalizing
+  → compress-finalize:   checkpoint + 清理 + 恢复原任务      → PipelineResult
 ```
 
 ## 关键行为
@@ -98,28 +109,37 @@ const compressResolved = runtime.getResolvedModel("basic") ?? resolved;
 ### 消息分割（compress-input）
 
 ```
-对话消息 → filter(user/assistant only)
-  → slice(-20): 保留 → 截断超长内容到 2000 字
-  → slice(0, -20): 归档 → 拼接为 summaryText
+Session 原始消息
+  → archiveMessages：待归档的完整前缀
+  → keepMessages：保留的完整后缀
+  → summaryMessages：archiveMessages 中 visible !== false 的 user/assistant
 ```
+
+归档集合和删除集合必须是同一批原始消息，不能先过滤消息再按数量删除 Session 原数组。
 
 ### 摘要生成（compress-summarize）
 
+- 输入由当前 `conversation-summary` 与本次 `summaryMessages` 组成，生成覆盖全部冷历史的累计摘要。
 - 调用 LLM，prompt：`将以下对话历史总结为 500 字以内的摘要，保留关键信息、决策和进展。`
-- `maxTokens: 600`, `temperature: 0`（确定性输出）
+- `maxTokens` 按压缩比动态取 400–1600，`temperature: 0`（确定性输出）
 - 无 text 或 apiKey 时跳过
 
-### 归档与清理（compress-finalize）
+### 归档与清理
 
 ```
 archiveMessages > 0
-  → archiveMessages(sandbox, sessionId, messages)  // 写入磁盘
-  → session.replaceEarlyMessages(20)               // 截断内存中的消息
-  → session.conversationSummary = 摘要              // 下一轮 dialogue 注入
-  → orchestrator.scheduleConversation()             // 恢复对话
+  → 写 message-{n}.jsonl.tmp
+  → 校验行数并 rename 为不可变分段
+  → 更新 conversation-summary / history-archive-index
+  → checkpoint message-latest.jsonl + context.json + session.json
+  → 按 seq 删除成功归档的内存消息
+  → 使用专用“从截断处继续”指令恢复 Conversation，避免重复注入原始用户请求
 ```
 
-归档路径：`{sandbox}/{sessionId}/archive/`
+归档路径：`{sandbox}/.atom/sessions/{safeSessionId}/message-{n}.jsonl`
+
+Context Snapshot 只注入累计摘要和归档索引，不注入 JSONL 正文。Agent 需要核对原文时使用
+`search_history` / `read_history`，读取结果只在当前 AI SDK step 中存在。
 
 ## Deps
 
@@ -131,7 +151,8 @@ archiveMessages > 0
   model: string;        // → compress-summarize (basic profile 独立模型)
   baseUrl?: string;     // → compress-summarize
   orchestrator;         // → compress-finalize
-  sandbox: string;      // → compress-finalize (归档路径)
+  persistence;         // → compress-archive / compress-finalize
+  contextService;      // → 累计摘要、归档索引和 checkpoint
 }
 ```
 
@@ -139,8 +160,9 @@ archiveMessages > 0
 
 | 场景 | 行为 |
 |------|------|
-| 归档文件写入失败 | `catch` → report warn，不阻塞 `replaceEarlyMessages` |
-| LLM 摘要失败 | `catch` → summary = ""，finalizing 继续 |
+| 归档文件写入失败 | 停止压缩提交，不删除任何 Session 消息，不调度恢复任务 |
+| checkpoint 失败 | 保留内存消息；已创建的冷分段可在恢复时按 seq 去重 |
+| LLM 摘要失败 | 停止提交，不删除内存消息、不调度续写；已写归档可按 `seq` 幂等复用 |
 | 无摘要文本 | 跳过 LLM 调用，direct finalizing |
 
 ## 文件
@@ -152,6 +174,7 @@ src/packages/core/src/pipelines/context-compress/
     types.ts                        CompressFlowState
     index.ts                        barrel export
     compress-input.ts
+    compress-archive.ts
     compress-summarize.ts
     compress-finalize.ts
 ```

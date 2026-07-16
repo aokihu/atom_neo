@@ -194,4 +194,63 @@ describe("ContextService", () => {
     service.sweepExpired(Date.now() + 2);
     expect(service.inspectSnapshot(snapshot.id)).toBeUndefined();
   });
+
+  test("exports and restores only durable session and topic entries", () => {
+    const first = createService();
+    first.service.put(putRequest());
+    first.service.put(putRequest({
+      scope: "topic",
+      owner: { sessionId: "session-1", topicId: "topic-1" },
+      entry: { ...putRequest().entry, key: "topic-history" },
+    }));
+    first.service.put(putRequest({
+      scope: "task",
+      owner: { sessionId: "session-1", taskId: "task-1" },
+      entry: { ...putRequest().entry, key: "task-only" },
+    }));
+    first.service.put(putRequest({
+      entry: { ...putRequest().entry, key: "once", consumeOnCommit: true },
+    }));
+
+    const persisted = first.service.exportSessionState("session-1", 3);
+    expect(persisted.buckets.flatMap(bucket => bucket.entries.map(entry => entry.key)).toSorted())
+      .toEqual(["history", "topic-history"]);
+
+    const second = createService();
+    expect(second.service.restoreSessionState(persisted)).toBe(2);
+    expect(second.service.get("session", { sessionId: "session-1" }, "history")?.content)
+      .toEqual([{ role: "user", content: "hello" }]);
+    expect(second.service.get("task", { sessionId: "session-1", taskId: "task-1" }, "task-only"))
+      .toBeUndefined();
+  });
+
+  test("excludes expired entries and buckets from persisted context", () => {
+    const { service } = createService();
+    service.put(putRequest({
+      entry: { ...putRequest().entry, key: "expired-entry", expiresAt: Date.now() - 1 },
+    }));
+    service.put(putRequest({
+      owner: { sessionId: "session-1", topicId: "expired-topic" },
+      scope: "topic",
+      lifecycle: { expiresAt: Date.now() - 1 },
+      entry: { ...putRequest().entry, key: "expired-bucket" },
+    }));
+
+    expect(service.exportSessionState("session-1").buckets).toHaveLength(0);
+  });
+
+  test("restoring one session leaves another session context unchanged", () => {
+    const first = createService();
+    first.service.put(putRequest());
+    const persisted = first.service.exportSessionState("session-1");
+
+    const second = createService();
+    second.service.put(putRequest({
+      owner: { sessionId: "session-2" },
+      entry: { ...putRequest().entry, key: "other-session" },
+    }));
+    second.service.restoreSessionState(persisted);
+
+    expect(second.service.get("session", { sessionId: "session-2" }, "other-session")).toBeDefined();
+  });
 });

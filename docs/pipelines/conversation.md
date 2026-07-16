@@ -1,720 +1,222 @@
 # Conversation Pipeline
 
-> **Purpose**: 定义提交给 LLM 的 Message 数组组织结构与核心对话管道。所有 Message 遵循 AI SDK `{ role, content }` 格式。
+> **Purpose**: 将 Session 消息和分层 Context 编译成一次 LLM 调用，并在安全提交后决定是否续写、推进 TODO、压缩或进入质量检查。
 
-## 1. 架构总览
+## 1. 当前主链
 
-```
-messages = [
-  { role: "system", content: "BASE_SYSTEM_PROMPT" },  // 安全提示词
-  { role: "system", content: "CONTEXT_DATA" },         // 上下文元数据
-  { role: "user",    content: "历史消息1" },
-  { role: "assistant", content: "历史回复1" },
-  { role: "user",    content: "当前输入" },
-]
-```
-
-**两层 system message 说明：**
-
-| 序号 | 作用 | 内容来源 | 加载方式 |
-|------|------|----------|----------|
-| 第 1 层 | 安全边界 | `PromptRegistry` (resolvePrompt) | 运行时合成 |
-| 第 2 层 | 上下文数据 | 运行时动态收集 | 时间、目录、长期记忆等 |
-
-## 2. 触发方式
-
-```
-prediction pipeline → predict-finalize → orchestrator.scheduleConversation()
-  → taskQueue.enqueue(task) → TaskEngine → pipelineBuilders["conversation"]
-  → conversationPipeline(deps).build(bus)
-```
-
-## 3. Element 链（10 个元素）
-
-```
+```text
 collect-prompts (source)
-  → load-system-prompt (transform)
-  → fetch-agents-prompt (transform)
-  → inject-skill-context (transform)
+  → record-context (transform)
   → collect-context (transform)
-  → format-system-messages (transform)
-  → format-user-messages (transform)
   → stream-llm (transform)
+  → token-ratio (boundary)
   → check-follow-up (boundary)
   → finalize (sink)
 ```
 
-| 顺序 | Element | Kind | 职责 |
-|------|---------|------|------|
-| 1 | `collect-prompts` | source | 从 session 提取可见消息 |
-| 2 | `load-system-prompt` | transform | 从 PromptRegistry 合成系统提示词 |
-| 3 | `fetch-agents-prompt` | transform | 获取 Agent 编译器输出的指令 |
-| 4 | `inject-skill-context` | transform | 注入当前已加载的 Skill section |
-| 5 | `collect-context` | transform | 使用 Prediction 的核心关键词检索并注入 Memory，同时构建运行时上下文 |
-| 6 | `format-system-messages` | transform | 合并 system prompt + agent prompt + skill + context |
-| 7 | `format-user-messages` | transform | 组装 user message 数组，切换 mode → `formatted` |
-| 8 | `stream-llm` | transform | 核心：调用 LLM，并按 step 更新 ToolGuard 状态 |
-| 9 | `check-follow-up` | boundary | 根据意图、finishReason 和结构化 TODO 状态决定 chainAction |
-| 10 | `finalize` | sink | 提交/释放 Snapshot，并把链式调度决策返回给 Task.Completed |
+| 顺序 | Element | 职责 | mode 变化 |
+|------|---------|------|-----------|
+| 1 | `collect-prompts` | 从 Session 读取可见消息；standalone 只取最近两条 | `initial → streaming` |
+| 2 | `record-context` | 将 System、AGENTS、Skill、环境、TODO、Memory 摘要记录到 ContextService，同时生成去重后的 user messages | `streaming → context_recorded` |
+| 3 | `collect-context` | 从 ContextService 创建不可变 TOON Snapshot | `context_recorded → formatted` |
+| 4 | `stream-llm` | 调用 AI SDK、执行工具循环、更新 ToolGuard 和 Context | `formatted → executing` |
+| 5 | `token-ratio` | 基于输入上限和输出保留预算计算占用比 | mode 不变 |
+| 6 | `check-follow-up` | 区分无计划续写和 TODO 续跑 | `executing → ready_to_finalize` |
+| 7 | `finalize` | 提交或释放 Snapshot，返回 chain / post-check 决策 | 返回 PipelineResult |
 
-## 4. Element 详解
+旧的 `load-system-prompt`、`fetch-agents-prompt`、`inject-skill-context`、
+`format-system-messages` 和 `format-user-messages` 不在当前主链中；相关职责已经聚合到
+`record-context`、`collect-context` 与 `stream-llm`。
 
-### 4.1 `load-system-prompt`
-
-**kind**: `transform`
-
-**职责**: 通过 `resolvePrompt()` 从 PromptRegistry 合成系统提示词（多语言 + 模型精细化追加）
-
-```typescript
-class LoadSystemPromptElement extends BaseElement {
-  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
-    if (input.mode !== "streaming") return input;
-    const systemPrompt = resolvePrompt(PromptKey.BASE_SYSTEM, input.providerModel);
-    return { ...input, systemPrompt };
-  }
-}
-```
-
-- **不切换 mode**，streaming 保持不变
-
-### 4.2 `collect-context`
-
-**kind**: `transform`
-
-**职责**: 收集运行时上下文数据，注入长期记忆、工具执行历史
-
-```typescript
-class CollectContextElement extends BaseElement {
-  async doProcess(input): Promise {
-    let contextData = [
-      `Current Time: ${new Date().toISOString()}`,
-      `Sandbox Directory: ${sandbox}`,
-      `OS: ${process.platform} ${process.arch}`,
-    ].join("\n");
-
-    // Prediction 输出单一核心关键词，例如“台风”
-    const memoryQuery = this.#session?.pendingPrediction?.memoryQuery?.trim() || "";
-    let memorySearchAttempted = false;
-    let injectedMemoryCount = 0;
-    let memorySearchStatus = "not_started";
-
-    // Memory injection with <Memory> tags
-    let memories = [];
-    if (memoryQuery) {
-      memorySearchAttempted = true;
-      try {
-        memories = this.#memory ? await this.#memory.search(memoryQuery) : [];
-        memorySearchStatus = this.#memory ? "empty" : "unavailable";
-      } catch {
-        memorySearchStatus = "unavailable";
-      }
-    }
-    for (const node of memories) {
-      contextData += `\n<MemorySummary id="${node.id.slice(0,6)}" tags="${node.tags}">\n${node.summary}\n</MemorySummary>`;
-      injectedMemoryCount++;
-      memorySearchStatus = "found";
-    }
-
-    // Tool execution history injection (from ToolContext)
-    const results = this.#session.toolContext?.results ?? [];
-    const topicResults = results.filter((r: any) => r.topic === this.#session.currentTopic);
-    if (topicResults.length > 0) {
-      const lines = topicResults.map((r: any) =>
-        `- [${new Date(r.timestamp).toISOString().slice(11, 19)}] ${r.toolName}: ${r.ok ? "ok" : "error"}${r.output ? ` — ${r.output.slice(0, 80)}` : ""}`
-      );
-      contextData += `\n\n[Tool Execution History]\n${lines.join("\n")}`;
-      this.#session.toolContext.results = results.filter((r: any) => r.topic !== this.#session.currentTopic);
-    }
-
-    return { ...input, contextData, memorySearchAttempted, injectedMemoryCount, memorySearchStatus };
-  }
-}
-```
-
-### 4.3 `format-system-messages`
-
-**kind**: `transform`
-
-**职责**: 合并三个 system 层级，不切换 mode
-
-```typescript
-class FormatSystemMessagesElement extends BaseElement {
-  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
-    if (input.mode !== "streaming") return input;
-    const parts: string[] = [];
-    if (input.systemPrompt) parts.push(input.systemPrompt);
-    if (input.compiledAgentsPrompt) parts.push(input.compiledAgentsPrompt);
-    if (input.contextData) parts.push(input.contextData);
-    return { ...input, systemText: parts.join("\n\n") };
-  }
-}
-```
-
-### 4.4 `format-user-messages`
-
-**kind**: `transform`
-
-**职责**: 组装用户/助手消息，切换到 `formatted` mode
-
-```typescript
-class FormatUserMessagesElement extends BaseElement {
-  async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
-    if (input.mode !== "streaming") return input;
-    const messages: Message[] = [];
-    for (const m of input.prompts ?? []) {
-      messages.push({ role: m.role, content: m.content });
-    }
-    const text = input.task?.payload?.[0]?.data;
-    if (text) messages.push({ role: "user" as const, content: text });
-    return { ...input, mode: "formatted", userMessages: messages };
-  }
-}
-```
-
-### 4.5 `stream-llm` — 核心流式生成
-
-**kind**: `transform`
-
-#### 门控与调用
-
-```typescript
-if (input.mode !== "formatted") return input;
-
-const streamResult = streamText({
-  model,
-  system: input.systemText,        // ← 专用参数，不混在 messages 中
-  messages: input.userMessages,    // ← 仅 user/assistant
-  tools: aiTools,
-  stopWhen: stepCountIs(this.#maxSteps),  // v6: 替代 maxSteps
-  maxOutputTokens: this.#maxTokens,       // v6: 替代 maxTokens
-  providerOptions: this.#providerOptions,
-  abortSignal: abortController.signal,
-  prepareStep: ({ steps }) => {
-    const selection = selectActiveToolsForStep({
-      taskIntent,
-      memorySearchAttempted: input.memorySearchAttempted,
-      hasSkillContext: Boolean(input.skillContext?.trim()),
-      hasExplicitUrl,
-      memoryToolCalled: steps.some(step =>
-        step.toolCalls.some(call => call.toolName === "search_memory")
-      ),
-    });
-    guardState.current = toWebfetchGuardState(selection);
-    return { activeTools: selection.activeTools }; // webfetch 始终包含在内
-  },
-});
-```
-
-#### 滑动窗口 — `<<<COMPLETE>>>` 标记检测
-
-```typescript
-const MARKER = "<<<COMPLETE>>>";
-const WINDOW = MARKER.length - 1;   // 始终保留最后 N-1 个字符
-let buffer = "";                     // 滑动窗口缓冲区
-let fullText = "";                   // 完整累计文本，用于计算 offset
-let pastMarker = false;
-
-for await (const chunk of streamResult.fullStream) {
-  if (chunk.type !== "text-delta") continue;
-
-  if (pastMarker) continue;         // 标记后内容丢弃
-
-  buffer += chunk.textDelta;
-  const idx = buffer.indexOf(MARKER);
-
-  if (idx >= 0) {
-    if (idx > 0) {
-      const offset = fullText.length;
-      const textDelta = buffer.slice(0, idx);
-      fullText += textDelta;
-      bus.emit("transport.delta", { textDelta, offset });
-    }
-    pastMarker = true;
-    buffer = "";
-    // 日志记录 "complete-marker-detected"
-  } else if (buffer.length > MARKER.length * 3) {
-    const sendLen = buffer.length - WINDOW;
-    const textDelta = buffer.slice(0, sendLen);
-    const offset = fullText.length;
-    fullText += textDelta;
-    bus.emit("transport.delta", { textDelta, offset });
-    buffer = buffer.slice(-WINDOW);  // 保留 WINDOW 个字符，不与已发送内容重叠
-  }
-}
-
-// 流结束后刷新残留缓冲区
-if (!pastMarker && buffer.length > 0) {
-  const offset = fullText.length;
-  fullText += buffer;
-  bus.emit("transport.delta", { textDelta: buffer, offset });
-}
-```
-
-#### 关键设计点
-
-| 机制 | 说明 |
-|------|------|
-| `WINDOW = MARKER.length - 1` | 滑动窗口始终保留最后 N-1 个字符，用于跨 chunk 检测 `<<<COMPLETE>>>` 标记。使用 `slice(-WINDOW)` 而非 `slice(-MARKER.length)` 避免与已发送内容产生 1 字符重叠 |
-| `offset` | 每个 `transport.delta` 消息携带 `offset` 字段，表示该 delta 在完整文本中的起始位置。TUI 使用 `content.substring(0, offset) + textDelta` 组装消息，避免因消息乱序或 buffer 边界问题导致的字符重复 |
-| **Buffer 刷新** | 流结束后必须将 `buffer` 中残留字符刷新，否则末尾 ≤WINDOW 个字符会丢失 |
-| **标记检测** | 命中 `<<<COMPLETE>>>` 后，发送标记前文本、丢弃后续内容、日志记录 `complete-marker-detected` |
-
-### 4.6 `check-follow-up`
-
-**kind**: `boundary`
-
-**职责**: 消费 `input.intents[]`，区分无计划续写与有计划 TODO 续跑
-
-- `FOLLOW_UP` → 设置 followUp data
-- `RETAIN_MEMORY` → 将 mem_id 短 ID 恢复为唯一长 ID 后执行 `memory.retain()`
-- `stream-llm` 因长度、可恢复错误或显式意图请求续写 → 保留 `chainAction=follow_up`
-- 任一 TODO 仍为 `pending` / `in_progress`，且本轮没有续写请求 → 设置 `chainAction=continue_todo`
-- 只有全部 TODO 为 `completed` / `cancelled` 时，TODO 才允许任务结束
-
-`follow_up` 表示回答因输出边界中断后继续生成；`continue_todo` 表示本轮正常结束后继续推进结构化计划。二者共用 `Conversation.Chain` 事件，但不共用触发条件与终止策略。
-
-**两阶段安全校验：**
-
-| 阶段 | 位置 | 校验内容 |
-|------|------|---------|
-| parse | intent 解析阶段 | 格式校验：必需参数非空、未知 TYPE 跳过 |
-| execute | CheckFollowUpElement | ID 校验：mem_id 需能被 MemoryService 解析为唯一完整 ID 才执行 retain() |
-
-### 4.7 `finalize` — 链任务统一收口
-
-**kind**: `sink`
-
-提交或释放 Context Snapshot，并返回 `chainAction` / `shouldPostCheck`。Finalize 不直接调度下一任务，避免下一任务在当前 Assistant 消息写入 Session 之前启动。
-
-`Task.Completed` 按固定顺序完成收口：
+## 2. 送入 LLM 的结构
 
 ```text
-保存 Assistant 消息 -> 累计 Token -> Conversation.Chain / Conversation.Idle -> 调度下一任务
+ContextService entries
+  ├── system prompt
+  ├── workspace AGENTS
+  ├── active Skill sections
+  ├── task environment / TODO
+  ├── selected Memory summaries
+  ├── durable Memory projections
+  └── conversation summary / archive index
+          ↓ collect-context
+      TOON Context Snapshot
+          ↓
+AI SDK
+  system: snapshot.content
+  messages: visible user / assistant messages
+  tools: visible tools + per-call ToolGuard
 ```
 
-**chainDepth 防循环**: 上限 `maxChainDepth`（默认 5）。它是自动 Chain 的统一安全预算；`follow_up` 达到检查点时交给 evaluator，`continue_todo` 达到上限后停止自动续跑并保留 TODO 状态。
+Snapshot 是一次调用的只读快照；编译状态、receipt、lease 和生命周期仍由 ContextService 内部管理，
+不会注入 LLM。
 
-**chainAction 设置顺序：**
+### 当前用户消息去重
 
-| Element | 设置值 | 条件 |
-|---------|--------|------|
-| stream-llm | `"follow_up"` | finishReason === "length" / "error"(status<400) / 意图包含 FOLLOW_UP |
-| check-follow-up | `"continue_todo"` | 本轮无 follow_up，且 Session 中存在 `pending` / `in_progress` TODO |
-| stream-llm | (跳过) | finishReason === "error" && errorStatusCode >= 400 — 参数错误不可恢复 |
-| finalize | `shouldPostCheck=false` | errorStatusCode >= 400 — 不触发 post-conversation 分析 |
+HTTP / WebSocket 在 Task 入队前已经把用户消息写入 Session。`record-context` 只有在最后一条消息
+不是同一份用户文本时才追加 payload，避免同一个输入出现两次。兼容元素
+`format-user-messages` 复用同一个 `appendCurrentUserMessage()` 规则。
 
-> **v6 迁移说明**：`finishReason === "tool-calls"` 触发 follow_up 的逻辑已移除。v6 中 `stopWhen: stepCountIs(N)` 在工具循环内部自动处理，LLM 在生成文本前不会以 "tool-calls" 结束。
+## 3. Context 记录边界
 
-**Token 溢出压缩**：当 `tokenOverflow === true` 时，finalize 计算 `compressRatio` 并调用 `orchestrator.scheduleCompress()`：
+`record-context` 负责写来源数据，不直接拼最终 system string：
 
-```typescript
-compressRatio = max(0, (tokenUsage / effectiveLimit - 0.8) * 5);
+| Scope | Key | 来源 | 生命周期 |
+|-------|-----|------|----------|
+| system | `system-prompt` | Prompt Registry | pinned |
+| workspace | `workspace-agents` | AGENTS compiler | pinned |
+| session / topic | `topic-skills` | SkillService | 随 Topic / Session |
+| task | `task-environment` | 当前时间、sandbox、TODO、预算 | Task |
+| task | `memory-summaries` | Prediction Memory 查询 | Task |
+| session / topic | Memory projection | `read_memory` 显式选择 | pinned 或 TTL |
+
+`collect-context` 只从 ContextService 获取 Snapshot，不再重复搜索 Memory 或拼装业务数据。
+
+## 4. ToolGuard 与 webfetch
+
+所有工具都可以出现在工具列表中。`webfetch` 不靠隐藏限制行为，而是在执行时检查前置发现流程：
+
+```text
+Agent calls webfetch
+  ├── 已有相关完整 Memory / Skill Context / 明确 URL → allow
+  ├── 尚未查询 Memory → block，提示 search_memory
+  ├── Memory 命中 Skill 线索 → block，提示 skill_load / skill_section
+  ├── Memory 为空但未检查 Skill → block，提示 skill_list
+  └── Memory / Skill 服务不可用或检查完成 → allow
 ```
 
-ratio 分为 5 档策略：
+Memory 与 Skill 工具对所有 intent 可见。Guard 的拒绝结果会明确告诉 Agent 下一步需要执行什么，
+原始工具函数不会在拒绝时运行。
 
-| ratio | keepCount | maxSummaryTokens |
-|-------|-----------|------------------|
-| < 0.3 | 20 | 400 |
-| 0.3 - 0.6 | 10 | 600 |
-| 0.6 - 0.9 | 5 | 800 |
-| 0.9 - 1.2 | 2 | 1200 |
-| >= 1.2 | 1 | 1600 |
+### 工具结果生命周期
 
-**溢出检测防误判**：`stream-llm.ts` 在 `stepCount===0 && fullTextLen===0` 时额外检查 ratio 门控，只有 `ratio > 0.8` 才判定为真实 token 溢出，否则报 `stream-error-not-overflow`。
+- 普通工具结果可以按 Topic 记录，供下一步使用。
+- `search_history` / `read_history` 和 Memory traversal 的大文本结果只保留给紧接着的 consumer step。
+- consumer step 结束后立即从 AI SDK messages 中裁掉，不跨 Conversation 持久化。
+- `read_memory` 只有显式传入 Context projection 参数时才成为 pinned 或 TTL Context。
 
-## 5. FlowState
+## 5. 输出预算与压缩阈值
+
+`maxOutputTokens` 由 Atom 自己传给 AI SDK，默认 4096。Context 输入预算为：
+
+```text
+inputBudget = contextLimit - maxOutputTokens - CONTEXT_RESERVE
+effectiveLimit = contextLimit - maxOutputTokens
+ratio = tokenUsage / effectiveLimit
+```
+
+系统在输入空间接近阈值时启动压缩，不等到输出 token 完全耗尽。`tokenOverflow` 时 Finalize 计算
+`compressRatio`，并通过 orchestrator 暂存 `context-compress` Task。
+
+| compressRatio | 保留最近消息 | Summary 上限 |
+|---------------|--------------|--------------|
+| `< 0.3` | 20 | 400 |
+| `0.3–0.6` | 10 | 600 |
+| `0.6–0.9` | 5 | 800 |
+| `0.9–1.2` | 2 | 1200 |
+| `≥ 1.2` | 1 | 1600 |
+
+## 6. 自动续写与 TODO 续跑
+
+| action | 含义 | 触发 |
+|--------|------|------|
+| `follow_up` | 无计划续写 | 长度截断、可恢复错误或显式续写意图 |
+| `continue_todo` | 按结构化计划继续 | 本轮没有 follow_up，且存在 pending / in_progress TODO |
+| `post_check_retry` | 质量检查后的修复重试 | post-conversation 判定 blocked 且未停滞 |
+
+优先级是 `follow_up > continue_todo`。HTTP 400 级不可恢复错误不会触发续写或 post-check。
+
+`chainDepth` 是统一安全预算，默认上限为 5：
+
+- TODO 达到上限后停止自动续跑并保留状态。
+- 普通 follow-up 在检查点转给 evaluator。
+- post-check retry 达到上限后终止，避免无限自我修复。
+
+## 7. Snapshot 与下游任务提交顺序
+
+Finalize 只返回决策。Pipeline 内部调用 orchestrator 时必须传入当前 `ownerTaskId`，任务只暂存在
+对应父 Task 下；WebSocket Compact 等独立请求没有 owner，直接入队：
+
+```text
+Pipeline completes
+  → finalize commits / releases Context Snapshot
+  → Task.Completed
+      → append Assistant message
+      → add token usage
+      → checkpoint Session + Context + latest messages
+          ├── success
+          │   → Task.Committed
+          │   → Conversation.Chain / Conversation.Idle
+          │   → release staged downstream tasks and hooks
+          └── failure
+              → discard staged downstream tasks
+              → keep Session in memory
+```
+
+`TaskEngine` 串行执行 Task。`Task.Committed` 是“父 Task 的 Session 状态已安全落盘”的信号；
+需要启动下游工作的 Hook 不能直接监听原始 `Task.Completed`。
+
+## 8. 流式输出安全
+
+| 机制 | 行为 |
+|------|------|
+| `stopWhen: stepCountIs(maxSteps)` | 控制 AI SDK 工具循环，默认 50 step |
+| `<<<COMPLETE>>>` | 使用滑动窗口跨 chunk 识别，标记及之后文本不发送 |
+| offset | Transport delta 携带完整文本偏移，TUI 按 offset 合并 |
+| Unicode | `substringWellFormed()` 安全截断；`sanitizeForJSON()` 使用 `toWellFormed()` 修复孤立代理 |
+| API error | 保存 status code；4xx 不自动续写，其他可恢复错误可 follow-up |
+
+字面量 `\u`、Windows 路径和代码属于合法文本，不能被 JSON sanitizer 改写。
+
+## 9. 关键 FlowState
 
 ```typescript
 type ConversationMode =
   | "initial"
   | "streaming"
+  | "context_recorded"
   | "formatted"
   | "executing"
   | "ready_to_finalize";
 
 type ConversationFlowState = {
   mode: ConversationMode;
-  task: any;
-  prompts?: Array<{ role: string; content: string }>;
-  systemPrompt?: string;
-  compiledAgentsPrompt?: string;
-  contextData?: string;
-  systemText?: string;
+  task: TaskItem;
+  prompts?: Message[];
+  contextOwner?: ContextOwner;
+  contextSnapshot?: ContextSnapshot;
+  contextSnapshotAccepted?: boolean;
+  memorySearchAttempted?: boolean;
+  memorySearchStatus?: "not_started" | "found" | "empty" | "unavailable";
+  injectedMemoryCount?: number;
   userMessages?: Message[];
   responseText?: string;
   reasoningContent?: string;
-  followUp?: { summary: string; nextPrompt: string; avoidRepeat: string };
-  chainAction?: "follow_up";
-  intents?: IntentRequest[];
+  chainAction?: "follow_up" | "continue_todo";
   tokenUsage?: TokenUsage;
   tokenOverflow?: boolean;
-  errorStatusCode?: number;  // API 错误状态码，用于判断是否可恢复
+  errorStatusCode?: number;
+  finishReason?: string;
+  completeDetected?: boolean;
 };
 ```
 
-## 6. 状态转移
+## 10. 关键文件
 
-```
-initial
-  → collect-prompts:      过滤可见消息                    → streaming
-  → load-system-prompt:   合成系统提示词                   → streaming
-  → fetch-agents-prompt:  获取编译后的 agent 指令           → streaming
-  → collect-context:      构建环境上下文                    → streaming
-  → format-system-messages: 合并 system + agent + context   → streaming
-  → format-user-messages: 组装 user messages, mode 切换     → formatted
-  → stream-llm:           调用 LLM, 处理 intent 工具调用     → executing
-  → check-follow-up:      决定 chainAction                  → ready_to_finalize
-  → finalize:             发出 Chain 或 Idle 事件           → PipelineResult
-```
-
-## 7. stream-llm AI SDK 配置
-
-| 参数 | 来源 | 默认 |
-|------|------|------|
-| `model` | `runtime.getResolvedModel(difficulty).model` | `"deepseek-v4-flash"` |
-| `stopWhen` | `config.json → conversation.maxSteps` → `stepCountIs(N)` | `stepCountIs(50)` |
-| `maxOutputTokens` | `config.json → transport.maxOutputTokens` | `4096` |
-| `tools` | 全部工具（启动时一次性加载）；其他工具按 intent 过滤，`webfetch` 始终可见 | `createAllTools()` |
-| `providerOptions` | `{ deepseek: { thinking: { type: ... } } }` | thinking=disabled |
-
-> **v6 迁移说明**：`maxSteps` 已移除，改用 `stopWhen: stepCountIs(N)` 控制多步工具循环。`maxTokens` 已更名为 `maxOutputTokens`。`allowSystemInMessages` 已废弃（v6 中 system message 始终允许）。
-
-**输出净化**：所有 LLM 输出在流式结束后经过 `sanitizeForJSON()` 双层净化：
-1. `String.toWellFormed()` 修复非法 Unicode 代理对
-2. 正则剥离字面量 `\uXXXX` 文本序列
-
-**溢出检测**：`stepCount===0 && fullTextLen===0 && ratio > 0.8` 才判定 token 溢出，ratio ≤ 0.8 时报 `stream-error-not-overflow` 避免误判。
-
-**Reasoning 流式处理（v6）**：`stream-llm.ts` 在流循环中处理以下 reasoning chunk 类型：
-
-| chunk type | 处理 | 说明 |
-|------------|------|------|
-| `reasoning-start` | 跳过 | 推理块起始信号 |
-| `reasoning-delta` | 累加 `reasoningText` | 流式推理文本增量 |
-| `reasoning-end` | 跳过 | 推理块结束信号 |
-| `text-start` / `text-end` | 跳过 | 文本块边界信号（v6 新增） |
-
-推理内容在流循环结束后直接使用累积的 `reasoningText` 填充 `ConversationFlowState.reasoningContent`，替代了 v4 中从 `response.messages` 后置提取的方式。多步 tool calling 场景中，每步的 reasoning 都会被正确累加。当 `config.json` 中 `thinking` 为 `enabled` 或 `adaptive` 时生效。
-
-**400 错误捕获**：`stream-llm.ts` 在 `type === "error"` 的 chunk 处理中提取 `err.statusCode` 存入 `streamErrorCode`。该变量在流循环结束后用于 `chainAction` 决策：
-
-```
-finishReason === "error" && streamErrorCode < 400 → chainAction: "follow_up" (可恢复)
-finishReason === "error" && streamErrorCode >= 400 → chainAction: undefined (参数错误，不可恢复)
-outer catch block → err.statusCode ?? 0 → errorStatusCode 字段
-```
-
-`errorStatusCode` 通过 `ConversationFlowState` 传至 `finalize.ts`，≥400 时跳过 `Conversation.Idle` 发射，阻断 post-conversation 对空输出的分析。
-
-**工具调用流式传输（v6）**：AI SDK v6 新增工具参数流式 chunk 类型，模型逐字符生成工具参数时实时传输：
-
-| chunk type | 处理 | 说明 |
-|------------|------|------|
-| `tool-input-start` | 记录 toolCallId + toolName | 模型开始构建工具参数 |
-| `tool-input-delta` | 累加 `delta` 文本 | 工具参数增量文本，用于 TUI 流式展示参数构建过程 |
-| `tool-input-end` | 标记参数构建完成 | 工具参数流式传输结束 |
-| `tool-input-available` | debug 记录 | 工具输入完整可用 |
-| `tool-input-error` | warn 记录 | 工具输入流式错误 |
-
-完整工具调用流（v6）：
-```
-tool-input-start → tool-input-delta × N → tool-input-end → tool-call → tool-result
-```
-
-**Transport 事件桥接**：stream-llm.ts 在工具调用和结果到达时发送 bus 事件，server.ts 桥接到 WebSocket 广播给 TUI：
-
-| 时机 | Bus Event | WebSocket Message |
-|------|-----------|-------------------|
-| `tool-call` chunk 到达 | `Transport.ToolStarted` | `TransportToolStarted` |
-| `tool-result` chunk 到达 | `Transport.ToolFinished` | `TransportToolFinished` |
-
-TUI 通过 `ToolMessageBox` 组件展示工具调用状态（preparing → executing → done/error），使用 `toolCallId` 作为主键匹配更新。
-
-**Step 结束折叠**：每个 step 中全部工具调用完成后，`finish-step` chunk 触发 `Transport.ToolStepFinished` 事件，TUI 将当前 step 内所有独立 tool 消息折叠为一条 `tool-summary`：
-
-| 时机 | Bus Event | WebSocket Message |
-|------|-----------|-------------------|
-| `finish-step` chunk | `Transport.ToolStepFinished` | `transport.tool.step-finished` |
-
-摘要格式：
-```
-◆ 2 tools ✓ — search_memory, webfetch         ← 全部成功
-◆ 3 tools (2 ok, 1 fail) — bash, webfetch, read  ← 部分失败
-◆ 1 tool ✓ — bash                              ← 单工具也折叠
-```
-
-**工具结果上下文存储**：工具执行结果不存入 SessionMessage（避免 `role:"tool"` 孤立消息导致 API 400），而是存入 `SessionContext.toolContext.results`（`ToolResultEntry[]`），在下一轮 `collect-context` 时按 topic 过滤注入系统 prompt：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `toolName` | `string` | 工具名 |
-| `topic` | `string` | 执行时的 `session.currentTopic` |
-| `timestamp` | `number` | Unix ms 执行时间 |
-| `ok` | `boolean` | 执行成功/失败 |
-| `output` | `string` | 结果内容 |
-| `durationMs` | `number?` | 执行耗时 |
-
-数据流：
-```
-工具执行完成 → 按 ToolResult.ok 生成 session.addToolResult({ toolName, topic, timestamp, ok, output, error })
-  → toolContext.results 按 topic 累积
-  → 下一轮 collect-context: 过滤当前 topic → 格式化为 [Tool Execution History]
-  → 注入 contextData → 清除当前 topic 条目
-  → resetForNewTopic() 时全量清空
-```
-
-上下文展示格式：
-```
-[Tool Execution History]
-- [11:30:21] search_memory: ok — No memories found
-- [11:30:24] webfetch: ok — Weather data (1.2KB)
-```
-
-查询能力与事实确认顺序：
-
-1. 先检查当前 Context 中已经注入的事实、查询方法和 Skill。
-2. Prediction 生成单一 `memoryQuery`，`collect-context` 在 LLM 调用前自动搜索 Memory。
-3. `webfetch` 始终出现在可用工具中；自动搜索未执行时，首次调用由 ToolGuard 拦截并要求 `search_memory`。
-4. 自动搜索或工具搜索命中时只提供 `<MemorySummary>`；候选相关时 Agent 调用 `read_memory(id)`，不相关时继续检查 Skill。
-5. 完整 Memory 是普通事实/方法时允许执行 `webfetch`；若正文包含 Skill 线索，则继续拦截，直到 `skill_load` / `skill_section` 成功。Skill 不存在或加载失败时允许降级。
-6. Memory 搜索为空时，Guard 要求 Agent 调用 `skill_list`；检查完成后再次调用 `webfetch` 即可执行。
-7. Agent 可以自主扩大 Memory 查询，但 Guard 不再强制累计三次不同查询。
-8. Memory 服务不可用或搜索异常时直接允许执行 `webfetch`，避免阻断查询。
-9. 用户消息含明确 `http://` 或 `https://` URL 时允许直接执行 `webfetch`。
-
-`search_memory`、`read_memory` 和 Skill 工具对所有 intent 保持可用，避免一次 intent 误分类切断能力发现。MCP 工具不参与本阶段的内置 `webfetch` 门控。
-
-Debug 日志记录 `memoryQuery`、`memorySearchStatus`、`injectedMemoryCount`、正文读取状态、`memorySuggestsSkill`、Skill 检查与加载状态、`webfetchAllowed`、Guard 原因和拦截事件，不记录 Memory 正文。
-
-`format-user-messages.ts` 中设有防线 `if (m.role === "tool") continue`，确保孤立的 `role:"tool"` 消息不会进入 LLM 消息数组。
-
-**Chunk 类型全覆盖**：v6 完整 chunk 类型清单及处理策略：
-
-| 类别 | Chunk 类型 | 处理方式 |
-|------|-----------|----------|
-| 跳过 | `stream-start`, `response-metadata`, `message-metadata`, `source`, `source-document`, `source-url`, `object`, `raw`, `reasoning`, `all` | `continue` |
-| Debug | `tool-input-start`, `tool-input-delta`, `tool-input-end`, `tool-input-available`, `tool-output-available`, `file`, `dynamic-tool` | `Element.Data` debug 级别 |
-| Warn | `tool-input-error`, `tool-output-denied`, `tool-output-error`, `tool-approval-request`, `abort` | `Element.Data` warn 级别 |
-| Error | `tool-error` | `Element.Data` error 级别 |
-
-不再有任何 chunk 类型落入 `unhandled-chunk` 兜底。
-
-## 8. chainAction → 自动续写与 TODO 续跑
-
-Finalize 把决策交给 `Task.Completed`；server.ts 在 Assistant 消息写入 Session 后再发出 `BusEvents.Conversation.Chain` 或 `Conversation.Idle`：
-
-```
-Conversation.Chain handler:
-  ├── post_check_retry + depth >= maxChainDepth → 终止链
-  ├── post_check_retry → incrementChainDepth + scheduleFollowUp
-  ├── follow_up + depth >= maxChainDepth → scheduleEvaluator
-  ├── follow_up + depth >= 3 && depth % 3 === 0 → scheduleEvaluator
-  ├── follow_up → incrementChainDepth + scheduleFollowUp
-  ├── continue_todo + TODO 已完成 → 终止链
-  ├── continue_todo + depth >= maxChainDepth → 停止自动续跑，保留 TODO
-  └── continue_todo → incrementChainDepth + scheduleTodoContinuation
-```
-
-**400 错误防护**：`stream-llm.ts` 在 `finishReason === "error"` 且 `errorStatusCode >= 400` 时不设置 `chainAction`（参数错误不可恢复）。`finalize.ts` 返回 `shouldPostCheck=false`，阻断 post-conversation 对空输出的分析。
-
-## 9. TODO 顺序执行机制
-
-### 四层约束
-
-| 层 | 实现 | 效果 |
-|----|------|------|
-| **工具级强约束** | `todowrite` 执行前检查 `in_progress` 数量，>1 返回错误 | 即时反馈，无法绕过 |
-| **Prompt 威慑** | Step 0 + 执行规则中声明 "todowrite 会拒绝多个 in_progress" | 事前提防 |
-| **上下文警告** | `collect-context` 在 TODO 列表上方注入醒目横幅 | 每次交互提醒 |
-| **状态机兜底** | `check-follow-up` 检查 active TODO | 模型提前 `stop` 时触发有计划续跑 |
-
-### 执行模式
-
-```
-LLM 调用 todowrite (1个 in_progress) → 执行当前任务 → 完成
-  → todowrite (标记 completed + 设置下一个 pending 为 in_progress)
-  → 本轮正常结束
-  → check-follow-up 根据 active TODO 生成 continue_todo
-  → 达到 maxChainDepth 时停止自动续跑，等待用户明确继续
-```
-
-### `post_check_retry` 链深度限制
-
-post-conversation 判定 `blocked` 时触发 `post_check_retry`。server.ts 中该分支新增 `chainDepth >= maxChainDepth` 门控，防止消息损坏导致的无限重试循环。
-
-### todowrite 工具 Schema
-
-`todowrite` 工具定义在 `src/packages/core/src/tools/builtin/todowrite.ts`。
-
-```typescript
-TodoWriteInputSchema = z.object({
-  todos: z.array(TodoItemSchema).describe("Full task list to replace current state"),
-});
-
-TodoItemSchema = z.object({
-  content: z.string().describe("Task description"),
-  status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
-  priority: z.enum(["high", "medium", "low"]),
-});
-```
-
-**全量替换模式**：LLM 每次调用必须传入完整 todo 数组（包括已完成和待处理项），彻底替换 `session.todoState`。现有状态由 `stream-llm.ts` 在工具执行成功后自动同步：
-
-```typescript
-if (t.name === "todowrite" && r.ok && session?.setTodoState) {
-    session.setTodoState((args as any).todos ?? []);
-}
-```
-
-**工具级验证**：`execute` 函数统计 `in_progress === "in_progress"` 的数量，> 1 时返回 `{ ok: false, error: "..." }`。`r.ok === false` 必须同步到工具统计和 session toolContext，避免失败被展示为成功。
-
-**formatProgress() 输出**：使用 Unicode 图标格式化进度（⬜/🔄/✅/❌），包含编号和优先级，末尾显示"下一步"提示。
-
-## 10. Unicode 净化（sanitizeForJSON）
-
-所有 LLM 输出的文本在存储前经过双层净化，防止模型输出的非法 Unicode 字符污染会话历史导致后续 API 400 错误：
-
-| 层 | 技术 | 处理目标 |
-|----|------|----------|
-| **第 1 层** | `String.toWellFormed()` (ES2024) | 孤立代理 codepoint → U+FFFD |
-| **第 2 层** | 正则 `\\u[0-9a-fA-F]{0,4}` | 字面量 `\uXXXX` 文本序列 → decode/strip |
-
-净化点：
-- `stream-llm.ts` — `fullText` 返回前（源头）
-- `server.ts` — assistant message 存储前（防线）
-
-共享工具函数 `sanitizeForJSON` 定义在 `@atom-neo/shared`。
-
-## 11. Deps
-
-```typescript
-type ConversationPipelineDeps = {
-  session: any;              // → collect-prompts, collect-context
-  task: any;                 // → collect-prompts (sandbox)
-  apiKey?: string;           // → stream-llm
-  model?: string;            // → stream-llm
-  baseUrl?: string;          // → stream-llm
-  providerOptions?: Record<string, any>;  // → stream-llm
-  providerModel?: string;    // → collect-context
-  configContextLimit?: number; // → collect-context
-  tools: any[];              // → stream-llm (全量工具)
-  getCompiledPrompt?: () => string;  // → fetch-agents-prompt
-  maxOutputTokens?: number;    // → stream-llm
-  maxSteps?: number;           // → stream-llm (→ stepCountIs(maxSteps))
-  memory?: any;              // → collect-context, check-follow-up
-  taskIntent?: string;       // → stream-llm (filter by intent type)
-  contextRelevance?: string; // → collect-prompts
-  sandbox?: string;          // → collect-context
-};
-```
-
-## 12. 文件
-
-```
+```text
 src/packages/core/src/pipelines/conversation/
-  index.ts                          pipeline 定义 + deps 类型
+  index.ts
   elements/
-    types.ts                        ConversationFlowState
-    index.ts                        barrel export
     collect-prompts.ts
-    load-system-prompt.ts
-    fetch-agents-prompt.ts
+    record-context.ts
     collect-context.ts
-    format-system-messages.ts
-    format-user-messages.ts
     stream-llm.ts
     check-follow-up.ts
     finalize.ts
+    types.ts
 
-src/packages/shared/src/types/session.ts    SessionMessage, ToolContext, ToolResultEntry 类型定义
-src/packages/core/src/session/context.ts     SessionContext, addToolResult()
-src/packages/core/src/server.ts             Transport.ToolStarted/Finished WebSocket 桥接
-src/packages/tui/src/
-  components/ToolMessageBox.tsx              工具调用多阶段展示组件
-  hooks/useChat.ts                           toolCallId 键控消息更新
-  client/ws-client.ts                        TransportToolStarted/Finished 事件接收
-  types.ts                                   ToolMessage phase 类型
+src/packages/core/src/pipelines/shared/token-ratio.ts
+src/packages/core/src/context/context-service.ts
+src/packages/core/src/server.ts
+src/packages/core/src/task/internal-task-orchestrator.ts
 ```
-
-## 13. Token Ratio 共享边界
-
-`TokenRatioElement`（kind: `boundary`）定义在 `src/packages/core/src/pipelines/shared/token-ratio.ts`，通过 `registerSharedElements()` 在 `server.ts` 启动时统一挂载到 5 条 pipeline：
-
-| Pipeline | 用途 |
-|----------|------|
-| conversation | 每轮对话结束后计算 token 占用比 |
-| prediction | 意图分类后更新 token 统计 |
-| follow-up-evaluator | 评估时检查是否需要压缩 |
-| context-compress | 压缩流程中的 token 追踪 |
-| post-conversation | 分析时的 token 统计 |
-
-**计算公式**：
-
-```typescript
-const tu = session.tokenUsage.total + (input.tokenUsage?.total ?? 0);
-const effectiveLimit = configContextLimit - maxTokens;
-const ratio = effectiveLimit > 0 ? tu / effectiveLimit : 0;
-```
-
-`effectiveLimit` 为真实可用 token 上限（配置的 contextLimit 减去 maxTokens 输出预留空间）。ratio 值通过 `BusEvents.Element.Data` 上报，供日志和下游元素消费。
-
-**日志格式**：`token-ratio: token-ratio {"tu": N, "effectiveLimit": N, "ratio": X.XXXX}`
-
-## 14. intent 工具 Schema
-
-`intent` 工具定义在 `src/packages/core/src/tools/builtin/intent.ts`，是 LLM 与系统之间的信令通道。
-
-### Schema
-
-```typescript
-IntentInputSchema = z.object({
-  action: z.enum(["follow_up", "retain_memory"]),
-  mem_id: z.string().optional(),           // retain_memory 时指定目标记忆 ID
-  next_prompt: z.string().optional(),      // follow_up 时指定下一个片段的提示
-  summary: z.string().optional(),          // 当前片段的简短摘要
-  history_abstract: z.string().optional(), // 对话历史概要
-  avoid_repeat: z.string().optional(),     // 要避免重复的已输出内容
-});
-```
-
-### 字段说明
-
-| 字段 | action | 说明 |
-|------|--------|------|
-| `action` | 两者 | `follow_up`（分段续写）或 `retain_memory`（保留已有记忆） |
-| `mem_id` | `retain_memory` | 要保留的记忆 ID（来自 `<MemorySummary>` 或 `<Memory>`） |
-| `next_prompt` | `follow_up` | 下一段续写的方向提示（如 "继续输出第3段"） |
-| `summary` | `follow_up` | 当前段的摘要，供下次续写时上下文注入 |
-| `history_abstract` | 两者 | 对话历史的简短概括 |
-| `avoid_repeat` | `follow_up` | 提示续写时不要重复已输出的内容 |
-
-### 工具属性
-
-| 属性 | 值 | 说明 |
-|------|-----|------|
-| `silent` | `true` | 工具输出不向用户展示（仅系统内传播） |
-| `permission` | `READ_ONLY` | 无需审批 |
-| `execute` | 返回 `"信号已收到"` | 空操作 — 真正逻辑在 stream-llm.ts 和 check-follow-up.ts 中 |
-
-### 处理链路
-
-```
-LLM 调用 intent → stream-llm 捕获 (intentSignal)
-  → toIntentRequest() → intents[]
-    → check-follow-up:
-      ├── RETAIN_MEMORY → memory.findFullId(mem_id) → memory.retain(fullMemoryId)
-      └── FOLLOW_UP  → chainAction: "follow_up" + followUp data
-```
-
-**注意**：`intent` 调用后 LLM 应**立即停止输出**。在对话决策协议中，调用 intent 是终结点。
-
-## 15. 相关文档
-
-| 文档 | 说明 |
-|------|------|
-| [pipeline-dev.md](../core/pipeline-dev.md#part-1-element-design) | Element 接口和模板 |
-| [pipeline-dev.md](../core/pipeline-dev.md#part-2-pipeline-builder) | Pipeline Builder DSL |
-| [session.md](../core/session.md) | Per-Session 上下文 |
-| [memory-service.md](../subsystems/memory-service.md) | Memory Service API |
-| [pipelines/prompts.md](./prompts.md) | PromptRegistry 提示词统一管理 |

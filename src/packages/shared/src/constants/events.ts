@@ -13,6 +13,7 @@ export const BusEvents = {
     Enqueued: "task.enqueued",
     Activated: "task.activated",
     Completed: "task.completed",
+    Committed: "task.committed",
     Failed: "task.failed",
   },
   Transport: {

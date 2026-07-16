@@ -125,7 +125,8 @@ describe("E2E: Core HTTP API", () => {
     expect(body).toEqual({ ok: true, sessionId: "e2e-close" });
 
     const read = await fetch(`${BASE}/api/sessions/e2e-close`);
-    expect(await read.json()).toEqual([]);
+    expect(read.status).toBe(404);
+    expect(await read.json()).toEqual({ error: "Session not found" });
   });
 
   test("404 for unknown path", async () => {

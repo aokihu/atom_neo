@@ -16,9 +16,17 @@ export type {
 } from "@atom-neo/shared";
 
 export { SessionStore } from "./session/store";
+export { SessionPersistenceService } from "./session/persistence-service";
+export type {
+  ArchiveReceipt,
+  HistoryMatch,
+  PersistedSessionState,
+  SessionCheckpointReason,
+} from "./session/types";
 export { compileContextSnapshot } from "./context/compiler";
 export type { CompileContextOptions, ContextCompilation } from "./context/compiler";
 export { ContextService } from "./context/context-service";
+export type { PersistedContextBucket, PersistedContextState } from "./context/context-service";
 
 // Tools
 export { ToolRegistry } from "./tools/registry";
@@ -32,6 +40,7 @@ export {
   createTreeTool, createGrepTool, createCpTool, createMvTool,
 } from "./tools/builtin/fs";
 export { createBashTool } from "./tools/builtin/bash";
+export { createHistoryTools } from "./tools/builtin/history";
 export {
   createSearchMemoryTool, createReadMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,

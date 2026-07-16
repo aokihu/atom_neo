@@ -19,6 +19,7 @@ export class HookManager {
   #logger: Logger;
   #hooks = new Map<string, Hook>();
   #lastActiveSessionId: string | null = null;
+  #stopped = false;
 
   constructor(
     scheduleService: ScheduleService,
@@ -134,6 +135,7 @@ export class HookManager {
   }
 
   stop(): void {
+    this.#stopped = true;
     for (const h of this.#hooks.values()) {
       if (h.trigger.type.startsWith("time:")) {
         this.#cancelScheduleTask(h.id);
@@ -181,6 +183,7 @@ export class HookManager {
       pipeline: "conversation",
       source: TaskSource.INTERNAL,
       payload: [{ type: "text", data: hook.prompt }],
+      origin: { type: "hook", hookId: hook.id },
     });
     this.#queue.enqueue(taskItem);
     this.#bus.emit(BusEvents.Task.Enqueued as any, { task: taskItem });
@@ -212,12 +215,14 @@ export class HookManager {
       this.#matchAndFire("session:end");
     });
 
-    this.#bus.on(BusEvents.Task.Completed as any, (_ev: unknown) => {
+    this.#bus.on(BusEvents.Task.Committed as any, (ev: { task: { origin?: { type: string } } }) => {
+      if (ev.task.origin?.type === "hook") return;
       this.#matchAndFire("task:completed");
     });
   }
 
   #matchAndFire(triggerType: string): void {
+    if (this.#stopped) return;
     for (const hook of this.#hooks.values()) {
       if (hook.enabled && hook.trigger.type === triggerType) {
         this.#fire(hook);

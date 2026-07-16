@@ -73,6 +73,8 @@ export enum PermissionLevel {
             [<code>link_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "在两个记忆节点间建立关系"],
             [<code>forget_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "按完整或唯一短 ID 删除记忆"],
             [<code>recall_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 session 召回上下文化记忆"],
+            [<code>search_history</code>, "Session History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "搜索当前 Session 已归档的原始消息"],
+            [<code>read_history</code>, "Session History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按归档 ID 和消息序号读取原始消息"],
             [<code>bash</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行 shell 命令"],
           ]}
         />
@@ -135,6 +137,32 @@ export const myTool: ToolDefinition = {
   execute,
   permission: PermissionLevel.READ_ONLY,
 };`} />
+      </Section>
+
+      <Section title="Session 历史工具">
+        <CodeBlock lang="typescript" code={`search_history({
+  query: string,
+  role?: "user" | "assistant",
+  limit?: number,       // default 5, max 20
+})
+
+read_history({
+  archiveId: "message-000001" | "message-latest",
+  fromSeq?: number,
+  toSeq?: number,
+  offset?: number,      // cursor returned by the previous read
+  checkpointRevision?: number,
+  limit?: number,       // default 20, max 50
+})`} />
+        <Callout type="info" title="只访问当前 Session">
+          压缩后的原始消息保存在不可变 JSONL 分段中。Snapshot 只注入累计摘要和归档索引；
+          Agent 需要核对原文时先调用 <code>search_history</code>，再用 <code>read_history</code> 精确读取。
+          两个工具都由运行时绑定当前 Session，不接收物理文件路径，也不会把结果写回持久 Context。
+          请求范围尚未读完时会附带可见的 <code>history_cursor</code>：多条消息按序号翻页，
+          单条长消息按 offset 分段读取；offset 必须与精确 fromSeq 一起提交，并始终保留原始读取范围。<code>message-latest</code>
+          搜索结果和游标都会锁定 checkpoint revision；首次读取也必须精确命中 fromSeq。
+          latest 变化或 offset 已到非空消息末尾时明确要求重新检索，不会静默跳过原文。
+        </Callout>
       </Section>
 
       {/* ── Tool Registry ── */}
