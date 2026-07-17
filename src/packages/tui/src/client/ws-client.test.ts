@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe("TuiClient task correlation", () => {
-  test("ignores a failed internal task from an already completed request", async () => {
+  test("waits for the explicit terminal event and ignores events from completed requests", async () => {
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     const taskIds = ["root-a", "root-b"];
     globalThis.fetch = (async () => Response.json({ taskId: taskIds.shift() })) as unknown as typeof fetch;
@@ -45,10 +45,22 @@ describe("TuiClient task correlation", () => {
     await connected;
 
     const first = client.send("first");
+    let firstSettled = false;
+    void first.finally(() => { firstSettled = true; });
     await nextTurn();
     socket.emit(WsMessages.Server.TaskCompleted, {
       taskId: "conversation-a",
+      rootTaskId: "root-a",
       parentTaskId: "root-a",
+      terminal: false,
+    });
+    await nextTurn();
+    expect(firstSettled).toBe(false);
+    socket.emit(WsMessages.Server.TaskCompleted, {
+      taskId: "post-check-a",
+      rootTaskId: "root-a",
+      parentTaskId: "root-a",
+      terminal: true,
     });
     await expect(first).resolves.toBe("");
 
@@ -73,6 +85,29 @@ describe("TuiClient task correlation", () => {
       error: "current failure",
     });
     await expect(second).rejects.toThrow("current failure");
+    client.close();
+  });
+
+  test("resolves a terminal root task that has no child", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    globalThis.fetch = (async () => Response.json({ taskId: "root-1" })) as unknown as typeof fetch;
+
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId: "s1" });
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    socket.emit(WsMessages.Server.SessionReady, { sessionId: "s1" });
+    await connected;
+
+    const request = client.send("finish at root");
+    await nextTurn();
+    socket.emit(WsMessages.Server.TaskCompleted, {
+      taskId: "root-1",
+      rootTaskId: "root-1",
+      parentTaskId: "root-1",
+      terminal: true,
+    });
+
+    await expect(request).resolves.toBe("");
     client.close();
   });
 

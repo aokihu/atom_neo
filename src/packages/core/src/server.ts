@@ -1,7 +1,7 @@
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationChainAction, ConversationContinuationAction, FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
-import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
+import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
 import { BusEvents, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource, TaskState } from "@atom-neo/shared";
@@ -372,16 +372,19 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         } as any);
       }
     }
-    orchestrator.commitTask(p.task.id);
+    const hasDownstreamTask = orchestrator.commitTask(p.task.id);
     if (sid) {
       const accumulated = sessionStore.get(sid).tokenUsage;
-      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskCompleted, {
+      const payload: TaskCompletedPayload = {
         taskId: p.task.id,
+        rootTaskId: p.task.chainId,
         parentTaskId: p.task.parentTaskId,
+        terminal: !hasDownstreamTask,
         output: result.output ?? "",
         reasoningContent,
         tokenUsage: accumulated,
-      });
+      };
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskCompleted, payload);
       broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
         active: false,
         taskId: p.task.id,

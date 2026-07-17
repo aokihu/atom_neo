@@ -1,5 +1,5 @@
 import type { TaskItem, TaskState } from "./types/task";
-import type { PipelineResult, TransportEventIdentity } from "./types/pipeline";
+import type { TransportEventIdentity } from "./types/pipeline";
 
 // Client → Core
 export type ClientEvent =
@@ -128,7 +128,12 @@ export type ToolGroupCompletePayload = TransportEventIdentity & {
 
 export type TaskCompletedPayload = {
   taskId: string;
-  result: PipelineResult;
+  rootTaskId: string;
+  parentTaskId: string | null;
+  terminal: boolean;
+  output: string;
+  reasoningContent: string;
+  tokenUsage: { total: number };
 };
 
 export type TaskFailedPayload = {

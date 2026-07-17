@@ -34,8 +34,16 @@ describe("InternalTaskOrchestrator continuations", () => {
     orchestrator.scheduleConversation("s1", "c1", "parent", undefined, undefined, "parent");
 
     expect(tasks).toHaveLength(0);
-    orchestrator.commitTask("parent");
+    expect(orchestrator.commitTask("parent")).toBe(true);
     expect(tasks).toHaveLength(1);
+  });
+
+  test("reports a terminal commit when no downstream task was staged", () => {
+    const { orchestrator, tasks } = createOrchestrator();
+    orchestrator.beginTask({ id: "terminal" } as any);
+
+    expect(orchestrator.commitTask("terminal")).toBe(false);
+    expect(tasks).toHaveLength(0);
   });
 
   test("discards staged downstream tasks when the parent checkpoint fails", () => {

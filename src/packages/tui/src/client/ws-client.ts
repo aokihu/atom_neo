@@ -91,13 +91,11 @@ export class TuiClient {
           this.#onToolGroupComplete?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
         },
         [WsMessages.Server.TaskCompleted]: (p) => {
-          const { taskId: completedId, parentTaskId } = p;
-          for (let i = 0; i < this.#pending.length; i++) {
-            const head = this.#pending[i];
-            if (parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
-              const done = this.#pending.splice(i, 1)[0];
+          if (p.terminal === true) {
+            const index = this.#pending.findIndex(pending => pending.rootTaskId === p.rootTaskId);
+            if (index >= 0) {
+              const done = this.#pending.splice(index, 1)[0];
               done.resolve(done.text);
-              break;
             }
           }
           const tu = p.tokenUsage;

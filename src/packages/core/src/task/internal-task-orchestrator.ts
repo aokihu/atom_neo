@@ -25,14 +25,15 @@ export class InternalTaskOrchestrator {
     this.#taskSessions.set(task.id, task.sessionId);
   }
 
-  commitTask(taskId: string): void {
+  commitTask(taskId: string): boolean {
     const staged = this.#stagedTasks.get(taskId);
-    if (!staged) return;
+    if (!staged) return false;
     this.#stagedTasks.delete(taskId);
     this.#taskOrigins.delete(taskId);
     this.#taskChains.delete(taskId);
     this.#taskSessions.delete(taskId);
     for (const item of staged) this.#enqueue(item);
+    return staged.length > 0;
   }
 
   discardTask(taskId: string): void {

@@ -120,12 +120,12 @@ content = content.substring(0, offset) + textDelta;`,
   ts: 1700000000008,
   payload: {
     taskId: string;
-    result: {
-      type: string;
-      transition?: string;
-      childTaskId?: string;
-      parentTaskId?: string;
-    };
+    rootTaskId: string;
+    parentTaskId: string | null;
+    terminal: boolean;
+    output: string;
+    reasoningContent: string;
+    tokenUsage: { total: number };
   };
 }`,
   taskFailed: `{
@@ -370,15 +370,29 @@ export default function DocPage({ content, title, description, category }: DocPa
 
         <h3 id={slugify("4.8 task.completed")}>4.8 task.completed</h3>
         <p>
-          Emitted when a task finishes successfully. The <code>result</code> payload indicates
-          the completion type and any child/parent task transitions.
+          Emitted when one Task finishes successfully. <code>rootTaskId</code> identifies the
+          original request, while <code>terminal</code> states whether that entire request has
+          reached a successful terminal state.
         </p>
         <CodeBlock lang="typescript" code={examples.taskCompleted} />
+        <ComparisonTable
+          headers={["After the current Task commits", "terminal", "Client action"]}
+          rows={[
+            ["A downstream Task was released", <code>false</code>, "Keep waiting for the same rootTaskId"],
+            ["No downstream Task remains", <code>true</code>, "Resolve the matching pending request"],
+          ]}
+        />
+        <Callout type="warn" title="Do not infer request completion from Task hierarchy">
+          Clients must not treat the first child Task or a matching <code>parentTaskId</code> as
+          request completion. Only <code>rootTaskId</code> plus <code>terminal=true</code> closes a
+          successful pending request.
+        </Callout>
 
         <h3 id={slugify("4.9 task.failed")}>4.9 task.failed</h3>
         <p>
-          Emitted when a task terminates with an error. The <code>rootTaskId</code> binds the failure to
-          its original request; clients must ignore failures that do not match a pending request.
+          Emitted when a task terminates with an error. Failure is terminal: the
+          <code>rootTaskId</code> binds it to the original request, and clients must ignore failures
+          that do not match a pending request.
         </p>
         <CodeBlock lang="typescript" code={examples.taskFailed} />
 
