@@ -9,6 +9,8 @@ const examples = {
   ts: number;        // Unix timestamp in milliseconds
   payload: P;
 };`,
+  sessionPath: `const encodedSessionId = encodeURIComponent(sessionId);
+const ws = new WebSocket(\`\${coreUrl}/ws/\${encodedSessionId}\`);`,
   taskSubmit: `{
   type: "event.task.submit",
   seq: 0,
@@ -263,8 +265,15 @@ export default function DocPage({ content, title, description, category }: DocPa
               connected through the matching <code>/ws/:sessionId</code> endpoint. System-level
               events such as MCP status remain global.
             </li>
+            <li>
+              <strong>Session Path Encoding</strong>: Clients encode <code>sessionId</code> with
+              <code>encodeURIComponent()</code> before placing it in <code>/ws/:sessionId</code> or
+              <code>/api/sessions/:sessionId</code>. Core decodes the single path segment exactly
+              once. Empty IDs, malformed escapes, and unencoded extra segments return <code>400</code>.
+            </li>
           </ul>
         </Callout>
+        <CodeBlock lang="typescript" code={examples.sessionPath} />
       </Section>
 
       {/* ── Section 2: Common Envelope ── */}

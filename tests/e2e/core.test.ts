@@ -72,24 +72,33 @@ describe("E2E: Core HTTP API", () => {
     expect(body.state).toBe("waiting");
   });
 
-  test("GET /api/sessions/:id returns messages", async () => {
+  test("GET /api/sessions/:id decodes one session path segment", async () => {
+    const sessionId = "team/研发 100%";
     // First add a message via task
     await fetch(`${BASE}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sessionId: "e2e-s2",
+        sessionId,
         chatId: "e2e-c2",
         data: { text: "hello" },
       }),
     });
 
     // Now retrieve
-    const r = await fetch(`${BASE}/api/sessions/e2e-s2`);
+    const r = await fetch(`${BASE}/api/sessions/${encodeURIComponent(sessionId)}`);
     const messages: any[] = await r.json();
     expect(r.status).toBe(200);
     expect(Array.isArray(messages)).toBe(true);
     expect(messages.some((m: any) => m.role === "user")).toBe(true);
+  });
+
+  test("rejects an invalid session path", async () => {
+    const malformed = await fetch(`${BASE}/api/sessions/%`);
+    const multiSegment = await fetch(`${BASE}/api/sessions/team/member`);
+
+    expect(malformed.status).toBe(400);
+    expect(multiSegment.status).toBe(400);
   });
 
   test("DELETE /api/tasks/:id cancels the matching session task chain or returns 404", async () => {

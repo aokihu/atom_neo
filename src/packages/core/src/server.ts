@@ -37,8 +37,10 @@ import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 import { ContextService } from "./context/context-service";
 import { decideTodoContinuation } from "./session/context";
 import { SessionPersistenceService } from "./session/persistence-service";
+import { decodePathParam } from "./url-path";
 
 const API_PREFIX = "/api/";
+const SESSION_API_PREFIX = `${API_PREFIX}sessions/`;
 const LOG_OUTPUT_MAX_LEN = 200;
 
 interface RuntimeLike {
@@ -560,7 +562,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
       // WebSocket upgrade for /ws/:sessionId
       if (url.pathname.startsWith("/ws/")) {
-        const sid = url.pathname.split("/ws/").pop() || "default";
+        const sid = decodePathParam(url.pathname, "/ws/");
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         srv.upgrade(req, { data: { sessionId: sid } });
         return; // handled by websocket handlers
       }
@@ -583,15 +586,17 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         }
         return createTaskHandler(taskQueue, normalized, bus);
       }
-      if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "GET") {
-        const sid = url.pathname.split("/").pop()!;
+      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
+        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         const session = sessionStore.load(sid);
         return session
           ? Response.json(session.messages)
           : Response.json({ error: "Session not found" }, { status: 404 });
       }
-      if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "DELETE") {
-        const sid = url.pathname.split("/").pop()!;
+      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
+        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         if (!sessionStore.delete(sid)) {
           return Response.json({ error: "Session is active" }, { status: 409 });
         }

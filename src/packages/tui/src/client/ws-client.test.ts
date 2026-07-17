@@ -4,13 +4,15 @@ import { TuiClient } from "./ws-client";
 
 class FakeWebSocket {
   static current: FakeWebSocket | undefined;
+  readonly url: string;
   sent: string[] = [];
   onopen?: () => void;
   onmessage?: (event: { data: string }) => void;
   onerror?: () => void;
   onclose?: () => void;
 
-  constructor(_url: string) {
+  constructor(url: string) {
+    this.url = url;
     FakeWebSocket.current = this;
   }
 
@@ -33,6 +35,35 @@ afterEach(() => {
 });
 
 describe("TuiClient task correlation", () => {
+  test("uses one encoded WebSocket path segment while preserving the original session ID", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    let submittedSessionId: string | undefined;
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      submittedSessionId = JSON.parse(String(init?.body)).sessionId;
+      return Response.json({ taskId: "root-special" });
+    }) as unknown as typeof fetch;
+
+    const sessionId = "team/研发 100%";
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId });
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    expect(socket.url).toBe(`ws://localhost:3100/ws/${encodeURIComponent(sessionId)}`);
+    socket.emit(WsMessages.Server.SessionReady, { sessionId });
+    await connected;
+
+    const request = client.send("special session");
+    await nextTurn();
+    expect(submittedSessionId).toBe(sessionId);
+    socket.emit(WsMessages.Server.TaskCompleted, {
+      taskId: "root-special",
+      rootTaskId: "root-special",
+      parentTaskId: null,
+      terminal: true,
+    });
+    await expect(request).resolves.toBe("");
+    client.close();
+  });
+
   test("waits for the explicit terminal event and ignores events from completed requests", async () => {
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     const taskIds = ["root-a", "root-b"];

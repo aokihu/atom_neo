@@ -441,21 +441,26 @@ export interface WizardState {
 // src/packages/setup-wizard/package.json
 {
   "name": "@atom-neo/setup-wizard",
-  "version": "0.13.0",
-  "private": true,
-  "main": "src/main.tsx",
+  "version": "1.3.7",
+  "type": "module",
+  "main": "./src/main.tsx",
+  "types": "./src/main.tsx",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "setup": "bun run src/main.tsx"
+    "build": "tsc"
   },
   "dependencies": {
-    "ink": "^5.x",
-    "ink-text-input": "^6.x",
-    "ink-select-input": "^5.x",
-    "react": "^19.x"
+    "ink": "^7.0.5",
+    "ink-text-input": "^6.0.0",
+    "ink-select-input": "^6.2.0",
+    "react": "^19.2.6"
   }
 }
 ```
+
+根目录使用 `bun run --workspaces build`，因此每个 workspace 都必须提供
+`build` 脚本。setup-wizard 使用现有 `tsconfig.json` 的 `outDir: ./dist`，通过
+`tsc` 生成与其他 packages 一致的 JavaScript、类型声明和 source map。
 
 根 `package.json` 补充 workspace：
 ```json

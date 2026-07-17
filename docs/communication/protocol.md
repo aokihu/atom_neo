@@ -12,6 +12,12 @@
 - **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
 - **Message Format**: JSON, one message per frame
 - **Session Routing**: Task-scoped `event.transport.*` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
+- **Session Path Encoding**: Clients must encode `sessionId` with `encodeURIComponent()` before placing it in `/ws/:sessionId` or `/api/sessions/:sessionId`. Core treats it as one URL path segment and applies `decodeURIComponent()` exactly once before Session lookup. Empty IDs, malformed percent escapes, and unencoded extra path segments are rejected with `400`.
+
+```typescript
+const encodedSessionId = encodeURIComponent(sessionId);
+const ws = new WebSocket(`${coreUrl}/ws/${encodedSessionId}`);
+```
 
 ---
 

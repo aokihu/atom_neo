@@ -45,7 +45,7 @@ export class TuiClient {
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.#ws = new WebSocket(`${this.#url}/ws/${this.#sessionId}`);
+      this.#ws = new WebSocket(`${this.#url}/ws/${encodeURIComponent(this.#sessionId)}`);
 
       this.#ws.onopen = () => {};
 
