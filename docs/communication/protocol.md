@@ -11,6 +11,13 @@
 - **Gateway Side**: HTTP reverse proxy. Verifies JWT for `/api/*` routes, validates Client Token for `/gateway/*` routes. Forwards authenticated requests to Core. WebSocket connections bypass Gateway and connect directly to Core.
 - **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
 - **Message Format**: JSON, one message per frame
+- **Session Routing**: Task-scoped `event.transport.*` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
+- **Session Path Encoding**: Clients must encode `sessionId` with `encodeURIComponent()` before placing it in `/ws/:sessionId` or `/api/sessions/:sessionId`. Core treats it as one URL path segment and applies `decodeURIComponent()` exactly once before Session lookup. Empty IDs, malformed percent escapes, and unencoded extra path segments are rejected with `400`.
+
+```typescript
+const encodedSessionId = encodeURIComponent(sessionId);
+const ws = new WebSocket(`${coreUrl}/ws/${encodedSessionId}`);
+```
 
 ---
 
@@ -20,11 +27,19 @@
 // All messages follow this envelope:
 type WSMessage<T extends string, P = Record<string, unknown>> = {
   type: T;
-  seq: number;       // Monotonic sequence number (Core assigns)
+  seq: number;       // Sender-assigned sequence number
   ts: number;        // Unix timestamp ms
   payload: P;
 };
 ```
+
+Client → Core 消息由 Client 自行分配 `seq`。Core → Client 消息由同一个 WebSocket
+Broadcaster 在进程生命周期内统一分配严格递增的 `seq`：
+
+- 每个逻辑消息只分配一次序号；
+- 同一次全局或 Session 广播的所有接收者看到相同序号；
+- Session 客户端可能看到序号间隙，因为其他 Session 的定向消息仍会占用全局序号；
+- 客户端可使用 `seq` 判断乱序或重复，但不能要求收到的序号连续。
 
 ---
 
@@ -35,7 +50,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
 ```typescript
 {
   type: "event.task.submit",
-  seq: 0,            // Client assigns, Core echoes in response
+  seq: 0,            // Client assigns
   ts: 1700000000000,
   payload: {
     sessionId: string;
@@ -62,6 +77,18 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
   }
 }
 ```
+
+Core 从当前 WebSocket 的 `/ws/:sessionId` 连接读取 Session 归属，不信任客户端 payload
+提供的 Session。只有 `taskId` 属于当前 Session 时才能取消。Core 使用该 Task 的
+`chainId` 作为取消边界：
+
+- 同一 Chain 的排队任务：全部从 TaskQueue 移除；
+- 同一 Chain 的执行中任务：全部触发 Task AbortSignal；
+- 同一 Chain 的 staged 派生任务：全部从 Orchestrator 丢弃；
+- 其他 Session 或不存在的任务：返回错误，不泄露其他 Session 的任务状态。
+
+成功取消后的成员 Task 状态为 `cancelled`。用户取消属于最高优先级控制操作，不等待普通
+Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation 的后续成员残留。
 
 ### 3.3 `ping`
 
@@ -102,7 +129,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
   payload: {
     taskId: string;
     previousState: string;
-    currentState: string;    // waiting|pending|processing|completed|failed|follow_up|dispatched|suspended
+    currentState: string;    // waiting|pending|processing|completed|failed|cancelled|follow_up|dispatched|suspended
   }
 }
 ```
@@ -146,6 +173,7 @@ type WSMessage<T extends string, P = Record<string, unknown>> = {
   seq: 5,
   ts: 1700000000005,
   payload: {
+    sessionId: string;
     taskId: string;
     textDelta: string;       // Incremental visible text
     offset: number;          // Position in the full message text where this delta starts
@@ -170,9 +198,9 @@ content = content.substring(0, offset) + textDelta;
   seq: 6,
   ts: 1700000000006,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: string;     // builtin | plugin | mcp
     toolCallId: string;
     input: unknown;         // Tool-specific input
   }
@@ -187,17 +215,23 @@ content = content.substring(0, offset) + textDelta;
   seq: 7,
   ts: 1700000000007,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: string;
     toolCallId: string;
-    ok: boolean;
-    output?: string;        // Tool result text
-    error?: string;         // Error message if failed
-    durationMs: number;
+    result?: unknown;       // Tool output when execution completes
+    error?: unknown;        // Present when execution fails
   }
 }
 ```
+
+Tool 是否成功由 `error` 是否存在判断：成功事件携带 `result`，失败事件携带 `error`。
+执行耗时、Tool 来源与聚合成功数属于 Core 内部观测或 step/group 汇总信息，不在单次
+ToolFinished WebSocket payload 中重复发送。Builtin 与 MCP Tool 必须使用相同的失败语义。
+
+`event.transport.reason`、`event.transport.tool.step-finished` 和
+`event.transport.tool.group-complete` 遵循相同的归属规则：payload 必须包含产生事件的
+`sessionId` 与 `taskId`，并且只能发送到对应 Session 的 WebSocket 客户端。
 
 ### 4.8 `task.completed`
 
@@ -208,15 +242,26 @@ content = content.substring(0, offset) + textDelta;
   ts: 1700000000008,
   payload: {
     taskId: string;
-    result: {
-      type: string;         // complete | enqueue | suspend_and_enqueue_child | resume_parent_and_enqueue
-      transition?: string;  // follow_up | dispatch
-      childTaskId?: string;
-      parentTaskId?: string;
-    }
+    rootTaskId: string;       // Original external request / Task chainId
+    parentTaskId: string | null;
+    terminal: boolean;        // true only when no downstream Task remains
+    output: string;
+    reasoningContent: string;
+    tokenUsage: { total: number };
   }
 }
 ```
+
+`task.completed` 表示当前 Task 成功完成，但不一定表示整条用户请求已经结束。Core 在提交
+当前 Task 后检查是否释放了下游 Task，并显式设置 `terminal`：
+
+| 当前 Task 提交结果 | `terminal` | 客户端行为 |
+|---|---:|---|
+| 已产生 Prediction、Conversation、Post-Conversation 或其他下游 Task | `false` | 继续按 `rootTaskId` 等待 |
+| 没有任何下游 Task，整条请求到达成功终态 | `true` | 结束对应请求的 pending Promise |
+
+客户端必须用 `rootTaskId` 关联原始请求，并且只能在 `terminal === true` 时结束成功请求。
+禁止根据 `parentTaskId`、Task 层级或“第一个子 Task”推测请求是否结束。
 
 ### 4.9 `task.failed`
 
@@ -228,12 +273,14 @@ content = content.substring(0, offset) + textDelta;
   payload: {
     taskId: string;
     rootTaskId: string;  // Task chainId: original external task, or this task for independent work
+    code?: string;       // PIPELINE_ABORTED when cancelled by the user
     error: string;
   }
 }
 ```
 
-客户端按 `rootTaskId` 匹配待处理请求。找不到对应请求时忽略该失败通知，不能按 FIFO 移除其他请求。
+`task.failed` 是失败终态。客户端按 `rootTaskId` 匹配并结束对应请求；找不到对应请求时忽略
+该失败通知，不能按 FIFO 移除其他请求。
 
 ### 4.10 `pong`
 

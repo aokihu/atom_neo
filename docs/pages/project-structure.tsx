@@ -18,8 +18,9 @@ function packagesSection(content: string) {
   return {
     shared: extractBlock(content, "## 2. Package: `shared`"),
     core: extractBlock(content, "## 3. Package: `core`"),
-    gateway: extractBlock(content, "## 4. Package: `gateway`"),
-    tui: extractBlock(content, "## 5. Package: `tui`"),
+    setupWizard: extractBlock(content, "## 4. Package: `setup-wizard`"),
+    gateway: extractBlock(content, "## 5. Package: `gateway`"),
+    tui: extractBlock(content, "## 6. Package: `tui`"),
   };
 }
 
@@ -33,6 +34,7 @@ type PackageInfo = {
 const PACKAGES: PackageInfo[] = [
   { name: "shared", label: "shared", color: "blue", description: "Shared types, pipeline core, log system — the foundation of the monorepo. Every other package depends on this." },
   { name: "core", label: "core", color: "green", description: "Core HTTP + WebSocket server, task engine, and tool registry. The central processing unit of the system." },
+  { name: "setupWizard", label: "setup-wizard", color: "purple", description: "First-run Ink configuration wizard. It runs in an isolated subprocess and compiles with the same workspace build contract as every other package." },
   { name: "gateway", label: "gateway", color: "orange", description: "External gateway handling JWT authentication, permission evaluation, rate limiting, and request proxying to Core." },
   { name: "tui", label: "tui", color: "purple", description: "Terminal UI application. Connects to Core via WebSocket for real-time streaming and tool execution display." },
 ];
@@ -49,7 +51,7 @@ export default function ProjectStructurePage({ content, title, description, cate
       {/* ── Top-Level Layout ── */}
       <Section title="Top-Level Layout">
         <p>
-          The Atom Neo monorepo uses Bun workspaces with four packages under <code>packages/</code>.
+          The Atom Neo monorepo uses Bun workspaces with five packages under <code>src/packages/</code>.
         </p>
         <CodeBlock lang="text" code={topLevelTree} />
       </Section>
@@ -75,6 +77,11 @@ export default function ProjectStructurePage({ content, title, description, cate
           The root <code>package.json</code> declares the monorepo workspace and common scripts:
         </p>
         <CodeBlock lang="json" code={rootPkgJson} />
+        <Callout type="info" title="Workspace build contract">
+          The root <code>bun run build</code> dispatches <code>build</code> to every workspace.
+          Core, Shared, TUI, Gateway, and setup-wizard therefore each provide a build script;
+          setup-wizard uses <code>tsc</code> with its existing <code>dist</code> output directory.
+        </Callout>
       </Section>
 
       {/* ── Package Dependencies ── */}
@@ -93,6 +100,11 @@ export default function ProjectStructurePage({ content, title, description, cate
               <span className="muted">standalone HTTP service</span>,
             ],
             [
+              <span className="pkg-dep-name"><Badge color="purple">setup-wizard</Badge></span>,
+              <><code>ink</code>, <code>react</code></>,
+              <span className="muted">first-run subprocess</span>,
+            ],
+            [
               <span className="pkg-dep-name"><Badge color="orange">gateway</Badge></span>,
               <><code>shared</code>, <code>jose</code></>,
               <span className="muted">standalone HTTP service</span>,
@@ -105,7 +117,9 @@ export default function ProjectStructurePage({ content, title, description, cate
           ]}
         />
         <Callout type="info" title="Dependency Flow">
-          <code>shared</code> is the only package depended on by all others. <code>core</code>, <code>gateway</code>, and <code>tui</code> are independent services/applications that share types and pipeline infrastructure through <code>shared</code>.
+          <code>core</code>, <code>gateway</code>, and <code>tui</code> share protocol types through
+          <code>shared</code>. The <code>setup-wizard</code> stays independent because it only owns
+          the first-run Ink interface and configuration files.
         </Callout>
       </Section>
 
@@ -119,8 +133,9 @@ export default function ProjectStructurePage({ content, title, description, cate
 
       {/* ── Summary ── */}
       <Callout type="ok" title="Monorepo Summary">
-        <strong>4 packages, 1 workspace root</strong> — <code>shared</code> provides types, pipeline core, and logging.
+        <strong>5 packages, 1 workspace root</strong> — <code>shared</code> provides types, pipeline core, and logging.
         <code>core</code> runs the HTTP/WebSocket server with event-driven task scheduling.
+        <code>setup-wizard</code> handles first-run configuration in an isolated subprocess.
         <code>gateway</code> secures external access with JWT auth and rate limiting.
         <code>tui</code> delivers the terminal interface via WebSocket streaming.
       </Callout>

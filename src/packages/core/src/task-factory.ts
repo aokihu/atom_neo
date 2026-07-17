@@ -1,4 +1,4 @@
-import { TaskSource, TaskState } from "@atom-neo/shared";
+import { TaskPriority, TaskSource, TaskState } from "@atom-neo/shared";
 import type { TaskItem, TaskOrigin, TaskPayload } from "@atom-neo/shared";
 
 let nextId = 0;
@@ -29,7 +29,9 @@ export function createTaskItem(params: {
     chatId: params.chatId,
     source: params.source,
     pipeline: params.pipeline,
-    priority: params.source === TaskSource.EXTERNAL ? 10 : 5,
+    priority: params.source === TaskSource.EXTERNAL
+      ? TaskPriority.EXTERNAL
+      : TaskPriority.INTERNAL,
     createdAt: now,
     payload: params.payload,
     ...(params.origin ? { origin: params.origin } : {}),

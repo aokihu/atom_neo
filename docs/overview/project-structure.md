@@ -182,6 +182,8 @@ src/packages/setup-wizard/
 ```
 
 Launched as a subprocess by `src/bootstrap/first-run.ts` via `Bun.spawn`.
+It still participates in the root `bun run --workspaces build` contract, so its
+package scripts include both `typecheck: tsc --noEmit` and `build: tsc`.
 
 ## 5. Package: `gateway`
 

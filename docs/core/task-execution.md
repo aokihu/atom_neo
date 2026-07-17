@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 双队列系统
+## 1. 优先级双队列系统
 
 ### 问题
 
@@ -32,33 +32,47 @@
 │  └───────────────────────┘  │
 │                             │
 │  dequeue():                 │
-│    1. ActiveQueue 有任务 → 取 ActiveQueue
-│    2. ActiveQueue 空     → 取 WaitingQueue
+│    1. 比较两个队列的最高 priority
+│    2. 同优先级时 ActiveQueue 优先
+│    3. Waiting 同优先级保持 FIFO
+│    4. Active 同优先级保持 LIFO
 └─────────────────────────────┘
 ```
 
 ### 路由规则
 
-| 任务来源 | `TaskSource` | 入队 |
-|----------|-------------|------|
-| 用户发消息 | `EXTERNAL` | WaitingQueue (FIFO) |
-| 链式续写任务 (follow_up) | `INTERNAL` | ActiveQueue (LIFO) |
-| 其他内部衍生任务 | `INTERNAL` | ActiveQueue (LIFO) |
+| 操作或任务来源 | 优先级 | 行为 |
+|----------------|--------|------|
+| 用户取消当前任务链 | `USER_CANCEL = 100` | 控制路径，立即处理，不等待普通 Task 出队 |
+| 链式续写及其他内部任务 | `INTERNAL = 50` | ActiveQueue，同优先级 LIFO |
+| 用户新消息 | `EXTERNAL = 10` | WaitingQueue，同优先级 FIFO |
+
+取消请求优先级最高。Core 先用 `taskId + sessionId` 定位目标 Task，再读取其 `chainId`，
+一次性取消同一 Session、同一 Task Chain 中的全部成员：
+
+- queued：立即从 WaitingQueue / ActiveQueue 移除；
+- processing：立即触发每个 Task 的 `AbortSignal`；
+- staged：立即丢弃 Orchestrator 中尚未提交的派生 Task。
+
+一个 Session 不能取消另一个 Session 的 Task Chain。独立 Task 的 `chainId` 等于自身 ID，
+因此使用同一套取消路径。
 
 ### 行为保证
 
 - 当前会话的工具调用链不会被打断
 - 用户新消息正常排队，等当前链完成后再处理
-- ActiveQueue 为空时不阻塞外部任务
-- `remove(taskId)` 从两个队列中查找并移除
+- 高优先级 Task 可以在低优先级 Task 之前出队
+- 用户取消不等待当前 Pipeline 自然结束
+- 同一 Task Chain 不会残留 queued、processing 或 staged 成员
+- 被取消的 Task 进入 `cancelled` 状态并释放 Session lease
 
 ### API
 
 ```typescript
 class TaskQueue {
   enqueue(task: TaskItem): void;
-  dequeue(): TaskItem | undefined;    // ActiveQueue 优先，再取 WaitingQueue
-  remove(taskId: string): boolean;    // 从两个队列中删除
+  dequeue(): TaskItem | undefined;    // 先比较 priority，再应用 FIFO/LIFO
+  cancelChain(taskId: string, sessionId: string): TaskChainCancellation | undefined;
   get waiting(): number;
   get active(): number;
   get processing(): number;
@@ -69,6 +83,30 @@ class TaskQueue {
 ---
 
 ## 2. TaskEngine 状态机
+
+### 用户取消
+
+```text
+TUI 第一次 ESC
+  → 显示“再次按 ESC 取消”
+
+2 秒内第二次 ESC
+  → event.task.cancel { taskId }
+  → Core 使用 WebSocket sessionId 校验 Task 归属
+      ├── 解析目标 Task 的 chainId
+      ├── queued members     → 全部从队列移除 → cancelled
+      ├── processing members → 全部 AbortController.abort() → cancelled
+      ├── staged members     → Orchestrator.discardChain()
+      └── 不属于当前 Session / 不存在 → 拒绝
+```
+
+`TaskEngine` 在每个 Element 执行前后检查取消信号，并将同一信号传给 LLM 与 Tool。
+因此 Bash、WebFetch 和支持 AbortSignal 的 MCP/模型调用可以立即停止；不支持信号的同步
+Element 最迟在当前 Element 返回后停止，不会继续执行后续 Element。
+
+取消以 Task Chain 为边界，而不是只处理客户端传入的单个 Task ID。意图预测、
+Conversation、follow-up、context-compress 和 post-conversation 只要共享同一
+`chainId`，都会被同一次取消覆盖；取消期间不得再提交该 Chain 的 staged Task。
 
 ### chainAction 统一收口
 

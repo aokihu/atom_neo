@@ -36,6 +36,14 @@ export type FlowState = { mode: string };
 
 export type ConversationContinuationAction = "follow_up" | "continue_todo";
 export type ConversationChainAction = ConversationContinuationAction | "post_check_retry";
+export type TransportEventIdentity = {
+  sessionId: string;
+  taskId: string;
+};
+export type ReportedTransportEvent<T extends Record<string, unknown>> = {
+  name: string;
+  payload: TransportEventIdentity & T;
+};
 
 export type PipelineEventMap = {
   "element.state-changed": {
@@ -81,25 +89,32 @@ export type DomainEventMap = {
     safeCount: number;
     rejectedCount: number;
   };
-  "transport.delta": { textDelta: string; offset: number };
-  "transport.tool.started": {
+  "transport.reason": ReportedTransportEvent<{ textDelta: string; offset: number }>;
+  "transport.delta": ReportedTransportEvent<{ textDelta: string; offset: number }>;
+  "transport.tool.started": ReportedTransportEvent<{
     toolName: string;
     toolCallId: string;
     input: unknown;
-  };
-  "transport.tool.finished": {
+  }>;
+  "transport.tool.finished": ReportedTransportEvent<{
     toolName: string;
     toolCallId: string;
     result?: unknown;
     error?: unknown;
-  };
-  "transport.tool.step-finished": {
+  }>;
+  "transport.tool.step-finished": ReportedTransportEvent<{
     stepNumber: number;
     total: number;
     success: number;
     failed: number;
     toolNames: string[];
-  };
+  }>;
+  "transport.tool.group-complete": ReportedTransportEvent<{
+    total: number;
+    success: number;
+    failed: number;
+    toolNames: string[];
+  }>;
   "transport.failed": { error: unknown };
   "conversation.chain": {
     sessionId: string;

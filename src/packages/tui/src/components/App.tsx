@@ -42,17 +42,18 @@ Keyboard shortcuts:
   Up/Down     Input history / Command menu
   /           Open command menu
   Tab         Autocomplete command
-  Esc         Dismiss command menu
+  Esc         Dismiss command menu / press twice to cancel running task
   Shift+Enter New line`;
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { send, clearMessages, addMessage, compact } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
+  const { send, clearMessages, addMessage, compact, cancel } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [taskHint, setTaskHint] = useState<string | null>(null);
 
   useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
 
@@ -67,6 +68,9 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
   const handleQuit = useCallback(() => { setActiveModal({ kind: "confirm-quit" }); }, []);
 
   const handleCompact = useCallback(() => { compact(); }, [compact]);
+  const handleCancelTask = useCallback(() => {
+    if (!cancel()) setTaskHint(null);
+  }, [cancel]);
 
   return (
     <ThemeContext.Provider value={theme}>
@@ -75,8 +79,17 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         <box flexDirection="row" flexGrow={1}>
           <box flexGrow={1} flexDirection="column" overflow="hidden" border={showSidebar ? ['right'] : false} borderColor={theme.colors.border.default} borderStyle="single">
             <ChatView />
-            <InputBar onSend={send} onQuit={handleQuit} onHelp={handleHelp} onClear={handleClear} onCompact={handleCompact} disabled={activeModal !== null} />
-            <StatusLine hint={exitHint} />
+            <InputBar
+              onSend={send}
+              onQuit={handleQuit}
+              onHelp={handleHelp}
+              onClear={handleClear}
+              onCompact={handleCompact}
+              onCancelTask={handleCancelTask}
+              onCancelHint={setTaskHint}
+              disabled={activeModal !== null}
+            />
+            <StatusLine hint={taskHint ?? exitHint} />
           </box>
           {showSidebar && <Sidebar serverInfo={serverInfo} contextLimit={contextLimit} />}
         </box>

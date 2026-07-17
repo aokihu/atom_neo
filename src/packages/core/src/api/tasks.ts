@@ -1,9 +1,10 @@
 import type { TaskQueue, TaskStatus } from "../task-queue";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { CoreEventMap } from "@atom-neo/shared";
-import { TaskSource, BusEvents } from "@atom-neo/shared";
+import { TaskSource, TaskState, BusEvents } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
 import type { Pipeline } from "../pipeline/builder";
+import type { TaskEngine } from "../task-engine";
 
 const pipelineMap = new Map<string, Pipeline>();
 
@@ -45,10 +46,11 @@ export async function createTaskHandler(
   }
 }
 
-export function taskCancelHandler(taskQueue: TaskQueue, _req: Request, taskId: string): Response {
-  if (taskQueue.remove(taskId)) {
-    taskQueue.storeResult(taskId, { taskId, state: "cancelled" });
-    return Response.json({ taskId, state: "cancelled" });
+export function taskCancelHandler(taskEngine: TaskEngine, req: Request, taskId: string): Response {
+  const sessionId = new URL(req.url).searchParams.get("sessionId");
+  if (!sessionId) return Response.json({ error: "sessionId is required" }, { status: 400 });
+  if (taskEngine.cancel(taskId, sessionId)) {
+    return Response.json({ taskId, state: TaskState.CANCELLED });
   }
   return Response.json({ taskId, state: "not_found" }, { status: 404 });
 }
@@ -58,4 +60,3 @@ export function taskStatusHandler(taskQueue: TaskQueue, taskId: string): Respons
   if (!status) return Response.json({ error: "not_found" }, { status: 404 });
   return Response.json(status);
 }
-

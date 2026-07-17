@@ -75,6 +75,7 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
           ? `Recent conversation:\n${input.contextMessages}\n\nCurrent user message: "${text}"`
           : `User message: "${text}"`,
         maxTokens: this.#maxTokens,
+        abortSignal: input.abortSignal,
       });
 
       const parsed = parseJsonFromLLMResponse<Record<string, any>>(raw);

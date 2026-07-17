@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { createTaskItem, createContinuationTask } from "./task-factory";
-import { TaskSource, TaskState } from "@atom-neo/shared";
+import { TaskPriority, TaskSource, TaskState } from "@atom-neo/shared";
 
 describe("createTaskItem", () => {
   test("creates task with external source and waiting state", () => {
@@ -22,7 +22,7 @@ describe("createTaskItem", () => {
     expect(task.priority).toBeGreaterThan(0);
   });
 
-  test("internal tasks have lower priority value (routed by source, not priority)", () => {
+  test("assigns explicit priorities for internal, external, and cancel work", () => {
     const ext = createTaskItem({
       sessionId: "s1", chatId: "c1", pipeline: "test",
       source: TaskSource.EXTERNAL, payload: [],
@@ -32,7 +32,8 @@ describe("createTaskItem", () => {
       source: TaskSource.INTERNAL, payload: [],
     });
 
-    expect(ext.priority).toBeGreaterThan(int.priority);
+    expect(int.priority).toBeGreaterThan(ext.priority);
+    expect(TaskPriority.USER_CANCEL).toBeGreaterThan(int.priority);
   });
 });
 

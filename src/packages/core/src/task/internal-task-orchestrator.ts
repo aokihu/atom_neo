@@ -11,6 +11,7 @@ export class InternalTaskOrchestrator {
   #stagedTasks = new Map<string, StagedTask[]>();
   #taskOrigins = new Map<string, TaskOrigin>();
   #taskChains = new Map<string, string>();
+  #taskSessions = new Map<string, string>();
 
   constructor(queue: TaskQueue, bus?: PipelineEventBus<FullEventMap>) {
     this.#queue = queue;
@@ -21,21 +22,33 @@ export class InternalTaskOrchestrator {
     if (!this.#stagedTasks.has(task.id)) this.#stagedTasks.set(task.id, []);
     if (task.origin) this.#taskOrigins.set(task.id, task.origin);
     this.#taskChains.set(task.id, task.chainId ?? task.id);
+    this.#taskSessions.set(task.id, task.sessionId);
   }
 
-  commitTask(taskId: string): void {
+  commitTask(taskId: string): boolean {
     const staged = this.#stagedTasks.get(taskId);
-    if (!staged) return;
+    if (!staged) return false;
     this.#stagedTasks.delete(taskId);
     this.#taskOrigins.delete(taskId);
     this.#taskChains.delete(taskId);
+    this.#taskSessions.delete(taskId);
     for (const item of staged) this.#enqueue(item);
+    return staged.length > 0;
   }
 
   discardTask(taskId: string): void {
     this.#stagedTasks.delete(taskId);
     this.#taskOrigins.delete(taskId);
     this.#taskChains.delete(taskId);
+    this.#taskSessions.delete(taskId);
+  }
+
+  discardChain(chainId: string, sessionId: string): void {
+    for (const [taskId, taskChainId] of this.#taskChains) {
+      if (taskChainId === chainId && this.#taskSessions.get(taskId) === sessionId) {
+        this.discardTask(taskId);
+      }
+    }
   }
 
   scheduleConversation(

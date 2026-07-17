@@ -7,6 +7,15 @@ import type { Pipeline } from "./pipeline/builder";
 
 type PipelineBuilder = (task: TaskItem) => Pipeline | undefined;
 
+export class TaskCancelledError extends Error {
+  readonly code = "PIPELINE_ABORTED";
+
+  constructor() {
+    super("Task cancelled by user");
+    this.name = "TaskCancelledError";
+  }
+}
+
 export class TaskEngine {
   #bus: PipelineEventBus<CoreEventMap>;
   #queue: TaskQueue;
@@ -14,17 +23,21 @@ export class TaskEngine {
   #processing = false;
   #timeoutMs: number;
   #pipelineBuilders: Record<string, PipelineBuilder>;
+  #abortControllers = new Map<string, AbortController>();
+  #discardChain?: (chainId: string, sessionId: string) => void;
 
   constructor(params: {
     bus: PipelineEventBus<CoreEventMap>;
     queue: TaskQueue;
     pipelineBuilders?: Record<string, PipelineBuilder>;
     timeoutMs?: number;
+    discardChain?: (chainId: string, sessionId: string) => void;
   }) {
     this.#bus = params.bus;
     this.#queue = params.queue;
     this.#pipelineBuilders = params.pipelineBuilders ?? {};
     this.#timeoutMs = params.timeoutMs ?? 120_000;
+    this.#discardChain = params.discardChain;
 
     this.#bus.on(BusEvents.Task.Enqueued, () => this.#onTaskEnqueued());
   }
@@ -36,6 +49,32 @@ export class TaskEngine {
 
   stop(): void {
     this.#running = false;
+  }
+
+  cancel(taskId: string, sessionId: string): boolean {
+    const cancellation = this.#queue.cancelChain(taskId, sessionId);
+    if (!cancellation) return false;
+
+    const error = new TaskCancelledError();
+    this.#discardChain?.(cancellation.chainId, sessionId);
+
+    for (const task of cancellation.queued) {
+      task.state = TaskState.CANCELLED;
+      task.updatedAt = Date.now();
+      this.#queue.storeResult(task.id, {
+        taskId: task.id,
+        state: TaskState.CANCELLED,
+        error: error.message,
+      });
+      removePipeline(task.id);
+      this.#bus.emit(BusEvents.Task.Failed, { task, error });
+    }
+
+    for (const task of cancellation.processing) {
+      this.#abortControllers.get(task.id)?.abort(error);
+    }
+
+    return true;
   }
 
   async drain(params: { timeoutMs?: number }): Promise<boolean> {
@@ -66,14 +105,17 @@ export class TaskEngine {
     const task = this.#queue.dequeue();
     if (!task) return;
 
-    this.#queue.markProcessing(task.id);
+    const abortController = new AbortController();
+    this.#abortControllers.set(task.id, abortController);
+    this.#queue.markProcessing(task);
     task.state = TaskState.PROCESSING;
     task.updatedAt = Date.now();
 
     this.#bus.emit(BusEvents.Task.Activated, { task });
 
     try {
-      const result = await this.#executeTask(task);
+      const result = await this.#executeTask(task, abortController.signal);
+      this.#throwIfCancelled(abortController.signal);
 
       this.#queue.markDone(task.id);
       task.state = TaskState.COMPLETED;
@@ -83,16 +125,21 @@ export class TaskEngine {
       this.#bus.emit(BusEvents.Pipeline.Result, { task, result });
     } catch (error) {
       this.#queue.markDone(task.id);
-      task.state = TaskState.FAILED;
+      const cancelled = abortController.signal.aborted;
+      task.state = cancelled ? TaskState.CANCELLED : TaskState.FAILED;
       task.updatedAt = Date.now();
 
-      this.#bus.emit(BusEvents.Task.Failed, { task, error });
+      this.#bus.emit(BusEvents.Task.Failed, {
+        task,
+        error: cancelled ? abortController.signal.reason ?? new TaskCancelledError() : error,
+      });
     } finally {
+      this.#abortControllers.delete(task.id);
       removePipeline(task.id);
     }
   }
 
-  async #executeTask(task: TaskItem): Promise<any> {
+  async #executeTask(task: TaskItem, abortSignal: AbortSignal): Promise<any> {
     let pipeline = getPipeline(task.id);
 
     if (!pipeline && task.pipeline) {
@@ -108,13 +155,18 @@ export class TaskEngine {
     let current: any = { mode: "initial", task };
 
     for (const element of pipeline.elements) {
-      try {
-        current = await element.process(current);
-      } catch (err) {
-        throw err;
-      }
+      this.#throwIfCancelled(abortSignal);
+      current.abortSignal = abortSignal;
+      current = await element.process(current);
+      this.#throwIfCancelled(abortSignal);
     }
 
-    return current;
+    if (!current || typeof current !== "object") return current;
+    const { abortSignal: _abortSignal, ...result } = current;
+    return result;
+  }
+
+  #throwIfCancelled(signal: AbortSignal): void {
+    if (signal.aborted) throw signal.reason ?? new TaskCancelledError();
   }
 }

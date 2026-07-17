@@ -262,7 +262,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #configContextLimit: number;
   #mcpToolsRef?: { current: Record<string, any> };
   #mcpToolNamesCount = 0;
-  #builtinToolResults = new Map<string, ToolExecutionStatus[]>();
+  #toolResults = new Map<string, ToolExecutionStatus[]>();
   #toolGuardState = { current: {} as ToolGuardState };
   #skillService?: SkillServiceLike;
   #contextService: ContextService;
@@ -297,9 +297,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
-    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#builtinToolResults, this.#toolGuardState, this.#session);
+    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGuardState, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
-    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
+    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults);
     this.#mcpToolsRef = params.mcpToolsRef;
     this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
     this.#aiTools = { ...builtinTools, ...wrappedMCP };
@@ -311,11 +311,18 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       this.report(BusEvents.Element.Data, { step: "no apiKey, fallback" });
       return { ...input, mode: "executing", responseText: "(no API key configured)" };
     }
+    const reportTransport = (eventName: string, payload: Record<string, unknown>) => {
+      this.report(eventName, {
+        sessionId: input.task.sessionId,
+        taskId: input.task.id,
+        ...payload,
+      });
+    };
 
     const { userMessages, systemText } = resolveModelInput(input);
     const mcpCurrent = this.#mcpToolsRef?.current ?? {};
     if (Object.keys(mcpCurrent).length > this.#mcpToolNamesCount) {
-      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter);
+      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults);
       this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
       Object.assign(this.#aiTools, wrappedMCP);
     }
@@ -343,7 +350,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       hasExplicitUrl,
     });
     this.#toolGuardState.current = toWebfetchGuardState(initialToolSelection);
-    this.#builtinToolResults.clear();
+    this.#toolResults.clear();
     this.report(BusEvents.Element.Data, {
       step: "starting LLM call",
       model: this.#model,
@@ -412,7 +419,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         stopWhen: stepCountIs(this.#maxSteps),
         maxOutputTokens: this.#maxTokens,
         providerOptions: this.#providerOptions,
-        abortSignal: abortController.signal,
+        abortSignal: input.abortSignal
+          ? AbortSignal.any([abortController.signal, input.abortSignal])
+          : abortController.signal,
         prepareStep: ({ stepNumber, steps, messages }) => {
           if (latestPreparedStep !== stepNumber) completeStep(latestPreparedStep);
           latestPreparedStep = stepNumber;
@@ -527,7 +536,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           if (pt !== "tool-call" && pt !== "tool-result" && stepToolCalls.length > 0) {
             const success = stepToolCalls.filter(t => t.ok).length;
             const failed = stepToolCalls.length - success;
-            this.report(BusEvents.Transport.ToolStepFinished as any, {
+            reportTransport(BusEvents.Transport.ToolStepFinished, {
               stepNumber: this.#stepCounter.count,
               total: stepToolCalls.length,
               success,
@@ -542,7 +551,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             if (text) {
               const offset = reasoningText.length;
               reasoningText += text;
-              this.report(BusEvents.Transport.Reason as any, { textDelta: text, offset });
+              reportTransport(BusEvents.Transport.Reason, { textDelta: text, offset });
             }
             continue;
           }
@@ -559,7 +568,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               if (safe.length > 0) {
                 const offset = fullText.length;
                 fullText += safe;
-                this.report(BusEvents.Transport.Delta, { textDelta: safe, offset });
+                reportTransport(BusEvents.Transport.Delta, { textDelta: safe, offset });
               }
               completeDetected = true;
               this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
@@ -572,7 +581,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               const safe = textBuffer.slice(0, sendLen);
               const offset = fullText.length;
               fullText += safe;
-              this.report(BusEvents.Transport.Delta, { textDelta: safe, offset });
+              reportTransport(BusEvents.Transport.Delta, { textDelta: safe, offset });
               textBuffer = textBuffer.slice(-(MARKER_LEN - 1));
             }
             continue;
@@ -584,21 +593,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               intentData = intentSignal.value ?? c.input;
             }
             this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
-            this.report(BusEvents.Transport.ToolStarted as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", input: c.input });
+            reportTransport(BusEvents.Transport.ToolStarted, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", input: c.input });
             continue;
           }
 
           if (pt === "tool-result") {
             const c = chunk as any;
             if (c.toolName === "intent") continue;
-            const status = takeToolExecutionStatus(this.#builtinToolResults, c.toolName);
+            const status = takeToolExecutionStatus(this.#toolResults, c.toolName);
             const rawResult = c.output ?? c.result;
             const toolOutput = String(c.output ?? c.result ?? status?.output ?? "");
             const toolError = c.error ?? status?.error;
             const toolOk = status?.ok ?? !toolError;
             const resultPreview = rawResult === undefined ? "" : JSON.stringify(rawResult).slice(0, 300);
             this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: resultPreview, ok: toolOk, error: toolError });
-            this.report(BusEvents.Transport.ToolFinished as any, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
+            reportTransport(BusEvents.Transport.ToolFinished, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
             stepToolCalls.push({ toolName: c.toolName, ok: toolOk });
             allToolCalls.push({ toolName: c.toolName, ok: toolOk });
             if (toolOk && status?.contextInjection) {
@@ -662,7 +671,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       if (!completeDetected && textBuffer.length > 0) {
         const offset = fullText.length;
         fullText += textBuffer;
-        this.report(BusEvents.Transport.Delta, { textDelta: textBuffer, offset });
+        reportTransport(BusEvents.Transport.Delta, { textDelta: textBuffer, offset });
       }
 
       this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
@@ -670,7 +679,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       if (allToolCalls.length > 0) {
         const uniqueNames = [...new Set(allToolCalls.map(t => t.toolName))];
         const success = allToolCalls.filter(t => t.ok).length;
-        this.report(BusEvents.Transport.ToolGroupComplete as any, {
+        reportTransport(BusEvents.Transport.ToolGroupComplete, {
           total: allToolCalls.length,
           success,
           failed: allToolCalls.length - success,
@@ -856,6 +865,16 @@ function takeToolExecutionStatus(
   return status;
 }
 
+function stringifyToolOutput(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output === undefined) return "";
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
+
 function buildAllAiTools(
   tools: ToolDefinition[],
   report: (event: string, payload: Record<string, unknown>) => void,
@@ -916,7 +935,12 @@ function buildAllAiTools(
   return result;
 }
 
-function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, payload: Record<string, unknown>) => void, stepCounter: { count: number }): Record<string, any> {
+export function wrapMCPAiTools(
+  mcpTools: Record<string, any>,
+  report: (event: string, payload: Record<string, unknown>) => void,
+  stepCounter: { count: number },
+  toolResults: Map<string, ToolExecutionStatus[]>,
+): Record<string, any> {
   const wrapped: Record<string, any> = {};
   for (const [name, t] of Object.entries(mcpTools)) {
     const origExecute = (t as any).execute;
@@ -934,11 +958,14 @@ function wrapMCPAiTools(mcpTools: Record<string, any>, report: (event: string, p
           const result = await origExecute(args, opts);
           const duration = Date.now() - start;
           report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: name, stepCount: sc, source: "mcp", duration });
+          pushToolExecutionStatus(toolResults, name, { ok: true, output: stringifyToolOutput(result) });
           return result;
         } catch (err: any) {
           const duration = Date.now() - start;
-          report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: name, stepCount: sc, source: "mcp", duration, error: err?.message ?? String(err) });
-          return `MCP tool error: ${err?.message ?? String(err)}`;
+          const error = err?.message ?? String(err);
+          report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: name, stepCount: sc, source: "mcp", duration, error });
+          pushToolExecutionStatus(toolResults, name, { ok: false, output: "", error });
+          return `MCP tool error: ${error}`;
         }
       },
     };

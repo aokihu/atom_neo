@@ -45,7 +45,7 @@ export class TuiClient {
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.#ws = new WebSocket(`${this.#url}/ws/${this.#sessionId}`);
+      this.#ws = new WebSocket(`${this.#url}/ws/${encodeURIComponent(this.#sessionId)}`);
 
       this.#ws.onopen = () => {};
 
@@ -91,13 +91,11 @@ export class TuiClient {
           this.#onToolGroupComplete?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
         },
         [WsMessages.Server.TaskCompleted]: (p) => {
-          const { taskId: completedId, parentTaskId } = p;
-          for (let i = 0; i < this.#pending.length; i++) {
-            const head = this.#pending[i];
-            if (parentTaskId === head.rootTaskId && completedId !== head.rootTaskId) {
-              const done = this.#pending.splice(i, 1)[0];
+          if (p.terminal === true) {
+            const index = this.#pending.findIndex(pending => pending.rootTaskId === p.rootTaskId);
+            if (index >= 0) {
+              const done = this.#pending.splice(index, 1)[0];
               done.resolve(done.text);
-              break;
             }
           }
           const tu = p.tokenUsage;
@@ -109,7 +107,9 @@ export class TuiClient {
           if (index < 0) return;
           const pending = this.#pending.splice(index, 1)[0];
           const err = p.error ?? "Unknown error";
-          pending.reject(new Error(String(err)));
+          const error = new Error(String(err));
+          if (p.code === "PIPELINE_ABORTED") error.name = "TaskCancelledError";
+          pending.reject(error);
         },
         [WsMessages.Server.SessionTaskActive]: (p) => {
           const { active, taskId } = p;
@@ -170,8 +170,20 @@ export class TuiClient {
   close(): void {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));
     this.#pending = [];
+    this.#activeTaskIds.clear();
     this.#ws?.close();
     this.#ready = false;
+  }
+
+  cancelActiveTask(): boolean {
+    if (!this.#ws || !this.#ready) return false;
+    const taskId = [...this.#activeTaskIds].at(-1);
+    if (!taskId) return false;
+    this.#ws.send(JSON.stringify({
+      type: WsMessages.Client.TaskCancel,
+      payload: { taskId },
+    }));
+    return true;
   }
 
   sendCompact(): void {

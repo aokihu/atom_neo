@@ -25,6 +25,7 @@ type ChatState = {
 
   generateId: () => string;
   addMessage: (msg: Message) => void;
+  addTransientMessage: (msg: Message, durationMs: number) => void;
   updateMessage: (id: string, patch: Partial<Message>) => void;
   clearMessages: () => void;
 
@@ -63,6 +64,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addMessage: (msg: Message) =>
     set(s => ({ messages: [...s.messages, msg] })),
+
+  addTransientMessage: (msg: Message, durationMs: number) => {
+    set(s => ({ messages: [...s.messages, msg] }));
+    setTimeout(() => {
+      set(s => ({ messages: s.messages.filter(item => item.id !== msg.id) }));
+    }, durationMs);
+  },
 
   updateMessage: (id: string, patch: Partial<Message>) =>
     set(s => ({
@@ -201,6 +209,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (busy) return { busy };
     return {
       busy: false,
+      showPreparing: false,
       activeAssistantId: null,
       messages: s.messages.map(m =>
         m.role === "assistant" && m.streaming ? { ...m, streaming: false } : m),

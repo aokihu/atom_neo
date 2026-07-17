@@ -7,6 +7,7 @@ import { TaskSource, BusEvents, WsMessages, errorMessage } from "@atom-neo/share
 import { createTaskItem } from "../task-factory";
 import type { InternalTaskOrchestrator } from "../task/internal-task-orchestrator";
 import type { SessionStore } from "../session/store";
+import type { TaskEngine } from "../task-engine";
 
 type ServerContext = {
   broadcaster: Broadcaster;
@@ -15,18 +16,13 @@ type ServerContext = {
   logger?: Logger;
   orchestrator?: InternalTaskOrchestrator;
   sessionStore?: SessionStore;
+  taskEngine?: TaskEngine;
   isStopping?: () => boolean;
 };
 
-let seq = 0;
-
 export function createWsHandlers(ctx: ServerContext) {
   function send(ws: ServerWebSocket<unknown>, type: string, payload: unknown) {
-    try {
-      ws.send(JSON.stringify({ type, seq: ++seq, ts: Date.now(), payload }));
-    } catch (err) {
-      ctx.logger?.error("ws send failed", { error: errorMessage(err) });
-    }
+    ctx.broadcaster.send(ws, type, payload);
   }
 
   return {
@@ -69,8 +65,12 @@ export function createWsHandlers(ctx: ServerContext) {
           send(ws, WsMessages.Server.TaskCreated, { taskId: task.id, state: task.state });
           ctx.bus?.emit(BusEvents.Task.Enqueued as any, { task });
         } else if (type === WsMessages.Client.TaskCancel) {
-          if (ctx.taskQueue.remove(payload.taskId)) ctx.sessionStore?.releaseTask(payload.taskId);
-          send(ws, WsMessages.Server.TaskStateChanged, { taskId: payload.taskId, currentState: "failed" });
+          const sid = (ws as any).data?.sessionId;
+          if (!sid || !ctx.taskEngine?.cancel(payload.taskId, sid)) {
+            send(ws, WsMessages.Control.Error, { message: "Task not found" });
+            return;
+          }
+          send(ws, WsMessages.Server.TaskStateChanged, { taskId: payload.taskId, currentState: "cancelled" });
         } else if (type === WsMessages.Control.Ping) {
           send(ws, WsMessages.Control.Pong, {});
         } else if (type === WsMessages.Client.Compact) {

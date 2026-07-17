@@ -5,10 +5,12 @@ import { PageHeader, Section, CodeBlock, Callout, ComparisonTable, Badge, slugif
 const examples = {
   envelope: `type WSMessage<T extends string, P = Record<string, unknown>> = {
   type: T;
-  seq: number;       // Monotonic sequence number assigned by Core
+  seq: number;       // Sender-assigned sequence number
   ts: number;        // Unix timestamp in milliseconds
   payload: P;
 };`,
+  sessionPath: `const encodedSessionId = encodeURIComponent(sessionId);
+const ws = new WebSocket(\`\${coreUrl}/ws/\${encodedSessionId}\`);`,
   taskSubmit: `{
   type: "event.task.submit",
   seq: 0,
@@ -52,7 +54,7 @@ const examples = {
   payload: {
     taskId: string;
     previousState: string;
-    currentState: string;
+    currentState: "waiting" | "pending" | "processing" | "completed" | "failed" | "cancelled";
   };
 }`,
   elementStarted: `{
@@ -81,6 +83,7 @@ const examples = {
   seq: 5,
   ts: 1700000000005,
   payload: {
+    sessionId: string;
     taskId: string;
     textDelta: string;
     offset: number;
@@ -93,9 +96,9 @@ content = content.substring(0, offset) + textDelta;`,
   seq: 6,
   ts: 1700000000006,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: "builtin" | "plugin" | "mcp";
     toolCallId: string;
     input: unknown;
   };
@@ -105,14 +108,12 @@ content = content.substring(0, offset) + textDelta;`,
   seq: 7,
   ts: 1700000000007,
   payload: {
+    sessionId: string;
     taskId: string;
     toolName: string;
-    toolSource: string;
     toolCallId: string;
-    ok: boolean;
-    output?: string;
-    error?: string;
-    durationMs: number;
+    result?: unknown;
+    error?: unknown;
   };
 }`,
   taskCompleted: `{
@@ -121,12 +122,12 @@ content = content.substring(0, offset) + textDelta;`,
   ts: 1700000000008,
   payload: {
     taskId: string;
-    result: {
-      type: string;
-      transition?: string;
-      childTaskId?: string;
-      parentTaskId?: string;
-    };
+    rootTaskId: string;
+    parentTaskId: string | null;
+    terminal: boolean;
+    output: string;
+    reasoningContent: string;
+    tokenUsage: { total: number };
   };
 }`,
   taskFailed: `{
@@ -136,6 +137,7 @@ content = content.substring(0, offset) + textDelta;`,
   payload: {
     taskId: string;
     rootTaskId: string;  // Task chainId: external root, or this task when independent
+    code?: string;       // PIPELINE_ABORTED when cancelled by the user
     error: string;
   };
 }`,
@@ -257,14 +259,34 @@ export default function DocPage({ content, title, description, category }: DocPa
             <li><strong>Gateway Side</strong>: Handles authenticated HTTP APIs only; does not proxy WebSocket</li>
             <li><strong>TUI Side</strong>: Direct WebSocket connection to Core (localhost, no auth)</li>
             <li><strong>Message Format</strong>: JSON, one message per frame</li>
+            <li>
+              <strong>Session Routing</strong>: Task-scoped <code>event.transport.*</code> events
+              carry <code>sessionId</code> and <code>taskId</code>, and are only sent to clients
+              connected through the matching <code>/ws/:sessionId</code> endpoint. System-level
+              events such as MCP status remain global.
+            </li>
+            <li>
+              <strong>Session Path Encoding</strong>: Clients encode <code>sessionId</code> with
+              <code>encodeURIComponent()</code> before placing it in <code>/ws/:sessionId</code> or
+              <code>/api/sessions/:sessionId</code>. Core decodes the single path segment exactly
+              once. Empty IDs, malformed escapes, and unencoded extra segments return <code>400</code>.
+            </li>
           </ul>
         </Callout>
+        <CodeBlock lang="typescript" code={examples.sessionPath} />
       </Section>
 
       {/* ── Section 2: Common Envelope ── */}
       <Section id="common-envelope" title="Common Envelope">
         <p>All messages follow a standard envelope with sequence number and timestamp.</p>
         <CodeBlock lang="typescript" code={examples.envelope} />
+        <Callout type="info" title="Core outbound sequence">
+          Client messages use a client-assigned sequence. Every Core outbound message uses one
+          process-wide, strictly increasing sequence allocated by the WebSocket Broadcaster.
+          A broadcast allocates one value shared by all recipients. Session clients may observe
+          gaps caused by messages routed to other Sessions, so sequence values are ordered but
+          not necessarily contiguous for an individual client.
+        </Callout>
       </Section>
 
       {/* ── Section 3: Client → Core Events ── */}
@@ -276,8 +298,24 @@ export default function DocPage({ content, title, description, category }: DocPa
         <CodeBlock lang="typescript" code={examples.taskSubmit} />
 
         <h3 id={slugify("3.2 task.cancel")}>3.2 task.cancel</h3>
-        <p>Request cancellation of a previously submitted task.</p>
+        <p>
+          Request cancellation of a queued or running task. Core derives the Session from the
+          current <code>/ws/:sessionId</code> connection and only cancels a matching Task.
+          The matching Task resolves its <code>chainId</code>: every queued member is removed,
+          every running member receives an AbortSignal, and staged descendants are discarded.
+          Cancellation is a highest-priority control operation and cancelled member Tasks enter
+          the <code>cancelled</code> state.
+        </p>
         <CodeBlock lang="typescript" code={examples.taskCancel} />
+        <Callout type="info" title="Cancellation boundary is the Task Chain">
+          Prediction, Conversation, follow-up, context-compress, and post-conversation are
+          cancelled together when they share the resolved <code>chainId</code>. Independent Tasks
+          use their own ID as the chain ID.
+        </Callout>
+        <Callout type="warn" title="Session ownership is mandatory">
+          The payload only identifies <code>taskId</code>. Core must not trust a client-provided
+          Session ID or reveal whether the same Task ID exists in another Session.
+        </Callout>
 
         <h3 id={slugify("3.3 ping")}>3.3 ping</h3>
         <p>Keep-alive heartbeat sent periodically by the client.</p>
@@ -299,7 +337,7 @@ export default function DocPage({ content, title, description, category }: DocPa
         <p>
           Emitted whenever the task transitions between states.
           Possible states: <code>waiting</code>, <code>pending</code>, <code>processing</code>,
-          <code>completed</code>, <code>failed</code>, <code>follow_up</code>,
+          <code>completed</code>, <code>failed</code>, <code>cancelled</code>, <code>follow_up</code>,
           <code>dispatched</code>, <code>suspended</code>.
         </p>
         <CodeBlock lang="typescript" code={examples.taskStateChanged} />
@@ -318,26 +356,52 @@ export default function DocPage({ content, title, description, category }: DocPa
         <CodeBlock lang="typescript" code={examples.deltaAssembly} />
 
         <h3 id={slugify("4.6 transport.tool.started")}>4.6 transport.tool.started</h3>
-        <p>Emitted when a tool invocation begins. Includes tool metadata and input.</p>
+        <p>Emitted when a tool invocation begins. Includes the tool identity and input.</p>
         <CodeBlock lang="typescript" code={examples.toolStarted} />
 
         <h3 id={slugify("4.7 transport.tool.finished")}>4.7 transport.tool.finished</h3>
         <p>
-          Emitted when a tool invocation completes, including output, error status, and duration.
+          Emitted when a tool invocation completes. Successful calls carry <code>result</code>;
+          failed calls carry <code>error</code>.
         </p>
         <CodeBlock lang="typescript" code={examples.toolFinished} />
+        <Callout type="info" title="Result and error are the wire contract">
+          Tool source, duration, and the internal <code>ok</code> flag remain Core observability
+          data. They are not duplicated in the per-call WebSocket event. Builtin and MCP tools use
+          the same <code>result</code>/<code>error</code> completion semantics.
+        </Callout>
+        <Callout type="info" title="Session-scoped transport events">
+          <code>event.transport.reason</code>, <code>event.transport.tool.step-finished</code> and{" "}
+          <code>event.transport.tool.group-complete</code> follow the same ownership contract:
+          their payloads include the producing <code>sessionId</code> and <code>taskId</code>, and
+          Core only sends them to that Session&apos;s WebSocket clients.
+        </Callout>
 
         <h3 id={slugify("4.8 task.completed")}>4.8 task.completed</h3>
         <p>
-          Emitted when a task finishes successfully. The <code>result</code> payload indicates
-          the completion type and any child/parent task transitions.
+          Emitted when one Task finishes successfully. <code>rootTaskId</code> identifies the
+          original request, while <code>terminal</code> states whether that entire request has
+          reached a successful terminal state.
         </p>
         <CodeBlock lang="typescript" code={examples.taskCompleted} />
+        <ComparisonTable
+          headers={["After the current Task commits", "terminal", "Client action"]}
+          rows={[
+            ["A downstream Task was released", <code>false</code>, "Keep waiting for the same rootTaskId"],
+            ["No downstream Task remains", <code>true</code>, "Resolve the matching pending request"],
+          ]}
+        />
+        <Callout type="warn" title="Do not infer request completion from Task hierarchy">
+          Clients must not treat the first child Task or a matching <code>parentTaskId</code> as
+          request completion. Only <code>rootTaskId</code> plus <code>terminal=true</code> closes a
+          successful pending request.
+        </Callout>
 
         <h3 id={slugify("4.9 task.failed")}>4.9 task.failed</h3>
         <p>
-          Emitted when a task terminates with an error. The <code>rootTaskId</code> binds the failure to
-          its original request; clients must ignore failures that do not match a pending request.
+          Emitted when a task terminates with an error. Failure is terminal: the
+          <code>rootTaskId</code> binds it to the original request, and clients must ignore failures
+          that do not match a pending request.
         </p>
         <CodeBlock lang="typescript" code={examples.taskFailed} />
 

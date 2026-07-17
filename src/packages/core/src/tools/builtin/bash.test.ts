@@ -23,4 +23,13 @@ describe("bash tool", () => {
     expect(result.ok).toBe(true);
     expect(result.output).toBe("(no output)");
   });
+  test("stops the process when the task signal is cancelled", async () => {
+    const controller = new AbortController();
+    const running = bash.execute({ command: "sleep 5" }, { abortSignal: controller.signal });
+    setTimeout(() => controller.abort(), 20);
+
+    const result = await running;
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("Command cancelled");
+  });
 });

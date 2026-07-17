@@ -24,4 +24,5 @@ export type PostConversationFlowState = {
   finishReason: string;
   completeDetected: boolean;
   analysis?: AnalysisResult;
+  abortSignal?: AbortSignal;
 };

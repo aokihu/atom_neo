@@ -51,6 +51,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
         systemKey: PromptKey.EVALUATOR_ANALYZE,
         prompt,
         maxTokens: this.#maxTokens,
+        abortSignal: input.abortSignal,
       });
 
       this.report(BusEvents.Element.Data, { step: "LLM response", raw: raw.slice(0, 500) });

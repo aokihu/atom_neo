@@ -66,6 +66,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
         systemKey: PromptKey.ANALYZE_RESULT,
         prompt,
         maxTokens: this.#maxTokens,
+        abortSignal: input.abortSignal,
       });
 
       const parsed = parseJsonFromLLMResponse<{ status: string; reason?: string; fingerprint?: string }>(raw);

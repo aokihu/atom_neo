@@ -51,4 +51,5 @@ export type ConversationFlowState = {
   errorStatusCode?: number;
   finishReason?: string;
   completeDetected?: boolean;
+  abortSignal?: AbortSignal;
 };

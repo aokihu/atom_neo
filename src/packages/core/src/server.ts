@@ -1,7 +1,7 @@
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationChainAction, ConversationContinuationAction, FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
-import type { PipelineResult, SessionMessage } from "@atom-neo/shared";
+import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
 import { BusEvents, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource, TaskState } from "@atom-neo/shared";
@@ -11,6 +11,7 @@ import { TaskEngine } from "./task-engine";
 import { SessionStore } from "./session/store";
 import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
+import { registerTransportBridge } from "./ws/transport-bridge";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
 import { ToolRegistry } from "./tools/registry";
@@ -36,8 +37,10 @@ import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 import { ContextService } from "./context/context-service";
 import { decideTodoContinuation } from "./session/context";
 import { SessionPersistenceService } from "./session/persistence-service";
+import { decodePathParam } from "./url-path";
 
 const API_PREFIX = "/api/";
+const SESSION_API_PREFIX = `${API_PREFIX}sessions/`;
 const LOG_OUTPUT_MAX_LEN = 200;
 
 interface RuntimeLike {
@@ -146,18 +149,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         toolCount: names.filter(n => toolServers[n] === cfg.name).length,
       }));
 
-      broadcaster.broadcast({
-        type: WsMessages.Server.MCPConnected,
-        ts: Date.now(), seq: 0,
-        payload: { servers: mcpServerInfos, toolInfos: names.map(name => ({ name, source: "mcp" as const, description: (tools[name] as any)?.description ?? "", online: true })) },
+      broadcaster.broadcast(WsMessages.Server.MCPConnected, {
+        servers: mcpServerInfos,
+        toolInfos: names.map(name => ({ name, source: "mcp" as const, description: (tools[name] as any)?.description ?? "", online: true })),
       });
 
       const healthStop = startMCPHealthCheck(clients, matchedConfigs, toolServers, (statuses) => {
-        broadcaster.broadcast({
-          type: WsMessages.Server.MCPToolStatus,
-          ts: Date.now(), seq: 0,
-          payload: { servers: statuses },
-        });
+        broadcaster.broadcast(WsMessages.Server.MCPToolStatus, { servers: statuses });
         for (const s of statuses) {
           const info = mcpServerInfos.find(i => i.name === s.name);
           if (info) info.online = s.online;
@@ -297,10 +295,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     if (sid) {
       sessionStore.acquireTask(p.task.id, sid);
       sessionRef.current = { sessionId: sid, chatId: p.task.chatId ?? "default" };
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: true, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: true,
+        taskId: p.task.id,
       });
     }
   });
@@ -343,15 +340,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error });
       logger.warn("session checkpoint failed after task completion", { sessionId: sid, taskId: p.task.id });
       orchestrator.discardTask(p.task.id);
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.TaskFailed,
-        ts: Date.now(), seq: 0,
-        payload: { taskId: p.task.id, rootTaskId: p.task.chainId, error },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
+        taskId: p.task.id,
+        rootTaskId: p.task.chainId,
+        error,
       });
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: false, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: false,
+        taskId: p.task.id,
       });
       return;
     }
@@ -378,43 +374,46 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         } as any);
       }
     }
-    orchestrator.commitTask(p.task.id);
+    const hasDownstreamTask = orchestrator.commitTask(p.task.id);
     if (sid) {
       const accumulated = sessionStore.get(sid).tokenUsage;
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.TaskCompleted,
-        ts: Date.now(), seq: 0,
-        payload: { taskId: p.task.id, parentTaskId: p.task.parentTaskId, output: result.output ?? "", reasoningContent, tokenUsage: accumulated },
-      });
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: false, taskId: p.task.id },
+      const payload: TaskCompletedPayload = {
+        taskId: p.task.id,
+        rootTaskId: p.task.chainId,
+        parentTaskId: p.task.parentTaskId,
+        terminal: !hasDownstreamTask,
+        output: result.output ?? "",
+        reasoningContent,
+        tokenUsage: accumulated,
+      };
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskCompleted, payload);
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: false,
+        taskId: p.task.id,
       });
     }
   });
   bus.on(BusEvents.Task.Failed, (p) => {
     orchestrator.discardTask(p.task.id);
-    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error: String(p.error) });
-    logger.error("task failed", { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) });
+    const cancelled = p.task.state === TaskState.CANCELLED;
+    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: p.task.state, error: String(p.error) });
+    const logContext = { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) };
+    if (cancelled) logger.info("task cancelled", logContext);
+    else logger.error("task failed", logContext);
     const sid = p.task.sessionId;
     if (sid && !sessionStore.save(sid, "task_failed")) {
       logger.warn("session checkpoint failed after task failure", { sessionId: sid, taskId: p.task.id });
     }
     if (sid) {
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.TaskFailed,
-        ts: Date.now(), seq: 0,
-        payload: {
-          taskId: p.task.id,
-          rootTaskId: p.task.chainId,
-          error: String(p.error),
-        },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
+        taskId: p.task.id,
+        rootTaskId: p.task.chainId,
+        ...(cancelled ? { code: "PIPELINE_ABORTED" } : {}),
+        error: String(p.error),
       });
-      broadcaster.broadcastToSession(sid, {
-        type: WsMessages.Server.SessionTaskActive,
-        ts: Date.now(), seq: 0,
-        payload: { active: false, taskId: p.task.id },
+      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
+        active: false,
+        taskId: p.task.id,
       });
     }
   });
@@ -533,10 +532,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
   });
 
-  const taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineBuilders });
+  const taskEngine = new TaskEngine({
+    bus,
+    queue: taskQueue,
+    pipelineBuilders,
+    discardChain: (chainId, sessionId) => orchestrator.discardChain(chainId, sessionId),
+  });
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
+  registerTransportBridge(bus, broadcaster);
   const wsHandlers = createWsHandlers({
     broadcaster,
     taskQueue,
@@ -544,61 +549,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     logger,
     orchestrator,
     sessionStore,
+    taskEngine,
     isStopping: () => stopping,
-  });
-
-  // Bridge: bus transport.reason → WebSocket broadcaster for reasoning streaming
-  bus.on(BusEvents.Transport.Reason as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
-    const { textDelta, offset } = ev.payload;
-    if (textDelta) {
-      broadcaster.broadcast({ type: WsMessages.Server.TransportReason, ts: Date.now(), seq: 0, payload: { textDelta, offset } });
-    }
-  });
-
-  // Bridge: bus transport.delta → WebSocket broadcaster for real-time streaming
-  // BaseElement.report() wraps payload in { name, payload } — FullEventMap doesn't reflect this yet
-  bus.on(BusEvents.Transport.Delta as any, (ev: { name: string; payload: { textDelta: string; offset: number } }) => {
-    const textDelta = ev.payload.textDelta;
-    const offset = ev.payload.offset ?? 0;
-    if (textDelta) {
-      broadcaster.broadcast({ type: WsMessages.Server.TransportDelta, ts: Date.now(), seq: 0, payload: { textDelta, offset } });
-    }
-  });
-
-  // Bridge: bus transport.tool.started → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolStarted as any, (ev: { name: string; payload: { toolName: string; toolCallId: string; input: unknown } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolStarted,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", toolName: ev.payload.toolName, toolCallId: ev.payload.toolCallId, input: ev.payload.input },
-    });
-  });
-
-  // Bridge: bus transport.tool.finished → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolFinished as any, (ev: { name: string; payload: { toolName: string; toolCallId: string; result?: unknown; error?: unknown } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolFinished,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", toolName: ev.payload.toolName, toolCallId: ev.payload.toolCallId, result: ev.payload.result, error: ev.payload.error },
-    });
-  });
-
-  // Bridge: bus transport.tool.step-finished → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolStepFinished as any, (ev: { name: string; payload: { stepNumber: number; total: number; success: number; failed: number; toolNames: string[] } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolStepFinished,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", ...ev.payload },
-    });
-  });
-
-  // Bridge: bus transport.tool.group-complete → WebSocket broadcaster
-  bus.on(BusEvents.Transport.ToolGroupComplete as any, (ev: { name: string; payload: { total: number; success: number; failed: number; toolNames: string[] } }) => {
-    broadcaster.broadcast({
-      type: WsMessages.Server.TransportToolGroupComplete,
-      ts: Date.now(), seq: 0,
-      payload: { taskId: "", ...ev.payload },
-    });
   });
 
   let stopping = false;
@@ -610,7 +562,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
       // WebSocket upgrade for /ws/:sessionId
       if (url.pathname.startsWith("/ws/")) {
-        const sid = url.pathname.split("/ws/").pop() || "default";
+        const sid = decodePathParam(url.pathname, "/ws/");
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         srv.upgrade(req, { data: { sessionId: sid } });
         return; // handled by websocket handlers
       }
@@ -633,15 +586,17 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         }
         return createTaskHandler(taskQueue, normalized, bus);
       }
-      if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "GET") {
-        const sid = url.pathname.split("/").pop()!;
+      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
+        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         const session = sessionStore.load(sid);
         return session
           ? Response.json(session.messages)
           : Response.json({ error: "Session not found" }, { status: 404 });
       }
-      if (url.pathname.startsWith(`${API_PREFIX}sessions/`) && method === "DELETE") {
-        const sid = url.pathname.split("/").pop()!;
+      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
+        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         if (!sessionStore.delete(sid)) {
           return Response.json({ error: "Session is active" }, { status: 409 });
         }
@@ -649,9 +604,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
         const taskId = url.pathname.split("/").pop()!;
-        const response = taskCancelHandler(taskQueue, req, taskId);
-        if (response.ok) sessionStore.releaseTask(taskId);
-        return response;
+        return taskCancelHandler(taskEngine, req, taskId);
       }
       if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
         return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
