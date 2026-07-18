@@ -185,6 +185,13 @@ Launched as a subprocess by `src/bootstrap/first-run.ts` via `Bun.spawn`.
 It still participates in the root `bun run --workspaces build` contract, so its
 package scripts include both `typecheck: tsc --noEmit` and `build: tsc`.
 
+### Workspace Dependency Version Policy
+
+Dependencies shared by the root application and workspace packages must stay on
+one compatible version line. The current baseline is AI SDK 7 with
+`@ai-sdk/deepseek` 3, and OpenTUI 0.4.3. Workspace manifests may declare these
+dependencies directly, but must not introduce a second major or minor line.
+
 ## 5. Package: `gateway`
 
 ```text

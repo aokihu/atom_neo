@@ -16,7 +16,7 @@ export async function callLLM(params: {
   const model = provider(params.model);
   const result = await generateText({
     model,
-    system: resolvePrompt(params.systemKey),
+    instructions: resolvePrompt(params.systemKey),
     prompt: params.prompt,
     maxOutputTokens: params.maxTokens,
     temperature: 0,
