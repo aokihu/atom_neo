@@ -9,10 +9,10 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^2.0.35",
+    "@ai-sdk/deepseek": "^3.0.5",
     "@atom-neo/shared": "workspace:*",
     "@toon-format/toon": "^2.3.0",
-    "ai": "^6.0.194",
+    "ai": "^7.0.17",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -170,7 +170,7 @@ src/packages/tui/src/app.tsx        → startTUI()
   sessions: 42,
   memory: { connected: true, size: "12MB" },
   tools: { registered: 15, builtin: 12, mcp: 3 },
-  version: "1.9.0"
+  version: "1.10.0"
 }`} />
       </Section>
     </div>

@@ -1,6 +1,6 @@
 import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { pruneMessages, streamText, tool, zodSchema, stepCountIs } from "ai";
+import { isStepCount, pruneMessages, streamText, tool, zodSchema } from "ai";
 import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolContextInjection, ToolDefinition, ToolGuardState } from "@atom-neo/shared";
@@ -413,10 +413,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
         const streamResult = streamText({
         model,
-        system: systemText || undefined,
+        instructions: systemText || undefined,
         messages: userMessages as any,
         tools: tools.length > 0 ? this.#aiTools : undefined,
-        stopWhen: stepCountIs(this.#maxSteps),
+        stopWhen: isStepCount(this.#maxSteps),
         maxOutputTokens: this.#maxTokens,
         providerOptions: this.#providerOptions,
         abortSignal: input.abortSignal
@@ -527,7 +527,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       try {
         let stepToolCalls: { toolName: string; ok: boolean }[] = [];
-        for await (const chunk of streamResult.fullStream) {
+        for await (const chunk of streamResult.stream) {
           const pt = (chunk as any).type;
 
           if (pt === "start" || pt === "source" || pt === "raw" || pt === "object"

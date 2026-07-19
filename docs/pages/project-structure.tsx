@@ -121,6 +121,11 @@ export default function ProjectStructurePage({ content, title, description, cate
           <code>shared</code>. The <code>setup-wizard</code> stays independent because it only owns
           the first-run Ink interface and configuration files.
         </Callout>
+        <Callout type="info" title="Shared dependency baseline">
+          Root and workspace manifests use one compatible dependency line: AI SDK 7 with
+          <code>@ai-sdk/deepseek</code> 3, and OpenTUI 0.4.3. A workspace must not introduce a
+          second major or minor line for these shared runtime libraries.
+        </Callout>
       </Section>
 
       {/* ── Environment Variables ── */}
