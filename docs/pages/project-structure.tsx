@@ -122,9 +122,10 @@ export default function ProjectStructurePage({ content, title, description, cate
           the first-run Ink interface and configuration files.
         </Callout>
         <Callout type="info" title="Shared dependency baseline">
-          Root and workspace manifests use one compatible dependency line: AI SDK 7 with
-          <code>@ai-sdk/deepseek</code> 3, and OpenTUI 0.4.3. A workspace must not introduce a
-          second major or minor line for these shared runtime libraries.
+          Root and workspace manifests use one compatible dependency line: <code>ai</code> 7.0.31
+          with <code>@ai-sdk/deepseek</code> 3.0.12 and <code>@ai-sdk/mcp</code> 2.0.15, plus
+          OpenTUI 0.4.3. A workspace must not introduce a second major or minor line for these
+          shared runtime libraries.
         </Callout>
       </Section>
 

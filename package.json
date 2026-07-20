@@ -19,8 +19,8 @@
     "build:bin": "mkdir -p dist && bun -e 'const{writeFileSync}=require(\"fs\");const pkg=require(\"./package.json\");writeFileSync(\"src/version.ts\",`export const VERSION = \\\"${pkg.version}\\\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^3.0.5",
-    "@ai-sdk/mcp": "^2.0.8",
+    "@ai-sdk/deepseek": "^3.0.12",
+    "@ai-sdk/mcp": "^2.0.15",
     "@atom-neo/core": "workspace:*",
     "@atom-neo/setup-wizard": "workspace:*",
     "@atom-neo/shared": "workspace:*",
@@ -29,7 +29,7 @@
     "@heroui/styles": "^3.2.2",
     "@opentui/core": "^0.4.3",
     "@opentui/react": "^0.4.3",
-    "ai": "^7.0.17",
+    "ai": "^7.0.31",
     "highlight.js": "^11.11.1",
     "opentui-spinner": "^0.0.7",
     "react": "^19.2.7",
