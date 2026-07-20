@@ -18,7 +18,7 @@ type ChatState = {
   activeAssistantId: string | null;
   busy: boolean;
   showPreparing: boolean;
-  tokenUsage: number;
+  contextTokens: number;
   todoItems: TodoItem[];
   toolInfos: ToolInfo[];
   mcpServers: MCPServerInfo[];
@@ -36,7 +36,7 @@ type ChatState = {
   handleToolGroupComplete: (total: number, success: number, failed: number, toolNames: string[]) => void;
 
   setBusy: (busy: boolean) => void;
-  setTokenUsage: (total: number) => void;
+  setContextTokens: (total: number) => void;
   setTodoItems: (todos: TodoItem[]) => void;
   setToolInfos: (infos: ToolInfo[]) => void;
   updateMCPConnected: (data: {
@@ -55,7 +55,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeAssistantId: null,
   busy: false,
   showPreparing: false,
-  tokenUsage: 0,
+  contextTokens: 0,
   todoItems: [],
   toolInfos: [],
   mcpServers: [],
@@ -216,7 +216,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
   }),
 
-  setTokenUsage: (total: number) => set({ tokenUsage: total }),
+  setContextTokens: (total: number) => set({ contextTokens: total }),
 
   setTodoItems: (todos: TodoItem[]) => set({ todoItems: todos }),
 

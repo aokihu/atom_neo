@@ -83,17 +83,20 @@ Task.Failed → checkpoint
   → releaseTask(taskId)
 ```
 
-## 5. Token Usage Tracking
+## 5. Token Usage 与 Context Tokens
 
 ```
-AI SDK streamResult.usage
-  → {inputTokens, outputTokens, totalTokens}
-    ↓
-Task.Completed → sessionContext.addTokenUsage(totalTokens) → checkpoint
+AI SDK streamResult.totalUsage.totalTokens
+  → tokenUsage.total（跨 Task 累计模型消费，仅用于统计）
 
-双重用途:
-1. LLM context: collect-context 注入 tokenUsage.total → system prompt
-2. TUI display: 侧栏显示 tokens / TOKEN_BUDGET ratio
+AI SDK streamResult.usage.totalTokens
+  → contextTokens（最后一个模型 Step 的当前窗口大小）
+
+Context Compress commit
+  → 根据压缩后的 Context Snapshot + 剩余可见 Messages 重算 contextTokens
+
+TUI 侧栏只显示 contextTokens / contextLimit。禁止把累计 tokenUsage.total 当作当前 Context
+占用率，否则它会跨 Task 永久增长，压缩后也不会下降。
 ```
 
 ---

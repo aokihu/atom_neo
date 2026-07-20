@@ -9,6 +9,7 @@ import {
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { ContextService } from "../../context/context-service";
 import type { SessionPersistenceService } from "../../session/persistence-service";
+import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
 
 export function registerContextCompressElements(): void {
   registerElement("compress-input", CompressInputElement);
@@ -43,5 +44,12 @@ export function contextCompressPipeline(deps: {
       orchestrator: deps.orchestrator,
       contextService: deps.contextService,
       persistence: deps.persistence,
+      workspaceId: deps.sandbox,
+      inputBudget: Math.max(
+        1,
+        (deps.configContextLimit ?? DEFAULT_CONTEXT_LIMIT)
+          - (deps.maxTokens ?? DEFAULT_MAX_TOKENS)
+          - CONTEXT_RESERVE,
+      ),
     });
 }

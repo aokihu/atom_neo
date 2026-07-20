@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { WsMessages } from "@atom-neo/shared";
+import { TaskFailureCodes, WsMessages } from "@atom-neo/shared";
 import { TuiClient } from "./ws-client";
 
 class FakeWebSocket {
@@ -200,6 +200,31 @@ describe("TuiClient task correlation", () => {
     });
 
     await expect(request).rejects.toMatchObject({ name: "TaskCancelledError" });
+    client.close();
+  });
+
+  test("preserves API_KEY_INVALID for TUI error presentation", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    globalThis.fetch = (async () => Response.json({ taskId: "root-1" })) as unknown as typeof fetch;
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId: "s1" });
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    socket.emit(WsMessages.Server.SessionReady, { sessionId: "s1" });
+    await connected;
+
+    const request = client.send("invalid key");
+    await nextTurn();
+    socket.emit(WsMessages.Server.TaskFailed, {
+      taskId: "conversation-1",
+      rootTaskId: "root-1",
+      code: TaskFailureCodes.ApiKeyInvalid,
+      error: "provider rejected credentials",
+    });
+
+    await expect(request).rejects.toMatchObject({
+      name: "ApiKeyInvalidError",
+      code: TaskFailureCodes.ApiKeyInvalid,
+    });
     client.close();
   });
 });

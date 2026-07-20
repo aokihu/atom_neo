@@ -12,6 +12,22 @@ export default function ContextCompressPage({ content, title, description, categ
         readTime={Math.max(1, Math.ceil(content.split(/\s+/).length / 200))}
       />
 
+      <Callout type="info" title="压缩对象只有 Context 和 Messages">
+        Context Compress 不搜索、不读取也不压缩 Memory。手动 /compact 完成 checkpoint 与清理后直接结束，
+        不会为了汇报结果启动普通 Conversation。
+      </Callout>
+
+      <Section title="触发来源与恢复边界">
+        <ComparisonTable
+          headers={["trigger", "来源", "resumeConversation", "完成后的行为"]}
+          rows={[
+            [<code>manual</code>, "用户执行 /compact", <Badge color="green">false</Badge>, "安静结束，不启动 Memory / History 工具链"],
+            [<code>token-overflow</code>, "Conversation 上下文溢出", <Badge color="orange">true</Badge>, "恢复被中断的原任务"],
+            [<code>context-pressure</code>, "Evaluator 检测到上下文压力", <Badge color="orange">true</Badge>, "压缩后继续原任务"],
+          ]}
+        />
+      </Section>
+
       <Section title="Pipeline 数据流">
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
           {[
@@ -40,10 +56,13 @@ export default function ContextCompressPage({ content, title, description, categ
       ├─ archiveError → finalizing → stop
       └─ archiveReceipt → summarizing
           ├─ summaryError → finalizing → stop
-          └─ summary → finalizing → checkpoint → continue`} />
+          └─ summary → finalizing → checkpoint
+              ├─ manual → complete
+              └─ overflow / pressure → continue`} />
         <ComparisonTable
           headers={["字段", "用途", "安全意义"]}
           rows={[
+            [<code>request</code>, "触发来源与是否恢复 Conversation", "阻止手动 compact 进入 Memory / History 工具链"],
             [<code>archiveMessages</code>, "归档与删除的同一批原始消息", "禁止先过滤再按数量删除"],
             [<code>summaryMessages</code>, "摘要可见的 user/assistant 消息", "内部消息仍保留在归档"],
             [<code>archiveReceipt</code>, "归档分段回执", "只有成功时才更新索引"],
@@ -81,7 +100,22 @@ message-latest.jsonl    ← 仍在 Session 中的最近消息`} />
             ["继续普通对话", "Snapshot 中的累计摘要 + 最近消息"],
             ["查找原始决策", <code>search_history</code>],
             ["核对精确原文", <code>read_history</code>],
-            ["压缩后续写", "专用“从截断处继续”指令，不重复原始用户请求"],
+            ["自动压缩后续写", "专用“从截断处继续”指令，不重复原始用户请求"],
+            ["手动 /compact", "只提交 Context / Messages 变更，不续写"],
+          ]}
+        />
+      </Section>
+
+      <Section title="压缩日志">
+        <ComparisonTable
+          headers={["阶段", "关键字段", "回答的问题"]}
+          rows={[
+            ["Request", <code>trigger, target, resumeConversation</code>, "为什么压缩、压缩什么、是否续写"],
+            ["Plan", <code>contextTokens, totalMessages, visibleMessages, safeCount</code>, "输入规模和安全边界是什么"],
+            ["Archive", <code>archiveId, count, fromSeq, toSeq</code>, "哪些 Messages 被归档"],
+            ["Summary", <code>summaryMessages, inputChars, summaryLen, maxTokens</code>, "哪些内容参与 Context 摘要"],
+            ["Commit", <code>removedMessages, remainingMessages, contextSummaryUpdated</code>, "Context / Messages 实际发生了什么"],
+            ["Tokens", <code>previousContextTokens, snapshotTokens, messageTokens, contextTokens</code>, "压缩后当前窗口降到了多少"],
           ]}
         />
       </Section>

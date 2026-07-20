@@ -115,7 +115,7 @@ class TaskEngine {
 `finalize` 收到该标记后计算动态压缩比并通过 `orchestrator.scheduleCompress()` 触发上下文压缩：
 
 ```typescript
-compressRatio = max(0, (tokenUsage / effectiveLimit - 0.8) * 5);
+compressRatio = max(0, (contextTokens / effectiveLimit - 0.8) * 5);
 session.compressing = true;  // 单锁防重复
 ```
 
@@ -356,6 +356,19 @@ function errorCodeToHttpStatus(code: APIErrorCode): number {
 ```
 
 ## 11. Structured Diagnostic Logging
+
+### Provider 401 → TUI 错误 Modal
+
+Conversation 中的模型 Provider 401 不是可恢复的空响应：
+
+1. `stream-llm` 保留 `errorStatusCode: 401`，不重试凭据；
+2. `finalize` 先释放未被模型接受的 Context Snapshot，再抛出带 `code = "API_KEY_INVALID"` 的错误；
+3. `TaskEngine` 将当前 Task 标记为 failed，Core 通过当前 Session 广播 `event.task.failed`；
+4. TUI 按 `rootTaskId` 结束对应 pending 请求，并显示 `API Key Invalid` Modal；
+5. Modal 关闭前 InputBar 失焦，用户确认后恢复输入。
+
+只有稳定 code `API_KEY_INVALID` 触发该 Modal。一般网络错误、超时及其他 Provider 错误仍沿用
+普通错误消息，避免把服务故障误报为凭据错误。
 
 ### BusEvents.Element.Data
 

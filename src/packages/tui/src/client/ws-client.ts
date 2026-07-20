@@ -3,12 +3,12 @@ type ReasonCallback = (delta: string, offset: number) => void;
 type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
 type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
 type ToolGroupCompleteCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
-type TokenUsageCallback = (total: number) => void;
+type ContextTokensCallback = (total: number) => void;
 type BusyChangeCallback = (busy: boolean) => void;
 type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: string[] }[]) => void;
 type MCPConnectedCallback = (data: { servers: { name: string; online: boolean; toolCount: number }[]; toolInfos: { name: string; source: string; description: string; online: boolean }[] }) => void;
 
-import { WsMessages } from "@atom-neo/shared";
+import { TaskFailureCodes, WsMessages } from "@atom-neo/shared";
 
 type PendingRequest = {
   resolve: (text: string) => void;
@@ -16,6 +16,17 @@ type PendingRequest = {
   text: string;
   rootTaskId: string;
 };
+
+export class TuiTaskError extends Error {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+    if (code === TaskFailureCodes.PipelineAborted) this.name = "TaskCancelledError";
+    if (code === TaskFailureCodes.ApiKeyInvalid) this.name = "ApiKeyInvalidError";
+  }
+}
 
 export class TuiClient {
   #url: string;
@@ -28,7 +39,7 @@ export class TuiClient {
   #onTool?: ToolCallback;
   #onToolStep?: ToolStepCallback;
   #onToolGroupComplete?: ToolGroupCompleteCallback;
-  #onTokenUsage?: TokenUsageCallback;
+  #onContextTokens?: ContextTokensCallback;
   #onBusyChange?: BusyChangeCallback;
   #onMCPStatus?: MCPStatusCallback;
   #onMCPConnected?: MCPConnectedCallback;
@@ -98,8 +109,8 @@ export class TuiClient {
               done.resolve(done.text);
             }
           }
-          const tu = p.tokenUsage;
-          if (tu) this.#onTokenUsage?.(tu.total);
+          const contextTokens = p.contextTokens ?? p.tokenUsage?.total;
+          if (typeof contextTokens === "number") this.#onContextTokens?.(contextTokens);
         },
         [WsMessages.Server.TaskFailed]: (p) => {
           const rootTaskId = p.rootTaskId ?? p.taskId;
@@ -107,8 +118,7 @@ export class TuiClient {
           if (index < 0) return;
           const pending = this.#pending.splice(index, 1)[0];
           const err = p.error ?? "Unknown error";
-          const error = new Error(String(err));
-          if (p.code === "PIPELINE_ABORTED") error.name = "TaskCancelledError";
+          const error = new TuiTaskError(String(err), typeof p.code === "string" ? p.code : undefined);
           pending.reject(error);
         },
         [WsMessages.Server.SessionTaskActive]: (p) => {
@@ -162,7 +172,7 @@ export class TuiClient {
   onTool(cb: ToolCallback): void { this.#onTool = cb; }
   onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
   onToolGroupComplete(cb: ToolGroupCompleteCallback): void { this.#onToolGroupComplete = cb; }
-  onTokenUsage(cb: TokenUsageCallback): void { this.#onTokenUsage = cb; }
+  onContextTokens(cb: ContextTokensCallback): void { this.#onContextTokens = cb; }
   onBusyChange(cb: BusyChangeCallback): void { this.#onBusyChange = cb; }
   onMCPStatus(cb: MCPStatusCallback): void { this.#onMCPStatus = cb; }
   onMCPConnected(cb: MCPConnectedCallback): void { this.#onMCPConnected = cb; }

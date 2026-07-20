@@ -6,14 +6,24 @@ import {
   pruneConsumedTransientTools,
   resolveModelInput,
   selectActiveToolsForStep,
+  resolveTokenMetrics,
   shouldPersistToolResult,
   summarizeMemoryRead,
   summarizeMemorySearch,
   summarizeSkillDiscovery,
   wrapMCPAiTools,
 } from "./stream-llm";
+
 import { ContextService } from "../../../context/context-service";
 import { makeBus } from "../../test-helpers";
+import { ToolCallLedger } from "../../../tools/governance";
+
+test("keeps cumulative model usage separate from the current context window", () => {
+  expect(resolveTokenMetrics(
+    { totalTokens: 200 },
+    { totalTokens: 1_000 },
+  )).toEqual({ contextTokens: 200, totalUsageTokens: 1_000 });
+});
 
 const availableToolNames = [
   "read", "write", "search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
@@ -39,7 +49,7 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
   const wrapped = wrapMCPAiTools({
     weather: { execute: async () => ({ temperature: 20 }) },
     broken: { execute: async () => { throw new Error("offline"); } },
-  }, () => {}, { count: 0 }, statuses);
+  }, () => {}, { count: 0 }, statuses, { current: new ToolCallLedger({ maxExecutions: 10 }) });
 
   expect(await wrapped.weather.execute({})).toEqual({ temperature: 20 });
   expect(statuses.get("weather")).toEqual([{
@@ -55,11 +65,28 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
   }]);
 });
 
+test("wrapMCPAiTools blocks duplicate execution through the shared ledger", async () => {
+  let executions = 0;
+  const statuses = new Map<string, any[]>();
+  const wrapped = wrapMCPAiTools({
+    weather: { execute: async () => ({ temperature: ++executions }) },
+  }, () => {}, { count: 0 }, statuses, { current: new ToolCallLedger({ maxExecutions: 10 }) });
+
+  expect(await wrapped.weather.execute({ city: "Hangzhou" })).toEqual({ temperature: 1 });
+  expect(JSON.parse(await wrapped.weather.execute({ city: "Hangzhou" }))).toMatchObject({
+    status: "blocked",
+    reason: "duplicate_request",
+  });
+  expect(executions).toBe(1);
+  expect(statuses.get("weather")?.at(-1)).toMatchObject({
+    ok: false,
+    error: "TOOL_GOVERNANCE_BLOCKED [duplicate_request]",
+  });
+});
+
 function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0]> = {}) {
   return selectActiveToolsForStep({
-    taskIntent: "conversation",
     availableToolNames,
-    mcpToolNames: ["mcp_weather"],
     memorySearchAttemptCount: 0,
     memorySearchFound: false,
     memorySearchUnavailable: false,
@@ -167,17 +194,21 @@ describe("selectActiveToolsForStep", () => {
     expect(select({ hasSkillContext: true }).activeTools).toContain("webfetch");
   });
 
-  test("keeps webfetch visible for every intent", () => {
-    for (const taskIntent of ["conversation", "question", "creative", "instruction"]) {
-      const activeTools = select({ taskIntent }).activeTools;
-      expect(activeTools).toContain("webfetch");
-      expect(activeTools).toContain("search_history");
-      expect(activeTools).toContain("read_history");
-    }
+  test("keeps webfetch and specialized tools visible", () => {
+    const activeTools = select().activeTools;
+    expect(activeTools).toContain("webfetch");
+    expect(activeTools).toContain("search_history");
+    expect(activeTools).toContain("read_history");
+    expect(activeTools).toContain("bash");
+    expect(activeTools).toContain("write");
   });
 
-  test("makes every Skill tool active for information questions", () => {
-    const selection = select({ taskIntent: "question", memorySearchAttemptCount: 1, memorySearchFound: true });
+  test("keeps every registered tool visible instead of filtering by intent", () => {
+    expect(select().activeTools).toEqual([...new Set(availableToolNames)]);
+  });
+
+  test("keeps every Skill tool active", () => {
+    const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
 
     for (const name of ["skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload"]) {
       expect(selection.activeTools).toContain(name);

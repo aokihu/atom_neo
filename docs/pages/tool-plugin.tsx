@@ -213,6 +213,35 @@ export class ToolRegistry {
 }`} />
       </Section>
 
+      <Section title="通用 Tool 调用治理">
+        <Callout type="info" title="不重复注入 Tool Catalog">
+          Runtime 传入 Conversation Pipeline 的所有 Tool 继续由 AI SDK 原生 <code>tools</code> 字段暴露。
+          <code>ToolCallLedger</code> 位于 Tool 的 <code>execute</code> 包装层，只治理执行，不复制 Tool description 或 input schema。
+        </Callout>
+        <CodeBlock lang="text" code={`全部 Tool → AI SDK tools → 模型 Tool Call
+                              ↓
+                     ToolCallLedger.begin()
+                       ├─ execute → 记录结果与进展
+                       └─ blocked → 返回紧凑治理结果
+                              ↓
+        prepareStep: toolChoice = none（需要收尾时）`} />
+        <ComparisonTable
+          headers={["规则", "第一阶段行为", "边界"]}
+          rows={[
+            ["工具可见性", "普通步骤暴露 Pipeline 收到的全部 Tool", "ToolGuard 等执行边界保持不变"],
+            ["相同调用", "同一进展窗口内只执行一次", "不同 Tool 成功后允许重新读取变化资源"],
+            ["无进展", "失败或拦截连续 3 次后收尾", "成功结果即视为通用进展"],
+            ["调用预算", "真实执行次数最多为本次 maxSteps", "AI SDK stopWhen 仍是 step 硬上限"],
+            ["循环收尾", <><code>prepareStep</code> 返回 <code>toolChoice: none</code></>, "保留一次正常文本回答"],
+            ["WebFetch 专项", "本阶段不处理", "URL、正文质量和相似度在第二阶段实现"],
+          ]}
+        />
+        <Callout type="warn" title="通用进展不是内容质量">
+          通用层只知道 Tool 是否成功执行。WebFetch 返回 HTTP 成功但正文为空、重复或被 CAPTCHA 阻断时，
+          仍需要后续 WebFetch 专项分类才能判定为无信息增量。
+        </Callout>
+      </Section>
+
       {/* ── MCP Tool Adapter ── */}
       <Section title="MCP 工具适配器">
         <CodeBlock lang="typescript" code={`// src/packages/core/src/tools/adapters/mcp-tool.ts

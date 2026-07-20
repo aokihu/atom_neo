@@ -1,14 +1,18 @@
 # Context Compress Pipeline
 
-> **Purpose**: Token 超限自动压缩 — 归档旧消息到磁盘、生成 LLM 摘要、清理 session、恢复对话。
+> **Purpose**: 压缩 Context 与 Messages — 归档旧消息、生成累计摘要、清理 Session，并按触发来源决定是否恢复对话。
 
 ## 职责
 
-当对话上下文接近 token 上限时，将旧消息归档到磁盘、生成 LLM 摘要、清理 session 消息，然后恢复对话。
+对 Session 的 Context 和 Messages 做压缩：将旧消息归档到磁盘、生成累计对话摘要、更新
+Context 条目并清理 Session 消息。压缩管线不搜索或读取 Memory，也不把 Memory 作为压缩对象。
+
+只有为了恢复被 Token overflow 或 Evaluator 中断的原任务时，压缩完成后才重新调度
+Conversation；用户手动执行 `/compact` 时安静结束，不启动 Conversation、Memory 或 History 工具链。
 
 ## 触发方式
 
-两种触发路径：
+三种触发路径：
 
 ```
 1. conversation pipeline → finalize (tokenOverflow)
@@ -18,9 +22,13 @@
          → pipelineBuilders["context-compress"] → contextCompressPipeline().build(bus)
 
 2. follow-up-evaluator pipeline → evaluate-finalize
-     ├── tokenUsage.total > contextLimit * 80% && health !== "stuck"
+     ├── contextTokens > effectiveLimit * 80% && health !== "stuck"
      └── → orchestrator.scheduleCompress() → TaskEngine
          → compress 先执行 → conversation 再执行 (拿到压缩后的 session)
+
+3. WebSocket `/compact`
+     └── → orchestrator.scheduleCompress(trigger="manual", resumeConversation=false)
+         → 只处理 Context / Messages，完成后不恢复 Conversation
 ```
 
 > **去重机制**：使用 `session.compressing` 单锁，压缩期间全周期覆盖（compressing=true）。conversation finalize 和 evaluator finalize 如果在 `compressing===true` 时触发压缩会被跳过。
@@ -39,7 +47,7 @@ compress-input (source)
 | 1 | `compress-input` | source | 从 Session 原始消息中选择完整前缀；可见 user/assistant 消息单独用于摘要 |
 | 2 | `compress-archive` | transform | 通过 `SessionPersistenceService` 可靠写入不可变 `message-{n}.jsonl`；失败时停止提交 |
 | 3 | `compress-summarize` | transform | 使用“旧累计摘要 + 本次可见消息”生成新的累计摘要 |
-| 4 | `compress-finalize` | sink | checkpoint latest/context/session，成功后按 `seq` 清理内存前缀并恢复原 Conversation |
+| 4 | `compress-finalize` | sink | checkpoint latest/context/session，成功后按 `seq` 清理内存前缀；仅自动恢复场景续跑原 Conversation |
 
 ## FlowState
 
@@ -50,6 +58,10 @@ type CompressFlowState = {
   mode: CompressMode;
   task: any;
   session: any;             // 含 compressRatio, compressing, compressRetry
+  request: {
+    trigger: "manual" | "token-overflow" | "context-pressure";
+    resumeConversation: boolean;
+  };
   archiveMessages: SessionMessage[]; // Session 原始消息的完整前缀
   summaryMessages: SessionMessage[]; // archiveMessages 中可见的 user/assistant
   archiveReceipt?: ArchiveReceipt;
@@ -69,7 +81,7 @@ initial
   → compress-input:      选择原始消息前缀                    → archiving
   → compress-archive:    写不可变 JSONL                     → summarizing
   → compress-summarize:  旧摘要 + 新消息生成累计摘要         → finalizing
-  → compress-finalize:   checkpoint + 清理 + 恢复原任务      → PipelineResult
+  → compress-finalize:   checkpoint + 清理 + 按触发来源决定是否恢复原任务 → PipelineResult
 ```
 
 ## 关键行为
@@ -79,7 +91,7 @@ initial
 `compressRatio` 由触发方（conversation/evaluator finalize）计算，存储在 `session.compressRatio`。`compress-input` 读取 ratio 选择策略：
 
 ```typescript
-compressRatio = max(0, (tokenUsage / effectiveLimit - 0.8) * 5);
+compressRatio = max(0, (contextTokens / effectiveLimit - 0.8) * 5);
 // effectiveLimit = configContextLimit - maxTokens (保留输出空间)
 ```
 
@@ -135,6 +147,22 @@ archiveMessages > 0
   → 按 seq 删除成功归档的内存消息
   → 使用专用“从截断处继续”指令恢复 Conversation，避免重复注入原始用户请求
 ```
+
+其中最后一步只适用于 `token-overflow` 和 `context-pressure`。`manual` 压缩在 checkpoint 与清理
+成功后直接完成，禁止为了汇报压缩结果而启动一轮普通 Conversation。
+
+### 日志边界
+
+压缩日志必须能独立回答以下问题，不依赖后续 Conversation 日志：
+
+- 谁触发了压缩：`manual`、`token-overflow` 或 `context-pressure`
+- 压缩目标：固定为 `context+messages`
+- 输入规模：Session 消息总数、可见消息数、Context Token、safe boundary
+- 归档范围：archive id、消息数、起止 seq
+- 摘要范围：参与摘要的消息数、输入字符数、摘要字符数和摘要上限
+- 提交结果：删除消息数、剩余消息数、Context summary/index 是否更新
+- Token 重算：压缩前 Context Token、Snapshot Token、剩余 Messages Token、压缩后 Context Token
+- 是否恢复 Conversation；手动压缩必须记录 `resumeConversation=false`
 
 归档路径：`{sandbox}/.atom/sessions/{safeSessionId}/message-{n}.jsonl`
 

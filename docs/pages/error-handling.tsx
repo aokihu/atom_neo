@@ -58,6 +58,21 @@ export default function ErrorHandlingPage({ content, title, description, categor
         </Callout>
       </Section>
 
+      <Section title="Provider 401 → TUI Error Modal">
+        <Callout type="warn" title="Invalid API Keys are terminal and visible">
+          When the model Provider returns HTTP 401, Conversation Finalize first releases the
+          unaccepted Context Snapshot, then throws an error with <code>code=&quot;API_KEY_INVALID&quot;</code>.
+          Core broadcasts a session-scoped <code>event.task.failed</code>; TUI correlates it by
+          <code>rootTaskId</code> and opens an <code>API Key Invalid</code> Modal. The rejected
+          credential is not retried automatically.
+        </Callout>
+        <CodeBlock lang="text" code={`Provider HTTP 401
+  → release Context Snapshot
+  → task.failed { code: "API_KEY_INVALID" }
+  → TUI rejects the matching pending request
+  → blocking API Key Invalid Modal`} />
+      </Section>
+
       {/* ── Section 2: Layer 1 – Element Errors ── */}
       <Section title="Layer 1: Element Errors">
         <Callout type="info" title="Responsibility">

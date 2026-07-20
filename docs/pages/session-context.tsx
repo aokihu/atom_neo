@@ -170,12 +170,17 @@ Independent WS Compact has no ownerTaskId → enqueue immediately`} />
         <ComparisonTable
           headers={["范围", "保留", "切换或结束时处理"]}
           rows={[
-            ["Session", "messages、inferenceFacts、tokenUsage、Context", "checkpoint 后可挂起和恢复"],
+            ["Session", "messages、inferenceFacts、tokenUsage、contextTokens、Context", "checkpoint 后可挂起和恢复"],
             ["Topic", "当前主题下的 TODO、Continuation、Skill Context", "Topic 变化时清理旧 Topic/Task/Step Context"],
             ["Task / Step", "本次执行的一次性输入与工具结果", "完成或失败后由 Context 生命周期卸载"],
             ["TUI", "只展示 Server 广播的 Session/Task/Token 状态", "不直接读写 Session 文件"],
           ]}
         />
+        <Callout type="info" title="累计消费与当前窗口分离">
+          <code>tokenUsage.total</code> 只记录跨 Task 累计模型消费；TUI 和压缩阈值使用
+          <code>contextTokens</code>。Compact 提交后，Core 根据新的 Context Snapshot 与剩余可见
+          Messages 重算 contextTokens，因此占用率会随压缩下降。
+        </Callout>
         <Callout type="info" title="双 ESC 取消执行中 Task">
           Session busy 时第一次按 <code>ESC</code> 显示取消提示；2 秒内再次按
           <code>ESC</code>，TUI 使用当前 <code>SessionTaskActive.taskId</code> 发送

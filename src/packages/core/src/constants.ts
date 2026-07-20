@@ -10,6 +10,9 @@ export const DEFAULT_CONTEXT_LIMIT = 131_072;
 /** Default max output tokens when not specified in config */
 export const DEFAULT_MAX_TOKENS = 4096;
 
+/** Reserved input space for tool schemas and runtime framing. */
+export const CONTEXT_RESERVE = 4096;
+
 export function resolveContextLimit(
   providerModel: string,
   configLimit?: number,

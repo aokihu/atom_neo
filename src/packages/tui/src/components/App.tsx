@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useEffect, useCallback, useState } 
 import { useTerminalDimensions } from "@opentui/react";
 import "opentui-spinner/react";
 import { useChat } from "../hooks/useChat";
+import type { ChatClientError } from "../hooks/useChat";
 import { useChatStore } from "../stores/chat";
 import { getTheme } from "../theme";
 import type { ServerInfo, ThemeColors, Message } from "../types";
@@ -18,10 +19,18 @@ import { useInputHistory } from "../stores/inputHistory";
 const SIDEBAR_MIN_WIDTH = 90;
 const FALLBACK_CONTEXT_LIMIT = 131_072;
 
-type ActiveModal = { kind: "confirm-clear" } | { kind: "confirm-quit" } | null;
+type ActiveModal =
+  | { kind: "confirm-clear" }
+  | { kind: "confirm-quit" }
+  | { kind: "error"; title: string; message: string }
+  | null;
 
 const MODAL_ACTIONS: ModalAction[] = [
   { key: "cancel", label: "Cancel", role: "cancel" },
+  { key: "ok", label: "OK", role: "confirm", variant: "primary" },
+];
+
+const ERROR_MODAL_ACTIONS: ModalAction[] = [
   { key: "ok", label: "OK", role: "confirm", variant: "primary" },
 ];
 
@@ -47,13 +56,22 @@ Keyboard shortcuts:
 
 export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
-  const { send, clearMessages, addMessage, compact, cancel } = useChat(url, undefined, serverInfo.toolInfos, serverInfo.mcpServerInfos);
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const showSidebar = width >= SIDEBAR_MIN_WIDTH;
   const contextLimit = serverInfo.contextLimit ?? FALLBACK_CONTEXT_LIMIT;
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [taskHint, setTaskHint] = useState<string | null>(null);
+  const handleClientError = useCallback((error: ChatClientError) => {
+    setActiveModal({ kind: "error", title: error.title, message: error.message });
+  }, []);
+  const { send, clearMessages, addMessage, compact, cancel } = useChat(
+    url,
+    undefined,
+    serverInfo.toolInfos,
+    serverInfo.mcpServerInfos,
+    handleClientError,
+  );
 
   useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
 
@@ -96,13 +114,18 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
         {activeModal && (
           <Modal
             open
-            title={activeModal.kind === "confirm-clear" ? "Clear conversation?" : "Exit Atom Neo?"}
+            title={activeModal.kind === "confirm-clear"
+              ? "Clear conversation?"
+              : activeModal.kind === "confirm-quit"
+                ? "Exit Atom Neo?"
+                : activeModal.title}
             placement="center"
             width={56}
-            actions={MODAL_ACTIONS}
-            defaultActionKey="cancel"
+            actions={activeModal.kind === "error" ? ERROR_MODAL_ACTIONS : MODAL_ACTIONS}
+            defaultActionKey={activeModal.kind === "error" ? "ok" : "cancel"}
             onClose={closeModal}
             onAction={(key) => {
+              if (activeModal.kind === "error") { closeModal(); return; }
               if (key === "cancel") { closeModal(); return; }
               if (activeModal.kind === "confirm-clear") { clearMessages(); closeModal(); return; }
               if (activeModal.kind === "confirm-quit") { closeModal(); onQuit?.(); }
@@ -111,7 +134,9 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
             <text fg={theme.colors.text.secondary}>
               {activeModal.kind === "confirm-clear"
                 ? "This will remove all messages from the current TUI view."
-                : "The current terminal UI session will be closed."}
+                : activeModal.kind === "confirm-quit"
+                  ? "The current terminal UI session will be closed."
+                  : activeModal.message}
             </text>
           </Modal>
         )}

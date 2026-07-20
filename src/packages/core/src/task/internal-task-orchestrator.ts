@@ -1,6 +1,6 @@
 import { createTaskItem } from "../task-factory";
 import { TaskSource, BusEvents } from "@atom-neo/shared";
-import type { TaskItem, TaskOrigin, TaskPayload, PipelineEventBus, FullEventMap } from "@atom-neo/shared";
+import type { ContextCompressRequest, TaskItem, TaskOrigin, TaskPayload, PipelineEventBus, FullEventMap } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
 
 type StagedTask = { task: TaskItem; onEnqueue?: (task: { id: string }) => void };
@@ -66,8 +66,20 @@ export class InternalTaskOrchestrator {
     this.#schedule("follow-up-evaluator", { sessionId, chatId, parentTaskId, ownerTaskId });
   }
 
-  scheduleCompress(sessionId: string, chatId: string, parentTaskId: string, payload?: TaskPayload[], ownerTaskId?: string): void {
-    this.#schedule("context-compress", { sessionId, chatId, parentTaskId, payload, ownerTaskId });
+  scheduleCompress(
+    sessionId: string,
+    chatId: string,
+    parentTaskId: string,
+    request: ContextCompressRequest,
+    ownerTaskId?: string,
+  ): void {
+    this.#schedule("context-compress", {
+      sessionId,
+      chatId,
+      parentTaskId,
+      payload: [{ type: "context_compress_request", data: request }],
+      ownerTaskId,
+    });
   }
 
   scheduleFollowUp(sessionId: string, chatId: string, parentTaskId: string, ownerTaskId?: string): void {

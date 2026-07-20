@@ -85,7 +85,8 @@ describe("compress-summarize", () => {
     const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, apiKey: "", model: "test" });
     const result = await (el as any).doProcess({
       mode: "summarizing", task: {}, session: null,
-      archiveMessages: [], summaryText: "hello",
+      request: { trigger: "manual", resumeConversation: false },
+      archiveMessages: [], summaryMessages: [], summaryText: "hello",
     });
     expect(result.mode).toBe("finalizing");
     expect(result.summary).toBe("");
@@ -97,7 +98,8 @@ describe("compress-summarize", () => {
     const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, apiKey: "sk-test", model: "test" });
     const result = await (el as any).doProcess({
       mode: "summarizing", task: {}, session: null,
-      archiveMessages: [], summaryText: "",
+      request: { trigger: "manual", resumeConversation: false },
+      archiveMessages: [], summaryMessages: [], summaryText: "",
     });
     expect(result.mode).toBe("finalizing");
   });
@@ -122,6 +124,7 @@ describe("compress-archive", () => {
       mode: "archiving",
       task: {},
       session: { sessionId: "s1" },
+      request: { trigger: "manual", resumeConversation: false },
       archiveMessages,
       summaryMessages: archiveMessages,
       summaryText: "raw",
@@ -162,6 +165,7 @@ describe("compress-archive", () => {
       mode: "archiving",
       task: {},
       session: { sessionId: "s1" },
+      request: { trigger: "manual", resumeConversation: false },
       archiveMessages: [{ role: "user", content: "raw", timestamp: 1, seq: 1 }],
       summaryMessages: [],
       summaryText: "",
@@ -174,7 +178,7 @@ describe("compress-archive", () => {
 });
 
 describe("compress-finalize", () => {
-  test("writes summary and schedules conversation", async () => {
+  test("writes summary and resumes an interrupted conversation", async () => {
     const bus = makeBus();
     const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
@@ -197,6 +201,7 @@ describe("compress-finalize", () => {
 
     await (el as any).doProcess({
       mode: "finalizing", task: { id: "t1", chatId: "c1", parentTaskId: "root" },
+      request: { trigger: "token-overflow", resumeConversation: true },
       session, archiveMessages, summaryMessages: archiveMessages, archiveReceipt, summaryText: "",
       summary: "test summary",
       keepCount: 5,
@@ -211,11 +216,73 @@ describe("compress-finalize", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("manual compact commits context and messages without starting conversation", async () => {
+    const bus = makeBus();
+    const events: Array<Record<string, unknown>> = [];
+    bus.on(BusEvents.Element.Data, event => events.push(event.payload));
+    const contextService = makeContextService(bus);
+    const capture = { enqueued: null as any };
+    const root = mkdtempSync(resolve(tmpdir(), "atom-compress-"));
+    const persistence = new SessionPersistenceService(root, contextService);
+    const session = new SessionContext("s1");
+    session.setContextTokens(100_000);
+    for (let i = 0; i < 3; i++) {
+      session.addMessage({ role: "assistant", content: `msg ${i}`, timestamp: i, visible: true });
+    }
+    const archiveMessages = [...session.messages.slice(0, 2)];
+    const archiveReceipt = persistence.archiveMessages("s1", archiveMessages)!;
+    const Ctor = resolveElement("compress-finalize");
+    const el = new Ctor({
+      name: "compress-finalize", kind: "sink", bus,
+      orchestrator: makeMockOrchestrator(capture) as any,
+      contextService,
+      persistence,
+    });
+
+    const result = await (el as any).doProcess({
+      mode: "finalizing",
+      task: { id: "t1", chatId: "c1", parentTaskId: "manual" },
+      request: { trigger: "manual", resumeConversation: false },
+      session,
+      archiveMessages,
+      summaryMessages: archiveMessages,
+      archiveReceipt,
+      summaryText: "",
+      summary: "manual summary",
+      summaryMaxTokens: 400,
+    });
+
+    expect(session.messages).toHaveLength(1);
+    expect(session.contextTokens).toBeLessThan(100_000);
+    expect(capture.enqueued).toBeNull();
+    expect(result.output).toContain("trigger=manual");
+    expect(result.output).toContain("resumeConversation=false");
+    expect(events).toContainEqual(expect.objectContaining({
+      step: "checkpoint committed",
+      trigger: "manual",
+      target: "context+messages",
+      removedMessages: 2,
+      remainingMessages: 1,
+      previousContextTokens: 100_000,
+      contextTokens: session.contextTokens,
+      resumeConversation: false,
+    }));
+    expect(events).toContainEqual(expect.objectContaining({
+      step: "completed without conversation resume",
+      trigger: "manual",
+      target: "context+messages",
+      resumeConversation: false,
+    }));
+    expect(persistence.restore("s1")?.contextTokens).toBe(session.contextTokens);
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("keeps every live message when checkpoint fails", async () => {
     const bus = makeBus();
     const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
     const session = new SessionContext("s1");
+    session.setContextTokens(500);
     for (let i = 0; i < 3; i++) {
       session.addMessage({ role: "assistant", content: `msg ${i}`, timestamp: i, visible: true });
     }
@@ -236,6 +303,7 @@ describe("compress-finalize", () => {
     await (el as any).doProcess({
       mode: "finalizing",
       task: { id: "t1", chatId: "c1" },
+      request: { trigger: "manual", resumeConversation: false },
       session,
       archiveMessages,
       summaryMessages: archiveMessages,
@@ -246,6 +314,7 @@ describe("compress-finalize", () => {
     });
 
     expect(session.messages).toHaveLength(3);
+    expect(session.contextTokens).toBe(500);
     expect(contextService.get("session", { sessionId: "s1" }, "conversation-summary")).toBeUndefined();
     expect(capture.enqueued).toBeNull();
   });
@@ -269,6 +338,7 @@ describe("compress-finalize", () => {
     const result = await (el as any).doProcess({
       mode: "finalizing",
       task: { id: "t1" },
+      request: { trigger: "manual", resumeConversation: false },
       session,
       archiveMessages: [],
       summaryMessages: [],
@@ -304,6 +374,7 @@ describe("compress-finalize", () => {
     await (el as any).doProcess({
       mode: "finalizing",
       task: { id: "t1" },
+      request: { trigger: "manual", resumeConversation: false },
       session,
       archiveMessages,
       summaryMessages: archiveMessages,

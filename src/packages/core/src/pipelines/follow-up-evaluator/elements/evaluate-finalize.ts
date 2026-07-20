@@ -87,7 +87,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
       this.#contextService.remove(scope, owner, "model-upgrade");
     }
 
-    const tu = input.session?.tokenUsage?.total ?? 0;
+    const tu = input.session?.contextTokens ?? 0;
     const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
     const effectiveLimit = (this.#configContextLimit ?? DEFAULT_CONTEXT_LIMIT) - this.#maxTokens;
     if (tu > effectiveLimit * 0.8) {
@@ -100,6 +100,9 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
 
       this.report(BusEvents.Element.Data, {
         step: "token usage high, scheduling compress",
+        trigger: "context-pressure",
+        target: "context+messages",
+        resumeConversation: true,
         total: tu, effectiveLimit,
         compressRetry: input.session.compressRetry,
         compressRatio: input.session.compressRatio.toFixed(3),
@@ -108,7 +111,7 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
         input.session.sessionId,
         input.task.chatId,
         input.task.parentTaskId ?? input.task.id,
-        undefined,
+        { trigger: "context-pressure", resumeConversation: true },
         input.task.id,
       );
       return { type: PipelineResultType.Complete, task: input.task, output: `evaluator: health=${health}, compress scheduled` };

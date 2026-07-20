@@ -2,7 +2,7 @@ import { PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationChainAction, ConversationContinuationAction, FullEventMap } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
-import { BusEvents, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
+import { BusEvents, TaskFailureCodes, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource, TaskState } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -76,6 +76,13 @@ type CompletedResult = PipelineResult & {
 
 interface ServiceProvider {
   get<T>(name: string): T | undefined;
+}
+
+export function resolveTaskFailureCode(error: unknown, cancelled: boolean): string | undefined {
+  if (cancelled) return TaskFailureCodes.PipelineAborted;
+  return typeof (error as { code?: unknown } | null)?.code === "string"
+    ? (error as { code: string }).code
+    : undefined;
 }
 
 export type CoreDeps = {
@@ -385,6 +392,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         output: result.output ?? "",
         reasoningContent,
         tokenUsage: accumulated,
+        contextTokens: sessionStore.get(sid).contextTokens,
       };
       broadcaster.broadcastToSession(sid, WsMessages.Server.TaskCompleted, payload);
       broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
@@ -397,7 +405,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     orchestrator.discardTask(p.task.id);
     const cancelled = p.task.state === TaskState.CANCELLED;
     taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: p.task.state, error: String(p.error) });
-    const logContext = { taskId: p.task.id, error: substringWellFormed(String(p.error), 0, 200) };
+    const failureCode = resolveTaskFailureCode(p.error, cancelled);
+    const logContext = {
+      taskId: p.task.id,
+      error: substringWellFormed(String(p.error), 0, 200),
+      ...(failureCode ? { code: failureCode } : {}),
+    };
     if (cancelled) logger.info("task cancelled", logContext);
     else logger.error("task failed", logContext);
     const sid = p.task.sessionId;
@@ -408,7 +421,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
         taskId: p.task.id,
         rootTaskId: p.task.chainId,
-        ...(cancelled ? { code: "PIPELINE_ABORTED" } : {}),
+        ...(failureCode ? { code: failureCode } : {}),
         error: String(p.error),
       });
       broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {

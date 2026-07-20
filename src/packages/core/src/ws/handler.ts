@@ -77,7 +77,17 @@ export function createWsHandlers(ctx: ServerContext) {
           const sid = (ws as any).data?.sessionId;
           const cid = (ws as any).data?.chatId ?? "default";
           if (sid && ctx.orchestrator && !ctx.isStopping?.()) {
-            ctx.orchestrator.scheduleCompress(sid, cid, sid);
+            ctx.logger?.info("compact requested", {
+              sessionId: sid,
+              chatId: cid,
+              trigger: "manual",
+              target: "context+messages",
+              resumeConversation: false,
+            });
+            ctx.orchestrator.scheduleCompress(sid, cid, sid, {
+              trigger: "manual",
+              resumeConversation: false,
+            });
           }
         }
       } catch (err) {

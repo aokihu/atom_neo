@@ -5,6 +5,7 @@ export type {
   TaskItem,
   TaskOrigin,
   TaskPayload,
+  ContextCompressRequest,
   TaskToolCall,
   TaskToolReport,
   ToolReportFact,

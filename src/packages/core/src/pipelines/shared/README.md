@@ -14,6 +14,6 @@
 TokenRatioElement 通过 `registerSharedElements()` 挂载到 5 条 pipeline：
 conversation / prediction / follow-up-evaluator / context-compress / post-conversation。
 
-计算公式：`ratio = tokenUsage.total / (configContextLimit - maxTokens)`
+计算公式：`ratio = contextTokens / (configContextLimit - maxTokens)`。`tokenUsage.total` 是累计模型消费，不能用于 Context 压缩阈值。
 
 > 文档: [pipelines/conversation.md](../../../docs/pipelines/conversation.md) 第 13 节
