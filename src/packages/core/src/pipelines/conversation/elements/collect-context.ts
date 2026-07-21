@@ -1,10 +1,8 @@
 import { BaseElement, BusEvents } from "@atom-neo/shared";
 import type { PipelineEventBus, PipelineEventMap } from "@atom-neo/shared";
-import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
+import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { ContextService } from "../../../context/context-service";
 import type { ConversationFlowState } from "./types";
-
-const CONTEXT_RESERVE = 4096;
 
 export class CollectContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #contextService: ContextService;

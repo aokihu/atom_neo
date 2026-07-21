@@ -134,6 +134,7 @@ export type TaskCompletedPayload = {
   output: string;
   reasoningContent: string;
   tokenUsage: { total: number };
+  contextTokens: number;
 };
 
 export type TaskFailedPayload = {

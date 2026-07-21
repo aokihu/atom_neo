@@ -135,9 +135,9 @@ src/main.ts (入口)
   │
   ├── 8. Create services (src/services/)
   │     sm = new ServiceManager()
-  │     sm.register("runtime", runtime)
+  │     sm.register("network", new NetworkService())
   │     sm.register("agents-compiler", new AgentsCompilerService({ runtime }))
-  │     sm.startAll()
+  │     await sm.startAll()
   │
   └── 9. Mode dispatch
         ├── "core" → startCore({ port, host, logger, sm })

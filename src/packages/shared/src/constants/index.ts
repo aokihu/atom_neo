@@ -1,1 +1,1 @@
-export { BusEvents, WsMessages } from "./events";
+export { BusEvents, TaskFailureCodes, WsMessages } from "./events";

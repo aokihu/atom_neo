@@ -15,6 +15,7 @@ export type {
   TaskItem,
   TaskOrigin,
   TaskPayload,
+  ContextCompressRequest,
   TaskToolCall,
   TaskToolReport,
   ToolReportFact,
@@ -30,6 +31,13 @@ export type {
   MemoryScope,
   MemorySearchRequest,
   MemorySearchResult,
+  WebFetchMethod,
+  WebFetchRequest,
+  NetworkRequestOptions,
+  WebFetchResultCode,
+  WebFetchRateLimit,
+  WebFetchResponse,
+  NetworkServiceLike,
   ToolDefinition,
   ToolResult,
   ToolExecuteOptions,
@@ -117,7 +125,7 @@ export type { LogLevel, LogEntry, LogSink } from "./log";
 export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
 
 // ── Constants ──
-export { BusEvents, WsMessages } from "./constants";
+export { BusEvents, TaskFailureCodes, WsMessages } from "./constants";
 
 // ── Prompts ──
 export { PromptKey, initPromptRegistry, resolvePrompt, getRegistry } from "./prompts";

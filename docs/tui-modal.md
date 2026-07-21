@@ -198,3 +198,24 @@ const modalActions: ModalAction[] = [
 - 复用现有 `theme.colors`，不引入新颜色体系。
 - 命令面板复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。
 - 仅在 `open` 时拦截按键；关闭后 `InputBar` 自动恢复焦点。
+
+## API Key 无效错误框
+
+模型 Provider 返回 HTTP 401 时，Core 通过 `event.task.failed` 发送稳定错误码
+`API_KEY_INVALID`。`useChat` 不把该错误追加为普通 Chat Message，而是通知 `App.tsx` 打开：
+
+```
+┌──────────────────────────────────────────────────────┐
+│ API Key Invalid                                      │
+├──────────────────────────────────────────────────────┤
+│ The configured API key was rejected by the model     │
+│ provider. Update it and restart Atom Neo.             │
+├──────────────────────────────────────────────────────┤
+│                                               [ OK ] │
+└──────────────────────────────────────────────────────┘
+```
+
+- 仅提供 `OK` Action，`Enter` 或 `Esc` 均可关闭；
+- Modal 打开期间 `InputBar` 禁用；
+- 不显示被拒绝的 Key、Provider 响应体或其他敏感配置；
+- 只有 `API_KEY_INVALID` 使用 Modal，其他任务错误保持原有消息展示。

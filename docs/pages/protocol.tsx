@@ -128,6 +128,7 @@ content = content.substring(0, offset) + textDelta;`,
     output: string;
     reasoningContent: string;
     tokenUsage: { total: number };
+    contextTokens: number;
   };
 }`,
   taskFailed: `{
@@ -137,7 +138,7 @@ content = content.substring(0, offset) + textDelta;`,
   payload: {
     taskId: string;
     rootTaskId: string;  // Task chainId: external root, or this task when independent
-    code?: string;       // PIPELINE_ABORTED when cancelled by the user
+    code?: string;       // PIPELINE_ABORTED | API_KEY_INVALID | another stable code
     error: string;
   };
 }`,
@@ -209,6 +210,7 @@ Authorization: Bearer eyJhbG...
   gatewayClientAuth: `POST /gateway/status
 Authorization: Bearer 550e8400-e29b-41d4-a716-446655440000`,
   errorCodes: `"PIPELINE_ABORTED"          // Signal cancelled
+"API_KEY_INVALID"           // Model Provider rejected the API Key
 "ELEMENT_FAILED"            // Element threw an error
 "TOOL_PERMISSION_DENIED"    // Tool level exceeds permission
 "RATE_LIMIT_EXCEEDED"       // Gateway rate limit hit
@@ -404,6 +406,11 @@ export default function DocPage({ content, title, description, category }: DocPa
           that do not match a pending request.
         </p>
         <CodeBlock lang="typescript" code={examples.taskFailed} />
+        <Callout type="warn" title="Invalid model credentials are never silent">
+          A model Provider HTTP 401 becomes a terminal <code>task.failed</code> with
+          <code>code=&quot;API_KEY_INVALID&quot;</code> after the Context Snapshot is released.
+          TUI shows a blocking error Modal and does not retry the rejected credential.
+        </Callout>
 
         <h3 id={slugify("4.10 pong")}>4.10 pong</h3>
         <p>Response to the client <code>ping</code> event.</p>
@@ -467,6 +474,7 @@ export default function DocPage({ content, title, description, category }: DocPa
           headers={["Error Code", "Meaning"]}
           rows={[
             [<code>PIPELINE_ABORTED</code>, "Task cancelled via signal"],
+            [<code>API_KEY_INVALID</code>, "Model Provider rejected the configured API Key; TUI opens an error Modal"],
             [<code>ELEMENT_FAILED</code>, "Pipeline element threw an unhandled error"],
             [<code>TOOL_PERMISSION_DENIED</code>, "Required tool level exceeds user permission"],
             [<code>RATE_LIMIT_EXCEEDED</code>, "Gateway rate limit triggered"],

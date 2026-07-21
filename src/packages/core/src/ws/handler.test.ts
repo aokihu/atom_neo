@@ -119,4 +119,33 @@ describe("WebSocket session persistence", () => {
 
     expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("Task not found"))).toBe(true);
   });
+
+  test("manual compact logs its scope and never requests conversation resume", () => {
+    const scheduleCompress = mock(() => {});
+    const info = mock(() => {});
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      orchestrator: { scheduleCompress } as any,
+      logger: { info } as any,
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.Compact,
+      payload: {},
+    }));
+
+    expect(scheduleCompress).toHaveBeenCalledWith("url-session", "default", "url-session", {
+      trigger: "manual",
+      resumeConversation: false,
+    });
+    expect(info).toHaveBeenCalledWith("compact requested", {
+      sessionId: "url-session",
+      chatId: "default",
+      trigger: "manual",
+      target: "context+messages",
+      resumeConversation: false,
+    });
+  });
 });

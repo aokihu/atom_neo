@@ -44,7 +44,7 @@ export function Sidebar({ serverInfo, contextLimit }: SidebarProps) {
   const [uptime, setUptime] = useState(0);
   const startRef = useRef(Date.now());
   const [mcpExpanded, setMcpExpanded] = useState(false);
-  const tokenUsage = useChatStore(s => s.tokenUsage);
+  const contextTokens = useChatStore(s => s.contextTokens);
   const todoItems = useChatStore(s => s.todoItems);
   const toolInfos = useChatStore(s => s.toolInfos);
   const mcpServers = useChatStore(s => s.mcpServers);
@@ -57,7 +57,7 @@ export function Sidebar({ serverInfo, contextLimit }: SidebarProps) {
     return () => clearInterval(t);
   }, [uptime < 60]);
 
-  const ratio = Math.round((tokenUsage / Math.max(contextLimit, 1)) * 100);
+  const ratio = Math.round((contextTokens / Math.max(contextLimit, 1)) * 100);
   const builtinCount = toolInfos.filter(t => t.source === "builtin").length;
   const mcpTotal = mcpServers.length;
   const mcpOnline = mcpServers.filter(s => s.online).length;
@@ -79,11 +79,11 @@ export function Sidebar({ serverInfo, contextLimit }: SidebarProps) {
             <text fg={colors.text.secondary}>{`${builtinCount} builtin`}</text>
           </box>
           <box flexDirection="row">
-            <text fg={colors.text.muted} width={7}>Tokens</text>
+            <text fg={colors.text.muted} width={7}>Context</text>
             <text fg={ratio > 90 ? colors.status.error : ratio > 75 ? colors.status.warning : colors.status.success}>
-              {gauge(tokenUsage, contextLimit)}
+              {gauge(contextTokens, contextLimit)}
             </text>
-            <text fg={colors.text.secondary}> {pct(tokenUsage, contextLimit)}</text>
+            <text fg={colors.text.secondary}> {pct(contextTokens, contextLimit)}</text>
           </box>
         </box>
       </box>

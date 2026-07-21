@@ -14,6 +14,11 @@ import type { ConversationFlowState, MemorySearchStatus } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { ContextService } from "../../../context/context-service";
+import {
+  formatToolGovernanceBlock,
+  ToolCallLedger,
+} from "../../../tools/governance";
+import type { ToolCallDecision } from "../../../tools/governance";
 
 type WebfetchGuardReason =
   | "explicit_url"
@@ -91,6 +96,17 @@ export function containsExplicitUrl(messages: ReadonlyArray<{ role: string; cont
 type MemorySearchStep = {
   toolResults?: Array<{ toolName: string; input: unknown; output: unknown }>;
 };
+
+export function resolveTokenMetrics(
+  usage?: { totalTokens?: number },
+  totalUsage?: { totalTokens?: number },
+): { contextTokens: number; totalUsageTokens: number } {
+  const contextTokens = usage?.totalTokens ?? 0;
+  return {
+    contextTokens,
+    totalUsageTokens: totalUsage?.totalTokens ?? contextTokens,
+  };
+}
 
 export function pruneConsumedTransientTools(messages: ModelMessage[]): ModelMessage[] {
   return pruneMessages({
@@ -202,9 +218,7 @@ export function summarizeSkillDiscovery(steps: MemorySearchStep[]): { checked: b
 }
 
 export function selectActiveToolsForStep(params: {
-  taskIntent: string;
   availableToolNames: string[];
-  mcpToolNames: string[];
   memorySearchAttemptCount: number;
   memorySearchFound: boolean;
   memorySearchUnavailable: boolean;
@@ -232,16 +246,8 @@ export function selectActiveToolsForStep(params: {
   else webfetchGuardReason = "memory_search_required";
   const webfetchGuardMessage = resolveWebfetchGuardMessage(webfetchGuardReason);
   const webfetchAllowed = canExecuteWebfetch(webfetchGuardReason);
-  const selected = [
-    ...getTaskToolNames(params.taskIntent),
-    ...params.mcpToolNames,
-    "search_history",
-    "read_history",
-    "webfetch",
-  ];
-  const available = new Set(params.availableToolNames);
   return {
-    activeTools: [...new Set(selected)].filter((name) => available.has(name)),
+    activeTools: [...new Set(params.availableToolNames)],
     webfetchAllowed,
     webfetchGuardReason,
     ...(webfetchGuardMessage ? { webfetchGuardMessage } : {}),
@@ -264,6 +270,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #mcpToolNamesCount = 0;
   #toolResults = new Map<string, ToolExecutionStatus[]>();
   #toolGuardState = { current: {} as ToolGuardState };
+  #toolGovernance: { current: ToolCallLedger };
   #skillService?: SkillServiceLike;
   #contextService: ContextService;
 
@@ -297,9 +304,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
-    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGuardState, this.#session);
+    this.#toolGovernance = { current: new ToolCallLedger({ maxExecutions: this.#maxSteps }) };
+    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGuardState, this.#toolGovernance, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
-    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults);
+    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
     this.#mcpToolsRef = params.mcpToolsRef;
     this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
     this.#aiTools = { ...builtinTools, ...wrappedMCP };
@@ -320,23 +328,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     };
 
     const { userMessages, systemText } = resolveModelInput(input);
+    this.#toolGovernance.current = new ToolCallLedger({ maxExecutions: this.#maxSteps });
     const mcpCurrent = this.#mcpToolsRef?.current ?? {};
     if (Object.keys(mcpCurrent).length > this.#mcpToolNamesCount) {
-      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults);
+      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
       this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
       Object.assign(this.#aiTools, wrappedMCP);
     }
     const tools = Object.keys(this.#aiTools);
-    const mcpToolNames = Object.keys(mcpCurrent);
     const hasExplicitUrl = containsExplicitUrl(userMessages);
     const hasSkillContext = Boolean(input.skillContext?.trim());
     const automaticQuery = this.#session?.pendingPrediction?.memoryQuery ?? "";
     const automaticStatus = input.memorySearchStatus ?? "not_started";
     const initialMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps: [] });
     const initialToolSelection = selectActiveToolsForStep({
-      taskIntent: this.#taskIntent,
       availableToolNames: tools,
-      mcpToolNames,
       memorySearchAttemptCount: initialMemorySearch.attemptCount,
       memorySearchFound: initialMemorySearch.found,
       memorySearchUnavailable: initialMemorySearch.unavailable,
@@ -351,6 +357,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     });
     this.#toolGuardState.current = toWebfetchGuardState(initialToolSelection);
     this.#toolResults.clear();
+    const initialGovernance = this.#toolGovernance.current.snapshot();
     this.report(BusEvents.Element.Data, {
       step: "starting LLM call",
       model: this.#model,
@@ -366,6 +373,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       memoryRead: false,
       webfetchAllowed: initialToolSelection.webfetchAllowed,
       webfetchGuardReason: initialToolSelection.webfetchGuardReason,
+      toolMaxExecutions: initialGovernance.maxExecutions,
+      toolMaxConsecutiveNoProgress: initialGovernance.maxConsecutiveNoProgress,
       snapshotId: input.contextSnapshot?.id ?? "",
     });
 
@@ -400,6 +409,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         const STREAM_TIMEOUT_MS = resolveTimeout(difficulty);
         const abortController = new AbortController();
         let reportedToolSelection = "";
+        let reportedGovernanceStop = "";
         let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
         let latestPreparedStep = -1;
         const completeStep = (stepNumber: number) => {
@@ -429,9 +439,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           const memoryRead = summarizeMemoryRead(steps);
           const skillDiscovery = summarizeSkillDiscovery(steps);
           const selection = selectActiveToolsForStep({
-            taskIntent: this.#taskIntent,
             availableToolNames: tools,
-            mcpToolNames,
             memorySearchAttemptCount: memorySearch.attemptCount,
             memorySearchFound: memorySearch.found,
             memorySearchUnavailable: memorySearch.unavailable,
@@ -445,6 +453,15 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             hasExplicitUrl,
           });
           this.#toolGuardState.current = toWebfetchGuardState(selection);
+          const governance = this.#toolGovernance.current.snapshot();
+          if (governance.stopReason && governance.stopReason !== reportedGovernanceStop) {
+            reportedGovernanceStop = governance.stopReason;
+            this.report(BusEvents.Element.Data, {
+              step: "tool-governance-stop",
+              stepNumber,
+              ...governance,
+            });
+          }
           const selectionKey = `${selection.webfetchAllowed}:${selection.webfetchGuardReason}`;
           if (selectionKey !== reportedToolSelection) {
             reportedToolSelection = selectionKey;
@@ -507,6 +524,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
           return {
             activeTools: selection.activeTools,
+            ...(this.#toolGovernance.current.shouldForceText() ? { toolChoice: "none" as const } : {}),
             messages: pruneConsumedTransientTools(messages),
             ...(instructions === undefined ? {} : { instructions }),
           };
@@ -716,6 +734,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       let response: any;
       let usage: any;
+      let totalUsage: any;
 
       try {
         response = await Promise.race([
@@ -732,27 +751,46 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       }
 
       try {
-        usage = await Promise.race([
-          streamResult.usage,
+        [usage, totalUsage] = await Promise.race([
+          Promise.all([streamResult.usage, streamResult.totalUsage]),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("streamResult.usage timeout")), 30_000)
+            setTimeout(() => reject(new Error("streamResult usage timeout")), 30_000)
           ),
         ]);
       } catch (err: any) {
         streamFailed = true;
         this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
         usage = { totalTokens: 0 };
+        totalUsage = usage;
         if (!finishReason) finishReason = "error";
       }
 
       const reasoningContent = reasoningText;
-      const tokenUsage: TokenUsage = { total: usage?.totalTokens ?? 0 };
+      const metrics = resolveTokenMetrics(usage, totalUsage);
+      const tokenUsage: TokenUsage = { total: metrics.totalUsageTokens };
       if (this.#session?.setContextTokens) {
-        this.#session.setContextTokens(usage?.totalTokens ?? 0);
+        this.#session.setContextTokens(metrics.contextTokens);
       }
 
       fullText = sanitizeForJSON(fullText);
-      this.report(BusEvents.Element.Data, { step: "done", outputLen: fullText.length, tokens: tokenUsage.total, hasIntents: intents.length > 0, finishReason, stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
+      const finalGovernance = this.#toolGovernance.current.snapshot();
+      this.report(BusEvents.Element.Data, {
+        step: "done",
+        outputLen: fullText.length,
+        totalUsageTokens: tokenUsage.total,
+        contextTokens: metrics.contextTokens,
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        hasIntents: intents.length > 0,
+        finishReason,
+        stepCount: this.#stepCounter.count,
+        maxSteps: this.#maxSteps,
+        toolAttempts: finalGovernance.attempts,
+        toolExecutions: finalGovernance.executions,
+        toolBlocked: finalGovernance.blocked,
+        toolConsecutiveNoProgress: finalGovernance.consecutiveNoProgress,
+        toolStopReason: finalGovernance.stopReason,
+      });
 
       if (this.#stepCounter.count >= this.#maxSteps) {
         this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
@@ -875,12 +913,66 @@ function stringifyToolOutput(output: unknown): string {
   }
 }
 
+function beginGovernedToolCall(params: {
+  toolName: string;
+  args: unknown;
+  source?: "mcp";
+  report: (event: string, payload: Record<string, unknown>) => void;
+  stepCounter: { count: number };
+  toolResults: Map<string, ToolExecutionStatus[]>;
+  governance: { current: ToolCallLedger };
+}):
+  | { allowed: true; stepCount: number; decision: Extract<ToolCallDecision, { allowed: true }> }
+  | { allowed: false; output: string } {
+  const stepCount = ++params.stepCounter.count;
+  const decision = params.governance.current.begin(params.toolName, params.args);
+  params.report(BusEvents.Element.Data, {
+    step: "tool-governance-decision",
+    toolName: params.toolName,
+    stepCount,
+    ...(params.source ? { source: params.source } : {}),
+    decision: decision.allowed ? "execute" : "block",
+    ...(!decision.allowed ? { reason: decision.reason } : {}),
+    fingerprint: decision.fingerprint,
+    ...params.governance.current.snapshot(),
+  });
+  if (decision.allowed) return { allowed: true, stepCount, decision };
+
+  const output = formatToolGovernanceBlock(decision);
+  const error = `TOOL_GOVERNANCE_BLOCKED [${decision.reason}]`;
+  pushToolExecutionStatus(params.toolResults, params.toolName, { ok: false, output, error });
+  return { allowed: false, output };
+}
+
+function finishGovernedToolCall(params: {
+  toolName: string;
+  stepCount: number;
+  decision: Extract<ToolCallDecision, { allowed: true }>;
+  ok: boolean;
+  source?: "mcp";
+  report: (event: string, payload: Record<string, unknown>) => void;
+  governance: { current: ToolCallLedger };
+}): void {
+  const governanceState = params.governance.current.finish(params.decision, params.ok);
+  params.report(BusEvents.Element.Data, {
+    step: "tool-governance-result",
+    toolName: params.toolName,
+    stepCount: params.stepCount,
+    ...(params.source ? { source: params.source } : {}),
+    fingerprint: params.decision.fingerprint,
+    ok: params.ok,
+    progress: params.ok,
+    ...governanceState,
+  });
+}
+
 function buildAllAiTools(
   tools: ToolDefinition[],
   report: (event: string, payload: Record<string, unknown>) => void,
   stepCounter: { count: number },
   toolResults: Map<string, ToolExecutionStatus[]>,
   guardState: { current: ToolGuardState },
+  governance: { current: ToolCallLedger },
   session?: any,
 ): Record<string, any> {
   const result: Record<string, any> = {};
@@ -891,7 +983,16 @@ function buildAllAiTools(
       execute: t.name === "intent"
         ? async () => "Intent received"
         : async (args: any, opts?: any) => {
-            const sc = ++stepCounter.count;
+            const governed = beginGovernedToolCall({
+              toolName: t.name,
+              args,
+              report,
+              stepCounter,
+              toolResults,
+              governance,
+            });
+            if (!governed.allowed) return governed.output;
+            const { stepCount: sc, decision } = governed;
             const start = Date.now();
             try {
               report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: t.name, stepCount: sc, args: JSON.stringify(args).slice(0, 200) });
@@ -902,12 +1003,25 @@ function buildAllAiTools(
               });
               const duration = Date.now() - start;
               report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: r.ok });
-              if (!r.ok && r.error?.startsWith("TOOL_GUARD_BLOCKED")) {
+              finishGovernedToolCall({
+                toolName: t.name,
+                stepCount: sc,
+                decision,
+                ok: r.ok,
+                report,
+                governance,
+              });
+              const deferred = r.ok
+                && typeof r.data === "object"
+                && r.data !== null
+                && (r.data as { status?: unknown }).status === "deferred";
+              if (deferred || (!r.ok && r.error?.startsWith("TOOL_GUARD_BLOCKED"))) {
                 report(BusEvents.Element.Data, {
                   step: "tool-guard-blocked",
                   toolName: t.name,
                   stepCount: sc,
                   reason: guardState.current[t.name]?.reason,
+                  ...(deferred ? { outcome: "deferred" } : {}),
                 });
               }
               const output = r.output || (r.data === undefined ? "" : JSON.stringify(r.data));
@@ -926,6 +1040,14 @@ function buildAllAiTools(
               const duration = Date.now() - start;
               const error = err?.message ?? String(err);
               report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: t.name, stepCount: sc, duration, error });
+              finishGovernedToolCall({
+                toolName: t.name,
+                stepCount: sc,
+                decision,
+                ok: false,
+                report,
+                governance,
+              });
               pushToolExecutionStatus(toolResults, t.name, { ok: false, output: "", error });
               return `Tool execution error: ${error}`;
             }
@@ -940,6 +1062,7 @@ export function wrapMCPAiTools(
   report: (event: string, payload: Record<string, unknown>) => void,
   stepCounter: { count: number },
   toolResults: Map<string, ToolExecutionStatus[]>,
+  governance: { current: ToolCallLedger },
 ): Record<string, any> {
   const wrapped: Record<string, any> = {};
   for (const [name, t] of Object.entries(mcpTools)) {
@@ -951,19 +1074,47 @@ export function wrapMCPAiTools(
     wrapped[name] = {
       ...t as any,
       execute: async (args: any, opts?: any) => {
-        const sc = ++stepCounter.count;
+        const governed = beginGovernedToolCall({
+          toolName: name,
+          args,
+          source: "mcp",
+          report,
+          stepCounter,
+          toolResults,
+          governance,
+        });
+        if (!governed.allowed) return governed.output;
+        const { stepCount: sc, decision } = governed;
         const start = Date.now();
         try {
           report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: name, stepCount: sc, source: "mcp", args: JSON.stringify(args).slice(0, 200) });
           const result = await origExecute(args, opts);
           const duration = Date.now() - start;
           report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: name, stepCount: sc, source: "mcp", duration });
+          finishGovernedToolCall({
+            toolName: name,
+            stepCount: sc,
+            source: "mcp",
+            decision,
+            ok: true,
+            report,
+            governance,
+          });
           pushToolExecutionStatus(toolResults, name, { ok: true, output: stringifyToolOutput(result) });
           return result;
         } catch (err: any) {
           const duration = Date.now() - start;
           const error = err?.message ?? String(err);
           report(BusEvents.Element.Data, { step: "tool-execute-error", toolName: name, stepCount: sc, source: "mcp", duration, error });
+          finishGovernedToolCall({
+            toolName: name,
+            stepCount: sc,
+            source: "mcp",
+            decision,
+            ok: false,
+            report,
+            governance,
+          });
           pushToolExecutionStatus(toolResults, name, { ok: false, output: "", error });
           return `MCP tool error: ${error}`;
         }
@@ -971,28 +1122,6 @@ export function wrapMCPAiTools(
     };
   }
   return wrapped;
-}
-
-function getTaskToolNames(taskIntent: string): string[] {
-  const FS_RO = ["read", "grep", "ls", "tree", "glob"];
-  const FS_RW = ["write", "edit", "cp", "mv"];
-  const MEMORY = ["search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory"];
-  const MEMORY_DISCOVERY = ["search_memory", "read_memory"];
-  const SKILL = ["skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload"];
-  const CONTROL = ["todowrite", "intent"];
-  const SCHEDULE = ["schedule_create", "schedule_list", "schedule_update", "schedule_cancel"];
-
-  switch (taskIntent) {
-    case "instruction":
-      return [...FS_RO, ...FS_RW, ...MEMORY, ...SKILL, ...CONTROL, "bash", ...SCHEDULE];
-    case "question":
-      return [...FS_RO, ...MEMORY, ...SKILL, ...CONTROL, ...SCHEDULE];
-    case "creative":
-      return [...FS_RO, ...FS_RW, ...MEMORY_DISCOVERY, ...SKILL, ...CONTROL, ...SCHEDULE];
-    case "conversation":
-    default:
-      return [...FS_RO, ...MEMORY_DISCOVERY, ...SKILL, ...CONTROL, ...SCHEDULE];
-  }
 }
 
 function resolveTimeout(difficulty: string): number {

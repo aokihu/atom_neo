@@ -152,9 +152,9 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       .replace("%s", process.arch)];
 
     if (!this.#session) return parts.join("\n\n");
-    const usage = this.#session.tokenUsage?.total ?? 0;
+    const usage = this.#session.contextTokens ?? 0;
     const pct = ((usage / this.#configContextLimit) * 100).toFixed(2);
-    parts.push(`Session Token Usage:\n  Total: ${usage} / ${this.#configContextLimit} (${pct}%)`);
+    parts.push(`Current Context Tokens:\n  Total: ${usage} / ${this.#configContextLimit} (${pct}%)`);
     if (this.#session.currentTopic) {
       parts.push(this.#resolve(PromptKey.CONTEXT_TOPIC_CONSTRAINT).replace("%s", this.#session.currentTopic));
     }

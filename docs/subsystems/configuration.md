@@ -171,7 +171,7 @@ const providerOptions = {
 - 最高优先级：`providers[provider].contextLimit`（用户显式覆盖）
 - 次优先级：内置 `CONTEXT_LIMITS` 表（`src/packages/core/src/constants.ts`）
 - 均无时默认 `131,072` (128K)
-- 用于计算 `Session Token Usage` 中的百分比：
+- 用于计算当前 `Context Tokens` 的百分比：
   ```
   Total: 12,480 / 1,000,000 (1.25%)
   ```

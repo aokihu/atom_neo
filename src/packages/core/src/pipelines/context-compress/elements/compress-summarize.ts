@@ -27,7 +27,14 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
     if (input.mode !== "summarizing") return input;
 
     if (!input.summaryText || !this.#apiKey) {
-      this.report(BusEvents.Element.Data, { step: "skipping, no text or apiKey" });
+      this.report(BusEvents.Element.Data, {
+        step: "summary skipped",
+        trigger: input.request.trigger,
+        target: "context+messages",
+        summaryMessages: input.summaryMessages.length,
+        inputChars: input.summaryText.length,
+        reason: !input.summaryText ? "no text" : "no apiKey",
+      });
       return {
         ...input,
         mode: "finalizing",
@@ -37,6 +44,14 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
     }
 
     try {
+      this.report(BusEvents.Element.Data, {
+        step: "summary started",
+        trigger: input.request.trigger,
+        target: "context+messages",
+        summaryMessages: input.summaryMessages.length,
+        inputChars: input.summaryText.length,
+        maxTokens: input.summaryMaxTokens || 600,
+      });
       const summary = await callLLM({
         apiKey: this.#apiKey,
         model: this.#model,
@@ -47,13 +62,15 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
         abortSignal: input.abortSignal,
       });
       const summaryError = summary.trim() ? undefined : "summary model returned empty text";
-      this.report(BusEvents.Element.Data, { step: "generated", summaryLen: summary.length });
+      this.report(BusEvents.Element.Data, { step: "summary generated", trigger: input.request.trigger, summaryLen: summary.length });
       return { ...input, mode: "finalizing", summary, ...(summaryError ? { summaryError } : {}) };
     } catch (err: any) {
       input.session.compressRatio = Math.min(2.0, (input.session.compressRatio ?? 0.5) + 0.4);
       this.report(BusEvents.Element.Data, {
         step: "error",
         level: "warn",
+        trigger: input.request.trigger,
+        target: "context+messages",
         error: substringWellFormed(err.message ?? "", 0, 300),
         errorName: err.name,
         statusCode: err.statusCode,

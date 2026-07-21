@@ -15,8 +15,8 @@ export class ServiceManager {
     this.#services.set(name, service);
   }
 
-  get<T extends BaseService>(name: string): T | undefined {
-    return this.#services.get(name) as T | undefined;
+  get<T>(name: string): T | undefined {
+    return this.#services.get(name) as unknown as T | undefined;
   }
 
   async startAll(): Promise<void> {

@@ -1,10 +1,19 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, TaskFailureCodes } from "@atom-neo/shared";
 import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ConversationFlowState } from "./types";
 import { calcTokenRatio, applyCompressRatio } from "../../shared";
+
+export class ApiKeyInvalidError extends Error {
+  readonly code = TaskFailureCodes.ApiKeyInvalid;
+
+  constructor() {
+    super("The configured API key was rejected by the model provider");
+    this.name = "ApiKeyInvalidError";
+  }
+}
 
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
   #orchestrator?: InternalTaskOrchestrator;
@@ -34,6 +43,11 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     }
 
     this.#completeSnapshot(input);
+
+    if (input.errorStatusCode === 401) {
+      this.report(BusEvents.Element.Data, { step: "api-key-invalid", errorStatusCode: 401 });
+      throw new ApiKeyInvalidError();
+    }
 
     if (input.tokenOverflow) {
       return this.#handleOverflow(input);
@@ -68,6 +82,9 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
 
     this.report(BusEvents.Element.Data, {
       step: "token-overflow, scheduling compress",
+      trigger: "token-overflow",
+      target: "context+messages",
+      resumeConversation: true,
       compressRetry: this.#session.compressRetry,
       compressRatio: this.#session.compressRatio.toFixed(2),
       tu, effectiveLimit,
@@ -77,7 +94,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       input.task.sessionId,
       input.task.chatId,
       input.task.parentTaskId ?? input.task.id,
-      input.task.payload,
+      { trigger: "token-overflow", resumeConversation: true },
       input.task.id,
     );
     return this.#complete({ ...input, chainAction: undefined });

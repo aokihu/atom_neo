@@ -29,13 +29,17 @@ export class CompressArchiveElement extends BaseElement<CompressFlowState, Compr
       ) ?? undefined;
       this.report(BusEvents.Element.Data, {
         step: "archived",
+        trigger: input.request.trigger,
+        target: "messages",
         archiveId: archiveReceipt?.archiveId,
         count: archiveReceipt?.count ?? 0,
+        fromSeq: archiveReceipt?.fromSeq,
+        toSeq: archiveReceipt?.toSeq,
       });
       return { ...input, mode: "summarizing", archiveReceipt };
     } catch (error) {
       const archiveError = error instanceof Error ? error.message : String(error);
-      this.report(BusEvents.Element.Data, { step: "archive failed", level: "warn", error: archiveError });
+      this.report(BusEvents.Element.Data, { step: "archive failed", level: "warn", trigger: input.request.trigger, target: "messages", error: archiveError });
       return { ...input, mode: "finalizing", archiveError, summary: "" };
     }
   }

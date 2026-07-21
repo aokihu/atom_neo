@@ -5,7 +5,7 @@ ContextService 是 Core 内 Context 的唯一 Owner。Pipeline、Session、Skill
 | 文件 | 职责 |
 |---|---|
 | `context-service.ts` | 管理分层 Bucket、Entry、生命周期、SnapshotState 与 lease |
-| `compiler.ts` | 对 Entry 去重、信任分区、预算选择，净化字符串后生成 TOON Snapshot |
+| `compiler.ts` | 对 Entry 去重、信任分区、预算选择，净化字符串后生成 TOON Snapshot，并提供统一 Token 估算 |
 | `context-service.test.ts` | Bucket、过期、lease、commit/release 与 Snapshot 测试 |
 | `compiler.test.ts` | Snapshot 顺序、预算和不可变性测试 |
 

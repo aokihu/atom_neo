@@ -5,6 +5,7 @@ export type {
   TaskItem,
   TaskOrigin,
   TaskPayload,
+  ContextCompressRequest,
   TaskToolCall,
   TaskToolReport,
   ToolReportFact,
@@ -28,6 +29,16 @@ export type {
   MemorySearchRequest,
   MemorySearchResult,
 } from "./memory";
+
+export type {
+  WebFetchMethod,
+  WebFetchRequest,
+  NetworkRequestOptions,
+  WebFetchResultCode,
+  WebFetchRateLimit,
+  WebFetchResponse,
+  NetworkServiceLike,
+} from "./network";
 
 export { PermissionLevel } from "./tool";
 export type {

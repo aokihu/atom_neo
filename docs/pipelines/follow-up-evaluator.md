@@ -70,7 +70,7 @@ initial
 ### Token 用量双重检查
 
 ```
-tokenUsage.total > contextLimit * 80% && health !== "stuck"
+contextTokens > effectiveLimit * 80% && health !== "stuck"
   → orchestrator.scheduleCompress()
 ```
 

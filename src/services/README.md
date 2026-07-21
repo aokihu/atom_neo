@@ -6,6 +6,7 @@
 |------|------|
 | `memory-service.ts` | SQLite Memory 存储、FTS5 召回、图关系和生命周期事件 |
 | `memory-ranking.ts` | 无状态的 Memory 相关性、质量与时间衰减计算 |
+| `network/` | 同进程 NetworkService、共享域名调度与 WebFetch 子功能 |
 | `skill-service.ts` | Skill 扫描、加载与 Context 构建 |
 | `skill-parser.ts` | 解析 `SKILL.md` 元数据和章节 |
 | `agents-compiler.ts` | 编译 Agent 定义 |

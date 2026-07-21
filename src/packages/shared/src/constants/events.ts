@@ -83,3 +83,8 @@ export const WsMessages = {
     Error: "error",
   },
 } as const;
+
+export const TaskFailureCodes = {
+  PipelineAborted: "PIPELINE_ABORTED",
+  ApiKeyInvalid: "API_KEY_INVALID",
+} as const;

@@ -2,8 +2,29 @@ import { useRef, useCallback, useEffect } from "react";
 import { TuiClient } from "../client/ws-client";
 import { useChatStore } from "../stores/chat";
 import type { ToolInfo, MCPServerInfo } from "../types";
+import { TaskFailureCodes } from "@atom-neo/shared";
 
-export function useChat(url: string, sessionId?: string, initialToolInfos?: ToolInfo[], initialMCPServers?: MCPServerInfo[]) {
+export type ChatClientError = { code: string; title: string; message: string };
+
+export function resolveChatClientError(error: unknown): ChatClientError | undefined {
+  const code = typeof (error as { code?: unknown } | null)?.code === "string"
+    ? (error as { code: string }).code
+    : "";
+  if (code !== TaskFailureCodes.ApiKeyInvalid) return undefined;
+  return {
+    code,
+    title: "API Key Invalid",
+    message: "The configured API key was rejected by the model provider. Update it and restart Atom Neo.",
+  };
+}
+
+export function useChat(
+  url: string,
+  sessionId?: string,
+  initialToolInfos?: ToolInfo[],
+  initialMCPServers?: MCPServerInfo[],
+  onClientError?: (error: ChatClientError) => void,
+) {
   const clientRef = useRef<TuiClient | null>(null);
   const reasoningBufferRef = useRef("");
   const activityRef = useRef(false);
@@ -16,8 +37,8 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
     const client = new TuiClient({ url, sessionId });
     clientRef.current = client;
 
-    client.onTokenUsage((total) => {
-      useChatStore.getState().setTokenUsage(total);
+    client.onContextTokens((total) => {
+      useChatStore.getState().setContextTokens(total);
     });
 
     client.onReason((delta) => {
@@ -102,6 +123,11 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
       await client.send(text);
     } catch (err: any) {
       const cancelled = err?.name === "TaskCancelledError";
+      const clientError = resolveChatClientError(err);
+      if (clientError && onClientError) {
+        onClientError(clientError);
+        return;
+      }
       const message = {
         role: cancelled ? "info" as const : "error" as const,
         content: cancelled ? "Task cancelled by user" : err.message,
@@ -111,7 +137,7 @@ export function useChat(url: string, sessionId?: string, initialToolInfos?: Tool
       if (cancelled) useChatStore.getState().addTransientMessage(message, 2_000);
       else useChatStore.getState().addMessage(message);
     }
-  }, []);
+  }, [onClientError]);
 
   const clearMessages = useCallback(() => {
     useChatStore.getState().clearMessages();

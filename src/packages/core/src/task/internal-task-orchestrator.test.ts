@@ -49,7 +49,10 @@ describe("InternalTaskOrchestrator continuations", () => {
   test("discards staged downstream tasks when the parent checkpoint fails", () => {
     const { orchestrator, tasks } = createOrchestrator();
     orchestrator.beginTask({ id: "parent" } as any);
-    orchestrator.scheduleCompress("s1", "c1", "parent", undefined, "parent");
+    orchestrator.scheduleCompress("s1", "c1", "parent", {
+      trigger: "token-overflow",
+      resumeConversation: true,
+    }, "parent");
 
     orchestrator.discardTask("parent");
     expect(tasks).toHaveLength(0);
@@ -79,11 +82,18 @@ describe("InternalTaskOrchestrator continuations", () => {
     const { orchestrator, tasks } = createOrchestrator();
     orchestrator.beginTask({ id: "parent" } as any);
 
-    orchestrator.scheduleCompress("s1", "c1", "manual");
+    orchestrator.scheduleCompress("s1", "c1", "manual", {
+      trigger: "manual",
+      resumeConversation: false,
+    });
     orchestrator.discardTask("parent");
 
     expect(tasks).toHaveLength(1);
     expect(tasks[0].parentTaskId).toBe("manual");
+    expect(tasks[0].payload).toEqual([{
+      type: "context_compress_request",
+      data: { trigger: "manual", resumeConversation: false },
+    }]);
   });
 
   test("propagates Hook origin to staged continuation tasks", () => {

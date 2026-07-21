@@ -3,6 +3,7 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { ContextService } from "../../../context/context-service";
 import type { CompressFlowState } from "./types";
+import type { ContextCompressRequest } from "@atom-neo/shared";
 
 function resolveStrategy(ratio: number): { keepCount: number; summaryMaxTokens: number } {
   if (ratio >= 1.2) return { keepCount: 1, summaryMaxTokens: 1600 };
@@ -30,6 +31,9 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
 
   async doProcess(input: any): Promise<CompressFlowState> {
     const messages = [...(this.#session?.messages ?? [])].map(message => ({ ...message }));
+    const request = input.task?.payload?.find((part: { type?: string }) =>
+      part.type === "context_compress_request")?.data as ContextCompressRequest | undefined;
+    const resolvedRequest = request ?? { trigger: "manual", resumeConversation: false };
 
     const ratio = this.#session?.compressRatio ?? 0.5;
     const strategy = resolveStrategy(ratio);
@@ -55,11 +59,29 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
         : "",
     ].filter(Boolean).join("\n\n");
 
-    this.report(BusEvents.Element.Data, { step: "done", totalMsgs: messages.length, toCompress: archiveMessages.length, keep: keepCount, safeCount, ratio: ratio.toFixed(2), strategy: JSON.stringify(strategy), mode: keepFromSafe > 0 ? "safe_boundary" : "default" });
+    this.report(BusEvents.Element.Data, {
+      step: "plan created",
+      taskId: input.task?.id,
+      sessionId: this.#session?.sessionId ?? "default",
+      trigger: resolvedRequest.trigger,
+      target: "context+messages",
+      resumeConversation: resolvedRequest.resumeConversation,
+      contextTokens: this.#session?.contextTokens ?? 0,
+      totalMessages: messages.length,
+      visibleMessages: messages.filter(message => message.visible !== false).length,
+      safeCount,
+      archiveMessages: archiveMessages.length,
+      summaryMessages: summaryMessages.length,
+      keepMessages: keepCount,
+      compressRatio: ratio.toFixed(2),
+      strategy: JSON.stringify(strategy),
+      mode: keepFromSafe > 0 ? "safe_boundary" : "default",
+    });
     return {
       mode: "archiving",
       task: input.task,
       session: this.#session,
+      request: resolvedRequest,
       archiveMessages,
       summaryMessages,
       keepCount,

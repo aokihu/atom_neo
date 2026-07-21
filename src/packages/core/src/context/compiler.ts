@@ -49,7 +49,7 @@ export function compileContextSnapshot(
   let used = 0;
   const selectedSet = new Set<ContextFragment>();
   for (const fragment of candidates.toSorted(compareSelection)) {
-    const tokens = estimateTokens(fragment.content);
+    const tokens = estimateTokenCount(fragment.content);
     const fits = fragment.retention === "pinned" || used + tokens <= budget;
     if (!fits) continue;
     selectedSet.add(fragment);
@@ -57,7 +57,7 @@ export function compileContextSnapshot(
   }
   const selected = ordered.filter(fragment => selectedSet.has(fragment));
   const manifest = ordered.map(fragment => {
-    const tokens = estimateTokens(fragment.content);
+    const tokens = estimateTokenCount(fragment.content);
     if (latestByKey.get(fragment.key) !== fragment) return toManifest(fragment, tokens, false, "duplicate");
     const isSelected = selectedSet.has(fragment);
     return toManifest(fragment, tokens, isSelected, isSelected ? undefined : "budget");
@@ -109,8 +109,8 @@ function compareSelection(a: ContextFragment, b: ContextFragment): number {
     || b.revision - a.revision;
 }
 
-function estimateTokens(content: ContextFragment["content"]): number {
-  const text = typeof content === "string" ? content : JSON.stringify(content);
+export function estimateTokenCount(content: unknown): number {
+  const text = typeof content === "string" ? content : JSON.stringify(content) ?? String(content ?? "");
   return Math.max(1, Math.ceil(text.length / 4));
 }
 

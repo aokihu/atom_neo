@@ -19,6 +19,9 @@ const mockRuntime = {
 const mockSm = {
   get(name: string) {
     if (name === "agents-compiler") return { getCompiledPrompt: () => "" };
+    if (name === "network") return {
+      webFetch: async () => ({ ok: true, code: "success", content: "ok" }),
+    };
     return undefined;
   }
 };
@@ -42,6 +45,17 @@ afterAll(() => {
 });
 
 describe("E2E: Core HTTP API", () => {
+  test("fails fast when NetworkService is not registered", async () => {
+    const logger = new Logger("error", () => {});
+    await expect(startCore({
+      port: 0,
+      host: "127.0.0.1",
+      logger,
+      sm: { get: () => undefined } as any,
+      runtime: mockRuntime as any,
+    })).rejects.toThrow('Required service "network" is not registered');
+  });
+
   test("GET /api/health returns ok", async () => {
     const r = await fetch(`${BASE}/api/health`);
     const body: any = await r.json();

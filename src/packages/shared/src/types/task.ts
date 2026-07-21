@@ -25,6 +25,11 @@ export enum TaskState {
 
 export type TaskOrigin = { type: "hook"; hookId: string };
 
+export type ContextCompressRequest = {
+  trigger: "manual" | "token-overflow" | "context-pressure";
+  resumeConversation: boolean;
+};
+
 export type TaskItem = {
   readonly id: string;
   readonly chainId: string;
@@ -46,7 +51,8 @@ export type TaskPayload =
   | { type: "image"; data: string }
   | { type: "audio"; data: string }
   | { type: "tool_report"; data: TaskToolReport }
-  | { type: "memory_search_request"; data: MemorySearchRequest };
+  | { type: "memory_search_request"; data: MemorySearchRequest }
+  | { type: "context_compress_request"; data: ContextCompressRequest };
 
 export type TaskToolCall = {
   toolName: string;

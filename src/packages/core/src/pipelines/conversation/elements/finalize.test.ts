@@ -94,4 +94,14 @@ describe("FinalizeElement context snapshot", () => {
 
     expect(result.shouldPostCheck).toBe(false);
   });
+
+  test("turns Provider 401 into an API_KEY_INVALID task failure after releasing context", async () => {
+    const { contextService, element, input } = createFixture(401);
+
+    await expect(element.doProcess(input)).rejects.toMatchObject({
+      name: "ApiKeyInvalidError",
+      code: "API_KEY_INVALID",
+    });
+    expect(contextService.inspectSnapshot(input.contextSnapshot.id)?.status).toBe("released");
+  });
 });

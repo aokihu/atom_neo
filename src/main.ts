@@ -13,6 +13,7 @@ import { ServiceManager } from "./services/service-manager";
 import { AgentsCompilerService } from "./services/agents-compiler";
 import { MemoryService } from "./services/memory-service";
 import { SkillService } from "./services/skill-service";
+import { NetworkService } from "./services/network/network-service";
 import { resolveContextLimit } from "./packages/core/src/constants";
 
 declare global {
@@ -111,7 +112,8 @@ export async function main(): Promise<void> {
     legacyNodesPath: runtime.atomDir + "/memory/nodes",
   }));
   sm.register("skill", new SkillService({ sandbox: args.sandbox }));
-  sm.startAll();
+  sm.register("network", new NetworkService());
+  await sm.startAll();
 
   // Lazy import to ensure AI_SDK_LOG_WARNINGS is set before AI SDK loads
   const { startCore } = await import("@atom-neo/core");
@@ -144,7 +146,11 @@ export async function main(): Promise<void> {
         },
       });
     } finally {
-      await core.stop();
+      try {
+        await core.stop();
+      } finally {
+        await sm.stopAll();
+      }
     }
     return;
   }
