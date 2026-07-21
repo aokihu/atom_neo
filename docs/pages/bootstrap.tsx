@@ -24,7 +24,7 @@ export default function DocPage({ content, title, description, category }: DocPa
             { step: 2, label: "Initialize Log System", desc: "LogHub.create() → register sinks (stdout, file)" },
             { step: 3, label: "Register Builtin Elements", desc: "elementRegistry.set(...) — all pipeline elements" },
             { step: 4, label: "Register Builtin Tools", desc: "toolRegistry.register(...) — all tools" },
-            { step: 5, label: "Initialize Services", desc: "serviceManager.register(memoryService) → startAll()" },
+            { step: 5, label: "Initialize Services", desc: "register(memory, skill, network) → await startAll()" },
             { step: 6, label: "Initialize Session Store", desc: "new SessionStore(config.maxSessions)" },
             { step: 7, label: "Initialize Task Engine", desc: "new TaskEngine(bus, taskQueue, pipelineManager, sessionStore)" },
             { step: 8, label: "Build Pipeline Instances", desc: "pipelineManager.register(\"conversation\", ...)" },

@@ -14,7 +14,7 @@ function createTool(execute: ToolDefinition["execute"]): ToolDefinition {
 }
 
 describe("createToolGuard dynamic policy", () => {
-  test("blocks a visible tool before its original execute runs", async () => {
+  test("defers a visible webfetch with a successful guidance result", async () => {
     let executed = false;
     const guarded = createToolGuard(createTool(async () => {
       executed = true;
@@ -32,9 +32,11 @@ describe("createToolGuard dynamic policy", () => {
     });
 
     expect(executed).toBe(false);
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("TOOL_GUARD_BLOCKED [memory_search_required]");
-    expect(result.error).toContain("search_memory");
+    expect(result).toEqual({
+      ok: true,
+      output: "Call search_memory, then retry webfetch.",
+      data: { status: "deferred", reason: "memory_search_required" },
+    });
   });
 
   test("executes the tool after the dynamic policy allows it", async () => {

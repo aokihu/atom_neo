@@ -1,5 +1,5 @@
 import { PipelineEventBus } from "@atom-neo/shared";
-import type { ConversationChainAction, ConversationContinuationAction, FullEventMap } from "@atom-neo/shared";
+import type { ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
 import { BusEvents, TaskFailureCodes, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
@@ -115,6 +115,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
   const memory = sm.get("memory");
   const skillService = sm.get<SkillServiceLike>("skill");
+  const network = sm.get<NetworkServiceLike>("network");
+  if (!network) throw new Error('Required service "network" is not registered');
   const getCompiledPrompt = () => {
     const compiler = sm.get<CompilerLike>("agents-compiler");
     return compiler?.getCompiledPrompt() ?? "";
@@ -127,7 +129,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const persistence = new SessionPersistenceService(sandbox, contextService);
   const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx), undefined, persistence);
 
-  const allTools = createAllTools(sandbox, memory, runtime?.appConfig?.permission?.whitelist ?? [], persistence);
+  const toolDependencies = {
+    sandbox,
+    network,
+    whitelist: runtime?.appConfig?.permission?.whitelist ?? [],
+    persistence,
+  };
+  const allTools = createAllTools({ ...toolDependencies, memory });
   if (skillService) {
     allTools.push(...createSkillTools(skillService));
   }
@@ -281,7 +289,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   };
 
   const toolRegistry = new ToolRegistry();
-  registerBuiltinTools(toolRegistry, sandbox, runtime?.appConfig?.permission?.whitelist ?? [], persistence);
+  registerBuiltinTools(toolRegistry, toolDependencies);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
   initPromptRegistry();

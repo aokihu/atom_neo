@@ -1011,12 +1011,17 @@ function buildAllAiTools(
                 report,
                 governance,
               });
-              if (!r.ok && r.error?.startsWith("TOOL_GUARD_BLOCKED")) {
+              const deferred = r.ok
+                && typeof r.data === "object"
+                && r.data !== null
+                && (r.data as { status?: unknown }).status === "deferred";
+              if (deferred || (!r.ok && r.error?.startsWith("TOOL_GUARD_BLOCKED"))) {
                 report(BusEvents.Element.Data, {
                   step: "tool-guard-blocked",
                   toolName: t.name,
                   stepCount: sc,
                   reason: guardState.current[t.name]?.reason,
+                  ...(deferred ? { outcome: "deferred" } : {}),
                 });
               }
               const output = r.output || (r.data === undefined ? "" : JSON.stringify(r.data));

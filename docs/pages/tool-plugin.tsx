@@ -233,12 +233,24 @@ export class ToolRegistry {
             ["无进展", "失败或拦截连续 3 次后收尾", "成功结果即视为通用进展"],
             ["调用预算", "真实执行次数最多为本次 maxSteps", "AI SDK stopWhen 仍是 step 硬上限"],
             ["循环收尾", <><code>prepareStep</code> 返回 <code>toolChoice: none</code></>, "保留一次正常文本回答"],
-            ["WebFetch 专项", "本阶段不处理", "URL、正文质量和相似度在第二阶段实现"],
+            ["WebFetch 节流", "NetworkService：普通域名 1 秒；搜索引擎主域 5 秒", "跨 Task、Session 和查询 URL 生效"],
           ]}
         />
         <Callout type="warn" title="通用进展不是内容质量">
           通用层只知道 Tool 是否成功执行。WebFetch 返回 HTTP 成功但正文为空、重复或被 CAPTCHA 阻断时，
           仍需要后续 WebFetch 专项分类才能判定为无信息增量。
+        </Callout>
+        <Callout type="info" title="WebFetch 域名冷却">
+          WebFetch Tool 只负责调用同进程 <code>NetworkService</code>。同一搜索引擎主域的请求起始时间至少间隔 5 秒，普通域名至少间隔 1 秒。HTTP 429
+          优先采用更长的 <code>Retry-After</code>，否则默认冷却 60 秒；冷却期间直接返回
+          <code>WEBFETCH_DOMAIN_COOLDOWN</code>，不会继续访问目标站点。并发调用会依次预留时间槽，
+          等待服从 Task 取消；节流状态保存在当前进程内，重启后清空，并通过
+          <code>data.rateLimit</code> 记录等待与冷却信息。未来 download 或 stream 必须复用同一调度器，本阶段不创建占位实现。
+        </Callout>
+        <Callout type="info" title="前置检查使用温和引导">
+          WebFetch 尚未完成 Memory 或 Skill 前置检查时，会返回成功的 <code>deferred</code> 结果，
+          正文提示下一步应调用的工具，不再返回 <code>Error:</code> 或 <code>TOOL_GUARD_BLOCKED</code>。
+          真实的 HTTP、超时和网络错误仍保持失败结果。
         </Callout>
       </Section>
 

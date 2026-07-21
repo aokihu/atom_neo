@@ -1,75 +1,46 @@
 import { z } from "zod";
-import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
+import type { NetworkServiceLike, ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 
-const OUTPUT_LIMIT = 65536;
+const WebFetchInputSchema = z.object({
+  url: z.string().describe("HTTP/HTTPS URL to fetch"),
+  method: z.enum(["GET", "POST"]).optional().default("GET"),
+  headers: z.record(z.string(), z.string()).optional().default({}),
+  body: z.string().optional(),
+  timeout: z.number().optional().default(15_000),
+  stripHtml: z.boolean().optional().default(true)
+    .describe("Extract plain text from HTML responses. Set to false to keep raw content (e.g. for parsing tables or meta tags). Non-HTML responses are unaffected."),
+  isMobile: z.boolean().optional().default(false)
+    .describe("Request the mobile version of a page when it may provide more useful content."),
+});
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ')
-    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, ' ')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&(?:amp|lt|gt|quot|#x27|#39|nbsp);/g, m =>
-      m === '&amp;' ? '&' : m === '&lt;' ? '<' : m === '&gt;' ? '>' :
-      m === '&quot;' ? '"' : m === '&#x27;' || m === '&#39;' ? "'" : ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-export function createWebFetchTool(): ToolDefinition {
-  const schema = z.object({
-    url: z.string().describe("HTTP/HTTPS URL to fetch"),
-    method: z.enum(["GET", "POST"]).optional().default("GET"),
-    headers: z.record(z.string(), z.string()).optional().default({}),
-    body: z.string().optional(),
-    timeout: z.number().optional().default(15_000),
-    stripHtml: z.boolean().optional().default(true)
-      .describe("Extract plain text from HTML responses. Set to false to keep raw content (e.g. for parsing tables or meta tags). Non-HTML responses are unaffected."),
-  });
-
+export function createWebFetchTool(network: NetworkServiceLike): ToolDefinition {
   return {
     name: "webfetch",
-    description: "Fetch URL content via HTTP GET or POST. By default strips HTML tags to return readable text (up to 64KB). Set stripHtml=false to get raw content.",
+    description: "Fetch URL content via throttled HTTP GET or POST using a browser User-Agent. Set isMobile=true for a mobile page. By default strips HTML tags to return readable text (up to 64KB). Set stripHtml=false to get raw content.",
     source: "builtin",
-    inputSchema: schema,
-    execute: async (args, opts?: ToolExecuteOptions) => {
-      const r = schema.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
-      const { url, method, headers, body, timeout, stripHtml: shouldStrip } = r.data;
-
-      const controller = new AbortController();
-      const timeoutTimer = setTimeout(() => controller.abort(), timeout);
-      const mergedSignal = opts?.abortSignal
-        ? (opts.abortSignal.addEventListener("abort", () => controller.abort()), controller.signal)
-        : controller.signal;
-
-      try {
-        const response = await fetch(url, {
-          method,
-          headers: { "User-Agent": "AtomNeo/1.0", ...headers },
-          body: method === "POST" ? body : undefined,
-          signal: mergedSignal,
-        });
-
-        const text = await response.text();
-        const contentType = response.headers.get("content-type") ?? "";
-        const extractText = shouldStrip && contentType.includes("text/html") ? stripHtml(text) : text;
-        const output = extractText.slice(0, OUTPUT_LIMIT) || "(no output)";
-
-        if (response.ok) {
-          return { ok: true, output, data: { status: response.status, contentType: response.headers.get("content-type") } };
-        }
-        return { ok: false, output, error: `HTTP ${response.status} ${response.statusText}` };
-      } catch (err: any) {
-        return { ok: false, output: "", error: err?.name === "TimeoutError" || err?.name === "AbortError"
-          ? `Request timed out after ${timeout}ms`
-          : `Fetch failed: ${err?.message ?? String(err)}` };
-      } finally {
-        clearTimeout(timeoutTimer);
-      }
+    inputSchema: WebFetchInputSchema,
+    execute: async (args, options) => {
+      const parsed = WebFetchInputSchema.safeParse(args);
+      if (!parsed.success) return { ok: false, output: "", error: parsed.error.message };
+      const { timeout, ...request } = parsed.data;
+      const result = await network.webFetch(
+        { ...request, timeoutMs: timeout },
+        { abortSignal: options?.abortSignal, sessionId: options?.sessionId },
+      );
+      const data = result.httpStatus !== undefined || result.contentType !== undefined || result.rateLimit
+        ? {
+            ...(result.httpStatus !== undefined ? { status: result.httpStatus } : {}),
+            ...(result.contentType !== undefined ? { contentType: result.contentType } : {}),
+            ...(result.rateLimit ? { rateLimit: result.rateLimit } : {}),
+          }
+        : undefined;
+      return {
+        ok: result.ok,
+        output: result.content,
+        ...(result.error ? { error: result.error } : {}),
+        ...(data ? { data } : {}),
+      };
     },
     permission: PermissionLevel.READ_ONLY,
   };

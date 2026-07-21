@@ -1,5 +1,5 @@
 import { ToolRegistry } from "./registry";
-import type { ToolDefinition } from "@atom-neo/shared";
+import type { NetworkServiceLike, ToolDefinition } from "@atom-neo/shared";
 import {
   createReadTool, createWriteTool, createLsTool, createTreeTool,
   createGrepTool, createCpTool, createMvTool, createGlobTool, createEditTool, createSandbox,
@@ -18,11 +18,15 @@ import { createToolGuard } from "./guard";
 
 /** Create all builtin tool definitions (fs, bash, memory) for a sandbox. */
 export function createAllTools(
-  sandbox: string,
-  memory?: any,
-  whitelist?: string[],
-  persistence?: SessionPersistenceService,
+  params: {
+    sandbox: string;
+    network: NetworkServiceLike;
+    memory?: any;
+    whitelist?: string[];
+    persistence?: SessionPersistenceService;
+  },
 ): ToolDefinition[] {
+  const { sandbox, network, memory, whitelist, persistence } = params;
   const sb = createSandbox(sandbox);
   const raw: ToolDefinition[] = [
     createReadTool(sb), createWriteTool(sb), createLsTool(sb),
@@ -36,7 +40,7 @@ export function createAllTools(
     createForgetMemoryTool(memory as any),
     createIntentTool(),
     createTodoWriteTool(),
-    createWebFetchTool(),
+    createWebFetchTool(network),
     createGlobTool(sb), createEditTool(sb),
     ...(persistence ? createHistoryTools(persistence) : []),
   ];
@@ -45,11 +49,14 @@ export function createAllTools(
 
 export function registerBuiltinTools(
   registry: ToolRegistry,
-  sandbox: string,
-  whitelist?: string[],
-  persistence?: SessionPersistenceService,
+  params: {
+    sandbox: string;
+    network: NetworkServiceLike;
+    whitelist?: string[];
+    persistence?: SessionPersistenceService;
+  },
 ): void {
-  for (const t of createAllTools(sandbox, undefined, whitelist, persistence)) {
+  for (const t of createAllTools(params)) {
     registry.register(t);
   }
 }

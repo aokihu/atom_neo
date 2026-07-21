@@ -17,6 +17,8 @@ atom_neo/
 ├── src/                       # All source code
 │   ├── main.ts               # Application entry point
 │   ├── bootstrap/            # App startup layer
+│   ├── services/             # App-level services (Memory, Skill, Network)
+│   │   └── network/          # Shared domain scheduling + WebFetch
 │   ├── assets/               # Static assets (bundled with app)
 │   │   └── prompts/
 │   │       └── base_system_prompt.md  # System safety prompt

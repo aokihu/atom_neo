@@ -47,6 +47,13 @@ const LIST_TOOLS = new Set(["ls", "tree"]);
 function checkDynamicPolicy(tool: ToolDefinition, opts?: ToolExecuteOptions): ToolResult | null {
   const decision = opts?.guardState?.[tool.name];
   if (!decision || decision.allowed) return null;
+  if (tool.name === "webfetch") {
+    return {
+      ok: true,
+      output: decision.message ?? "Complete the required Memory or Skill check, then retry webfetch.",
+      data: { status: "deferred", reason: decision.reason },
+    };
+  }
   return {
     ok: false,
     output: "",

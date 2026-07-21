@@ -52,6 +52,7 @@ export default function ProjectStructurePage({ content, title, description, cate
       <Section title="Top-Level Layout">
         <p>
           The Atom Neo monorepo uses Bun workspaces with five packages under <code>src/packages/</code>.
+          App-level services live under <code>src/services/</code>; NetworkService owns shared domain scheduling and WebFetch outside Core.
         </p>
         <CodeBlock lang="text" code={topLevelTree} />
       </Section>
