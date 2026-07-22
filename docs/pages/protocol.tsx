@@ -197,18 +197,8 @@ export const ServerEventTypes = [
   "replay.event",
   "replay.end",
 ] as const;`,
-  gatewayApiAuth: `POST /api/tasks
-Authorization: Bearer eyJhbG...
-
-// JWT payload
-{
-  sub: "user-id",
-  permissionLevel: 0 | 1 | 2,
-  exp: 1700000000,
-  iat: 1699996400,
-}`,
-  gatewayClientAuth: `POST /gateway/status
-Authorization: Bearer 550e8400-e29b-41d4-a716-446655440000`,
+  gatewayClientAuth: `POST /gateway/inbound
+X-Gateway-Secret: 550e8400-e29b-41d4-a716-446655440000`,
   errorCodes: `"PIPELINE_ABORTED"          // Signal cancelled
 "API_KEY_INVALID"           // Model Provider rejected the API Key
 "ELEMENT_FAILED"            // Element threw an error
@@ -454,15 +444,13 @@ export default function DocPage({ content, title, description, category }: DocPa
       {/* ── Section 7: Gateway Authentication ── */}
       <Section id="gateway-auth" title="Gateway Authentication">
         <p>
-          Gateway only proxies HTTP requests. External <code>/api/*</code> calls use JWT Bearer
-          authentication; internal <code>/gateway/*</code> calls use an in-memory Client Token.
+          Gateway 仅为平台 Client 子进程提供消息中转服务，使用一次性随机 Secret 验证。
+          不对外提供任何 HTTP API。
         </p>
-        <h3 id={slugify("7.1 api JWT")}>7.1 /api/* — JWT Bearer Token</h3>
-        <CodeBlock lang="text" code={examples.gatewayApiAuth} />
-        <h3 id={slugify("7.2 gateway Client Token")}>7.2 /gateway/* — Client Token</h3>
+        <h3 id={slugify("7.1 gateway Client Secret")}>7.1 /gateway/* — Client Secret</h3>
         <CodeBlock lang="text" code={examples.gatewayClientAuth} />
         <Callout type="info" title="WebSocket 直连 Core">
-          Gateway 不代理 WebSocket，也不执行 JWT upgrade。TUI 直接连接 Core 的
+          Gateway 不代理 WebSocket。TUI 直接连接 Core 的
           <code>/ws/:sessionId</code> 端点。
         </Callout>
       </Section>

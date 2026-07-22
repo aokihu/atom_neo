@@ -59,7 +59,7 @@ Options:
     }
   },
   "transport": { "maxOutputTokens": 4096 },
-  "gateway": { "port": 3000, "jwtSecret": "..." },
+  "gateway": { "port": 3000 },
   "tui": { "theme": "dark" },
   "permission": {
     "whitelist": ["/home/user/other-project", "/tmp/shared"]
@@ -233,17 +233,14 @@ START
   │
   ├── 2. Initialize Log System
   │
-  ├── 3. Initialize Rate Limiter
-  │     new RateLimiter(config.rateLimit)
+  ├── 3. Initialize Client Manager
+  │     new ClientManager(config, logger)
   │
-  ├── 4. Initialize JWT Verifier
-  │     new JWTVerifier(config.jwtSecret)
-  │
-  ├── 5. Initialize Core Proxy
-  │     new CoreProxy(config.coreUrl)
-  │
-  ├── 6. Start HTTP Server
+  ├── 4. Start HTTP Server
   │     Bun.serve({ port: config.port, fetch: router })
+  │
+  ├── 5. Start All Clients
+  │     cm.startAll() → spawn + health check
   │
   └── READY
 ```

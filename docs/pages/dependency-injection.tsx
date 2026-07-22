@@ -195,7 +195,7 @@ new MemoryService({ dbPath: config.memoryDbPath })`} />
       {/* ═══ Section 10: Dependency Validation ═══ */}
       <Section title="10. Dependency Validation at Startup">
         <Callout type="ok" title="Fail fast">
-          Bootstrap should validate critical dependencies before starting: JWT secret length, tool registry has entries, file paths exist.
+          Bootstrap should validate critical dependencies before starting: tool registry has entries, file paths exist.
         </Callout>
         <CodeBlock lang="typescript" code={blocks.typescript[3] || ""} />
       </Section>

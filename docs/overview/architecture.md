@@ -32,12 +32,9 @@ graph TB
         Sidebar["Sidebar"]
     end
 
-    subgraph Gateway["Gateway (外部通讯层)"]
+    subgraph Gateway["Gateway (Client 中转层)"]
         ClientMgr["Client Manager"]
-        Auth["JWT/Token Auth"]
-        Rate["Rate Limit"]
-        Proxy["HTTP Proxy"]
-        Auth --> Rate --> Proxy
+        SecretAuth["Secret Auth"]
     end
 
     subgraph Clients["Platform Clients (子进程)"]
@@ -60,10 +57,10 @@ graph TB
         WS --> Bus
     end
 
-    InputBar -->|"POST /api/tasks (JWT)"| Auth
+    InputBar -->|"POST /api/tasks"| HTTP
     ClientMgr -->|"stdin/stdout (token)"| WeChat
     ClientMgr -->|"stdin/stdout (token)"| Telegram
-    Proxy --> HTTP
+    SecretAuth -->|"inbound message"| HTTP
     WS -->|"transport.delta"| ChatView
 ```
 
@@ -97,7 +94,7 @@ atom_neo/
 │       │   └── pipelines/        # conversation / prediction / follow-up-evaluator / context-compress / post-conversation
 │       │
 │       ├── shared/               # types / pipeline-core / log / protocol / utils
-│       ├── gateway/              # auth / ratelimit / proxy / client-manager
+│       ├── gateway/              # secret auth / client-manager
 │       └── tui/                  # OpenTUI React: App / ChatView / InputBar / Sidebar / hooks
 │
 ├── sandbox/                      # 运行时工作目录
@@ -342,7 +339,7 @@ type ServerEvent =
   | { type: "event.pipeline.replay-end"; payload: ReplayEndPayload };
 ```
 
-所有事件统一走 WebSocket，无 HTTP 轮询。Gateway 负责 HTTP API 的 JWT 验证和速率限制后代理到 Core。
+所有事件统一走 WebSocket，无 HTTP 轮询。TUI 直连 Core 的 HTTP/WebSocket；Gateway 仅为外部平台 Client 子进程提供消息中转，通过一次性 Secret 验证。
 
 ---
 
@@ -369,7 +366,6 @@ enum PermissionLevel {
 }
 
 // TUI 直连 Core → PermissionLevel.FULL
-// Gateway → JWT claim 中的 permission_level（权限校验待实现）
 ```
 
 ## 相关文档

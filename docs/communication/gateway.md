@@ -1,6 +1,6 @@
-# Gateway — 外部通讯界面层
+# Gateway — 平台 Client 中转层
 
-> **Purpose**: Gateway 是 Atom Neo 的外部通讯界面层。通过管理平台 Client 子进程，将微信、Telegram 等外部平台的消息标准化后路由到 Core 引擎。
+> **Purpose**: Gateway 是 Atom Neo 的平台 Client 中转层。通过管理平台 Client 子进程，将微信、Telegram 等外部平台的消息标准化后路由到 Core 引擎。
 
 ## 1. 架构
 
@@ -12,9 +12,6 @@
 └──────────┘  sendMsg   │ ├ 长轮询/Webhook  │        │ ├ Message → Task    │        │      │
                         │ └ 平台逻辑        │        │ ├ Poll Task Result  │        │      │
                         └──────────────────┘        │ └ Push Result→Client│        └──────┘
-                                                     │                     │
-                                                     │ /api/* (JWT)        │
-                        外部 HTTP 用户 ─────────────→│ 代理到 Core          │
 ```
 
 **原则：**
@@ -22,23 +19,15 @@
 - Client 负责**所有平台特定逻辑**（webhook 管理、消息收发、格式转换）
 - Gateway 是 **Client ↔ Core** 的安全中转层
 - Client 和 Gateway 之间通过 **HTTP API + Secret** 双向通信
+- Gateway **仅监听 127.0.0.1**，仅供本机 Client 子进程访问
 
-## 2. 路由分离
+## 2. 路由
 
-Gateway 暴露两类路由，独立验证：
+Gateway 仅暴露一类路由，仅供 Client 子进程使用：
 
 | 路由前缀 | 验证方式 | 用户 | 用途 |
 |---------|---------|------|------|
-| `/api/*` | `Authorization: Bearer <JWT>` | TUI / 外部 HTTP 客户端 | 代理到 Core |
 | `/gateway/*` | `X-Gateway-Secret` Header | Client 子进程 | 消息中转 |
-
-### 2.1 `/api/*` — JWT 验证
-
-外部用户（TUI、HTTP API 调用者）通过 JWT Bearer Token 访问 Gateway，Gateway 代理请求到 Core。
-
-### 2.2 `/gateway/*` — Secret 验证
-
-内部 Client 子进程通过 HTTP Header `X-Gateway-Secret` 进行身份验证。
 
 **Gateway 端点：**
 
@@ -54,6 +43,8 @@ Gateway 暴露两类路由，独立验证：
 | `/health` | GET | Gateway 健康检查（每 30s） |
 | `/task-result` | POST | Gateway 推送 Core 任务结果 |
 | `/command` | POST | Gateway 管理指令（stop/ping） |
+
+**设计决策：** Gateway 不对外提供任何 API。TUI 直连 Core 的 HTTP/WebSocket，不经过 Gateway。Atom Neo 定位为单机工具，无需对外暴露 HTTP API，因此 Gateway 不需要 JWT / 速率限制 / 反向代理等机制。
 
 ## 3. 消息流
 
@@ -105,7 +96,7 @@ Gateway 暴露两类路由，独立验证：
 | 通讯 | Client 每次 HTTP 调用都带 `X-Gateway-Secret` Header |
 | 崩溃重启 | Gateway 自动生成新 secret，旧 secret 立即失效 |
 
-Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。
+Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。Secret 与 Client 进程生命周期绑定，进程死则 Secret 死。
 
 ## 5. Client Manager
 
@@ -163,7 +154,6 @@ Gateway 关闭
 {
   "gateway": {
     "port": 3000,
-    "jwtSecret": "change-me-minimum-16-chars",
     "clients": [
       {
         "id": "telegram-bot",
@@ -175,7 +165,7 @@ Gateway 关闭
 }
 ```
 
-环境变量：`GATEWAY_PORT`, `CORE_URL`, `JWT_SECRET`
+环境变量：`GATEWAY_PORT`, `CORE_URL`
 
 ## 8. 文件
 
@@ -186,14 +176,7 @@ src/packages/gateway/
     server.ts                       HTTP Server + 路由分发 + 消息中转
     config.ts                       Gateway 配置
     auth/
-      jwt.ts                        JWT 签发与验证
       secret.ts                     Secret 生成与验证
-    ratelimit/
-      limiter.ts                    滑动窗口速率限制
-    permissions/
-      checker.ts                    权限等级比较
-    proxy/
-      core-proxy.ts                 HTTP 反向代理到 Core
     client-manager/
       index.ts                      Client 子进程管理器
 
@@ -210,4 +193,4 @@ clients/
 | [architecture.md](../overview/architecture.md) | Gateway 在系统架构中的位置 |
 | [protocol.md](./protocol.md) | WebSocket 事件协议与 HTTP API |
 | [bootstrap.md](../overview/bootstrap.md) | Gateway 启动顺序 |
-| [configuration.md](../subsystems/configuration.md) | Gateway 配置项 (jwtSecret, port, clients) |
+| [configuration.md](../subsystems/configuration.md) | Gateway 配置项 (port, clients) |

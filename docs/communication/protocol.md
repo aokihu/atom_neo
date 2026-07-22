@@ -8,7 +8,7 @@
 ## 1. Transport
 
 - **Core Side**: WebSocket server at `ws://host:port/ws/:sessionId`
-- **Gateway Side**: HTTP reverse proxy. Verifies JWT for `/api/*` routes, validates Client Token for `/gateway/*` routes. Forwards authenticated requests to Core. WebSocket connections bypass Gateway and connect directly to Core.
+- **Gateway Side**: Message relay for platform Client subprocesses. Validates Client Secret for `/gateway/*` routes, forwards inbound messages to Core, polls task results, and pushes results back to Clients. WebSocket connections bypass Gateway and connect directly to Core.
 - **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
 - **Message Format**: JSON, one message per frame
 - **Session Routing**: Task-scoped `event.transport.*` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
@@ -387,39 +387,26 @@ export type ServerEventType = (typeof ServerEventTypes)[number];
 
 ## 7. Gateway Authentication
 
-Gateway 提供两类路由，使用不同的验证机制：
+Gateway 仅为 Client 子进程提供服务，使用一次性随机 Secret 验证：
 
-### 7.1 `/api/*` — JWT Bearer Token
+### 7.1 `/gateway/*` — Client Secret
 
-外部用户（TUI、HTTP API 调用者）通过 JWT Bearer Token 访问：
-
-```
-POST /api/tasks
-Authorization: Bearer eyJhbG...
-
-// JWT payload:
-{
-  sub: "user-id",
-  permissionLevel: 0 | 1 | 2,
-  exp: 1700000000,
-  iat: 1699996400,
-}
-```
-
-### 7.2 `/gateway/*` — Client Token
-
-内部 Client 子进程通过 Gateway 启动时分配的一次性随机 Token 验证：
+内部 Client 子进程通过 Gateway 启动时分配的一次性随机 Secret 验证：
 
 ```
-POST /gateway/status
-Authorization: Bearer 550e8400-e29b-41d4-a716-446655440000
+POST /gateway/inbound
+X-Gateway-Secret: 550e8400-e29b-41d4-a716-446655440000
 ```
 
-Token 由 `crypto.randomUUID()` 在 Client 子进程启动时生成，仅存在于 Gateway 内存。Client 崩溃重启时自动轮换。
+Secret 由 `crypto.randomUUID()` 在 Client 子进程启动时生成，仅存在于 Gateway 内存。Client 崩溃重启时自动轮换（旧 Secret 立即失效）。
+
+### 7.2 不对外提供 API
+
+Gateway 不向外部用户/TUI 提供任何 API。TUI 直连 Core 的 `/api/*` 和 `/ws/:sessionId`。
 
 ### 7.3 WebSocket
 
-WebSocket 连接不经过 Gateway。TUI 客户端直接连接 Core 的 `/ws/:sessionId` 端点。Gateway 仅代理 HTTP API 调用。
+WebSocket 连接不经过 Gateway。TUI 客户端直接连接 Core 的 `/ws/:sessionId` 端点。Gateway 仅处理 Client 子进程的消息中转。
 
 ---
 

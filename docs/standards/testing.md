@@ -215,7 +215,6 @@ test("receives transport.delta events via WebSocket", async () => {
 | Session Store | 100% |
 | Pipeline Builder | 100% |
 | HTTP handlers | 90%+ (happy path + error cases) |
-| Gateway auth | 100% |
 | Replay system | 100% |
 
 ## 相关文档

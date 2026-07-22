@@ -26,7 +26,7 @@ atom_neo/
 │       ├── shared/           # Shared types, pipeline core, log system
 │       ├── core/             # Core HTTP + WebSocket server, task engine
 │       ├── setup-wizard/     # First-run Ink installation wizard (subprocess)
-│       ├── gateway/          # External gateway (auth, permission, proxy)
+│       ├── gateway/          # Platform client gateway (secret auth + client manager)
 │       └── tui/              # Terminal UI application
 │
 ├── sandbox/                   # Runtime workspace directory (gitignored)
@@ -205,13 +205,9 @@ src/packages/gateway/
 ├── server.ts
 ├── config.ts
 ├── auth/
-│   └── jwt.ts
-├── permissions/
-│   └── checker.ts
-├── ratelimit/
-│   └── limiter.ts
-└── proxy/
-    └── core-proxy.ts
+│   └── secret.ts
+└── client-manager/
+    └── index.ts
 ```
 
 ## 6. Package: `tui`

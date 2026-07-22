@@ -34,7 +34,6 @@
   },
 
   "gateway": {
-    "jwtSecret": "change-me-minimum-16-chars",
     "port": 3000
   },
 
@@ -89,7 +88,7 @@ const ConfigSchema = z.object({
   providerProfiles: ProviderProfilesSchema.default({...}),
   providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
   transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({...}),
-  gateway: z.object({ jwtSecret: z.string(), port: z.number().int().default(3000) }).default({...}),
+  gateway: z.object({ port: z.number().int().default(3000) }).default({...}),
   tui: z.object({ theme: z.enum(["github-dark", "github-light", "dracula", "nord", "tokyo-night", "solarized-dark", "monokai"]).default("github-dark") }).default({...}),
 });
 
@@ -149,7 +148,7 @@ const providerOptions = {
   },
   providers: {},
   transport: { maxOutputTokens: 4096 },
-  gateway: { jwtSecret: "change-me-minimum-16-chars", port: 3000 },
+  gateway: { port: 3000 },
   tui: { theme: "github-dark" },
 }
 ```

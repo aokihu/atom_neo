@@ -244,10 +244,6 @@ class GoodService {
 // Bootstrap should validate critical dependencies before starting:
 
 function validateDeps(deps: RuntimeDeps): void {
-  if (!deps.config.jwtSecret || deps.config.jwtSecret.length < 16) {
-    throw new Error("jwtSecret must be at least 16 characters");
-  }
-
   if (deps.toolRegistry.getAll().length === 0) {
     throw new Error("No tools registered. At least read tool is required.");
   }

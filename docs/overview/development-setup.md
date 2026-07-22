@@ -39,7 +39,6 @@ cp .env.example .env
 
 # Required:
 DEEPSEEK_API_KEY=sk-your-key-here
-GATEWAY_JWT_SECRET=your-secret-at-least-16-chars
 
 # Optional (defaults are fine for dev):
 CORE_PORT=3100
@@ -72,7 +71,7 @@ bun test
 # Terminal 1: Start Core
 bun run --filter @atom-neo/core dev
 
-# Terminal 2: Start Gateway (optional, for API testing)
+# Terminal 2: Start Gateway (optional, for platform client testing)
 bun run --filter @atom-neo/gateway dev
 
 # Terminal 3: Start TUI (optional, for terminal testing)
@@ -105,13 +104,6 @@ curl -X POST http://localhost:3100/api/tasks \
   }'
 
 # Expected: {"taskId":"...","state":"waiting"}
-
-# Via Gateway (with JWT auth):
-# First get a token (if auth endpoint is set up), then:
-curl -X POST http://localhost:3000/api/tasks \
-  -H "Authorization: Bearer <jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{ ... }'
 ```
 
 ---
