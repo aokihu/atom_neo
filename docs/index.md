@@ -55,6 +55,7 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [gateway.md](./communication/gateway.md) | Gateway 平台 Client 中转层 — 子进程管理 + Secret 鉴权 + 消息路由 | 理解外部平台集成 |
+| [clients/telegram-bot.md](./clients/telegram-bot.md) | Telegram Bot Client 实现 — 长轮询/Webhook 双模式 + 消息分片 + 限流退避 | 接入 Telegram |
 | [protocol.md](./communication/protocol.md) | WebSocket 事件协议 | 通信层 |
 | [error-handling.md](./communication/error-handling.md) | 错误跨层传播模型 — Element → Pipeline → TaskEngine → Client | 写 try/catch |
 

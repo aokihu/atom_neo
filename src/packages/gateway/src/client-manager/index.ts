@@ -1,6 +1,20 @@
 import { generateSecret } from "../auth/secret";
-import type { GatewayConfig } from "../config";
+import type { ClientConfig, GatewayConfig } from "../config";
 import type { Logger } from "@atom-neo/shared";
+
+const RESERVED_ARGS = new Set(["secret", "port", "gateway-url"]);
+
+function buildClientArgs(clientArgs?: Record<string, string>): string[] {
+  if (!clientArgs) return [];
+  const args: string[] = [];
+  for (const [key, value] of Object.entries(clientArgs)) {
+    if (RESERVED_ARGS.has(key)) {
+      throw new Error(`clientArgs.${key} is reserved and managed by Gateway`);
+    }
+    args.push(`--${key}`, value);
+  }
+  return args;
+}
 
 export type ActiveClient = {
   id: string;
@@ -35,7 +49,7 @@ export class ClientManager {
 
   async startAll(): Promise<void> {
     for (const cc of this.#config.clients) {
-      await this.spawn(cc.id, cc.platform, cc.binary);
+      await this.spawn(cc);
     }
 
     this.#heartbeatTimer = setInterval(() => this.#healthCheck(), 30_000);
@@ -52,7 +66,8 @@ export class ClientManager {
     }
   }
 
-  private async spawn(id: string, platform: string, binaryPath: string): Promise<void> {
+  private async spawn(cc: ClientConfig): Promise<void> {
+    const { id, platform, binary, clientArgs } = cc;
     const secret = generateSecret();
     const port = this.#nextPort++;
 
@@ -60,19 +75,23 @@ export class ClientManager {
     this.#clients.set(id, client);
     this.#secretMap.set(secret, client);
 
-    this.#logger.info("spawning client", { id, platform, port, binary: binaryPath });
+    const userArgs = buildClientArgs(clientArgs);
+    this.#logger.info("spawning client", { id, platform, port, binary, args: userArgs });
 
-    const proc = Bun.spawn([binaryPath, "--secret", secret, "--port", String(port), "--gateway-url", `http://127.0.0.1:${this.#config.port}`], {
-      stdout: "pipe",
-      stderr: "pipe",
-      onExit: (_, exitCode, signalCode, error) => {
-        this.#logger.warn("client exited", { id, platform, exitCode, signalCode, error: error?.message });
-        if (this.#clients.has(id)) {
-          this.#logger.info("restarting client", { id, platform });
-          this.spawn(id, platform, binaryPath);
-        }
+    const proc = Bun.spawn(
+      [binary, "--secret", secret, "--port", String(port), "--gateway-url", `http://127.0.0.1:${this.#config.port}`, ...userArgs],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        onExit: (_, exitCode, signalCode, error) => {
+          this.#logger.warn("client exited", { id, platform, exitCode, signalCode, error: error?.message });
+          if (this.#clients.has(id)) {
+            this.#logger.info("restarting client", { id, platform });
+            this.spawn(cc);
+          }
+        },
       },
-    });
+    );
 
     this.#procs.set(id, { killed: false });
     this.#logger.debug("client process started", { id, pid: proc.pid });

@@ -167,8 +167,7 @@ export async function main(): Promise<void> {
       const gateway = await startGateway({
         port: appConfig.gateway?.port ?? 3000,
         coreUrl: `http://${args.host}:${core.port}`,
-        jwtSecret: appConfig.gateway?.jwtSecret,
-        clients: (appConfig.gateway as any)?.clients,
+        clients: appConfig.gateway?.clients,
       });
       logger.info("gateway started alongside core", { corePort: core.port, gatewayPort: appConfig.gateway?.port ?? 3000 });
       break;

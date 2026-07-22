@@ -158,12 +158,21 @@ Gateway 关闭
       {
         "id": "telegram-bot",
         "platform": "telegram",
-        "binary": "/home/user/bots/telegram-bot"
+        "binary": "/home/user/bots/telegram-bot",
+        "clientArgs": {
+          "bot-token": "123456:ABC-DEF...",
+          "mode": "longpoll"
+        }
       }
     ]
   }
 }
 ```
+
+**`clientArgs` 字段说明：**
+- key 必须与 client 的 CLI 参数名完全一致（kebab-case）
+- Gateway 保留 `secret`、`port`、`gateway-url` 三个内部参数，不允许覆盖
+- 所有值必须为字符串类型
 
 环境变量：`GATEWAY_PORT`, `CORE_URL`
 

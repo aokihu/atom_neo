@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "bun run --watch src/main.ts",
     "start": "bun run src/main.ts",
-    "build": "bun build src/main.ts --compile --outfile telegram-bot"
+    "build": "bun build src/main.ts --compile --outfile telegram-bot",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
   }
 }
