@@ -40,3 +40,4 @@ data/
 # Sandbox (runtime workspace)
 sandbox/
 clients/telegram-bot/telegram-bot
+.bun-build
