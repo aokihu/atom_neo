@@ -45,6 +45,8 @@ function parseArgs(): ClientArgs {
 
   const portStr = getArg("port");
   if (!portStr) { console.error("--port is required"); process.exit(1); }
+  const port = parseInt(portStr);
+  if (isNaN(port) || port < 1 || port > 65535) { console.error(`--port must be a valid port number (1-65535), got: ${portStr}`); process.exit(1); }
 
   const botToken = getArg("bot-token") ?? Bun.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) { console.error("--bot-token or TELEGRAM_BOT_TOKEN env is required"); process.exit(1); }
@@ -59,16 +61,20 @@ function parseArgs(): ClientArgs {
     console.error("--webhook-url is required when --mode=webhook"); process.exit(1);
   }
 
+  const webhookPortStr = getArg("webhook-port") ?? "8443";
+  const webhookPort = parseInt(webhookPortStr);
+  if (isNaN(webhookPort) || webhookPort < 1 || webhookPort > 65535) { console.error(`--webhook-port must be a valid port number (1-65535), got: ${webhookPortStr}`); process.exit(1); }
+
   const webhookSecret = getArg("webhook-secret") ?? crypto.randomUUID();
 
   return {
     secret,
-    port: parseInt(portStr),
+    port,
     gatewayUrl: getArg("gateway-url") ?? "http://127.0.0.1:3000",
     botToken,
     mode,
     webhookUrl,
-    webhookPort: parseInt(getArg("webhook-port") ?? "8443"),
+    webhookPort,
     webhookHost: getArg("webhook-host") ?? "127.0.0.1",
     webhookSecret,
   };
@@ -104,8 +110,6 @@ function splitMessage(text: string, maxLen = 4096): string[] {
 const args = parseArgs();
 const TG = `https://api.telegram.org/bot${args.botToken}`;
 
-let backoffMs = 0;
-
 async function tgCall<T>(method: string, body: Record<string, unknown>, retries = 3): Promise<TgResponse<T>> {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -116,7 +120,7 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
       });
       const data = await res.json() as TgResponse<T>;
 
-      if (data.ok) { backoffMs = 0; return data; }
+      if (data.ok) { return data; }
 
       if (data.error_code === 401 || data.error_code === 409) {
         console.error(`[tg] fatal error ${data.error_code}: ${data.description}`);
@@ -135,8 +139,8 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
     } catch (err) {
       console.error(`[tg] network error (attempt ${attempt + 1}): ${err}`);
       if (attempt < retries - 1) {
-        backoffMs = Math.min(backoffMs * 2 || 1000, 30_000);
-        await sleep(backoffMs);
+        const backoff = Math.min(1000 * Math.pow(2, attempt), 30_000);
+        await sleep(backoff);
       }
     }
   }
@@ -179,14 +183,20 @@ async function sendReply(chatId: string, text: string): Promise<void> {
  */
 function fixMarkdownLineBreaks(md: string): string {
   // 只按 fenced code blocks (```...```) 分段，保护内部内容
-  // inline code (`...`) 不分段，让 heading 正则自然匹配
   const segments = md.split(/(```[\s\S]*?```)/g);
+
+  const headingRe = /(?<=[^\n#\\])(#{1,6}(?!#)[ \t]*\S[^\n]*)$/gm;
 
   const result = segments.map((seg, i) => {
     // 奇数段是 fenced code blocks，原样保留
     if (i % 2 === 1) return seg;
 
     return seg
+      // 标题粘连修复（segment 内处理，不破坏代码块）
+      .replace(headingRe, (m: string) => {
+        const fixed = /#{1,6}[ \t]/.test(m) ? m : m.replace(/^(#{1,6})/, "$1 ");
+        return "\n\n" + fixed;
+      })
       // 无序列表标记（非行首，前置字符不是 * _ 避免拆分 **bold**）
       .replace(/([^\n*_])(\s*)([-*+])([ \t])/g, "$1\n$2$3$4")
       // 有序列表
@@ -195,14 +205,7 @@ function fixMarkdownLineBreaks(md: string): string {
       .replace(/([^\n])(\s*)(>[ \t])/g, "$1\n$2$3");
   }).join("");
 
-  // 标题正则：在 joined 结果上运行，捕获跨 segment 边界的标题
-  // lookbehind 确保不拆分 ### 也不匹配行首的标题
   return result
-    .replace(/(?<=[^\n#\\])(#{1,6}(?!#)[ \t]*\S[^\n]*)$/gm,
-      (m: string) => {
-        const fixed = /#{1,6}[ \t]/.test(m) ? m : m.replace(/^(#{1,6})/, "$1 ");
-        return "\n\n" + fixed;
-      })
     .replace(/\n{3,}/g, "\n\n")
     .replace(/^\n+/, "");
 }
@@ -211,7 +214,9 @@ function fixMarkdownLineBreaks(md: string): string {
 
 let updateOffset = 0;
 // 记录每个 chat 的最后一条消息 ID，用于回复时建立引用
+// 上限 1000 条，超出时删除最早条目
 const lastMessageIds = new Map<string, number>();
+const MAX_MESSAGE_IDS = 1000;
 
 async function handleUpdate(update: TgUpdate): Promise<void> {
   const msg = update.message;
@@ -219,6 +224,10 @@ async function handleUpdate(update: TgUpdate): Promise<void> {
 
   // 记录消息 ID 供 reply 使用
   lastMessageIds.set(String(msg.chat.id), msg.message_id);
+  if (lastMessageIds.size > MAX_MESSAGE_IDS) {
+    const first = lastMessageIds.keys().next().value;
+    if (first !== undefined) lastMessageIds.delete(first);
+  }
 
   // 忽略 bot 自己的消息，避免 bot-to-bot 循环
   if (msg.from?.is_bot) return;
@@ -285,7 +294,6 @@ async function startLongPolling(): Promise<void> {
       console.error(`[tg] poll error (${consecutiveErrors}), retrying in ${backoff}ms:`, err);
       await sleep(backoff);
     }
-    if (backoffMs > 0) await sleep(backoffMs);
   }
 }
 
@@ -344,8 +352,11 @@ const server = Bun.serve({
       const cmd = await req.json() as { action: string };
       if (cmd.action === "stop") {
         console.log("[bot] stopping");
+        const response = Response.json({ ok: true });
         server.stop();
-        process.exit(0);
+        // 延迟退出确保 HTTP 响应已发送
+        setTimeout(() => process.exit(0), 100);
+        return response;
       }
       if (cmd.action === "ping") {
         return Response.json({ ok: true, pong: true });
