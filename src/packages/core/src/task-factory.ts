@@ -15,6 +15,7 @@ export function createTaskItem(params: {
   payload: TaskPayload[];
   parentTaskId?: string | null;
   chainId?: string;
+  platform?: string;
   origin?: TaskOrigin;
 }): TaskItem {
   const id = generateId("task");
@@ -34,6 +35,7 @@ export function createTaskItem(params: {
       : TaskPriority.INTERNAL,
     createdAt: now,
     payload: params.payload,
+    ...(params.platform ? { platform: params.platform } : {}),
     ...(params.origin ? { origin: params.origin } : {}),
     state: TaskState.WAITING,
     updatedAt: now,

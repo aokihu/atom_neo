@@ -33,6 +33,7 @@ export async function createTaskHandler(
       pipeline: body.pipeline ?? "prediction",
       source: TaskSource.EXTERNAL,
       payload: [{ type: "text", data: body.data?.text ?? "" }],
+      ...(body.platform ? { platform: body.platform } : {}),
     });
 
     if (pipeline) pipelineMap.set(task.id, pipeline);

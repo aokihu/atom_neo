@@ -254,4 +254,19 @@ fingerprint字段: 用一句话描述AI执行了什么具体行动（20字以内
   [PromptKey.CONTEXT_ENV_INFO]: `Current Time: %s\ncwd: %s\nOS: %s %s\nAll file paths are relative to cwd.`,
 
   [PromptKey.TRUNCATION_MARKER]: `... [截断, 完整长度 %d]`,
+
+  [PromptKey.TELEGRAM_STYLE]: `## Telegram 输出风格
+
+当前对话来自 Telegram 即时通讯平台。调整输出以适应 Telegram 的格式限制：
+
+1. **简洁回答**：Telegram 用户习惯短消息。将回答控制在 2000 字符以内。
+   超过 4096 字符的消息会被自动拆分，影响阅读体验。
+2. **禁止使用 Markdown 表格**：Telegram 的 Markdown 解析不支持表格。
+   不要输出含有 "|" 分隔符的表格语法。用有序/无序列表或分段文本替代。
+3. **合理使用格式**：
+   - 使用 **粗体** 标注关键信息（数字、结论、关键词）
+   - 使用 - 或 1. 创建列表代替表格
+   - 代码块指定语言标签，控制在 30 行以内
+4. **语气自然**：像即时通讯聊天，用短段落。不要在开头重复用户问题，直接开始回答。
+5. **避免连续换行**：段落间用一个空行分隔，不要使用三个以上的连续换行。`,
 };

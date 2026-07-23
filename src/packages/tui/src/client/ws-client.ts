@@ -152,7 +152,7 @@ export class TuiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sessionId: this.#sessionId, chatId: this.#chatId, data: { text },
+        sessionId: this.#sessionId, chatId: this.#chatId, platform: "tui", data: { text },
       }),
     });
     const response = await res.json().catch(() => ({})) as { taskId?: unknown; error?: unknown };

@@ -12,6 +12,7 @@ import {
   CheckFollowUpElement,
   FinalizeElement,
   InjectSkillContextElement,
+  ApplySourceContextElement,
 } from "./elements";
 
 import { DEFAULT_MAX_TOKENS } from "../../constants";
@@ -31,6 +32,7 @@ export function registerConversationElements(): void {
   registerElement("check-follow-up", CheckFollowUpElement);
   registerElement("finalize", FinalizeElement);
   registerElement("inject-skill-context", InjectSkillContextElement);
+  registerElement("apply-source-context", ApplySourceContextElement);
 }
 
 export type ConversationPipelineDeps = {
@@ -70,6 +72,9 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       taskIntent: deps.intent,
       getCompiledPrompt: deps.getCompiledPrompt,
       skillService: deps.skillService,
+    })
+    .transform("apply-source-context", {
+      contextService: deps.contextService,
     })
     .transform("collect-context", {
       contextService: deps.contextService,

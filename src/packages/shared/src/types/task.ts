@@ -41,6 +41,7 @@ export type TaskItem = {
   readonly priority: number;
   readonly createdAt: number;
   readonly payload: TaskPayload[];
+  readonly platform?: string;
   readonly origin?: TaskOrigin;
   state: TaskState;
   updatedAt: number;
