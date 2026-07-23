@@ -162,7 +162,8 @@ Gateway 关闭
         "clientArgs": {
           "bot-token": "123456:ABC-DEF...",
           "mode": "longpoll"
-        }
+        },
+        "stdio": "inherit"
       }
     ]
   }
@@ -173,6 +174,12 @@ Gateway 关闭
 - key 必须与 client 的 CLI 参数名完全一致（kebab-case）
 - Gateway 保留 `secret`、`port`、`gateway-url` 三个内部参数，不允许覆盖
 - 所有值必须为字符串类型
+
+**`stdio` 字段说明：**
+- 控制 Client 子进程 stdout/stderr 的处理方式
+- `"inherit"`（默认）：输出到 Gateway 的 stdout/stderr，便于开发调试
+- `"ignore"`：丢弃 Client 输出，减少生产环境日志噪音
+- 注意：**不是** Client 的 CLI 参数，属于 Gateway 内部进程管理配置
 
 环境变量：`GATEWAY_PORT`, `CORE_URL`
 

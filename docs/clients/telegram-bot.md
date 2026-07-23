@@ -82,12 +82,12 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
       "clientArgs": {
         "bot-token": "123456:ABC-DEF...",
         "mode": "longpoll"
-        // 或：
-        // "mode": "webhook",
-        // "webhook-url": "https://bot.your-domain.com/tg",
-        // "webhook-port": "8443",
-        // "webhook-secret": "your-persistent-secret"
-      }
+      },
+      "clientArgs": {
+        "bot-token": "123456:ABC-DEF...",
+        "mode": "longpoll"
+      },
+      "stdio": "inherit"
     }]
   }
 }
@@ -97,6 +97,10 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
 - `clientArgs` 的 key 必须与 client CLI 参数名完全一致（kebab-case）
 - Gateway 保留 `secret`、`port`、`gateway-url` 三个内部参数，不允许在 `clientArgs` 中覆盖
 - 所有值必须为字符串类型
+- `stdio`：控制 Client 子进程 stdout/stderr 输出方式
+  - `"inherit"`（默认）：输出到 Gateway 终端，便于开发调试
+  - `"ignore"`：丢弃输出，减少生产日志噪音
+  - **注意**：`stdio` 是 Gateway 内部进程管理配置，不是 Client 的 CLI 参数
 
 ## 4. 两种模式对比
 
