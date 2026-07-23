@@ -150,7 +150,6 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
 // ── Send Reply ──────────────────────────────────────────────────────────
 
 async function sendReply(chatId: string, text: string): Promise<void> {
-  // 先修复粘连，再分片（避免 telegramify 转义序列被切分）
   const fixed = fixMarkdownLineBreaks(text);
   const chunks = splitMessage(fixed);
   const replyToId = lastMessageIds.get(chatId) ?? 0;
@@ -164,9 +163,12 @@ async function sendReply(chatId: string, text: string): Promise<void> {
     const res = await tgCall("sendMessage", body);
     if (!res.ok) {
       console.error(`[tg] sendMessage failed (${res.error_code}): ${res.description}`);
-      // MarkdownV2 解析失败时，用修复后但未转义的原始文本降级重试
+      console.error(`[tg] failed text preview: ${formatted.slice(0, 200)}`);
+      // MarkdownV2 解析失败时，降级为原始纯文本（不经 fixMarkdownLineBreaks 和 telegramify）
       if (res.error_code === 400) {
-        const fallback: Record<string, unknown> = { chat_id: chatId, text: chunks[i] };
+        const rawChunks = splitMessage(text);
+        const rawText = rawChunks[i] ?? text;
+        const fallback: Record<string, unknown> = { chat_id: chatId, text: rawText };
         if (i === 0 && replyToId > 0) fallback.reply_parameters = { message_id: replyToId };
         await tgCall("sendMessage", fallback);
       }
