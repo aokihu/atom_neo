@@ -36,7 +36,7 @@ export default function ArchitecturePage({ content, title, description, category
           </div>
           <div className="arch-layer arch-layer-gateway">
             <div className="arch-layer__label">Gateway</div>
-            <div className="arch-layer__desc">JWT 认证 → 权限检查 → 速率限制 → 请求转发</div>
+            <div className="arch-layer__desc">Client 子进程管理 → Secret 验证 → 消息中转</div>
           </div>
           <div className="arch-layer arch-layer-core">
             <div className="arch-layer__label">Core</div>

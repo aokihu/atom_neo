@@ -4,6 +4,7 @@ const ClientConfigSchema = z.object({
   id: z.string().min(1),
   platform: z.string().min(1),
   binary: z.string().min(1),
+  clientArgs: z.record(z.string(), z.string()).optional(),
 });
 
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;

@@ -67,11 +67,10 @@ cd atom_neo`} />
           </div>
         </div>
         <Callout type="warn" title="Required Variables">
-          <code>DEEPSEEK_API_KEY</code> and <code>GATEWAY_JWT_SECRET</code> are required. All others have sensible defaults.
+          <code>DEEPSEEK_API_KEY</code> is required. All others have sensible defaults.
         </Callout>
         <CodeBlock lang="bash" code={`# Required:
 DEEPSEEK_API_KEY=sk-your-key-here
-GATEWAY_JWT_SECRET=your-secret-at-least-16-chars
 
 # Optional (defaults are fine for dev):
 CORE_PORT=3100
@@ -170,9 +169,6 @@ REPLAY_ENABLED=true`} />
 # Expected: {"taskId":"...","state":"waiting"}`} />
           </div>
         </div>
-        <Callout type="info" title="Via Gateway (with JWT)">
-          <code>{"curl -X POST http://localhost:3000/api/tasks -H \"Authorization: Bearer <jwt>\" -H \"Content-Type: application/json\" -d '{\"...\"}'"}</code>
-        </Callout>
       </Section>
 
       {/* ═══ Section 7: WebSocket Test ═══ */}

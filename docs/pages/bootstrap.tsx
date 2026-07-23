@@ -60,10 +60,9 @@ export default function DocPage({ content, title, description, category }: DocPa
           {[
             { step: 1, label: "Load Configuration", desc: "gatewayConfig.load()" },
             { step: 2, label: "Initialize Log System", desc: "" },
-            { step: 3, label: "Initialize Rate Limiter", desc: "new RateLimiter(config.rateLimit)" },
-            { step: 4, label: "Initialize JWT Verifier", desc: "new JWTVerifier(config.jwtSecret)" },
-            { step: 5, label: "Initialize Core Proxy", desc: "new CoreProxy(config.coreUrl)" },
-            { step: 6, label: "Start HTTP Server", desc: "Bun.serve({ port: config.port, fetch: router })" },
+            { step: 3, label: "Initialize Client Manager", desc: "new ClientManager(config, logger)" },
+            { step: 4, label: "Start HTTP Server", desc: "Bun.serve({ port: config.port, fetch: router })" },
+            { step: 5, label: "Start All Clients", desc: "cm.startAll() → spawn + health check" },
           ].map((item) => (
             <div className="timeline__item" key={item.step}>
               <div className="timeline__step"><Badge color="orange">{String(item.step)}</Badge></div>

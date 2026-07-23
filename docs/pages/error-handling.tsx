@@ -321,8 +321,6 @@ export function normalizeError(error: unknown): ErrorResponse {
             [<code>PIPELINE_NOT_FOUND</code>, <Badge color="orange">HTTP 404</Badge>, "Requested pipeline name is not registered"],
             [<code>INTERNAL_ERROR</code>, <Badge color="red">HTTP 500</Badge>, "Unhandled server-side exception"],
             [<code>RATE_LIMIT_EXCEEDED</code>, <Badge color="orange">HTTP 429</Badge>, "Client exceeded rate limit threshold"],
-            [<code>UNAUTHORIZED</code>, <Badge color="red">HTTP 401</Badge>, "Missing or invalid JWT token"],
-            [<code>FORBIDDEN</code>, <Badge color="red">HTTP 403</Badge>, "Authenticated user lacks required permissions"],
             [<code>SESSION_NOT_FOUND</code>, <Badge color="orange">HTTP 404</Badge>, "Requested session ID does not exist"],
           ]}
         />

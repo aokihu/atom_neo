@@ -29,14 +29,14 @@ const ConfigSchema = z.object({
     maxOutputTokens: z.number().int().default(4096),
   }).default({ maxOutputTokens: 4096 }),
   gateway: z.object({
-    jwtSecret: z.string().default("change-me-minimum-16-chars"),
     port: z.number().int().default(3000),
     clients: z.array(z.object({
       id: z.string(),
       platform: z.string(),
       binary: z.string(),
+      clientArgs: z.record(z.string(), z.string()).optional(),
     })).default([]),
-  }).default({ jwtSecret: "change-me-minimum-16-chars", port: 3000, clients: [] }),
+  }).default({ port: 3000, clients: [] }),
   tui: z.object({
     theme: z.enum([
       "github-dark", "github-light", "dracula", "nord",

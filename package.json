@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.10.0",
+  "version": "1.11.1",
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
+    "dev:gateway":"bun run src/main.ts --mode full --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
     "docs": "bun run --watch docs/server.tsx",
     "docs:dev": "bun run docs/server.tsx",
@@ -22,6 +23,7 @@
     "@ai-sdk/deepseek": "^3.0.12",
     "@ai-sdk/mcp": "^2.0.15",
     "@atom-neo/core": "workspace:*",
+    "@atom-neo/gateway": "workspace:*",
     "@atom-neo/setup-wizard": "workspace:*",
     "@atom-neo/shared": "workspace:*",
     "@atom-neo/tui": "workspace:*",

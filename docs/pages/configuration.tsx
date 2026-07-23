@@ -121,7 +121,6 @@ export default function DocPage({ content, title, description, category }: DocPa
 CORE_PORT=3100
 DEEPSEEK_API_KEY=sk-xxx
 OPENAI_API_KEY=sk-xxx
-GATEWAY_JWT_SECRET=supersecret-min-16-chars
 
 # .gitignore:
 .env

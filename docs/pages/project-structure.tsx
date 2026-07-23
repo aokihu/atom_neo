@@ -35,7 +35,7 @@ const PACKAGES: PackageInfo[] = [
   { name: "shared", label: "shared", color: "blue", description: "Shared types, pipeline core, log system — the foundation of the monorepo. Every other package depends on this." },
   { name: "core", label: "core", color: "green", description: "Core HTTP + WebSocket server, task engine, and tool registry. The central processing unit of the system." },
   { name: "setupWizard", label: "setup-wizard", color: "purple", description: "First-run Ink configuration wizard. It runs in an isolated subprocess and compiles with the same workspace build contract as every other package." },
-  { name: "gateway", label: "gateway", color: "orange", description: "External gateway handling JWT authentication, permission evaluation, rate limiting, and request proxying to Core." },
+  { name: "gateway", label: "gateway", color: "orange", description: "Platform client gateway managing subprocess lifecycle, secret-based auth, and message relay between external platforms and Core." },
   { name: "tui", label: "tui", color: "purple", description: "Terminal UI application. Connects to Core via WebSocket for real-time streaming and tool execution display." },
 ];
 
@@ -143,7 +143,7 @@ export default function ProjectStructurePage({ content, title, description, cate
         <strong>5 packages, 1 workspace root</strong> — <code>shared</code> provides types, pipeline core, and logging.
         <code>core</code> runs the HTTP/WebSocket server with event-driven task scheduling.
         <code>setup-wizard</code> handles first-run configuration in an isolated subprocess.
-        <code>gateway</code> secures external access with JWT auth and rate limiting.
+        <code>gateway</code> manages platform client subprocesses with secret-based auth.
         <code>tui</code> delivers the terminal interface via WebSocket streaming.
       </Callout>
     </div>
