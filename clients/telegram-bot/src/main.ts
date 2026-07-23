@@ -97,6 +97,36 @@ function splitMessage(text: string, maxLen = 4096): string[] {
   return chunks;
 }
 
+/**
+ * HTML 安全分片：优先在 </p>、</li>、</pre> 等块级结束标签后切分，
+ * 避免在 <b>、<code> 等行内标签中间截断导致未闭合。
+ */
+function splitHtmlMessage(html: string, maxLen = 4096): string[] {
+  if (html.length <= maxLen) return [html];
+  const chunks: string[] = [];
+  let remaining = html;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) { chunks.push(remaining); break; }
+
+    // 在 maxLen 范围内找最后一个块级结束标签
+    const window = remaining.slice(0, maxLen);
+    const blockEnds = ["</p>", "</li>", "</pre>", "</blockquote>", "</h1>", "</h2>", "</h3>", "</h4>", "</h5>", "</h6>", "\n"];
+    let cut = -1;
+    for (const tag of blockEnds) {
+      const idx = window.lastIndexOf(tag);
+      if (idx > cut) cut = idx + tag.length;
+    }
+
+    // 找不到合适位置就硬切（风险自负）
+    if (cut <= 0) cut = maxLen;
+
+    chunks.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut);
+  }
+  return chunks;
+}
+
 // ── Telegram API ────────────────────────────────────────────────────────────
 
 const args = parseArgs();
@@ -142,12 +172,132 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
 }
 
 async function sendReply(chatId: string, replyToId: number, text: string): Promise<void> {
-  const chunks = splitMessage(text);
+  // 优先尝试 Markdown → HTML 渲染
+  const html = markdownToTelegramHtml(text);
+  const useHtml = html !== null;
+
+  // HTML 模式下用安全分片，避免截断标签
+  const chunks = useHtml ? splitHtmlMessage(sanitizeTelegramHtml(html)) : splitMessage(text);
+
   for (let i = 0; i < chunks.length; i++) {
     const body: Record<string, unknown> = { chat_id: chatId, text: chunks[i] };
+    if (useHtml) body.parse_mode = "HTML";
     if (i === 0) body.reply_parameters = { message_id: replyToId };
     await tgCall("sendMessage", body);
   }
+}
+
+// ── Markdown → HTML ─────────────────────────────────────────────────────────
+
+/**
+ * 修复 LLM 输出中常见的"粘连"问题：
+ * 块级 Markdown 语法（标题/列表/代码块/引用）前面缺少换行时自动补齐。
+ * 代码块内部不处理。
+ *
+ * 注意：Markdown 规范要求标题标记 # 后面必须有空格（### text），
+ * 无空格的 ###text 不是合法 Markdown，不会被任何解析器识别为标题。
+ * 因此我们只处理"前面缺换行"的情况，不处理"# 后缺空格"的情况。
+ */
+function fixMarkdownLineBreaks(md: string): string {
+  // 只按 fenced code blocks (```...```) 分段，保护内部内容
+  // inline code (`...`) 不分段，让 heading 正则自然匹配
+  const segments = md.split(/(```[\s\S]*?```)/g);
+
+  const result = segments.map((seg, i) => {
+    // 奇数段是 fenced code blocks，原样保留
+    if (i % 2 === 1) return seg;
+
+    return seg
+      // 无序列表标记
+      .replace(/([^\n])(\s*)([-*+])([ \t])/g, "$1\n$2$3$4")
+      // 有序列表
+      .replace(/([^\n\s.])(\s*)(\d+\.)([ \t])/g, "$1\n$2$3$4")
+      // 引用块
+      .replace(/([^\n])(\s*)(>[ \t])/g, "$1\n$2$3");
+  }).join("");
+
+  // 标题正则：在 joined 结果上运行，捕获跨 segment 边界的标题
+  // lookbehind 确保不拆分 ### 也不匹配行首的标题
+  return result
+    .replace(/(?<=[^\n#\\])(#{1,6}(?!#)[ \t]*\S[^\n]*)$/gm,
+      (m: string) => {
+        const fixed = /#{1,6}[ \t]/.test(m) ? m : m.replace(/^(#{1,6})/, "$1 ");
+        return "\n\n" + fixed;
+      })
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\n+/, "");
+}
+
+/**
+ * 将 Markdown 渲染为 Telegram HTML 模式支持的子集。
+ * 失败时返回 null，调用方应降级为纯文本。
+ */
+function markdownToTelegramHtml(md: string): string | null {
+  try {
+    const fixed = fixMarkdownLineBreaks(md);
+    const html = Bun.markdown.html(fixed, {
+      // Telegram HTML 模式支持的标签子集：<b> <i> <u> <s> <code> <pre> <a> <blockquote> <tg-spoiler>
+      tables: true,
+      strikethrough: true,
+      tasklists: true,
+      autolinks: true,
+      // LLM 输出常缺 # 后空格，如 ###标题（非标准但可容错渲染）
+      permissiveAtxHeaders: true,
+    });
+    return html;
+  } catch (err) {
+    console.error(`[tg] markdown render failed: ${err}`);
+    return null;
+  }
+}
+
+/**
+ * Telegram HTML 模式不支持的标签转换为支持的标签：
+ * - <h1>..<h6> → <b> + 换行
+ * - <ul>/<ol>/<li> → 换行 + • 前缀
+ * - <table> 系列 → 移除（Telegram 不支持）
+ * - <hr> → 分隔线文本
+ * - <input type=checkbox> → 移除
+ * - <em> → <i>，<strong> → <b>，<del> → <s>
+ */
+function sanitizeTelegramHtml(html: string): string {
+  return html
+    // 标题 → 加粗 + 换行
+    .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/g, "<b>$1</b>\n")
+    // 列表
+    .replace(/<ul[^>]*>/g, "")
+    .replace(/<\/ul>/g, "")
+    .replace(/<ol[^>]*>/g, "")
+    .replace(/<\/ol>/g, "")
+    .replace(/<li[^>]*>([\s\S]*?)<\/li>/g, "• $1\n")
+    // 表格 → 降级为文本
+    .replace(/<table[^>]*>([\s\S]*?)<\/table>/g, (_m, inner: string) => {
+      return inner
+        .replace(/<thead[^>]*>([\s\S]*?)<\/thead>/g, (_t, thead: string) =>
+          thead.replace(/<th[^>]*>([\s\S]*?)<\/th>/g, "$1 | ")
+        )
+        .replace(/<tbody[^>]*>([\s\S]*?)<\/tbody>/g, (_b, tbody: string) =>
+          tbody.replace(/<tr[^>]*>([\s\S]*?)<\/tr>/g, (_r, row: string) =>
+            row.replace(/<td[^>]*>([\s\S]*?)<\/td>/g, "$1 | ").trimEnd() + "\n"
+          )
+        );
+    })
+    // 任务列表 checkbox → 文本标记
+    .replace(/<input[^>]*type="checkbox"[^>]*checked[^>]*>/g, "☑ ")
+    .replace(/<input[^>]*type="checkbox"[^>]*>/g, "☐ ")
+    // hr → 分隔线
+    .replace(/<hr[^>]*>/g, "───\n")
+    // em/strong/del → Telegram 等价标签
+    .replace(/<em>([\s\S]*?)<\/em>/g, "<i>$1</i>")
+    .replace(/<strong>([\s\S]*?)<\/strong>/g, "<b>$1</b>")
+    .replace(/<del>([\s\S]*?)<\/del>/g, "<s>$1</s>")
+    // <p> → 换行
+    .replace(/<p[^>]*>([\s\S]*?)<\/p>/g, "$1\n")
+    // 换行标签 → \n
+    .replace(/<br[^>]*>/g, "\n")
+    // 去除首尾多余换行
+    .replace(/^\n+|\n+$/g, "")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 // ── Update Handling ─────────────────────────────────────────────────────────
