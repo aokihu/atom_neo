@@ -39,16 +39,23 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
   logger.info("gateway starting", { port: config.port, coreUrl: config.coreUrl, clientCount: config.clients.length });
 
   async function handleInbound(client: ActiveClient, req: Request): Promise<Response> {
-    const msg = await req.json() as InboundMessage;
-    logger.info("inbound message", { client: client.id, platform: msg.platform, user: msg.platformUserId, text: msg.data.text.slice(0, 50) });
-
-    const sessionId = `${msg.platform}:${msg.platformUserId}`;
-
     try {
+      let body: unknown;
+      try { body = await req.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
+
+      const msg = body as InboundMessage;
+      const text = msg?.data?.text;
+      if (!msg.platform || !msg.platformUserId || typeof text !== "string") {
+        return Response.json({ error: "Invalid inbound message: platform, platformUserId, and data.text are required" }, { status: 400 });
+      }
+
+      logger.info("inbound message", { client: client.id, platform: msg.platform, user: msg.platformUserId, text: text.slice(0, 50) });
+      const sessionId = `${msg.platform}:${msg.platformUserId}`;
+
       const taskRes = await fetch(`${config.coreUrl}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, chatId: sessionId, pipeline: "conversation", data: { text: msg.data.text } }),
+        body: JSON.stringify({ sessionId, chatId: sessionId, pipeline: "conversation", data: { text } }),
       });
       const taskData = await taskRes.json() as { taskId: string };
       logger.debug("task submitted", { taskId: taskData.taskId });
@@ -56,16 +63,24 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
       const result = await pollTask(taskData.taskId);
       logger.debug("task completed, pushing to client", { taskId: taskData.taskId });
 
-      await fetch(`${client.url}/task-result`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", [SECRET_HEADER]: client.secret },
-        body: JSON.stringify({ taskId: taskData.taskId, platformUserId: msg.platformUserId, result }),
-      });
+      try {
+        const res = await fetch(`${client.url}/task-result`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", [SECRET_HEADER]: client.secret },
+          body: JSON.stringify({ taskId: taskData.taskId, platformUserId: msg.platformUserId, result }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) {
+          logger.error("client rejected task result", { taskId: taskData.taskId, clientId: client.id, status: res.status });
+        }
+      } catch (err) {
+        logger.error("failed to push task result to client", { taskId: taskData.taskId, clientId: client.id, error: String(err) });
+      }
 
       return Response.json({ ok: true });
     } catch (err) {
       logger.error("inbound error", { error: String(err) });
-      return Response.json({ error: String(err) }, { status: 500 });
+      return Response.json({ error: "Internal error" }, { status: 500 });
     }
   }
 
@@ -103,8 +118,12 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
         }
 
         if (url.pathname === "/gateway/event" && req.method === "POST") {
-          const event = await req.json() as InboundEvent;
-          logger.info("client event", { client: client.id, ...event });
+          try {
+            const body = await req.json();
+            logger.info("client event", { client: client.id, ...body });
+          } catch {
+            // ignore malformed event body
+          }
           return Response.json({ ok: true });
         }
 
