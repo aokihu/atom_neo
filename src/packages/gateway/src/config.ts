@@ -5,6 +5,7 @@ const ClientConfigSchema = z.object({
   platform: z.string().min(1),
   binary: z.string().min(1),
   clientArgs: z.record(z.string(), z.string()).optional(),
+  stdio: z.enum(["inherit", "ignore"]).default("inherit"),
 });
 
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;

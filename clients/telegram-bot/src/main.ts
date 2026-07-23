@@ -267,16 +267,32 @@ async function pollOnce(): Promise<void> {
   if (!res.ok || !res.result) return;
 
   for (const update of res.result) {
-    updateOffset = update.update_id + 1;
-    await handleUpdate(update);
+    try {
+      await handleUpdate(update);
+      updateOffset = update.update_id + 1;
+    } catch (err) {
+      console.error(`[tg] handle update ${update.update_id} failed, will retry:`, err);
+      // 不推进 offset，下次轮询时重试此消息
+    }
   }
 }
 
 async function startLongPolling(): Promise<void> {
-  await tgCall("deleteWebhook", {});
+  await tgCall("deleteWebhook", { drop_pending_updates: true });
   console.log("[tg] long polling started");
+
+  let consecutiveErrors = 0;
+
   while (true) {
-    await pollOnce();
+    try {
+      await pollOnce();
+      consecutiveErrors = 0;
+    } catch (err) {
+      consecutiveErrors++;
+      const backoff = Math.min(1000 * Math.pow(2, consecutiveErrors), 30_000);
+      console.error(`[tg] poll error (${consecutiveErrors}), retrying in ${backoff}ms:`, err);
+      await sleep(backoff);
+    }
     if (backoffMs > 0) await sleep(backoffMs);
   }
 }
