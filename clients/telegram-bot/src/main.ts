@@ -1,6 +1,8 @@
 const SECRET_HEADER = "X-Gateway-Secret";
 const TG_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token";
 
+import telegramify from "telegramify-markdown";
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type TgUser = { id: number; first_name: string; username?: string; is_bot?: boolean };
@@ -142,101 +144,32 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
 }
 
 /**
- * 将 LLM 输出的 Markdown 渲染为 Telegram HTML 模式支持的标签子集。
- * 失败时返回 null，调用方降级为纯文本。
+ * 将 LLM 输出的 Markdown 转为适合 MarkdownV2 发送的格式：
+ * 1. fixMarkdownLineBreaks 修复"粘连"换行问题
+ * 2. telegramify 负责：标题→加粗、列表→•、特殊字符转义
  */
-function markdownToTelegramHtml(md: string): string | null {
-  try {
-    const fixed = fixMarkdownLineBreaks(md);
-    const html = Bun.markdown.html(fixed, {
-      tables: true,
-      strikethrough: true,
-      tasklists: true,
-      autolinks: true,
-    });
-    return sanitizeTelegramHtml(html);
-  } catch (err) {
-    console.error(`[tg] markdown render failed: ${err}`);
-    return null;
-  }
-}
-
-/**
- * Telegram HTML 模式不支持的标签转换为支持的标签：
- * - <h1>..<h6> → <b> + 换行
- * - <ul>/<ol>/<li> → 换行 + • 前缀
- * - <table> 系列 → 纯文本（Telegram 不支持）
- * - <hr> → 分隔线文本
- * - <strong> → <b>，<em> → <i>，<del> → <s>
- */
-function sanitizeTelegramHtml(html: string): string {
-  return html
-    .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/g, "<b>$1</b>\n")
-    .replace(/<ul[^>]*>/g, "")
-    .replace(/<\/ul>/g, "")
-    .replace(/<ol[^>]*>/g, "")
-    .replace(/<\/ol>/g, "")
-    .replace(/<li[^>]*>([\s\S]*?)<\/li>/g, "• $1\n")
-    .replace(/<table[^>]*>([\s\S]*?)<\/table>/g, (_m, inner: string) => {
-      return inner
-        .replace(/<th(\s[^>]*)?>([\s\S]*?)<\/th>/g, "<b>$2</b> | ")
-        .replace(/<td(\s[^>]*)?>([\s\S]*?)<\/td>/g, "$2 | ")
-        .replace(/<\/tr>/g, "\n")
-        .replace(/<\/?(table|thead|tbody|tr)[^>]*>/g, "")
-        .replace(/\| \n/g, "\n")
-        .replace(/\n{2,}/g, "\n")
-        .replace(/^\n+|\n+$/g, "");
-    })
-    .replace(/<input[^>]*type="checkbox"[^>]*checked[^>]*>/g, "☑ ")
-    .replace(/<input[^>]*type="checkbox"[^>]*>/g, "☐ ")
-    .replace(/<hr[^>]*>/g, "───\n")
-    .replace(/<em>([\s\S]*?)<\/em>/g, "<i>$1</i>")
-    .replace(/<strong>([\s\S]*?)<\/strong>/g, "<b>$1</b>")
-    .replace(/<del>([\s\S]*?)<\/del>/g, "<s>$1</s>")
-    .replace(/<p[^>]*>([\s\S]*?)<\/p>/g, "$1\n")
-    .replace(/<br[^>]*>/g, "\n")
-    .replace(/^\n+|\n+$/g, "")
-    .replace(/\n{3,}/g, "\n\n");
-}
-
-/**
- * HTML 安全分片：在块级标签后切分，避免截断行内标签。
- */
-function splitHtmlMessage(html: string, maxLen = 4096): string[] {
-  if (html.length <= maxLen) return [html];
-  const chunks: string[] = [];
-  let remaining = html;
-  while (remaining.length > 0) {
-    if (remaining.length <= maxLen) { chunks.push(remaining); break; }
-    const blockEnds = ["</p>", "</li>", "</pre>", "</blockquote>", "</b>", "\n"];
-    let cut = -1;
-    const window = remaining.slice(0, maxLen);
-    for (const tag of blockEnds) {
-      const idx = window.lastIndexOf(tag);
-      if (idx > cut) cut = idx + tag.length;
-    }
-    if (cut <= 0) cut = maxLen;
-    chunks.push(remaining.slice(0, cut));
-    remaining = remaining.slice(cut);
-  }
-  return chunks;
+function markdownForTelegram(md: string): string {
+  const fixed = fixMarkdownLineBreaks(md);
+  // telegramify 输出 MarkdownV2 格式，自动处理转义和格式转换
+  return telegramify(fixed, "keep");
 }
 
 // ── Send Reply ──────────────────────────────────────────────────────────
 
 async function sendReply(chatId: string, text: string): Promise<void> {
-  const html = markdownToTelegramHtml(text);
-  const useHtml = html !== null;
-  const chunks = useHtml ? splitHtmlMessage(html) : splitMessage(text);
+  const formatted = markdownForTelegram(text);
+  const chunks = splitMessage(formatted);
   const replyToId = lastMessageIds.get(chatId) ?? 0;
 
   for (let i = 0; i < chunks.length; i++) {
-    const body: Record<string, unknown> = { chat_id: chatId, text: chunks[i] };
-    if (useHtml) body.parse_mode = "HTML";
+    const body: Record<string, unknown> = {
+      chat_id: chatId, text: chunks[i], parse_mode: "MarkdownV2",
+    };
     if (i === 0 && replyToId > 0) body.reply_parameters = { message_id: replyToId };
     const res = await tgCall("sendMessage", body);
     if (!res.ok) {
       console.error(`[tg] sendMessage failed (${res.error_code}): ${res.description}`);
+      // MarkdownV2 解析失败时降级为纯文本重试
       if (res.error_code === 400) {
         const fallback: Record<string, unknown> = { chat_id: chatId, text: chunks[i] };
         if (i === 0 && replyToId > 0) fallback.reply_parameters = { message_id: replyToId };
@@ -246,7 +179,7 @@ async function sendReply(chatId: string, text: string): Promise<void> {
   }
 }
 
-// ── Markdown → HTML ─────────────────────────────────────────────────────────
+// ── Markdown Break Fix ──────────────────────────────────────────────────────
 
 /**
  * 修复 LLM 输出中常见的"粘连"问题：
