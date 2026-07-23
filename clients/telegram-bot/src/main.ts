@@ -220,6 +220,9 @@ async function handleUpdate(update: TgUpdate): Promise<void> {
   // 记录消息 ID 供 reply 使用
   lastMessageIds.set(String(msg.chat.id), msg.message_id);
 
+  // 忽略 bot 自己的消息，避免 bot-to-bot 循环
+  if (msg.from?.is_bot) return;
+
   if (msg.chat.type !== "private") {
     await sendReply(String(msg.chat.id), "请私聊使用。");
     return;
@@ -229,8 +232,6 @@ async function handleUpdate(update: TgUpdate): Promise<void> {
     await sendReply(String(msg.chat.id), "目前仅支持文本消息。");
     return;
   }
-
-  if (msg.from?.is_bot) return;
 
   console.log(`[tg] message from ${msg.chat.id}: ${msg.text.slice(0, 50)}`);
 
@@ -303,7 +304,7 @@ async function startWebhook(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`[tg] webhook registered: ${webhookUrl}`);
+  console.log(`[tg] webhook registered (url: ${args.webhookUrl})`);
   console.log(`[tg] ensure cloudflared routes ${args.webhookUrl} → http://${args.webhookHost}:${args.webhookPort}`);
 }
 

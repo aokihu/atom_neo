@@ -1,8 +1,5 @@
 import { loadGatewayConfig } from "./config";
 import type { GatewayConfig } from "./config";
-import { JwtVerifier } from "./auth/jwt";
-import { RateLimiter } from "./ratelimit/limiter";
-import { CoreProxy } from "./proxy/core-proxy";
 import { SECRET_HEADER } from "./auth/secret";
 import { ClientManager } from "./client-manager";
 import type { ActiveClient } from "./client-manager";
@@ -28,13 +25,10 @@ type InboundEvent = {
 
 export async function startGateway(configOverrides?: Partial<GatewayConfig>): Promise<{ stop: () => void }> {
   const config = loadGatewayConfig(configOverrides);
-  const jwt = new JwtVerifier(config.jwtSecret);
-  const limiter = new RateLimiter({
-    maxRequests: config.rateLimitRequestsPerMin,
-    burst: config.rateLimitBurst,
-  });
-  const proxy = new CoreProxy(config.coreUrl);
   const cm = new ClientManager(config, logger);
+
+  // Per-client rate limiting: max 1 request per 200ms per client
+  const rateLimiters = new Map<string, number>();
 
   logger.info("gateway starting", { port: config.port, coreUrl: config.coreUrl, clientCount: config.clients.length });
 
@@ -113,6 +107,15 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
           });
         }
 
+        // Per-client rate limit (1 req / 200ms)
+        const lastReq = rateLimiters.get(client.id) ?? 0;
+        if (Date.now() - lastReq < 200) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+            status: 429, headers: { "Content-Type": "application/json" },
+          });
+        }
+        rateLimiters.set(client.id, Date.now());
+
         if (url.pathname === "/gateway/inbound" && req.method === "POST") {
           return handleInbound(client, req);
         }
@@ -130,22 +133,7 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
         return new Response("Not Found", { status: 404 });
       }
 
-      const token = req.headers.get("Authorization")?.replace("Bearer ", "");
-      const payload = token ? await jwt.verify(token) : null;
-
-      if (!payload) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401, headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      if (!limiter.allow(payload.sub)) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
-          status: 429, headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      return proxy.proxy(req);
+      return new Response("Not Found", { status: 404 });
     },
   });
 
