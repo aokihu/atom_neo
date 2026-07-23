@@ -171,19 +171,21 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
   return { ok: false, error_code: -1, description: "max retries exceeded" };
 }
 
-async function sendReply(chatId: string, replyToId: number, text: string): Promise<void> {
-  // 优先尝试 Markdown → HTML 渲染
+async function sendReply(chatId: string, text: string): Promise<void> {
   const html = markdownToTelegramHtml(text);
   const useHtml = html !== null;
-
-  // HTML 模式下用安全分片，避免截断标签
   const chunks = useHtml ? splitHtmlMessage(sanitizeTelegramHtml(html)) : splitMessage(text);
+  const replyToId = lastMessageIds.get(chatId) ?? 0;
 
   for (let i = 0; i < chunks.length; i++) {
     const body: Record<string, unknown> = { chat_id: chatId, text: chunks[i] };
     if (useHtml) body.parse_mode = "HTML";
-    if (i === 0) body.reply_parameters = { message_id: replyToId };
-    await tgCall("sendMessage", body);
+    // 仅第一条消息且 replyToId 有效时携带回复引用（0 是无效 message_id）
+    if (i === 0 && replyToId > 0) body.reply_parameters = { message_id: replyToId };
+    const res = await tgCall("sendMessage", body);
+    if (!res.ok) {
+      console.error(`[tg] sendMessage failed (${res.error_code}): ${res.description}`);
+    }
   }
 }
 
@@ -303,18 +305,23 @@ function sanitizeTelegramHtml(html: string): string {
 // ── Update Handling ─────────────────────────────────────────────────────────
 
 let updateOffset = 0;
+// 记录每个 chat 的最后一条消息 ID，用于回复时建立引用
+const lastMessageIds = new Map<string, number>();
 
 async function handleUpdate(update: TgUpdate): Promise<void> {
   const msg = update.message;
   if (!msg) return;
 
+  // 记录消息 ID 供 reply 使用
+  lastMessageIds.set(String(msg.chat.id), msg.message_id);
+
   if (msg.chat.type !== "private") {
-    await sendReply(String(msg.chat.id), msg.message_id, "请私聊使用。");
+    await sendReply(String(msg.chat.id), "请私聊使用。");
     return;
   }
 
   if (!msg.text) {
-    await sendReply(String(msg.chat.id), msg.message_id, "目前仅支持文本消息。");
+    await sendReply(String(msg.chat.id), "目前仅支持文本消息。");
     return;
   }
 
@@ -401,7 +408,7 @@ const server = Bun.serve({
       const text = body.result?.responseText || body.result?.output || "";
 
       if (text) {
-        await sendReply(body.platformUserId, 0, text);
+        await sendReply(body.platformUserId, text);
         console.log(`[tg] sent to ${body.platformUserId}: ${text.slice(0, 50)}`);
       }
       return Response.json({ ok: true });
