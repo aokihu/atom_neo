@@ -17,8 +17,16 @@
     "maxOutputTokens": 4096
   },
   "gateway": {
-    "jwtSecret": "change-me-minimum-16-chars",
-    "port": 3000
+    "port": 3000,
+    "clients": [{
+      "id": "telegram-bot",
+      "platform": "telegram",
+      "binary": "./clients/telegram-bot/telegram-bot",
+      "clientArgs": {
+        "bot-token": "8697257882:AAEbJ2EIqwr_XV17qGTZ0011IqJPLOJU-R0",
+        "mode": "longpoll"
+      }
+    }]
   },
   "tui": {
     "theme": "github-dark"
