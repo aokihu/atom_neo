@@ -22,7 +22,10 @@ export type GatewayConfig = z.infer<typeof GatewayConfigSchema>;
 
 export function loadGatewayConfig(overrides?: Partial<GatewayConfig>): GatewayConfig {
   const env: Record<string, unknown> = {};
-  if (Bun.env.GATEWAY_PORT) env.port = parseInt(Bun.env.GATEWAY_PORT);
+  if (Bun.env.GATEWAY_PORT) {
+    const p = Number(Bun.env.GATEWAY_PORT);
+    if (Number.isFinite(p) && p > 0 && p <= 65535) env.port = p;
+  }
   if (Bun.env.CORE_URL) env.coreUrl = Bun.env.CORE_URL;
 
   return GatewayConfigSchema.parse({ ...env, ...overrides });
