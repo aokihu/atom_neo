@@ -143,33 +143,24 @@ async function tgCall<T>(method: string, body: Record<string, unknown>, retries 
   return { ok: false, error_code: -1, description: "max retries exceeded" };
 }
 
-/**
- * 将 LLM 输出的 Markdown 转为适合 MarkdownV2 发送的格式：
- * 1. fixMarkdownLineBreaks 修复"粘连"换行问题
- * 2. telegramify 负责：标题→加粗、列表→•、特殊字符转义
- */
-function markdownForTelegram(md: string): string {
-  const fixed = fixMarkdownLineBreaks(md);
-  // telegramify 输出 MarkdownV2 格式，自动处理转义和格式转换
-  return telegramify(fixed, "keep");
-}
-
 // ── Send Reply ──────────────────────────────────────────────────────────
 
 async function sendReply(chatId: string, text: string): Promise<void> {
-  const formatted = markdownForTelegram(text);
-  const chunks = splitMessage(formatted);
+  // 先修复粘连，再分片（避免 telegramify 转义序列被切分）
+  const fixed = fixMarkdownLineBreaks(text);
+  const chunks = splitMessage(fixed);
   const replyToId = lastMessageIds.get(chatId) ?? 0;
 
   for (let i = 0; i < chunks.length; i++) {
+    const formatted = telegramify(chunks[i], "keep");
     const body: Record<string, unknown> = {
-      chat_id: chatId, text: chunks[i], parse_mode: "MarkdownV2",
+      chat_id: chatId, text: formatted, parse_mode: "MarkdownV2",
     };
     if (i === 0 && replyToId > 0) body.reply_parameters = { message_id: replyToId };
     const res = await tgCall("sendMessage", body);
     if (!res.ok) {
       console.error(`[tg] sendMessage failed (${res.error_code}): ${res.description}`);
-      // MarkdownV2 解析失败时降级为纯文本重试
+      // MarkdownV2 解析失败时，用修复后但未转义的原始文本降级重试
       if (res.error_code === 400) {
         const fallback: Record<string, unknown> = { chat_id: chatId, text: chunks[i] };
         if (i === 0 && replyToId > 0) fallback.reply_parameters = { message_id: replyToId };
