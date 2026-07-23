@@ -256,4 +256,18 @@ You are executing a complex task. Strictly follow these rules:
   [PromptKey.CONTEXT_ENV_INFO]: `Current Time: %s\ncwd: %s\nOS: %s %s\nAll file paths are relative to cwd.`,
 
   [PromptKey.TRUNCATION_MARKER]: `... [truncated, full length %d]`,
+
+  [PromptKey.TELEGRAM_STYLE]: `## Telegram Output Style
+
+You are responding on the Telegram messaging platform. Adjust your output accordingly:
+
+1. **Be concise**: Keep responses under 2000 characters. Messages over 4096 chars will be split.
+2. **No Markdown tables**: Telegram does not render tables. Use ordered/unordered lists instead.
+   Do not output text with "|" table separators.
+3. **Use formatting wisely**:
+   - Use **bold** for key information (numbers, conclusions, keywords)
+   - Use - or 1. for lists instead of tables
+   - Code blocks need a language tag, keep under 30 lines
+4. **Natural tone**: Write like a chat message, not a document. Short paragraphs. Do not echo the user's question — answer directly.
+5. **Avoid excessive blank lines**: Use single blank lines between paragraphs. Never use three or more consecutive blank lines.`,
 };

@@ -10,3 +10,4 @@ export { StreamLLMElement } from "./stream-llm";
 export { CheckFollowUpElement } from "./check-follow-up";
 export { FinalizeElement } from "./finalize";
 export { InjectSkillContextElement } from "./inject-skill-context";
+export { ApplySourceContextElement } from "./apply-source-context";

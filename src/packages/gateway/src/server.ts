@@ -49,7 +49,11 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
       const taskRes = await fetch(`${config.coreUrl}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, chatId: sessionId, pipeline: "conversation", data: { text } }),
+        body: JSON.stringify({
+          sessionId, chatId: sessionId, pipeline: "conversation",
+          platform: msg.platform,
+          data: { text },
+        }),
       });
       const taskData = await taskRes.json() as { taskId: string };
       logger.debug("task submitted", { taskId: taskData.taskId });
