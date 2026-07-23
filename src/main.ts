@@ -157,9 +157,17 @@ export async function main(): Promise<void> {
 
   // Explicit --mode: core or full
   switch (args.mode) {
-    case "core":
-      await startCore({ port, host: args.host, logger, sm, runtime });
+    case "core": {
+      const core = await startCore({ port, host: args.host, logger, sm, runtime });
+      const shutdown = async () => {
+        logger.info("shutting down core...");
+        try { await core.stop(); } finally { await sm.stopAll(); }
+        process.exit(0);
+      };
+      process.once("SIGINT", shutdown);
+      process.once("SIGTERM", shutdown);
       break;
+    }
 
     case "full": {
       const core = await startCore({ port, host: args.host, logger, sm, runtime });
@@ -170,6 +178,14 @@ export async function main(): Promise<void> {
         clients: appConfig.gateway?.clients,
       });
       logger.info("gateway started alongside core", { corePort: core.port, gatewayPort: appConfig.gateway?.port ?? 3000 });
+      const shutdown = async () => {
+        logger.info("shutting down gateway and core...");
+        gateway.stop();
+        try { await core.stop(); } finally { await sm.stopAll(); }
+        process.exit(0);
+      };
+      process.once("SIGINT", shutdown);
+      process.once("SIGTERM", shutdown);
       break;
     }
   }

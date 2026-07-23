@@ -35,6 +35,7 @@ const ConfigSchema = z.object({
       platform: z.string(),
       binary: z.string(),
       clientArgs: z.record(z.string(), z.string()).optional(),
+      stdio: z.enum(["inherit", "ignore"]).default("inherit"),
     })).default([]),
   }).default({ port: 3000, clients: [] }),
   tui: z.object({
