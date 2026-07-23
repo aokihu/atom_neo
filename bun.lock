@@ -8,6 +8,7 @@
         "@ai-sdk/deepseek": "^3.0.12",
         "@ai-sdk/mcp": "^2.0.15",
         "@atom-neo/core": "workspace:*",
+        "@atom-neo/gateway": "workspace:*",
         "@atom-neo/setup-wizard": "workspace:*",
         "@atom-neo/shared": "workspace:*",
         "@atom-neo/tui": "workspace:*",
