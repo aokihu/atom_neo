@@ -213,6 +213,8 @@ function fixMarkdownLineBreaks(md: string): string {
 // ── Update Handling ─────────────────────────────────────────────────────────
 
 let updateOffset = 0;
+// 单条 update 的重试计数，避免某条消息永久卡住轮询
+const updateRetries = new Map<string, number>();
 // 记录每个 chat 的最后一条消息 ID，用于回复时建立引用
 // 上限 1000 条，超出时删除最早条目
 const lastMessageIds = new Map<string, number>();
@@ -268,12 +270,24 @@ async function pollOnce(): Promise<void> {
   if (!res.ok || !res.result) return;
 
   for (const update of res.result) {
+    // 单条 update 最多重试 3 次，之后跳过避免永久卡住
+    const retryKey = `u${update.update_id}`;
+    const attempts = (updateRetries.get(retryKey) ?? 0) + 1;
+
     try {
       await handleUpdate(update);
       updateOffset = update.update_id + 1;
+      updateRetries.delete(retryKey);
     } catch (err) {
-      console.error(`[tg] handle update ${update.update_id} failed, will retry:`, err);
-      // 不推进 offset，下次轮询时重试此消息
+      if (attempts >= 3) {
+        console.error(`[tg] update ${update.update_id} failed ${attempts} times, skipping:`, err);
+        updateOffset = update.update_id + 1;
+        updateRetries.delete(retryKey);
+      } else {
+        console.error(`[tg] handle update ${update.update_id} failed (attempt ${attempts}), will retry:`, err);
+        updateRetries.set(retryKey, attempts);
+        break; // 停止处理后续 update，下次轮询重试
+      }
     }
   }
 }
@@ -283,8 +297,15 @@ async function startLongPolling(): Promise<void> {
   console.log("[tg] long polling started");
 
   let consecutiveErrors = 0;
+  let lastHeartbeatTime = Date.now();
 
   while (true) {
+    // 每小时输出一次心跳日志，证明 bot 仍在运行
+    if (Date.now() - lastHeartbeatTime > 3_600_000) {
+      console.log(`[tg] heartbeat: alive, processed up to offset ${updateOffset}`);
+      lastHeartbeatTime = Date.now();
+    }
+
     try {
       await pollOnce();
       consecutiveErrors = 0;
