@@ -64,13 +64,18 @@ export default function ContextCompressPage({ content, title, description, categ
           rows={[
             [<code>request</code>, "触发来源与是否恢复 Conversation", "阻止手动 compact 进入 Memory / History 工具链"],
             [<code>archiveMessages</code>, "归档与删除的同一批原始消息", "禁止先过滤再按数量删除"],
-            [<code>summaryMessages</code>, "摘要可见的 user/assistant 消息", "内部消息仍保留在归档"],
+            [<code>summaryMessages</code>, "可见且有摘要资格的 user/assistant", "无效 Tool Outcome 不进入摘要"],
             [<code>archiveReceipt</code>, "归档分段回执", "只有成功时才更新索引"],
             [<code>archiveError</code>, "归档失败", "阻止 checkpoint 和清理"],
             [<code>summaryError</code>, "摘要失败或空结果", "阻止破坏性提交"],
             [<code>summaryMaxTokens</code>, "摘要输出预算", "按压缩比动态取 400–1600"],
           ]}
         />
+        <Callout type="info" title="事实权重">
+          摘要输入区分 <code>user_goal</code>、<code>assistant_with_tool_evidence</code> 和
+          <code>assistant_reference_unverified</code>；error、empty、blocked、deferred、cancelled
+          不会被重新总结成事实。
+        </Callout>
       </Section>
 
       <Section title="5 档压缩策略">

@@ -20,7 +20,7 @@ export const CATEGORIES: CategoryMap = {
 export function categorize(filename: string): string {
   if (["architecture", "project-structure", "index", "bootstrap", "development-setup"].includes(filename)) return "overview";
   if (["coding", "testing", "dependency-injection"].includes(filename)) return "conventions";
-  if (["pipeline-dev", "tool-plugin", "session", "context-management", "memory-service", "sandbox", "task-execution", "configuration", "first-run-wizard", "agents-compiler", "tui-modal"].includes(filename)) return "subsystems";
+  if (["pipeline-dev", "tool-plugin", "session", "context-management", "context-outcome-governance", "memory-service", "sandbox", "task-execution", "configuration", "first-run-wizard", "agents-compiler", "tui-modal"].includes(filename)) return "subsystems";
   if (["protocol", "error-handling", "gateway"].includes(filename)) return "integration";
   return "guide";
 }
@@ -52,6 +52,7 @@ export function priority(filename: string): number {
     "tool-plugin": 23,
     session: 24,
     "context-management": 25,
+    "context-outcome-governance": 25,
     "memory-service": 26,
     sandbox: 26,
     "task-execution": 27,

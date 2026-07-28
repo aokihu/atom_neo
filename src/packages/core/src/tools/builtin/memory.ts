@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
+import { TOOL_OUTCOMES } from "../outcome";
 
 const searchMemoryInputSchema = z.object({
   query: z.string().describe("One or more broad concepts, synonyms, domain terms, or Skill names; avoid dates and freshness words"),
@@ -79,16 +80,30 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema: searchMemoryInputSchema,
     execute: async (args) => {
-      if (!memory) return { ok: true, output: "(memory service not connected)", data: { results: [] } };
+      if (!memory) {
+        return {
+          ok: true,
+          output: "(memory service not connected)",
+          data: { results: [] },
+          outcome: { status: "deferred", progress: "none", code: "service_unavailable" },
+        };
+      }
       const r = searchMemoryInputSchema.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       const nodes = await memory.search(r.data.query, r.data.limit);
-      if (nodes.length === 0) return { ok: true, output: "No memories found. Retry with a broader query using different, non-overlapping keywords." };
+      if (nodes.length === 0) {
+        return {
+          ok: true,
+          output: "No memories found. Retry with a broader query using different, non-overlapping keywords.",
+          outcome: { ...TOOL_OUTCOMES.empty, code: "no_matches" },
+        };
+      }
       const output = nodes.map(formatMemorySummary).join("\n");
       return {
         ok: true,
         output,
         data: nodes.map(toMemorySummaryData),
+        outcome: TOOL_OUTCOMES.evidence,
       };
     },
     permission: PermissionLevel.READ_ONLY,
@@ -102,11 +117,11 @@ export function createReadMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema: readMemoryInputSchema,
     execute: async (args) => {
-      if (!memory) return { ok: false, output: "", error: "memory service not connected" };
+      if (!memory) return { ok: false, output: "", error: "memory service not connected", outcome: TOOL_OUTCOMES.error };
       const result = readMemoryInputSchema.safeParse(args);
-      if (!result.success) return { ok: false, output: "", error: result.error.message };
+      if (!result.success) return { ok: false, output: "", error: result.error.message, outcome: TOOL_OUTCOMES.error };
       const node = memory.getById(result.data.id);
-      if (!node) return { ok: false, output: "", error: `Memory not found: ${result.data.id}` };
+      if (!node) return { ok: false, output: "", error: `Memory not found: ${result.data.id}`, outcome: TOOL_OUTCOMES.error };
       memory.recordRead?.(node.id);
       const id = String(node.id).slice(0, 6);
       const tags = Array.isArray(node.tags) ? node.tags.join(",") : "";
@@ -116,6 +131,7 @@ export function createReadMemoryTool(memory?: any): ToolDefinition {
         ok: true,
         output,
         data: node,
+        outcome: TOOL_OUTCOMES.evidence,
         ...(retention ? {
           contextInjection: {
             scope: retention.retention === "pinned" ? "session" as const : "topic" as const,
@@ -145,9 +161,9 @@ export function createSaveMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema: saveMemoryInputSchema,
     execute: async (args) => {
-      if (!memory) return { ok: false, output: "", error: "memory service not connected" };
+      if (!memory) return { ok: false, output: "", error: "memory service not connected", outcome: TOOL_OUTCOMES.error };
       const r = saveMemoryInputSchema.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       try {
         const id = memory.save(r.data.content, r.data.tags, r.data.summary, {
           baseWeight: r.data.baseWeight,
@@ -156,9 +172,9 @@ export function createSaveMemoryTool(memory?: any): ToolDefinition {
           pinned: r.data.pinned,
           supersedesId: r.data.supersedesId,
         });
-        return { ok: true, output: `Saved memory: ${id.slice(0, 8)}...`, data: { id } };
+        return { ok: true, output: `Saved memory: ${id.slice(0, 8)}...`, data: { id }, outcome: TOOL_OUTCOMES.stateChanged };
       } catch (err) {
-        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err), outcome: TOOL_OUTCOMES.error };
       }
     },
     permission: PermissionLevel.FILE_WRITE,
@@ -172,15 +188,23 @@ export function createTraverseMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema: z.object({ startId: z.string(), maxSteps: z.number().optional().default(4) }),
     execute: async (args) => {
-      if (!memory) return { ok: true, output: "(memory service not connected)", data: { paths: [] } };
+      if (!memory) {
+        return {
+          ok: true,
+          output: "(memory service not connected)",
+          data: { paths: [] },
+          outcome: { status: "deferred", progress: "none", code: "service_unavailable" },
+        };
+      }
       const r = z.object({ startId: z.string(), maxSteps: z.number().optional().default(4) }).safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       const nodes = memory.traverse(r.data.startId, r.data.maxSteps);
-      if (nodes.length === 0) return { ok: true, output: "No related memories found." };
+      if (nodes.length === 0) return { ok: true, output: "No related memories found.", outcome: TOOL_OUTCOMES.empty };
       return {
         ok: true,
         output: nodes.map(formatMemoryTraversalSummary).join("\n"),
         data: nodes.map(toMemoryTraversalSummaryData),
+        outcome: TOOL_OUTCOMES.evidence,
       };
     },
     permission: PermissionLevel.READ_ONLY,
@@ -199,13 +223,20 @@ export function createLinkMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema,
     execute: async (args) => {
-      if (!memory) return { ok: true, output: "(memory service not connected)", data: {} };
+      if (!memory) {
+        return {
+          ok: true,
+          output: "(memory service not connected)",
+          data: {},
+          outcome: { status: "deferred", progress: "none", code: "service_unavailable" },
+        };
+      }
       const r = inputSchema.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       const linked = memory.link(r.data.source, r.data.target, r.data.relation);
       return linked === false
-        ? { ok: false, output: "", error: "Memory link source or target not found" }
-        : { ok: true, output: "Linked." };
+        ? { ok: false, output: "", error: "Memory link source or target not found", outcome: TOOL_OUTCOMES.error }
+        : { ok: true, output: "Linked.", outcome: TOOL_OUTCOMES.stateChanged };
     },
     permission: PermissionLevel.FILE_WRITE,
   };
@@ -218,16 +249,16 @@ export function createForgetMemoryTool(memory?: any): ToolDefinition {
     source: "builtin",
     inputSchema: memoryIdInputSchema,
     execute: async (args) => {
-      if (!memory) return { ok: false, output: "", error: "memory service not connected" };
+      if (!memory) return { ok: false, output: "", error: "memory service not connected", outcome: TOOL_OUTCOMES.error };
       const r = memoryIdInputSchema.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       try {
         const forgotten = memory.forget(r.data.id);
         return forgotten
-          ? { ok: true, output: `Forgot memory: ${r.data.id}` }
-          : { ok: false, output: "", error: `Memory not found: ${r.data.id}` };
+          ? { ok: true, output: `Forgot memory: ${r.data.id}`, outcome: TOOL_OUTCOMES.stateChanged }
+          : { ok: false, output: "", error: `Memory not found: ${r.data.id}`, outcome: TOOL_OUTCOMES.error };
       } catch (err) {
-        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err), outcome: TOOL_OUTCOMES.error };
       }
     },
     permission: PermissionLevel.FILE_WRITE,

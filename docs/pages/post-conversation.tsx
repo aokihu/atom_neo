@@ -27,8 +27,8 @@ export default function PostConversationPage({ content, title, description, cate
       <Section title="3 个 Element 的判断链">
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
           {[
-            ["1", "post-collect-input", "提取用户请求、回复头尾和 TODO 元数据", "blue"],
-            ["2", "post-analyze-result", "LLM 三态分析并生成行为指纹", "purple"],
+            ["1", "post-collect-input", "提取用户请求、Tool Outcome、回复头尾和 TODO 元数据", "blue"],
+            ["2", "post-analyze-result", "按 User > primary evidence > MCP reference > Assistant claim 分析", "purple"],
             ["3", "post-finalize", "结束、等待用户，或安全重试", "green"],
           ].map(([step, name, detail, color], index, all) => (
             <React.Fragment key={name}>
@@ -74,6 +74,10 @@ export default function PostConversationPage({ content, title, description, cate
         />
         <Callout type="tip" title="比较的是行为，不是原句">
           “请问要查哪个城市”和“请告诉我城市名称”会被归一成相近的 fingerprint，避免换个说法继续空转。
+        </Callout>
+        <Callout type="info" title="Assistant 只是待验证声明">
+          工具型任务没有 evidence/stateChanged 且只有 empty/error/blocked/deferred 时，不能仅凭
+          Assistant 自述“已完成”判为 satisfactory；retry suggestion 也只作为 untrusted reference。
         </Callout>
       </Section>
 

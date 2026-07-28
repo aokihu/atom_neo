@@ -1,4 +1,4 @@
-import type { ToolResult } from "./tool";
+import type { ToolOutcome } from "./tool";
 
 export type SessionMessage = {
   seq?: number;
@@ -21,6 +21,7 @@ export type ToolResultEntry = {
   topic: string;
   timestamp: number;
   ok: boolean;
+  outcome: ToolOutcome;
   output: string;
   error?: string;
   durationMs?: number;

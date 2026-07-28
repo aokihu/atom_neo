@@ -24,7 +24,7 @@ evaluator-input (source) → evaluator-analyze (transform) → evaluate-finalize
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `evaluator-input` | source | 从 session 提取最近 10 条消息生成摘要 |
+| 1 | `evaluator-input` | source | 从最近 10 条消息提取 User Goal 与低预算 Assistant Unverified Reference |
 | 2 | `evaluator-analyze` | transform | 调用 LLM 分类对话健康度 |
 | 3 | `evaluate-finalize` | sink | 根据评估结果干预或继续 |
 

@@ -5,9 +5,10 @@ import {
   injectToolContext,
   pruneConsumedTransientTools,
   resolveModelInput,
+  resolveMCPToolOutcome,
   selectActiveToolsForStep,
   resolveTokenMetrics,
-  shouldPersistToolResult,
+  summarizeToolOutcomes,
   summarizeMemoryRead,
   summarizeMemorySearch,
   summarizeSkillDiscovery,
@@ -55,6 +56,7 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
   expect(statuses.get("weather")).toEqual([{
     ok: true,
     output: "{\"temperature\":20}",
+    outcome: { status: "success", progress: "evidence", evidenceWeight: "reference" },
   }]);
 
   expect(await wrapped.broken.execute({})).toBe("MCP tool error: offline");
@@ -62,7 +64,21 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
     ok: false,
     output: "",
     error: "offline",
+    outcome: { status: "error", progress: "none", evidenceWeight: "reference" },
   }]);
+});
+
+test("resolveMCPToolOutcome uses MCP structure instead of natural-language guessing", () => {
+  expect(resolveMCPToolOutcome({ isError: true, content: [{ type: "text", text: "offline" }] }))
+    .toEqual({ status: "error", progress: "none", evidenceWeight: "reference", code: "mcp_is_error" });
+  expect(resolveMCPToolOutcome({ content: [{ type: "text", text: "   " }] }))
+    .toEqual({ status: "empty", progress: "none", evidenceWeight: "reference" });
+  expect(resolveMCPToolOutcome({ content: [], structuredContent: { count: 1 } }))
+    .toEqual({ status: "success", progress: "evidence", evidenceWeight: "reference" });
+  expect(resolveMCPToolOutcome({
+    outcome: { status: "empty", progress: "none", code: "no_matches" },
+    content: [{ type: "text", text: "No matches" }],
+  })).toEqual({ status: "empty", progress: "none", evidenceWeight: "reference", code: "no_matches" });
 });
 
 test("wrapMCPAiTools blocks duplicate execution through the shared ledger", async () => {
@@ -352,11 +368,23 @@ describe("transient memory traversal context", () => {
     expect(JSON.stringify(pruned)).toContain("search_memory");
   });
 
-  test("does not persist traversal output across conversations", () => {
-    expect(shouldPersistToolResult("traverse_memory")).toBe(false);
-    expect(shouldPersistToolResult("search_history")).toBe(false);
-    expect(shouldPersistToolResult("read_history")).toBe(false);
-    expect(shouldPersistToolResult("read_memory")).toBe(true);
+  test("summarizes framework outcomes without reading output text", () => {
+    expect(summarizeToolOutcomes([
+      { status: "success", progress: "evidence" },
+      { status: "success", progress: "state_changed" },
+      { status: "empty", progress: "none" },
+      { status: "error", progress: "none" },
+      { status: "deferred", progress: "none" },
+    ])).toEqual({
+      evidence: 1,
+      referenceEvidence: 0,
+      stateChanged: 1,
+      empty: 1,
+      error: 1,
+      blocked: 0,
+      deferred: 1,
+      cancelled: 0,
+    });
   });
 });
 

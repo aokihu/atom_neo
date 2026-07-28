@@ -29,6 +29,7 @@
 | [tool-plugin.md](./subsystems/tool-plugin.md) | Tool 插件接口 | 创建 Tool |
 | [session.md](./core/session.md) | Per-Session 状态、目录持久化、Context 恢复、Topic 与 TUI 生命周期 | 操作会话 |
 | [context-management.md](./context-management.md) | Context 六层所有权、Snapshot、Receipt、自动卸载与预算 | 修改 Context 注入或生命周期 |
+| [context-outcome-governance.md](./context-outcome-governance.md) | Tool Outcome、跨轮 Context、Prediction、Post 与 Compact 的防污染改造计划 | 修改工具结果或上下文消费链 |
 | [memory-service.md](./subsystems/memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
 | [network-service.md](./subsystems/network-service.md) | 同进程网络 Service、WebFetch 子功能与域名调度 | 修改网络能力 |
 | [configuration.md](./subsystems/configuration.md) | 配置加载优先级、格式 | 添加配置项 |

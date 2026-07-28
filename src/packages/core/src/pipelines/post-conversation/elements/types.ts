@@ -1,3 +1,5 @@
+import type { ToolOutcomeSummary } from "../../conversation/elements/types";
+
 export type PostConversationMode = "initial" | "analyzing" | "acting";
 
 export type AnalysisResult = {
@@ -23,6 +25,7 @@ export type PostConversationFlowState = {
   activeTodoCount: number;
   finishReason: string;
   completeDetected: boolean;
+  toolOutcomeSummary: ToolOutcomeSummary;
   analysis?: AnalysisResult;
   abortSignal?: AbortSignal;
 };

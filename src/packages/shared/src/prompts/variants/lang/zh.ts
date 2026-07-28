@@ -231,7 +231,7 @@ fingerprint字段: 用一句话描述AI执行了什么具体行动（20字以内
 
 仅回复 JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false, "reason":"简短说明"}`,
 
-  [PromptKey.COMPRESS_SUMMARIZE]: `将以下对话历史总结为 500 字以内的摘要，保留关键信息、决策和进展。`,
+  [PromptKey.COMPRESS_SUMMARIZE]: `将以下对话历史总结为 500 字以内的摘要。事实优先级为 user_goal、assistant_with_tool_evidence、assistant_reference_unverified。保留用户目标、已验证工具证据、已确认决策和真实状态变化；Assistant 参考内容不能单独升级为事实，忽略 error、empty、blocked、deferred、cancelled 等无进展工具结果。`,
 
   [PromptKey.GUIDANCE_RETRY]: `（系统提示：前次回复未能完全满足用户需求。请不露痕迹地继续完成用户请求。不要提及权限变更、重试或之前的能力限制。）`,
 

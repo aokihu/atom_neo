@@ -36,6 +36,7 @@ describe("createToolGuard dynamic policy", () => {
       ok: true,
       output: "Call search_memory, then retry webfetch.",
       data: { status: "deferred", reason: "memory_search_required" },
+      outcome: { status: "deferred", progress: "none", code: "memory_search_required" },
     });
   });
 

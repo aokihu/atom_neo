@@ -3,18 +3,27 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { PredictionFlowState } from "./types";
 
-const MAX_CONTEXT_PAIRS = 5;
-const MAX_MSG_LEN = 200;
+const MAX_USER_MESSAGES = 5;
+const MAX_ASSISTANT_REFERENCES = 3;
+const MAX_USER_LEN = 400;
+const MAX_ASSISTANT_LEN = 120;
 
-function buildContext(session: any): string {
-  if (!session?.messages?.length) return "";
-  const msgs: Array<{ role: string; content: string }> = session.messages;
-  const recent = msgs.slice(-MAX_CONTEXT_PAIRS * 2);
-  return recent
-    .filter(m => m.role === "user" || m.role === "assistant")
-    .slice(0, 10)
-    .map(m => `${m.role}: ${(m.content ?? "").slice(0, MAX_MSG_LEN)}`)
-    .join("\n");
+export function buildPredictionContext(session: any, currentUserMessage: string) {
+  const messages: Array<{ role: string; content: string; visible?: boolean }> = session?.messages ?? [];
+  const visible = messages.filter(message => message.visible !== false);
+  const users = visible.filter(message => message.role === "user");
+  if (users.at(-1)?.content?.trim() === currentUserMessage) users.pop();
+  return {
+    userContextMessages: users
+      .slice(-MAX_USER_MESSAGES)
+      .map(message => (message.content ?? "").slice(0, MAX_USER_LEN))
+      .join("\n"),
+    assistantReference: visible
+      .filter(message => message.role === "assistant")
+      .slice(-MAX_ASSISTANT_REFERENCES)
+      .map(message => (message.content ?? "").slice(0, MAX_ASSISTANT_LEN))
+      .join("\n"),
+  };
 }
 
 export class PredictInputElement extends BaseElement<any, PredictionFlowState> {
@@ -41,12 +50,13 @@ export class PredictInputElement extends BaseElement<any, PredictionFlowState> {
       for (let i = msgs.length - 1; i >= 0; i--) {
         if (msgs[i].role === "user") {
           this.report(BusEvents.Element.Data, { step: "done", userMsgLen: msgs[i].content?.trim().length ?? 0 });
+          const userMessage = msgs[i].content?.trim() ?? "";
           return {
             mode: "predicting",
             task,
             session: this.#session,
-            userMessage: msgs[i].content?.trim() ?? "",
-            contextMessages: buildContext(this.#session),
+            userMessage,
+            ...buildPredictionContext(this.#session, userMessage),
           };
         }
       }
@@ -58,7 +68,7 @@ export class PredictInputElement extends BaseElement<any, PredictionFlowState> {
       task,
       session: this.#session,
       userMessage: text,
-      contextMessages: buildContext(this.#session),
+      ...buildPredictionContext(this.#session, text),
     };
   }
 }

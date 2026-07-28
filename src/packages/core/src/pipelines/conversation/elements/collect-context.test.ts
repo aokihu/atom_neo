@@ -143,6 +143,35 @@ describe("conversation context pipeline", () => {
     )).toBeDefined();
   });
 
+  test("removes legacy tool history before compiling a new snapshot", async () => {
+    const session = new SessionContext("s1");
+    session.pendingPrediction = { difficulty: "easy", memoryQuery: "" };
+    const bus = makeBus();
+    const contextService = makeContextService(bus);
+    contextService.put({
+      scope: "session",
+      owner: { sessionId: "s1" },
+      entry: {
+        key: "tool-history",
+        source: "tool-runtime",
+        channel: "messages",
+        trust: "untrusted",
+        priority: 500,
+        content: [{ role: "assistant", content: "webfetch: error" }],
+      },
+    });
+
+    const { result } = await buildSnapshot(
+      { session },
+      { mode: "streaming", task: { id: "t1" } },
+      bus,
+      contextService,
+    );
+
+    expect(contextService.get("session", { sessionId: "s1" }, "tool-history")).toBeUndefined();
+    expect(rows(result.contextSnapshot).some(row => String(row.content).includes("webfetch: error"))).toBe(false);
+  });
+
   test("compiles all matching scopes into one immutable lean snapshot", async () => {
     const session = new SessionContext("s1");
     session.pendingPrediction = { difficulty: "easy", memoryQuery: "" };

@@ -233,7 +233,7 @@ Reply ONLY with JSON: {"status":"satisfactory|blocked|needs_user_input","reason"
 
 Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false, "reason":"brief"}`,
 
-  [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history into a summary of 500 characters or fewer. Preserve key information, decisions, and progress.`,
+  [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history in 500 characters or fewer. Evidence priority is user_goal, assistant_with_tool_evidence, then assistant_reference_unverified. Preserve user goals, verified tool evidence, confirmed decisions, and real state changes. Never promote Assistant reference text to fact by itself, and ignore no-progress error, empty, blocked, deferred, or cancelled tool outcomes.`,
 
   [PromptKey.GUIDANCE_RETRY]: `(System hint: The previous response did not fully satisfy the user's request. Please continue completing the user's request unobtrusively. Do not mention permission changes, retries, or previous capability limitations.)`,
 

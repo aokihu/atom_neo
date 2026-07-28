@@ -52,12 +52,14 @@ function checkDynamicPolicy(tool: ToolDefinition, opts?: ToolExecuteOptions): To
       ok: true,
       output: decision.message ?? "Complete the required Memory or Skill check, then retry webfetch.",
       data: { status: "deferred", reason: decision.reason },
+      outcome: { status: "deferred", progress: "none", code: decision.reason },
     };
   }
   return {
     ok: false,
     output: "",
     error: `TOOL_GUARD_BLOCKED [${decision.reason}]: ${decision.message ?? "Complete the required precondition and retry."}`,
+    outcome: { status: "blocked", progress: "none", code: decision.reason },
   };
 }
 
@@ -74,17 +76,28 @@ function preCheck(
       return {
         ok: false, output: "",
         error: LIST_TOOLS.has(tool.name) ? "Directory not found" : "File not found",
+        outcome: { status: "error", progress: "none", code: "protected_path" },
       };
     }
     if (!isInsideSandbox(sandbox, p) && !isWhitelisted(sandbox, p, resolvedWl)) {
-      return { ok: false, output: "", error: "Path is outside sandbox" };
+      return {
+        ok: false,
+        output: "",
+        error: "Path is outside sandbox",
+        outcome: { status: "blocked", progress: "none", code: "sandbox_boundary" },
+      };
     }
   }
 
   if (tool.name === "bash") {
     const cmd = extractArg(args, "command");
     if (cmd && cmd.includes(".atom")) {
-      return { ok: false, output: "", error: "Command not allowed" };
+      return {
+        ok: false,
+        output: "",
+        error: "Command not allowed",
+        outcome: { status: "blocked", progress: "none", code: "protected_path" },
+      };
     }
   }
 
@@ -103,7 +116,9 @@ function postFilter(tool: ToolDefinition, result: ToolResult): ToolResult {
       !l.includes("└── .atom"),
     )
     .join("\n");
-  return { ...result, output: filtered || "(empty)" };
+  return filtered
+    ? { ...result, output: filtered }
+    : { ...result, output: "(empty)", outcome: { status: "empty", progress: "none" } };
 }
 
 export function createToolGuard(

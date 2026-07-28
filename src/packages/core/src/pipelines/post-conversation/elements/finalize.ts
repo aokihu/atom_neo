@@ -56,11 +56,14 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
         entry: {
           key: "post-check-guidance",
           source: "post-conversation",
-          channel: "instructions",
-          trust: "trusted",
+          channel: "messages",
+          trust: "untrusted",
           priority: 860,
           consumeOnCommit: true,
-          content: resolvePrompt(PromptKey.GUIDANCE_RETRY),
+          content: [{
+            role: "assistant",
+            content: `Post-check reference (unverified): ${resolvePrompt(PromptKey.GUIDANCE_RETRY)}`,
+          }],
         },
       });
       this.report(BusEvents.Conversation.Chain, {

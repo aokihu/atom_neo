@@ -1,5 +1,6 @@
 import type { ToolDefinition, ToolResult } from "@atom-neo/shared";
 import { PermissionLevel, errorMessage } from "@atom-neo/shared";
+import { TOOL_OUTCOMES } from "./outcome";
 
 export async function executeTool(
   tool: ToolDefinition,
@@ -12,6 +13,7 @@ export async function executeTool(
       ok: false,
       output: "",
       error: `Permission denied: ${tool.name} requires level ${required}`,
+      outcome: { status: "blocked", progress: "none", code: "permission_denied" },
     };
   }
 
@@ -31,6 +33,7 @@ export async function executeTool(
       ok: false,
       output: "",
       error: errorMessage(error),
+      outcome: TOOL_OUTCOMES.error,
       metadata: { durationMs: performance.now() - start },
     };
   }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { NetworkServiceLike, ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
+import { TOOL_OUTCOMES } from "../outcome";
 
 const WebFetchInputSchema = z.object({
   url: z.string().describe("HTTP/HTTPS URL to fetch"),
@@ -22,7 +23,9 @@ export function createWebFetchTool(network: NetworkServiceLike): ToolDefinition 
     inputSchema: WebFetchInputSchema,
     execute: async (args, options) => {
       const parsed = WebFetchInputSchema.safeParse(args);
-      if (!parsed.success) return { ok: false, output: "", error: parsed.error.message };
+      if (!parsed.success) {
+        return { ok: false, output: "", error: parsed.error.message, outcome: TOOL_OUTCOMES.error };
+      }
       const { timeout, ...request } = parsed.data;
       const result = await network.webFetch(
         { ...request, timeoutMs: timeout },
@@ -40,6 +43,11 @@ export function createWebFetchTool(network: NetworkServiceLike): ToolDefinition 
         output: result.content,
         ...(result.error ? { error: result.error } : {}),
         ...(data ? { data } : {}),
+        outcome: result.ok
+          ? result.content.trim() ? { ...TOOL_OUTCOMES.evidence, code: result.code } : { ...TOOL_OUTCOMES.empty, code: result.code }
+          : result.code === "cancelled"
+            ? { ...TOOL_OUTCOMES.cancelled, code: result.code }
+            : { ...TOOL_OUTCOMES.error, code: result.code },
       };
     },
     permission: PermissionLevel.READ_ONLY,

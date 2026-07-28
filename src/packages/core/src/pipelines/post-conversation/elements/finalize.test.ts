@@ -40,7 +40,8 @@ describe("PostConversationFinalizeElement", () => {
       "post-check-guidance",
     );
     expect(guidance?.consumeOnCommit).toBe(true);
-    expect(guidance?.channel).toBe("instructions");
+    expect(guidance?.channel).toBe("messages");
+    expect(guidance?.trust).toBe("untrusted");
   });
 
   test("preserves the source task and stages retry until it commits", async () => {

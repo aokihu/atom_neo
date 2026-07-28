@@ -37,14 +37,47 @@ export type ToolContextInjection = {
   entry: Omit<ContextEntry, "revision">;
 };
 
+export type ToolOutcomeStatus =
+  | "success"
+  | "empty"
+  | "error"
+  | "blocked"
+  | "deferred"
+  | "cancelled";
+
+export type ToolProgress = "evidence" | "state_changed" | "none";
+
+export type ToolOutcome = {
+  status: ToolOutcomeStatus;
+  progress: ToolProgress;
+  evidenceWeight?: "primary" | "reference";
+  code?: string;
+};
+
 export type ToolResult = {
   ok: boolean;
   output: string;
   error?: string;
   data?: unknown;
+  outcome?: ToolOutcome;
   contextInjection?: ToolContextInjection;
   metadata?: {
     tokensUsed?: number;
     durationMs?: number;
   };
 };
+
+export function resolveToolOutcome(result: Pick<ToolResult, "ok" | "data" | "outcome">): ToolOutcome {
+  if (result.outcome) return result.outcome;
+  if (
+    result.ok
+    && typeof result.data === "object"
+    && result.data !== null
+    && (result.data as { status?: unknown }).status === "deferred"
+  ) {
+    return { status: "deferred", progress: "none" };
+  }
+  return result.ok
+    ? { status: "success", progress: "evidence" }
+    : { status: "error", progress: "none" };
+}

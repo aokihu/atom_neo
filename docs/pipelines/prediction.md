@@ -21,7 +21,7 @@ predict-input (source) → predict-intent (transform) → token-ratio (boundary)
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `predict-input` | source | 提取用户消息 + 最近对话上下文 |
+| 1 | `predict-input` | source | 提取当前用户请求、历史 User Context 与低权重 Assistant Reference |
 | 2 | `predict-intent` | transform | 调用 `generateText`（非流式），输出 `IntentPredictionResult` |
 | 3 | `token-ratio` | boundary | 检查 token 使用比例 |
 | 4 | `predict-finalize` | sink | 写入 `session.pendingPrediction`，调度 conversation 任务 |
@@ -36,11 +36,16 @@ type PredictionFlowState = {
   task: any;
   session: any;
   userMessage: string;
-  contextMessages?: string;
+  userContextMessages?: string;
+  assistantReference?: string;
   prediction?: IntentPredictionResult;
   error?: string;
 };
 ```
+
+Prediction 不再把 User/Assistant 按同一权重拼成一段历史：当前 User 请求是权威输入，
+历史 User 消息用于主题延续；Assistant 只保留更短的 `assistantReference`，并在 Prompt 中标记为
+未验证参考，不能用其旧搜索词或旧结论覆盖当前请求。
 
 ## 状态转移
 

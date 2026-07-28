@@ -40,10 +40,13 @@ export type {
   NetworkServiceLike,
 } from "./network";
 
-export { PermissionLevel } from "./tool";
+export { PermissionLevel, resolveToolOutcome } from "./tool";
 export type {
   ToolDefinition,
   ToolResult,
+  ToolOutcome,
+  ToolOutcomeStatus,
+  ToolProgress,
   ToolExecuteOptions,
   ToolContextInjection,
   ToolGuardDecision,

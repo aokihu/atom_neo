@@ -57,6 +57,8 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     const taskId = input.task?.id ?? "task";
     const taskOwner = compactOwner({ sessionId, topicId, taskId });
     const topicOwner = compactOwner({ sessionId, topicId });
+    this.#contextService.remove("session", { sessionId }, "tool-history");
+    if (topicId) this.#contextService.remove("topic", { sessionId, topicId }, "tool-history");
     const systemPrompt = this.#resolve(PromptKey.BASE_SYSTEM);
     const compiledAgentsPrompt = this.#getCompiledPrompt();
     const skillContext = this.#skillService?.buildContext(sessionId) ?? "";

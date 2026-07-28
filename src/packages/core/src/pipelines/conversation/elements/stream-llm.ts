@@ -1,16 +1,16 @@
-import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
+import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, resolveToolOutcome, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { isStepCount, pruneMessages, streamText, tool, zodSchema } from "ai";
 import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import type { ToolContextInjection, ToolDefinition, ToolGuardState } from "@atom-neo/shared";
+import type { ToolContextInjection, ToolDefinition, ToolGuardState, ToolOutcome, ToolProgress } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
 import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
-import type { ConversationFlowState, MemorySearchStatus } from "./types";
+import type { ConversationFlowState, MemorySearchStatus, ToolOutcomeSummary } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { ContextService } from "../../../context/context-service";
@@ -108,6 +108,28 @@ export function resolveTokenMetrics(
   };
 }
 
+export function summarizeToolOutcomes(outcomes: readonly ToolOutcome[]): ToolOutcomeSummary {
+  const summary: ToolOutcomeSummary = {
+    evidence: 0,
+    referenceEvidence: 0,
+    stateChanged: 0,
+    empty: 0,
+    error: 0,
+    blocked: 0,
+    deferred: 0,
+    cancelled: 0,
+  };
+  for (const outcome of outcomes) {
+    if (outcome.progress === "evidence") {
+      if (outcome.evidenceWeight === "reference") summary.referenceEvidence++;
+      else summary.evidence++;
+    }
+    if (outcome.progress === "state_changed") summary.stateChanged++;
+    if (outcome.status !== "success") summary[outcome.status]++;
+  }
+  return summary;
+}
+
 export function pruneConsumedTransientTools(messages: ModelMessage[]): ModelMessage[] {
   return pruneMessages({
     messages,
@@ -117,12 +139,6 @@ export function pruneConsumedTransientTools(messages: ModelMessage[]): ModelMess
     }],
     emptyMessages: "remove",
   });
-}
-
-export function shouldPersistToolResult(toolName: string): boolean {
-  return toolName !== "traverse_memory"
-    && toolName !== "search_history"
-    && toolName !== "read_history";
 }
 
 export function injectToolContext(params: {
@@ -402,7 +418,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       let tokenOverflow = false;
       let streamErrorCode = 0;
       let streamFailed = false;
-      const allToolCalls: { toolName: string; ok: boolean }[] = [];
+      const allToolCalls: { toolName: string; outcome: ToolOutcome }[] = [];
 
       try {
         const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -620,15 +636,25 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             if (c.toolName === "intent") continue;
             const status = takeToolExecutionStatus(this.#toolResults, c.toolName);
             const rawResult = c.output ?? c.result;
-            const toolOutput = String(c.output ?? c.result ?? status?.output ?? "");
+            const toolOutput = status?.output ?? stringifyToolOutput(rawResult);
             const toolError = c.error ?? status?.error;
             const toolOk = status?.ok ?? !toolError;
+            const outcome = status?.outcome ?? resolveToolOutcome({ ok: toolOk });
             const resultPreview = rawResult === undefined ? "" : JSON.stringify(rawResult).slice(0, 300);
-            this.report(BusEvents.Element.Data, { step: "tool-call-finish", toolName: c.toolName, stepCount: this.#stepCounter.count, result: resultPreview, ok: toolOk, error: toolError });
+            this.report(BusEvents.Element.Data, {
+              step: "tool-call-finish",
+              toolName: c.toolName,
+              stepCount: this.#stepCounter.count,
+              result: resultPreview,
+              ok: toolOk,
+              outcomeStatus: outcome.status,
+              progress: outcome.progress,
+              error: toolError,
+            });
             reportTransport(BusEvents.Transport.ToolFinished, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
-            stepToolCalls.push({ toolName: c.toolName, ok: toolOk });
-            allToolCalls.push({ toolName: c.toolName, ok: toolOk });
-            if (toolOk && status?.contextInjection) {
+            stepToolCalls.push({ toolName: c.toolName, ok: outcome.progress !== "none" });
+            allToolCalls.push({ toolName: c.toolName, outcome });
+            if (outcome.status === "success" && status?.contextInjection) {
               const scope = injectToolContext({
                 contextService: this.#contextService,
                 injection: status.contextInjection,
@@ -644,19 +670,15 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
                 key: status.contextInjection.entry.key,
               });
             }
-            if (shouldPersistToolResult(c.toolName) && this.#session?.addToolResult) {
+            if (this.#session?.addToolResult) {
               this.#session.addToolResult({
                 toolName: c.toolName,
                 topic: this.#session.currentTopic ?? "",
                 timestamp: Date.now(),
                 ok: toolOk,
+                outcome,
                 output: toolOutput,
                 error: toolError,
-              });
-              this.#appendToolHistory({
-                toolName: c.toolName,
-                ok: toolOk,
-                output: toolOutput,
               });
             }
             continue;
@@ -696,7 +718,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
       if (allToolCalls.length > 0) {
         const uniqueNames = [...new Set(allToolCalls.map(t => t.toolName))];
-        const success = allToolCalls.filter(t => t.ok).length;
+        const success = allToolCalls.filter(t => t.outcome.status === "success").length;
         reportTransport(BusEvents.Transport.ToolGroupComplete, {
           total: allToolCalls.length,
           success,
@@ -814,6 +836,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         errorStatusCode: streamErrorCode,
         finishReason,
         completeDetected,
+        toolOutcomeSummary: summarizeToolOutcomes(allToolCalls.map(call => call.outcome)),
         contextSnapshotAccepted: !timedOut && !streamFailed,
       };
     } catch (err: any) {
@@ -847,38 +870,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
   }
 
-  #appendToolHistory(result: { toolName: string; ok: boolean; output: string }): void {
-    const sessionId = this.#session?.sessionId ?? "default";
-    const topicId = this.#session?.currentTopic || undefined;
-    const scope = topicId ? "topic" as const : "session" as const;
-    const owner = { sessionId, ...(topicId ? { topicId } : {}) };
-    const current = this.#contextService.get(scope, owner, "tool-history");
-    const previous = Array.isArray(current?.content)
-      ? current.content.map(message => message.content).join("\n")
-      : "[Tool Execution History]";
-    const time = new Date().toISOString().slice(11, 19);
-    const line = `- [${time}] ${result.toolName}: ${result.ok ? "ok" : "error"}${result.output ? ` — ${substringWellFormed(result.output, 0, 80)}` : ""}`;
-    this.#contextService.put({
-      scope,
-      owner,
-      entry: {
-        key: "tool-history",
-        source: "tool-runtime",
-        channel: "messages",
-        trust: "untrusted",
-        priority: 500,
-        consumeOnCommit: true,
-        content: [{ role: "assistant", content: `${previous}\n${line}` }],
-      },
-    });
-  }
-
 }
 
 type ToolExecutionStatus = {
   ok: boolean;
   output: string;
   error?: string;
+  outcome: ToolOutcome;
   contextInjection?: ToolContextInjection;
 };
 
@@ -913,6 +911,61 @@ function stringifyToolOutput(output: unknown): string {
   }
 }
 
+function isExplicitToolOutcome(value: unknown): value is ToolOutcome {
+  if (!value || typeof value !== "object") return false;
+  const outcome = value as Partial<ToolOutcome>;
+  return [
+    "success",
+    "empty",
+    "error",
+    "blocked",
+    "deferred",
+    "cancelled",
+  ].includes(outcome.status ?? "") && [
+    "evidence",
+    "state_changed",
+    "none",
+  ].includes(outcome.progress ?? "");
+}
+
+function hasStructuredValue(value: unknown): boolean {
+  if (value === undefined || value === null || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+export function resolveMCPToolOutcome(result: unknown): ToolOutcome {
+  if (!result || typeof result !== "object") {
+    return hasStructuredValue(result)
+      ? { status: "success", progress: "evidence", evidenceWeight: "reference" }
+      : { status: "empty", progress: "none", evidenceWeight: "reference" };
+  }
+  const record = result as Record<string, unknown>;
+  if (isExplicitToolOutcome(record.outcome)) {
+    return { ...record.outcome, evidenceWeight: "reference" };
+  }
+  if (record.isError === true) {
+    return { status: "error", progress: "none", evidenceWeight: "reference", code: "mcp_is_error" };
+  }
+  if (Array.isArray(record.content)) {
+    const contentEvidence = record.content.some(part => {
+      if (!part || typeof part !== "object") return hasStructuredValue(part);
+      const content = part as Record<string, unknown>;
+      return content.type === "text"
+        ? typeof content.text === "string" && content.text.trim().length > 0
+        : true;
+    });
+    return contentEvidence || hasStructuredValue(record.structuredContent)
+      ? { status: "success", progress: "evidence", evidenceWeight: "reference" }
+      : { status: "empty", progress: "none", evidenceWeight: "reference" };
+  }
+  if ("toolResult" in record && !hasStructuredValue(record.toolResult)) {
+    return { status: "empty", progress: "none", evidenceWeight: "reference" };
+  }
+  return { status: "success", progress: "evidence", evidenceWeight: "reference" };
+}
+
 function beginGovernedToolCall(params: {
   toolName: string;
   args: unknown;
@@ -940,7 +993,12 @@ function beginGovernedToolCall(params: {
 
   const output = formatToolGovernanceBlock(decision);
   const error = `TOOL_GOVERNANCE_BLOCKED [${decision.reason}]`;
-  pushToolExecutionStatus(params.toolResults, params.toolName, { ok: false, output, error });
+  pushToolExecutionStatus(params.toolResults, params.toolName, {
+    ok: false,
+    output,
+    error,
+    outcome: { status: "blocked", progress: "none", code: decision.reason },
+  });
   return { allowed: false, output };
 }
 
@@ -949,11 +1007,12 @@ function finishGovernedToolCall(params: {
   stepCount: number;
   decision: Extract<ToolCallDecision, { allowed: true }>;
   ok: boolean;
+  progress: ToolProgress;
   source?: "mcp";
   report: (event: string, payload: Record<string, unknown>) => void;
   governance: { current: ToolCallLedger };
 }): void {
-  const governanceState = params.governance.current.finish(params.decision, params.ok);
+  const governanceState = params.governance.current.finish(params.decision, params.progress);
   params.report(BusEvents.Element.Data, {
     step: "tool-governance-result",
     toolName: params.toolName,
@@ -961,7 +1020,7 @@ function finishGovernedToolCall(params: {
     ...(params.source ? { source: params.source } : {}),
     fingerprint: params.decision.fingerprint,
     ok: params.ok,
-    progress: params.ok,
+    progress: params.progress,
     ...governanceState,
   });
 }
@@ -1001,27 +1060,33 @@ function buildAllAiTools(
                 sessionId: session?.sessionId,
                 guardState: guardState.current,
               });
+              const outcome = resolveToolOutcome(r);
               const duration = Date.now() - start;
-              report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: t.name, stepCount: sc, duration, ok: r.ok });
+              report(BusEvents.Element.Data, {
+                step: "tool-execute-done",
+                toolName: t.name,
+                stepCount: sc,
+                duration,
+                ok: r.ok,
+                outcomeStatus: outcome.status,
+                progress: outcome.progress,
+              });
               finishGovernedToolCall({
                 toolName: t.name,
                 stepCount: sc,
                 decision,
                 ok: r.ok,
+                progress: outcome.progress,
                 report,
                 governance,
               });
-              const deferred = r.ok
-                && typeof r.data === "object"
-                && r.data !== null
-                && (r.data as { status?: unknown }).status === "deferred";
-              if (deferred || (!r.ok && r.error?.startsWith("TOOL_GUARD_BLOCKED"))) {
+              if (outcome.status === "deferred" || outcome.status === "blocked") {
                 report(BusEvents.Element.Data, {
                   step: "tool-guard-blocked",
                   toolName: t.name,
                   stepCount: sc,
                   reason: guardState.current[t.name]?.reason,
-                  ...(deferred ? { outcome: "deferred" } : {}),
+                  outcome: outcome.status,
                 });
               }
               const output = r.output || (r.data === undefined ? "" : JSON.stringify(r.data));
@@ -1029,6 +1094,7 @@ function buildAllAiTools(
                 ok: r.ok,
                 output,
                 error: r.error,
+                outcome,
                 contextInjection: r.contextInjection,
               });
               if (t.name === "todowrite" && r.ok && session?.setTodoState) {
@@ -1045,10 +1111,16 @@ function buildAllAiTools(
                 stepCount: sc,
                 decision,
                 ok: false,
+                progress: "none",
                 report,
                 governance,
               });
-              pushToolExecutionStatus(toolResults, t.name, { ok: false, output: "", error });
+              pushToolExecutionStatus(toolResults, t.name, {
+                ok: false,
+                output: "",
+                error,
+                outcome: { status: "error", progress: "none" },
+              });
               return `Tool execution error: ${error}`;
             }
           },
@@ -1089,18 +1161,34 @@ export function wrapMCPAiTools(
         try {
           report(BusEvents.Element.Data, { step: "tool-execute-start", toolName: name, stepCount: sc, source: "mcp", args: JSON.stringify(args).slice(0, 200) });
           const result = await origExecute(args, opts);
+          const outcome = resolveMCPToolOutcome(result);
+          const error = outcome.status === "error" ? "MCP tool returned isError" : undefined;
           const duration = Date.now() - start;
-          report(BusEvents.Element.Data, { step: "tool-execute-done", toolName: name, stepCount: sc, source: "mcp", duration });
+          report(BusEvents.Element.Data, {
+            step: "tool-execute-done",
+            toolName: name,
+            stepCount: sc,
+            source: "mcp",
+            duration,
+            outcomeStatus: outcome.status,
+            progress: outcome.progress,
+          });
           finishGovernedToolCall({
             toolName: name,
             stepCount: sc,
             source: "mcp",
             decision,
-            ok: true,
+            ok: !error,
+            progress: outcome.progress,
             report,
             governance,
           });
-          pushToolExecutionStatus(toolResults, name, { ok: true, output: stringifyToolOutput(result) });
+          pushToolExecutionStatus(toolResults, name, {
+            ok: !error,
+            output: stringifyToolOutput(result),
+            ...(error ? { error } : {}),
+            outcome,
+          });
           return result;
         } catch (err: any) {
           const duration = Date.now() - start;
@@ -1112,10 +1200,16 @@ export function wrapMCPAiTools(
             source: "mcp",
             decision,
             ok: false,
+            progress: "none",
             report,
             governance,
           });
-          pushToolExecutionStatus(toolResults, name, { ok: false, output: "", error });
+          pushToolExecutionStatus(toolResults, name, {
+            ok: false,
+            output: "",
+            error,
+            outcome: { status: "error", progress: "none", evidenceWeight: "reference" },
+          });
           return `MCP tool error: ${error}`;
         }
       },

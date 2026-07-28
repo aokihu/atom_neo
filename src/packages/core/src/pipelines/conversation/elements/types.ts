@@ -12,6 +12,17 @@ export type ConversationMode =
 export type Message = { role: string; content: string; reasoning_content?: string };
 export type MemorySearchStatus = "not_started" | "found" | "empty" | "unavailable";
 
+export type ToolOutcomeSummary = {
+  evidence: number;
+  referenceEvidence: number;
+  stateChanged: number;
+  empty: number;
+  error: number;
+  blocked: number;
+  deferred: number;
+  cancelled: number;
+};
+
 export const appendCurrentUserMessage = (messages: Message[], content?: string): Message[] => {
   const latest = messages.at(-1);
   if (content && (latest?.role !== "user" || latest.content !== content)) {
@@ -51,5 +62,6 @@ export type ConversationFlowState = {
   errorStatusCode?: number;
   finishReason?: string;
   completeDetected?: boolean;
+  toolOutcomeSummary?: ToolOutcomeSummary;
   abortSignal?: AbortSignal;
 };

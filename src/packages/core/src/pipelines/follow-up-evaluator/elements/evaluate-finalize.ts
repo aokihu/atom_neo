@@ -59,11 +59,14 @@ export class EvaluateFinalizeElement extends BaseElement<EvaluatorFlowState, Pip
         entry: {
           key: "evaluator-suggestion",
           source: "follow-up-evaluator",
-          channel: "instructions",
-          trust: "trusted",
+          channel: "messages",
+          trust: "untrusted",
           priority: 850,
           consumeOnCommit: true,
-          content: resolvePrompt(PromptKey.CONTEXT_EVALUATOR_HINT).replace("%s", suggestion),
+          content: [{
+            role: "assistant",
+            content: `Evaluator reference (unverified): ${resolvePrompt(PromptKey.CONTEXT_EVALUATOR_HINT).replace("%s", suggestion)}`,
+          }],
         },
       });
     } else {

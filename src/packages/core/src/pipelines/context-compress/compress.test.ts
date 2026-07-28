@@ -10,6 +10,7 @@ import { ContextService } from "../../context/context-service";
 import { SessionContext } from "../../session/context";
 import { SessionPersistenceService } from "../../session/persistence-service";
 import { BusEvents } from "@atom-neo/shared";
+import { formatSummaryMessage, isSummaryEligibleMessage } from "./elements/compress-input";
 
 function makeContextService(bus: ReturnType<typeof makeBus>) {
   const service = new ContextService(bus, { sweepIntervalMs: 0 });
@@ -23,6 +24,37 @@ beforeAll(() => {
 });
 
 describe("compress-input", () => {
+  test("drops invalid tool result messages and labels Assistant text as reference", () => {
+    expect(isSummaryEligibleMessage({
+      role: "assistant",
+      content: "No matches",
+      timestamp: 1,
+      metadata: { toolOutcome: { status: "empty", progress: "none" } },
+    })).toBe(false);
+    expect(formatSummaryMessage({
+      role: "assistant",
+      content: "I think this is done",
+      timestamp: 1,
+    })).toBe("assistant_reference_unverified: I think this is done");
+    expect(formatSummaryMessage({
+      role: "assistant",
+      content: "verified",
+      timestamp: 1,
+      metadata: {
+        toolOutcomeSummary: {
+          evidence: 1,
+          referenceEvidence: 0,
+          stateChanged: 0,
+          empty: 0,
+          error: 0,
+          blocked: 0,
+          deferred: 0,
+          cancelled: 0,
+        },
+      },
+    })).toBe("assistant_with_tool_evidence: verified");
+  });
+
   test("extracts early messages with the resolved keep count", async () => {
     const bus = makeBus();
     const session = {

@@ -1,5 +1,6 @@
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
+import type { ToolOutcomeSummary } from "./pipelines/conversation/elements/types";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
 import { BusEvents, TaskFailureCodes, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
@@ -72,6 +73,7 @@ type CompletedResult = PipelineResult & {
   shouldPostCheck?: boolean;
   finishReason?: string;
   completeDetected?: boolean;
+  toolOutcomeSummary?: ToolOutcomeSummary;
 };
 
 interface ServiceProvider {
@@ -336,6 +338,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         metadata: {
           finishReason: result.finishReason ?? "",
           completeDetected: result.completeDetected ?? false,
+          ...(result.toolOutcomeSummary ? { toolOutcomeSummary: result.toolOutcomeSummary } : {}),
         },
         ...(reasoningContent ? { reasoningContent } : {}),
       };

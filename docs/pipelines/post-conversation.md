@@ -37,10 +37,11 @@ type PostConversationFlowState = {
   task: any;  // source 必须保留触发本 Pipeline 的 Task
   session: any;
   userMessage: string;
-  assistantResponse: string;
+  assistantResponse: string; // 未验证 claim/reference
   predictedTaskIntent: string;
   stepCount: number;
   assistantParts: number;
+  toolOutcomeSummary: ToolOutcomeSummary;
   analysis?: AnalysisResult;
 };
 
@@ -88,7 +89,10 @@ initial
 
 - **门控**: 无 `apiKey`、无消息或分析结果时跳过，默认 `{ status: "satisfactory" }`
 - **System Prompt**: `resolvePrompt(PromptKey.ANALYZE_RESULT, ...)`
-- **User Prompt**: 用户请求（前 500 字符）+ AI 回复头尾摘要（前 3000 字符）+ TODO/结束元数据 + 任务类型描述
+- **User Prompt**: 用户请求（前 500 字符）+ Tool Outcome 统计 + AI 回复头尾声明（前 3000 字符）
+  + TODO/结束元数据 + 任务类型描述
+- 判断优先级固定为：User 请求 > primary evidence/stateChanged > MCP reference evidence > 完成元数据
+  > Assistant 自述；MCP reference 只能辅助判断。
 - **参数**: temperature=0, maxTokens=256
 - **输出**: JSON `{ status: "satisfactory" | "blocked" | "needs_user_input", reason: string, fingerprint?: string }`
 - **容错**: LLM 调用或 JSON 解析失败 → fallback `{ status: "satisfactory", reason: "skip" }`
@@ -190,6 +194,7 @@ Layer 1 拦截已知模式（追问、澄清等）。Layer 2 作为通用兜底�
 | **400 错误跳过** | 当 conversation pipeline 的 `errorStatusCode >= 400` 时返回 `shouldPostCheck=false`，跳过空输出分析 |
 | **chainDepth 限制** | `post_check_retry` 分支在 server.ts 中受 `maxChainDepth` 约束（默认 5） |
 | **停滞检测** | trigram Jaccard 指纹相似度 > 0.6 → stalled。防止相似回复的死循环重试 |
+| **参考降权** | Assistant 回复和 retry suggestion 都是未验证参考；suggestion 以一次性 untrusted message 注入 |
 | **ES2025 Set** | 使用原生 `Set.intersection()` / `Set.union()`，Bun ≥1.3 原生支持 |
 
 ## Deps

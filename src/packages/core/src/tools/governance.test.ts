@@ -16,7 +16,7 @@ describe("ToolCallLedger", () => {
     const first = ledger.begin("read", { filepath: "a.ts" });
     expect(first.allowed).toBe(true);
     if (!first.allowed) throw new Error("expected first call to execute");
-    ledger.finish(first, true);
+    ledger.finish(first, "evidence");
 
     const duplicate = ledger.begin("read", { filepath: "a.ts" });
     expect(duplicate).toMatchObject({ allowed: false, reason: "duplicate_request" });
@@ -24,7 +24,7 @@ describe("ToolCallLedger", () => {
     const edit = ledger.begin("edit", { filepath: "a.ts", old_string: "a", new_string: "b" });
     expect(edit.allowed).toBe(true);
     if (!edit.allowed) throw new Error("expected edit to execute");
-    ledger.finish(edit, true);
+    ledger.finish(edit, "state_changed");
 
     expect(ledger.begin("read", { filepath: "a.ts" }).allowed).toBe(true);
   });
@@ -34,7 +34,7 @@ describe("ToolCallLedger", () => {
     for (const toolName of ["one", "two", "three"]) {
       const decision = ledger.begin(toolName, {});
       if (!decision.allowed) throw new Error("expected call to execute");
-      ledger.finish(decision, false);
+      ledger.finish(decision, "none");
     }
 
     expect(ledger.shouldForceText()).toBe(true);
@@ -48,7 +48,7 @@ describe("ToolCallLedger", () => {
     const ledger = new ToolCallLedger({ maxExecutions: 2 });
     const first = ledger.begin("one", {});
     if (!first.allowed) throw new Error("expected first call to execute");
-    ledger.finish(first, true);
+    ledger.finish(first, "evidence");
 
     const second = ledger.begin("two", {});
     expect(second.allowed).toBe(true);
@@ -62,7 +62,7 @@ describe("ToolCallLedger", () => {
     const ledger = new ToolCallLedger({ maxExecutions: 10 });
     const first = ledger.begin("read", { filepath: "a.ts" });
     if (!first.allowed) throw new Error("expected first call to execute");
-    ledger.finish(first, true);
+    ledger.finish(first, "evidence");
     const duplicate = ledger.begin("read", { filepath: "a.ts" });
     if (duplicate.allowed) throw new Error("expected duplicate to be blocked");
 

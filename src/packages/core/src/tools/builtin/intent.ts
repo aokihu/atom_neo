@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
+import { TOOL_OUTCOMES } from "../outcome";
 
 export const IntentInputSchema = z.object({
   action: z.enum(["follow_up", "retain_memory"]),
@@ -20,7 +21,7 @@ export function createIntentTool(): ToolDefinition {
       "Signal system to follow_up (continue segmented output) or retain_memory (retain an existing long-term memory).",
     source: "builtin",
     inputSchema: IntentInputSchema,
-    execute: async () => ({ ok: true, output: "信号已收到" }),
+    execute: async () => ({ ok: true, output: "信号已收到", outcome: TOOL_OUTCOMES.stateChanged }),
     permission: PermissionLevel.READ_ONLY,
     silent: true,
   };

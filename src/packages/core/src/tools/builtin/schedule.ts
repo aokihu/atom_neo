@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 import type { HookManager } from "../../hooks/hook-manager";
+import { TOOL_OUTCOMES } from "../outcome";
 
 const createInput = z.object({
   name: z.string().describe("Unique name for this scheduled task"),
@@ -54,7 +55,7 @@ export function createScheduleTools(
     inputSchema: createInput,
     execute: async (args) => {
       const r = createInput.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       try {
         const hook = hm().create({
           name: r.data.name,
@@ -67,9 +68,10 @@ export function createScheduleTools(
           ok: true,
           output: `Scheduled task created: ${hook.id} ("${hook.name}") scope=${hook.scope} trigger=${hook.trigger.type}.`,
           data: hook,
+          outcome: TOOL_OUTCOMES.stateChanged,
         };
       } catch (err) {
-        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err), outcome: TOOL_OUTCOMES.error };
       }
     },
     permission: PermissionLevel.FULL,
@@ -82,10 +84,10 @@ export function createScheduleTools(
     inputSchema: listInput,
     execute: async (args) => {
       const r = listInput.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       try {
         const hooks = hm().list(r.data);
-        if (hooks.length === 0) return { ok: true, output: "No scheduled tasks." };
+        if (hooks.length === 0) return { ok: true, output: "No scheduled tasks.", outcome: TOOL_OUTCOMES.empty };
         const lines = hooks.map(h => {
           const last = h.lastFiredAt ? new Date(h.lastFiredAt).toISOString() : "never";
           const status = h.enabled ? "enabled" : "disabled";
@@ -96,9 +98,9 @@ export function createScheduleTools(
           const sid = h.sessionId ? ` sid=${h.sessionId}` : "";
           return `- [${status}] ${h.id}: "${h.name}" | ${detail} | scope=${h.scope}${sid} | last: ${last}`;
         });
-        return { ok: true, output: lines.join("\n"), data: hooks };
+        return { ok: true, output: lines.join("\n"), data: hooks, outcome: TOOL_OUTCOMES.evidence };
       } catch (err) {
-        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err), outcome: TOOL_OUTCOMES.error };
       }
     },
     permission: PermissionLevel.READ_ONLY,
@@ -111,16 +113,17 @@ export function createScheduleTools(
     inputSchema: updateInput,
     execute: async (args) => {
       const r = updateInput.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       try {
         const hook = hm().update(r.data.id, r.data);
         return {
           ok: true,
           output: `Scheduled task updated: ${hook.id} ("${hook.name}"). Trigger: ${hook.trigger.type}. Enabled: ${hook.enabled}.`,
           data: hook,
+          outcome: TOOL_OUTCOMES.stateChanged,
         };
       } catch (err) {
-        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err), outcome: TOOL_OUTCOMES.error };
       }
     },
     permission: PermissionLevel.FULL,
@@ -133,14 +136,14 @@ export function createScheduleTools(
     inputSchema: cancelInput,
     execute: async (args) => {
       const r = cancelInput.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return { ok: false, output: "", error: r.error.message, outcome: TOOL_OUTCOMES.error };
       try {
         const ok = hm().cancel(r.data.id);
         return ok
-          ? { ok: true, output: `Scheduled task "${r.data.id}" cancelled.` }
-          : { ok: false, output: "", error: `Scheduled task "${r.data.id}" not found.` };
+          ? { ok: true, output: `Scheduled task "${r.data.id}" cancelled.`, outcome: TOOL_OUTCOMES.stateChanged }
+          : { ok: false, output: "", error: `Scheduled task "${r.data.id}" not found.`, outcome: TOOL_OUTCOMES.error };
       } catch (err) {
-        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err) };
+        return { ok: false, output: "", error: err instanceof Error ? err.message : String(err), outcome: TOOL_OUTCOMES.error };
       }
     },
     permission: PermissionLevel.FULL,

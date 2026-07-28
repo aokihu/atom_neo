@@ -36,9 +36,16 @@ export interface ToolDefinition {
 
 export type ToolResult = {
   ok: boolean;
-  output: string;       // Text result for LLM context
+  output: string;       // Current tool-loop feedback, not durable Context
   error?: string;       // Error message if not ok
   data?: unknown;       // Structured data for downstream use
+  outcome?: {
+    status: "success" | "empty" | "error" | "blocked" | "deferred" | "cancelled";
+    progress: "evidence" | "state_changed" | "none";
+    evidenceWeight?: "primary" | "reference";
+    code?: string;
+  };
+  contextInjection?: ToolContextInjection;
   metadata?: {
     tokensUsed?: number;
     durationMs?: number;
@@ -111,6 +118,12 @@ export const myTool: ToolDefinition = {
 };
 ```
 
+`ok` 只保留执行协议兼容性，Tool Governance 必须读取 `outcome.progress`。`error`、`empty`、
+`blocked`、`deferred`、`cancelled` 在当前工具循环中可见，但不自动写入 Topic/Session Context。
+旧 Plugin/MCP 结果由 `resolveToolOutcome()` 统一归一化，禁止通过解析 `output` 文本猜测状态。
+MCP 原始结果在当前 conversation 的后续 steps 中完整可用；conversation 结束后按 `reference`
+级证据进入质量判断，不能自动持久化或单独作为 Post/Compact 的完成事实。
+
 ## 3. File System Tools
 
 ```typescript
@@ -181,7 +194,8 @@ createForgetMemoryTool(memory)   // { id }
 - `search_memory`、`read_memory` 与 Skill 工具对所有 intent 可用。
 - 内置 `webfetch` 对所有 intent 始终可见，由 Agent 自主决定何时调用。
 - AI SDK `prepareStep` 只汇总 Memory 与 Skill 的发现状态，并通过 `ToolExecuteOptions.guardState` 交给 ToolGuard，不再隐藏 `webfetch`。
-- ToolGuard 在真正执行网络请求前检查状态；前置条件不足时不访问网络，返回 `TOOL_GUARD_BLOCKED` 和下一步操作。
+- ToolGuard 在真正执行网络请求前检查状态；前置条件不足时不访问网络，返回
+  `outcome.status="deferred"`、`progress="none"` 和下一步操作。
 - 搜索命中只表示发现摘要，必须成功执行 `read_memory` 后才视为 Memory 已确认。
 - Memory 搜索为空时，Guard 要求 Agent 执行 `skill_list`；Skill 已检查后再次调用 `webfetch` 即可执行。
 - Memory 存在候选时，Guard 提示 Agent 读取相关候选；若候选不相关，Agent 可检查 Skill 后再次调用 `webfetch`，无需由 Pipeline 判断语义相关性。
@@ -226,6 +240,7 @@ read_history({
 - `search_history` 对 `message-latest` 命中同时返回 `checkpointRevision`，首次读取即可锁定检查点。`read_history` 还会要求显式 `fromSeq` 必须精确命中首条消息；latest 变化、anchor 消失、offset 越界或切入代理对时返回明确错误，禁止静默跳消息。
 - 搜索同时命中不可变分段与 latest 时优先返回不可变 `message-{n}` 引用。
 - 工具结果只供当前 step 使用，不写入长期 Session Tool Context。
+- 普通 Tool Result 只写结构化 Session 审计；跨轮 Context 仅接受显式 `contextInjection`。
 - `search_history` 和 `read_history` 对所有 intent 可见，不参与 Memory/Skill/Web 门控。
 
 通用 `read` / `bash` 仍不用于读取 `.atom` 内部状态；History Tool 通过

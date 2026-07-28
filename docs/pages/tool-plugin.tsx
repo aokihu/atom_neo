@@ -35,9 +35,16 @@ export interface ToolDefinition {
 
 export type ToolResult = {
   ok: boolean;
-  output: string;       // Text result for LLM context
+  output: string;       // Current tool-loop feedback
   error?: string;       // Error message if not ok
   data?: unknown;       // Structured data for downstream use
+  outcome?: {
+    status: "success" | "empty" | "error" | "blocked" | "deferred" | "cancelled";
+    progress: "evidence" | "state_changed" | "none";
+    evidenceWeight?: "primary" | "reference";
+    code?: string;
+  };
+  contextInjection?: ToolContextInjection;
   metadata?: {
     tokensUsed?: number;
     durationMs?: number;
@@ -51,6 +58,10 @@ export enum PermissionLevel {
 }`} />
         <Callout type="info" title="设计理念">
           Tool 是统一接口：文件系统、Memory、Bash、MCP 操作都通过同一 <code>execute(args) → ToolResult</code> 模式。
+          <code>ok</code> 只保留协议兼容性，框架根据 <code>outcome.progress</code> 判断真实进展；
+          普通结果只留在当前循环，跨轮 Context 必须显式使用 <code>contextInjection</code>。
+          MCP 原始结果在当前 conversation 中完整可用，conversation 结束后统一按 reference evidence
+          参与 Post/Compact 判断。
         </Callout>
       </Section>
 

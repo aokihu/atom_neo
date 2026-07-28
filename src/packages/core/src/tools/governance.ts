@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ToolProgress } from "@atom-neo/shared";
 
 export const DEFAULT_MAX_CONSECUTIVE_NO_PROGRESS = 3;
 
@@ -93,8 +94,11 @@ export class ToolCallLedger {
     return { allowed: true, toolName, fingerprint };
   }
 
-  finish(decision: Extract<ToolCallDecision, { allowed: true }>, ok: boolean): ToolGovernanceSnapshot {
-    if (ok) {
+  finish(
+    decision: Extract<ToolCallDecision, { allowed: true }>,
+    progress: ToolProgress,
+  ): ToolGovernanceSnapshot {
+    if (progress !== "none") {
       this.#consecutiveNoProgress = 0;
       this.#fingerprintsSinceProgress = new Set([decision.fingerprint]);
     } else {

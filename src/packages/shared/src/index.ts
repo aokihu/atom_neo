@@ -6,6 +6,7 @@ export {
   IntentRequestType,
   IntentRequestSource,
   PermissionLevel,
+  resolveToolOutcome,
   PipelineResultType,
   PipelineEnqueueTransition,
 } from "./types";
@@ -40,6 +41,9 @@ export type {
   NetworkServiceLike,
   ToolDefinition,
   ToolResult,
+  ToolOutcome,
+  ToolOutcomeStatus,
+  ToolProgress,
   ToolExecuteOptions,
   ToolContextInjection,
   ToolGuardDecision,

@@ -65,9 +65,9 @@ describe("prediction pipeline elements", () => {
 
     const result = await el.process({ mode: "initial", task: { payload: [{ data: "你搜索了吗" }] } });
     expect(result.userMessage).toBe("你搜索了吗");
-    expect(result.contextMessages).toBeDefined();
-    expect(result.contextMessages).toContain("能够介绍一下杭州的景点吗");
-    expect(result.contextMessages).toContain("好的，我来搜索一下");
+    expect(result.userContextMessages).toContain("能够介绍一下杭州的景点吗");
+    expect(result.userContextMessages).not.toContain("好的，我来搜索一下");
+    expect(result.assistantReference).toContain("好的，我来搜索一下");
   });
 
   test("predict-input handles empty session for context", async () => {
@@ -83,7 +83,8 @@ describe("prediction pipeline elements", () => {
 
     const result = await el.process({ mode: "initial", task: { payload: [{ data: "hello" }] } });
     expect(result.userMessage).toBe("hello");
-    expect(result.contextMessages).toBe("");
+    expect(result.userContextMessages).toBe("");
+    expect(result.assistantReference).toBe("");
   });
 
   test("predict-input handles empty payload", async () => {

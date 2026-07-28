@@ -45,6 +45,7 @@ describe("webfetch tool adapter", () => {
         contentType: "text/plain",
         rateLimit: { domain: "example.com", waitedMs: 1_000 },
       },
+      outcome: { status: "success", progress: "evidence", code: "success" },
     });
   });
 
@@ -79,7 +80,7 @@ describe("webfetch tool adapter", () => {
     expect(called).toBe(false);
   });
 
-  test("maps a domain cooldown without changing the Tool contract", async () => {
+  test("maps a domain cooldown to an explicit no-progress outcome", async () => {
     const tool = createWebFetchTool({
       webFetch: async () => ({
         ok: false,
@@ -99,6 +100,7 @@ describe("webfetch tool adapter", () => {
         status: 429,
         rateLimit: { domain: "google.com", waitedMs: 0, retryAfterMs: 60_000 },
       },
+      outcome: { status: "error", progress: "none", code: "domain_cooldown" },
     });
   });
 });
