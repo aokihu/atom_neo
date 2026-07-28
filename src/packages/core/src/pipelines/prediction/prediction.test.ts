@@ -87,6 +87,35 @@ describe("prediction pipeline elements", () => {
     expect(result.assistantReference).toBe("");
   });
 
+  test("predict-input excludes failed Tool Assistant content", async () => {
+    const bus = makeBus();
+    const session = {
+      sessionId: "s1",
+      messages: [
+        { role: "user", content: "浙江大学有游泳馆吗" },
+        {
+          role: "assistant",
+          content: "<｜｜DSML｜｜tool_calls>webfetch",
+          metadata: {
+            completeDetected: false,
+            toolOutcomeSummary: { evidence: 0, stateChanged: 0, empty: 1, deferred: 2 },
+          },
+        },
+        { role: "user", content: "你再搜索一下" },
+      ],
+    };
+    const Ctor = resolveElement("predict-input");
+    const el = new Ctor({ name: "predict-input", kind: "source", bus, session, task: {} });
+
+    const result = await el.process({
+      mode: "initial",
+      task: { payload: [{ data: "你再搜索一下" }] },
+    });
+
+    expect(result.assistantReference).toBe("");
+    expect(result.userContextMessages).toContain("浙江大学有游泳馆吗");
+  });
+
   test("predict-input handles empty payload", async () => {
     const bus = makeBus();
     const Ctor = resolveElement("predict-input");

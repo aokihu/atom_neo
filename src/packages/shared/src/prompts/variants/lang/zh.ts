@@ -130,9 +130,9 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 先检查 Context 中已有的事实、查询方法和 Skill；存在可用方法时直接遵循，不要重复发现能力
 - Context 没有可用方法时，先调用 \`search_memory\`；query 使用核心概念，可附加同义词、领域词或 Skill 名称，删除年份、"最新"等实时限定词
 - \`search_memory\`、\`traverse_memory\` 和自动 Memory 搜索只提供摘要；\`traverse_memory\` 还提供来源、关系与深度，其浏览结果会在下一 step 后自动卸载。摘要与当前任务相关时必须调用 \`read_memory\` 获取完整正文，读取前不能把摘要当作事实或调用网络工具
-- \`webfetch\` 始终可见，但 ToolGuard 会在能力发现未完成时拦截，并通过 Tool Result 告知下一步操作
-- Memory 搜索为空时调用 \`skill_list\` 检查可用 Skill；没有相关 Skill 时再次调用 \`webfetch\`
-- Memory 候选不相关时不必读取，可在检查 Skill 后再次调用 \`webfetch\`；你可以自主扩大 Memory 查询，但不要求固定重试次数
+- ToolGuard 与手工 Tool Loop 会按能力发现状态开放当前可执行工具；不要调用当前 step 未开放的工具
+- Memory 搜索为空后不要换关键词继续搜索，直接调用 \`skill_list\` 检查可用 Skill；没有相关 Skill 时调用 \`webfetch\`
+- Memory 候选不相关时不必读取，调用 \`skill_list\`；完成 Skill 检查后再调用 \`webfetch\`
 - Memory 提供 Skill 线索只表示定位到能力，不表示能力已加载；必须先用 \`skill_load\` / \`skill_section\` 取得正文并遵循对应流程，成功前禁止调用网络工具
 - 完整 Memory 读取后优先使用其方法；Memory 和 Skill 均无可用能力或 Memory 不可用时，再使用 \`webfetch\` 等搜索/网络工具；实时数据也不能跳过能力发现
 - 用户明确提供 URL 时，可以直接使用 \`webfetch\`

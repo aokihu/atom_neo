@@ -5,9 +5,11 @@ import type { ContextService } from "../../../context/context-service";
 import type { CompressFlowState } from "./types";
 import type { ContextCompressRequest } from "@atom-neo/shared";
 import type { SessionMessage, ToolOutcome } from "@atom-neo/shared";
+import { isFailedToolAssistant } from "../../../session/message-policy";
 
 export function isSummaryEligibleMessage(message: SessionMessage): boolean {
   if (message.visible === false || (message.role !== "user" && message.role !== "assistant")) return false;
+  if (isFailedToolAssistant(message)) return false;
   const outcome = message.metadata?.toolOutcome as ToolOutcome | undefined;
   return !outcome || outcome.status === "success";
 }

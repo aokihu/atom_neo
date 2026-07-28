@@ -130,9 +130,9 @@ You can use the following tools to load and manage skills — domain operation g
 - First inspect Context for existing facts, lookup methods, and Skills; follow an available method without repeating capability discovery.
 - If Context has no usable method, call \`search_memory\` with core concepts plus optional synonyms, domain terms, or Skill names; remove years and freshness words such as "latest".
 - Automatic Memory search, \`search_memory\`, and \`traverse_memory\` return summaries only. \`traverse_memory\` also provides source, relation, and depth metadata, and its browsing result is unloaded after the next step. If a summary is relevant, call \`read_memory\` for the full content; do not treat a summary as fact or use network tools before reading it.
-- \`webfetch\` is always visible, but ToolGuard blocks execution until capability discovery is complete and returns the required next action in the Tool Result.
-- If a Memory search is empty, call \`skill_list\` to inspect available Skills. If none is relevant, call \`webfetch\` again.
-- An irrelevant Memory candidate does not need to be read; inspect Skills and retry \`webfetch\`. You may broaden Memory searches, but there is no fixed retry count.
+- ToolGuard and the manual Tool Loop expose only the tools executable in the current capability-discovery state; do not call a tool that is inactive for the current step.
+- After a Memory search is empty, do not retry it with different keywords. Call \`skill_list\`; if no Skill is relevant, call \`webfetch\`.
+- An irrelevant Memory candidate does not need to be read. Call \`skill_list\`, then use \`webfetch\` after Skill discovery is complete.
 - A Skill hint in Memory only locates a capability; it is not loaded yet. Use \`skill_load\` / \`skill_section\` to obtain and follow its content before calling any network tool.
 - Prefer a method from a fully read Memory. Use \`webfetch\` or other network tools only when Memory and Skill have no usable capability or Memory is unavailable; real-time data does not bypass capability discovery.
 - If the user provides an explicit URL, \`webfetch\` may be used directly.

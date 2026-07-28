@@ -16,7 +16,7 @@
 本次改造覆盖所有 Tool，不为 WebFetch 添加特例。目标是：
 
 - Tool 直接返回框架可识别的结构化 Outcome。
-- 当前工具循环仍能看到错误、空结果和阻塞原因，以便改变策略。
+- 无效结果由框架审计和状态机消费，不把原始 Tool Call / Tool Result 交给后续模型 step。
 - 只有明确的 Context Injection 可以进入跨轮 Context；普通结果不再自动沉淀。
 - Tool Governance 根据 `progress` 而不是 `ok` 判断是否真正前进。
 - Prediction 以 User 请求为主，Assistant 只作为低权重参考。
@@ -56,15 +56,15 @@ type ToolResult = {
 
 ### 状态矩阵
 
-| status | 含义 | progress | 当前工具循环 | 跨轮 Context |
-|--------|------|----------|--------------|--------------|
-| `success` | 获得可用事实 | `evidence` | 保留 | 仅显式 Injection |
-| `success` | 写入或状态操作完成 | `state_changed` | 保留 | 仅显式 Injection |
-| `empty` | 执行成功但没有结果 | `none` | 保留简短反馈 | 丢弃 |
-| `error` | 参数、传输或执行失败 | `none` | 保留简短错误 | 丢弃 |
-| `blocked` | 框架策略禁止执行 | `none` | 保留下一步提示 | 丢弃 |
-| `deferred` | 前置条件不足，尚未执行 | `none` | 保留下一步提示 | 丢弃 |
-| `cancelled` | 用户或任务取消 | `none` | 保留取消状态 | 丢弃 |
+| status | 含义 | progress | 下一模型 step | 跨轮 Context |
+|--------|------|----------|----------------|--------------|
+| `success` | 获得可用事实 | `evidence` | 保留 Call + 安全 Result | 仅显式 Injection |
+| `success` | 写入或状态操作完成 | `state_changed` | 保留 Call + 安全 Result | 仅显式 Injection |
+| `empty` | 执行成功但没有结果 | `none` | Call + Result 整组丢弃 | 丢弃 |
+| `error` | 参数、传输或执行失败 | `none` | Call + Result 整组丢弃 | 丢弃 |
+| `blocked` | 框架策略禁止执行 | `none` | Call + Result 整组丢弃 | 丢弃 |
+| `deferred` | 前置条件不足，尚未执行 | `none` | Call + Result 整组丢弃 | 丢弃 |
+| `cancelled` | 用户或任务取消 | `none` | Call + Result 整组丢弃 | 丢弃 |
 
 `ok` 与 `status` 不等价：`empty` 和 `deferred` 可以是协议层 `ok: true`，但必须是
 `progress: "none"`。框架禁止通过解析 `output` 文本判断这些状态。
@@ -73,8 +73,8 @@ type ToolResult = {
 
 ```
 ToolResult
-  ├─ current step message      所有状态，供本轮恢复
   ├─ ToolCallLedger           outcome + fingerprint + 计数，不注入 LLM
+  ├─ Conversation evidence    仅 success，供当前手工循环
   ├─ Session tool result      结构化审计记录，不作为 Prompt Context
   └─ ContextService           仅 contextInjection 显式投影
 ```
@@ -82,6 +82,9 @@ ToolResult
 规则：
 
 - 删除普通 Tool Result 自动生成 `tool-history` Context 的行为。
+- AI SDK 只负责单 step Tool Call 解析，Tool 不向 SDK 提供 `execute`；执行与循环由 Atom 控制。
+- 无效结果对应的 Assistant Tool Call 与 Tool Result 必须整组删除，避免 AI SDK 的 missing result 校验和
+  response messages 累积污染。
 - `error`、`empty`、`blocked`、`deferred`、`cancelled` 不进入 Topic/Session Context。
 - `success` 也不自动持久化正文，避免旧证据无限累积；需要跨轮使用时由 Tool 返回
   `contextInjection`，沿用现有 scope、TTL、pin 与 trust 边界。
@@ -123,10 +126,12 @@ ToolResult
 
 ### Phase 2 — 执行与治理
 
-- Stream 层统一解析 Outcome，写入 Session 审计记录。
+- 将 Tool schema 与 executor 分离；AI SDK 只接收不带 `execute` 的 schema Tool。
+- Stream 层改为单 step 手工循环，统一执行 Tool、解析 Outcome 并写入 Session 审计记录。
 - ToolCallLedger 由 `ok` 改为 `progress !== "none"`。
 - Guard 的阻塞结果显式返回 `blocked/deferred` 与稳定 code。
 - 删除普通 `tool-history` Context 写入，只保留 `contextInjection`。
+- 只有 `evidence/state_changed` 可以投影到下一模型 step；无效 Call/Result 整组丢弃。
 - 增加重复空结果、重复错误和改变查询后恢复的测试。
 
 ### Phase 3 — 内置 Tool 迁移
@@ -167,8 +172,10 @@ ToolResult
 
 - 任一 Tool 的语义状态无需解析 `output` 即可判定。
 - error/empty 不会出现在新生成的 Topic/Session Context Snapshot 或 Compact Summary 输入中。
-- Agent 在当前工具循环中仍能读取简短失败原因并改变参数或查询。
+- Agent 不读取原始失败内容；框架通过 Tool 可用性、Guard 状态和最小 step instruction 控制下一步。
+- 能力发现链进入下一状态后，前一状态的工具从 `activeTools` 移除，避免模型重复执行已判定为空的动作。
 - 连续 `progress:none` 会触发已有 no-progress 保护；新的 evidence/state change 可以解除重复保护。
+- 因连续无进展停止且整轮没有有效 evidence/state change 时，不接受模型随后生成的具体事实断言。
 - Prediction 的 User 请求与 Assistant Reference 在数据结构和 Prompt 中明确分离。
 - Post 不会仅凭 Assistant 自述判定任务完成，retry suggestion 不是 trusted instruction。
 - 现有 `contextInjection` 的 Memory/Skill 投影行为保持兼容。

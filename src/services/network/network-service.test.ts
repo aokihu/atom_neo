@@ -238,4 +238,19 @@ describe("NetworkService webFetch", () => {
     });
     await service.stop();
   });
+
+  test("keeps an empty extracted page structurally empty", async () => {
+    const service = new NetworkService({
+      fetch: async () => response("<html><head><title>x</title></head><body></body></html>", {
+        headers: { "content-type": "text/html" },
+      }),
+    });
+    await service.start();
+
+    expect(await service.webFetch({ url: "https://example.com" })).toMatchObject({
+      ok: true,
+      content: "",
+    });
+    await service.stop();
+  });
 });

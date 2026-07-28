@@ -59,9 +59,9 @@ export enum PermissionLevel {
         <Callout type="info" title="设计理念">
           Tool 是统一接口：文件系统、Memory、Bash、MCP 操作都通过同一 <code>execute(args) → ToolResult</code> 模式。
           <code>ok</code> 只保留协议兼容性，框架根据 <code>outcome.progress</code> 判断真实进展；
-          普通结果只留在当前循环，跨轮 Context 必须显式使用 <code>contextInjection</code>。
-          MCP 原始结果在当前 conversation 中完整可用，conversation 结束后统一按 reference evidence
-          参与 Post/Compact 判断。
+          只有 progress 结果才投影到当前手工循环，跨轮 Context 必须显式使用 <code>contextInjection</code>。
+          MCP 成功结果在当前 conversation 中按 reference evidence 可用；空结果和错误由框架消费，
+          不进入模型消息。
         </Callout>
       </Section>
 
@@ -90,7 +90,10 @@ export enum PermissionLevel {
           ]}
         />
         <Callout type="info" title="动态工具门控">
-          内置 <code>webfetch</code> 始终可见。Agent 调用后，ToolGuard 在网络请求前检查 Memory 与 Skill 状态；条件不足时返回下一步操作而不访问网络。Memory 候选相关时先用 <code>read_memory</code>，不相关时检查 <code>skill_list</code>，完成能力发现后重试 <code>webfetch</code>。
+          ToolGuard 在网络请求前检查 Memory 与 Skill 状态；条件不足时不访问网络。手工循环会同步收窄
+          <code>activeTools</code>：Memory 已为空后不再开放 <code>search_memory</code>，而只开放
+          <code>skill_list</code> 与 <code>intent</code>；完成能力发现后才恢复业务工具与
+          <code>webfetch</code>，已判定为空的发现工具不会在本轮重新开放。
         </Callout>
       </Section>
 

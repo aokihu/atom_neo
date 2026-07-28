@@ -18,7 +18,8 @@ describe("Memory discovery prompts", () => {
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("ToolGuard");
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("`skill_list`");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("`skill_list`");
-    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("always visible");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("do not retry it with different keywords");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("不要换关键词继续搜索");
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");
   });

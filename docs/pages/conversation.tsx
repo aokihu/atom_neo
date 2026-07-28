@@ -5,11 +5,12 @@ import { PageHeader, Section, CodeBlock, Callout, ComparisonTable, Badge } from 
 const elementGroups = [
   ["1", "读取消息", "collect-prompts", "blue"],
   ["2", "记录 Context", "record-context", "purple"],
-  ["3", "编译 Snapshot", "collect-context", "purple"],
-  ["4", "执行模型", "stream-llm", "orange"],
-  ["5", "计算预算", "token-ratio", "orange"],
-  ["6", "决定续跑", "check-follow-up", "blue"],
-  ["7", "统一收口", "finalize", "green"],
+  ["3", "应用 Source", "apply-source-context", "purple"],
+  ["4", "编译 Snapshot", "collect-context", "purple"],
+  ["5", "手工 Tool Loop", "stream-llm", "orange"],
+  ["6", "计算预算", "token-ratio", "orange"],
+  ["7", "决定续跑", "check-follow-up", "blue"],
+  ["8", "统一收口", "finalize", "green"],
 ] as const;
 
 export default function ConversationPage({ content, title, description, category }: DocPageProps) {
@@ -22,7 +23,7 @@ export default function ConversationPage({ content, title, description, category
         readTime={Math.max(1, Math.ceil(content.split(/\s+/).length / 200))}
       />
 
-      <Section title="当前 7 个 Element 的主链">
+      <Section title="当前 8 个 Element 的主链">
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "stretch" }}>
           {elementGroups.map(([step, name, detail, color], index) => (
             <React.Fragment key={name}>
@@ -46,7 +47,7 @@ export default function ConversationPage({ content, title, description, category
           rows={[
             [<Badge color="purple">system</Badge>, "唯一 TOON Context Snapshot；内部包含 System Prompt、AGENTS、Skill 等 entries", <><code>system = snapshot.content</code></>],
             [<Badge color="blue">messages</Badge>, "可见的 user / assistant 历史与当前输入", "过滤孤立 role:tool"],
-            [<Badge color="orange">tools</Badge>, "按意图筛选的工具定义；webfetch 始终可见", "执行资格由 ToolGuard 判定"],
+            [<Badge color="orange">tools</Badge>, "只向 AI SDK 提供 schema；webfetch 始终可见", "执行、Outcome 与循环由 Atom 控制"],
           ]}
         />
         <CodeBlock lang="text" code={`Prompt Registry + AGENTS + Skill + runtime sources
@@ -55,7 +56,29 @@ export default function ConversationPage({ content, title, description, category
   → system: snapshot.content
 
 Session visible messages + current input → messages
-Tool registry + intent selection          → tools`} />
+Tool registry → schema-only definitions  → AI SDK Tool Calls
+Tool executors + ToolGuard + Ledger       → Atom Tool Loop`} />
+      </Section>
+
+      <Section title="AI SDK 与 Atom 的职责边界">
+        <CodeBlock lang="text" code={`streamText（单 step）
+  → Tool Call schema validation
+  → Atom Ledger reserves execution
+  → Atom ToolRunner executes
+  → structured ToolOutcome
+      ├─ evidence / state_changed → next step Call + Result
+      └─ empty / error / blocked / deferred / cancelled → discard pair
+  → Atom narrows next-step activeTools from Guard state
+  → final Assistant text only`} />
+        <ComparisonTable
+          headers={["职责", "所有者"]}
+          rows={[
+            ["模型适配、流式解析、Tool Call 参数校验", <Badge color="orange">AI SDK</Badge>],
+            ["执行权限、重复检测、并发与次数预算", <Badge color="blue">Atom</Badge>],
+            ["Outcome、Context 投影、MCP reference 生命周期", <Badge color="purple">Atom</Badge>],
+            ["最终回复与 Session 持久化", <Badge color="green">Atom</Badge>],
+          ]}
+        />
       </Section>
 
       <Section title="Web 查询的能力发现顺序">
@@ -75,7 +98,8 @@ Tool registry + intent selection          → tools`} />
           ]}
         />
         <Callout type="tip" title="可见不等于可执行">
-          Agent 始终知道 <code>webfetch</code> 存在；Guard 用可解释的结果提示缺少哪一步，而不是把工具从列表隐藏。
+          Agent 始终知道 <code>webfetch</code> 存在；Guard 的结构化状态直接改变下一 step 策略，
+          无效 Tool Call 与 Result 不进入后续消息。
         </Callout>
       </Section>
 
@@ -104,11 +128,11 @@ Tool registry + intent selection          → tools`} />
         <ComparisonTable
           headers={["边界", "当前实现"]}
           rows={[
-            ["工具循环", <><code>stopWhen: stepCountIs(maxSteps)</code>，默认 50</>],
+            ["工具循环", <><code>ToolCallLedger</code> 控制手工循环，默认 50 次执行、连续 3 次无进展</>],
             ["输出预算", <><code>maxOutputTokens</code> 由系统配置，默认 4096；压缩阈值预留这部分空间</>],
             ["完成标记", <><code>&lt;&lt;&lt;COMPLETE&gt;&gt;&gt;</code> 用滑动窗口跨 chunk 识别，标记后文本丢弃</>],
             ["Unicode", <><code>String.toWellFormed()</code> 修复孤立代理；截断统一使用 <code>substringWellFormed</code></>],
-            ["工具结果", "进入按 topic 管理的 ToolContext，下一轮注入后消费，不生成孤立 tool 消息"],
+            ["工具结果", "仅 progress 结果进入当前 Conversation 下一 step；无效 Call + Result 整组丢弃"],
           ]}
         />
       </Section>

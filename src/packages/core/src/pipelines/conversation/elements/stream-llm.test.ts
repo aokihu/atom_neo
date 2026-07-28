@@ -119,24 +119,29 @@ function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0
 }
 
 describe("selectActiveToolsForStep", () => {
-  test("keeps webfetch visible while its guard requires Memory discovery", () => {
+  test("only exposes Memory search from the discovery chain before discovery", () => {
     const selection = select();
 
     expect(selection.activeTools).toContain("search_memory");
-    expect(selection.activeTools).toContain("read_memory");
-    expect(selection.activeTools).toContain("skill_load");
-    expect(selection.activeTools).toContain("skill_section");
-    expect(selection.activeTools).toContain("mcp_weather");
-    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.activeTools).not.toContain("read_memory");
+    expect(selection.activeTools).not.toContain("skill_list");
+    expect(selection.activeTools).not.toContain("skill_load");
+    expect(selection.activeTools).not.toContain("skill_section");
+    expect(selection.activeTools).not.toContain("mcp_weather");
+    expect(selection.activeTools).toContain("intent");
+    expect(selection.activeTools).not.toContain("webfetch");
     expect(selection.webfetchAllowed).toBe(false);
     expect(selection.webfetchGuardReason).toBe("memory_search_required");
     expect(selection.webfetchGuardMessage).toContain("search_memory");
   });
 
-  test("keeps webfetch visible and asks the Agent to review a Memory candidate", () => {
+  test("removes repeated Memory search while a candidate is being reviewed", () => {
     const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
 
-    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.activeTools).not.toContain("search_memory");
+    expect(selection.activeTools).toContain("read_memory");
+    expect(selection.activeTools).toContain("skill_list");
+    expect(selection.activeTools).not.toContain("webfetch");
     expect(selection.webfetchAllowed).toBe(false);
     expect(selection.webfetchGuardReason).toBe("memory_review_required");
     expect(selection.webfetchGuardMessage).toContain("read_memory");
@@ -155,7 +160,9 @@ describe("selectActiveToolsForStep", () => {
     const loaded = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillLoaded: true });
     const unavailable = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillUnavailable: true });
 
-    expect(locked.activeTools).toContain("webfetch");
+    expect(locked.activeTools).not.toContain("webfetch");
+    expect(locked.activeTools).toContain("skill_load");
+    expect(locked.activeTools).toContain("skill_section");
     expect(locked.webfetchAllowed).toBe(false);
     expect(locked.webfetchGuardReason).toBe("skill_load_required");
     expect(loaded.webfetchGuardReason).toBe("skill_context");
@@ -165,7 +172,9 @@ describe("selectActiveToolsForStep", () => {
   test("asks for Skill discovery after one empty Memory search", () => {
     const selection = select({ memorySearchAttemptCount: 1 });
 
-    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.activeTools).not.toContain("search_memory");
+    expect(selection.activeTools).toContain("skill_list");
+    expect(selection.activeTools).not.toContain("webfetch");
     expect(selection.webfetchAllowed).toBe(false);
     expect(selection.webfetchGuardReason).toBe("skill_search_required");
     expect(selection.webfetchGuardMessage).toContain("skill_list");
@@ -177,12 +186,15 @@ describe("selectActiveToolsForStep", () => {
     expect(selection.activeTools).toContain("webfetch");
     expect(selection.webfetchAllowed).toBe(true);
     expect(selection.webfetchGuardReason).toBe("capability_discovery_complete");
+    expect(selection.webfetchGuardMessage).toContain("Use webfetch");
   });
 
   test("does not use repeated Memory searches as a Skill-discovery substitute", () => {
     const selection = select({ memorySearchAttemptCount: 3 });
 
-    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.activeTools).not.toContain("search_memory");
+    expect(selection.activeTools).toContain("skill_list");
+    expect(selection.activeTools).not.toContain("webfetch");
     expect(selection.webfetchAllowed).toBe(false);
     expect(selection.webfetchGuardReason).toBe("skill_search_required");
   });
@@ -210,25 +222,30 @@ describe("selectActiveToolsForStep", () => {
     expect(select({ hasSkillContext: true }).activeTools).toContain("webfetch");
   });
 
-  test("keeps webfetch and specialized tools visible", () => {
+  test("keeps prerequisite stages exclusive until discovery completes", () => {
     const activeTools = select().activeTools;
-    expect(activeTools).toContain("webfetch");
-    expect(activeTools).toContain("search_history");
-    expect(activeTools).toContain("read_history");
-    expect(activeTools).toContain("bash");
-    expect(activeTools).toContain("write");
+    expect(activeTools).toEqual(["search_memory", "intent"]);
   });
 
-  test("keeps every registered tool visible instead of filtering by intent", () => {
-    expect(select().activeTools).toEqual([...new Set(availableToolNames)]);
-  });
-
-  test("keeps every Skill tool active", () => {
+  test("keeps only Memory review choices and intent active while a candidate is pending", () => {
     const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
 
-    for (const name of ["skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload"]) {
+    for (const name of ["read_memory", "skill_list", "intent"]) {
       expect(selection.activeTools).toContain(name);
     }
+    for (const name of ["search_memory", "skill_load", "skill_section", "skill_remove_section", "skill_unload", "bash"]) {
+      expect(selection.activeTools).not.toContain(name);
+    }
+  });
+
+  test("does not reopen exhausted discovery tools after capability discovery", () => {
+    const selection = select({ memorySearchAttemptCount: 1, skillChecked: true });
+
+    expect(selection.activeTools).toContain("webfetch");
+    expect(selection.activeTools).toContain("bash");
+    expect(selection.activeTools).not.toContain("search_memory");
+    expect(selection.activeTools).not.toContain("read_memory");
+    expect(selection.activeTools).not.toContain("skill_list");
   });
 });
 
@@ -269,6 +286,22 @@ describe("summarizeMemorySearch", () => {
 
     expect(found.found).toBe(true);
     expect(unavailable.unavailable).toBe(true);
+  });
+
+  test("lets a structured empty search reject an irrelevant automatic candidate", () => {
+    const result = summarizeMemorySearch({
+      automaticQuery: "浙江大学游泳馆",
+      automaticStatus: "found",
+      steps: [{ toolResults: [{
+        toolName: "search_memory",
+        input: { query: "浙江大学 游泳馆 游泳" },
+        output: "No memories found.",
+        outcome: { status: "empty", progress: "none" },
+      }] }],
+    });
+
+    expect(result.found).toBe(false);
+    expect(result.attemptCount).toBe(1);
   });
 
   test("detects full Memory reads and Skill hints", () => {

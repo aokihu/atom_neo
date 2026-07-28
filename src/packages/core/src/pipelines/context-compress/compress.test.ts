@@ -31,6 +31,24 @@ describe("compress-input", () => {
       timestamp: 1,
       metadata: { toolOutcome: { status: "empty", progress: "none" } },
     })).toBe(false);
+    expect(isSummaryEligibleMessage({
+      role: "assistant",
+      content: "I will keep searching",
+      timestamp: 1,
+      metadata: {
+        completeDetected: false,
+        toolOutcomeSummary: {
+          evidence: 0,
+          referenceEvidence: 0,
+          stateChanged: 0,
+          empty: 1,
+          error: 0,
+          blocked: 0,
+          deferred: 2,
+          cancelled: 0,
+        },
+      },
+    })).toBe(false);
     expect(formatSummaryMessage({
       role: "assistant",
       content: "I think this is done",

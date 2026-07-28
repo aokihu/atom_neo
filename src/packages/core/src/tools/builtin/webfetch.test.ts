@@ -80,6 +80,18 @@ describe("webfetch tool adapter", () => {
     expect(called).toBe(false);
   });
 
+  test("maps an empty successful response to no progress", async () => {
+    const tool = createWebFetchTool({
+      webFetch: async () => ({ ok: true, code: "success", content: "" }),
+    });
+
+    expect(await tool.execute({ url: "https://example.com" })).toMatchObject({
+      ok: true,
+      output: "",
+      outcome: { status: "empty", progress: "none", code: "success" },
+    });
+  });
+
   test("maps a domain cooldown to an explicit no-progress outcome", async () => {
     const tool = createWebFetchTool({
       webFetch: async () => ({

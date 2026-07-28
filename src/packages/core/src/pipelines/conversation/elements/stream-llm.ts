@@ -1,6 +1,6 @@
 import { areMemorySearchQueriesSimilar, BaseElement, canonicalizeMemorySearchQuery, containsSkillHint, resolveToolOutcome, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { isStepCount, pruneMessages, streamText, tool, zodSchema } from "ai";
+import { pruneMessages, streamText, tool, zodSchema } from "ai";
 import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolContextInjection, ToolDefinition, ToolGuardState, ToolOutcome, ToolProgress } from "@atom-neo/shared";
@@ -14,6 +14,14 @@ import type { ConversationFlowState, MemorySearchStatus, ToolOutcomeSummary } fr
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { ContextService } from "../../../context/context-service";
+import {
+  buildToolStepInstruction,
+  projectProgressToolMessages,
+  shouldDiscardUnverifiedFinal,
+  stripToolCallMarkup,
+  toSchemaOnlyTools,
+} from "./tool-loop";
+import type { ManualToolCall, ToolStepRecord } from "./tool-loop";
 import {
   formatToolGovernanceBlock,
   ToolCallLedger,
@@ -40,6 +48,21 @@ type ActiveToolSelection = {
   webfetchGuardMessage?: string;
 };
 
+function selectDiscoveryTools(reason: WebfetchGuardReason): ReadonlySet<string> | undefined {
+  switch (reason) {
+    case "memory_search_required":
+      return new Set(["search_memory"]);
+    case "memory_review_required":
+      return new Set(["read_memory", "skill_list"]);
+    case "skill_search_required":
+      return new Set(["skill_list"]);
+    case "skill_load_required":
+      return new Set(["skill_load", "skill_section"]);
+    default:
+      return undefined;
+  }
+}
+
 function resolveWebfetchGuardMessage(reason: WebfetchGuardReason): string | undefined {
   switch (reason) {
     case "memory_search_required":
@@ -50,6 +73,18 @@ function resolveWebfetchGuardMessage(reason: WebfetchGuardReason): string | unde
       return "Memory has no usable result. Call skill_list, then retry webfetch if no relevant Skill exists.";
     case "skill_load_required":
       return "Memory points to a Skill. Call skill_load or skill_section, then retry webfetch.";
+    case "capability_discovery_complete":
+      return "Capability discovery is complete. search_memory and skill_list are exhausted for this conversation. Use webfetch for external facts.";
+    case "memory_found":
+      return "A Memory has been fully read. Use that evidence, or call webfetch only if external facts are still required.";
+    case "explicit_url":
+      return "The user supplied a URL. Call webfetch for that URL when its content is needed.";
+    case "skill_context":
+      return "A Skill is loaded. Follow it and call webfetch only when the Skill requires external content.";
+    case "memory_unavailable":
+    case "memory_read_unavailable":
+    case "skill_unavailable":
+      return "Capability discovery is unavailable. Use webfetch when external facts are required.";
   }
 }
 
@@ -94,7 +129,7 @@ export function containsExplicitUrl(messages: ReadonlyArray<{ role: string; cont
 }
 
 type MemorySearchStep = {
-  toolResults?: Array<{ toolName: string; input: unknown; output: unknown }>;
+  toolResults?: Array<{ toolName: string; input: unknown; output: unknown; outcome?: ToolOutcome }>;
 };
 
 export function resolveTokenMetrics(
@@ -191,8 +226,13 @@ export function summarizeMemorySearch(params: {
       if (typeof input?.query === "string") addDistinctQuery(input.query);
 
       const output = typeof result.output === "string" ? result.output : "";
-      if (output.includes("<MemorySummary id=")) found = true;
-      if (/memory service not connected|^Error:|tool execution error/i.test(output)) unavailable = true;
+      if (result.outcome?.progress === "evidence" || (!result.outcome && output.includes("<MemorySummary id="))) {
+        found = true;
+      }
+      if (result.outcome?.status === "empty") found = false;
+      if (result.outcome?.status === "error" || (!result.outcome && /memory service not connected|^Error:|tool execution error/i.test(output))) {
+        unavailable = true;
+      }
     }
   }
 
@@ -262,8 +302,18 @@ export function selectActiveToolsForStep(params: {
   else webfetchGuardReason = "memory_search_required";
   const webfetchGuardMessage = resolveWebfetchGuardMessage(webfetchGuardReason);
   const webfetchAllowed = canExecuteWebfetch(webfetchGuardReason);
+  const enabledDiscoveryTools = selectDiscoveryTools(webfetchGuardReason);
+  const availableTools = [...new Set(params.availableToolNames)];
+  const activeTools = enabledDiscoveryTools
+    ? availableTools.filter(name => name === "intent" || enabledDiscoveryTools.has(name))
+    : availableTools.filter(name => {
+        if (name === "search_memory" && params.memorySearchAttemptCount > 0) return false;
+        if (name === "read_memory" && (params.memoryRead || !params.memorySearchFound)) return false;
+        if (name === "skill_list" && params.skillChecked) return false;
+        return true;
+      });
   return {
-    activeTools: [...new Set(params.availableToolNames)],
+    activeTools,
     webfetchAllowed,
     webfetchGuardReason,
     ...(webfetchGuardMessage ? { webfetchGuardMessage } : {}),
@@ -274,6 +324,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
+  #builtinTools: Record<string, any>;
   #aiTools: Record<string, any>;
   #maxTokens: number;
   #maxSteps: number;
@@ -283,7 +334,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #session: any;
   #configContextLimit: number;
   #mcpToolsRef?: { current: Record<string, any> };
-  #mcpToolNamesCount = 0;
   #toolResults = new Map<string, ToolExecutionStatus[]>();
   #toolGuardState = { current: {} as ToolGuardState };
   #toolGovernance: { current: ToolCallLedger };
@@ -321,12 +371,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
     this.#toolGovernance = { current: new ToolCallLedger({ maxExecutions: this.#maxSteps }) };
-    const builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGuardState, this.#toolGovernance, this.#session);
+    this.#builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGuardState, this.#toolGovernance, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
     const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
     this.#mcpToolsRef = params.mcpToolsRef;
-    this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
-    this.#aiTools = { ...builtinTools, ...wrappedMCP };
+    this.#aiTools = { ...this.#builtinTools, ...wrappedMCP };
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -346,11 +395,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const { userMessages, systemText } = resolveModelInput(input);
     this.#toolGovernance.current = new ToolCallLedger({ maxExecutions: this.#maxSteps });
     const mcpCurrent = this.#mcpToolsRef?.current ?? {};
-    if (Object.keys(mcpCurrent).length > this.#mcpToolNamesCount) {
-      const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
-      this.#mcpToolNamesCount = Object.keys(wrappedMCP).length;
-      Object.assign(this.#aiTools, wrappedMCP);
-    }
+    const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
+    this.#aiTools = { ...this.#builtinTools, ...wrappedMCP };
+    const modelTools = toSchemaOnlyTools(this.#aiTools);
     const tools = Object.keys(this.#aiTools);
     const hasExplicitUrl = containsExplicitUrl(userMessages);
     const hasSkillContext = Boolean(input.skillContext?.trim());
@@ -396,478 +443,544 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
     const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
     const model = provider(this.#model);
-
-    const intentSignal: { value: IntentToolInput | null } = { value: null };
     this.#stepCounter.count = 0;
+    let fullText = "";
+    let reasoningText = "";
+    let transportReasoningLength = 0;
+    let intentData: IntentToolInput | null = null;
+    let finishReason = "";
+    let tokenOverflow = false;
+    let streamErrorCode = 0;
+    let streamFailed = false;
+    let timedOut = false;
+    let completeDetected = false;
+    let cumulativeUsage = 0;
+    let lastUsage: any = { totalTokens: 0, inputTokens: 0, outputTokens: 0 };
+    let modelStep = 0;
+    let stepInstruction = "";
+    let forceFinalText = false;
+    let frameworkStopReason = "";
+    let consecutiveInactiveSteps = 0;
+    let currentSystemText = systemText;
+    let reportedToolSelection = "";
+    let reportedGovernanceStop = "";
+    let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
+    let modelMessages = [...userMessages] as ModelMessage[];
+    const frameworkSteps: MemorySearchStep[] = [];
+    const allToolCalls: { toolName: string; outcome: ToolOutcome }[] = [];
+    const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
+    const abortController = new AbortController();
+    const streamSignal = input.abortSignal
+      ? AbortSignal.any([abortController.signal, input.abortSignal])
+      : abortController.signal;
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: this.#stepCounter.count });
+      abortController.abort();
+    }, resolveTimeout(difficulty));
 
-    // Wire intentSignal into the pre-built intent tool
-    const intentAITool = this.#aiTools["intent"];
-    if (intentAITool) {
-      const origExecute = intentAITool.execute;
-      intentAITool.execute = async (args: any) => {
-        const parsed = IntentInputSchema.safeParse(args);
-        if (parsed.success) intentSignal.value = parsed.data;
-        return origExecute(args);
+    const completeStep = (stepNumber: number) => {
+      this.bus.emit(BusEvents.Context.StepCompleted as any, {
+        sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+        taskId: input.task?.id ?? "task",
+        stepId: String(stepNumber),
+      } as any);
+    };
+
+    const refreshSkillContext = () => {
+      const nextRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
+      if (nextRevision === skillRevision) return;
+      skillRevision = nextRevision;
+      const skillContext = this.#skillService?.buildContext(this.#session?.sessionId) ?? "";
+      const owner = {
+        sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+        ...(this.#session?.currentTopic ? { topicId: this.#session.currentTopic } : {}),
       };
-    }
+      const scope = this.#session?.currentTopic ? "topic" as const : "session" as const;
+      if (skillContext) {
+        this.#contextService.put({
+          scope,
+          owner,
+          entry: {
+            key: "topic-skills",
+            source: "skill-service",
+            channel: "instructions",
+            trust: "trusted",
+            priority: 600,
+            content: skillContext,
+          },
+        });
+      } else {
+        this.#contextService.remove(scope, owner, "topic-skills");
+      }
+      const stepSnapshot = this.#contextService.createSnapshot({
+        ...input.contextOwner,
+        stepId: String(modelStep),
+      });
+      currentSystemText = stepSnapshot.content;
+      this.bus.emit(BusEvents.Context.SnapshotRelease as any, { snapshotId: stepSnapshot.id } as any);
+      this.report(BusEvents.Element.Data, {
+        step: "step-snapshot-created",
+        stepNumber: modelStep,
+        snapshotId: stepSnapshot.id,
+        revision: nextRevision,
+        skillContextLength: skillContext.length,
+      });
+    };
 
-      let fullText = "";
-      let reasoningText = "";
-      let intentData: IntentToolInput | null = null;
-      let finishReason = "";
-      let tokenOverflow = false;
-      let streamErrorCode = 0;
-      let streamFailed = false;
-      const allToolCalls: { toolName: string; outcome: ToolOutcome }[] = [];
-
-      try {
-        const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
-        const STREAM_TIMEOUT_MS = resolveTimeout(difficulty);
-        const abortController = new AbortController();
-        let reportedToolSelection = "";
-        let reportedGovernanceStop = "";
-        let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
-        let latestPreparedStep = -1;
-        const completeStep = (stepNumber: number) => {
-          if (stepNumber < 0) return;
-          this.bus.emit(BusEvents.Context.StepCompleted as any, {
-            sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
-            taskId: input.task?.id ?? "task",
-            stepId: String(stepNumber),
-          } as any);
-        };
-
-        const streamResult = streamText({
-        model,
-        instructions: systemText || undefined,
-        messages: userMessages as any,
-        tools: tools.length > 0 ? this.#aiTools : undefined,
-        stopWhen: isStepCount(this.#maxSteps),
-        maxOutputTokens: this.#maxTokens,
-        providerOptions: this.#providerOptions,
-        abortSignal: input.abortSignal
-          ? AbortSignal.any([abortController.signal, input.abortSignal])
-          : abortController.signal,
-        prepareStep: ({ stepNumber, steps, messages }) => {
-          if (latestPreparedStep !== stepNumber) completeStep(latestPreparedStep);
-          latestPreparedStep = stepNumber;
-          const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps });
-          const memoryRead = summarizeMemoryRead(steps);
-          const skillDiscovery = summarizeSkillDiscovery(steps);
-          const selection = selectActiveToolsForStep({
-            availableToolNames: tools,
+    try {
+      while (!timedOut && modelStep <= this.#maxSteps + 1) {
+        refreshSkillContext();
+        const memorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps: frameworkSteps });
+        const memoryRead = summarizeMemoryRead(frameworkSteps);
+        const skillDiscovery = summarizeSkillDiscovery(frameworkSteps);
+        const selection = selectActiveToolsForStep({
+          availableToolNames: tools,
+          memorySearchAttemptCount: memorySearch.attemptCount,
+          memorySearchFound: memorySearch.found,
+          memorySearchUnavailable: memorySearch.unavailable,
+          memoryRead: memoryRead.read,
+          memoryReadUnavailable: memoryRead.unavailable,
+          memorySuggestsSkill: memoryRead.suggestsSkill,
+          hasSkillContext,
+          skillChecked: skillDiscovery.checked,
+          skillLoaded: skillDiscovery.loaded,
+          skillUnavailable: skillDiscovery.unavailable,
+          hasExplicitUrl,
+        });
+        this.#toolGuardState.current = toWebfetchGuardState(selection);
+        const governance = this.#toolGovernance.current.snapshot();
+        if (governance.stopReason && governance.stopReason !== reportedGovernanceStop) {
+          reportedGovernanceStop = governance.stopReason;
+          this.report(BusEvents.Element.Data, { step: "tool-governance-stop", stepNumber: modelStep, ...governance });
+        }
+        const selectionKey = `${selection.webfetchAllowed}:${selection.webfetchGuardReason}:${selection.activeTools.join(",")}`;
+        if (selectionKey !== reportedToolSelection) {
+          reportedToolSelection = selectionKey;
+          this.report(BusEvents.Element.Data, {
+            step: "tool-policy",
+            stepNumber: modelStep,
+            activeCount: selection.activeTools.length,
             memorySearchAttemptCount: memorySearch.attemptCount,
             memorySearchFound: memorySearch.found,
             memorySearchUnavailable: memorySearch.unavailable,
             memoryRead: memoryRead.read,
             memoryReadUnavailable: memoryRead.unavailable,
             memorySuggestsSkill: memoryRead.suggestsSkill,
-            hasSkillContext,
             skillChecked: skillDiscovery.checked,
             skillLoaded: skillDiscovery.loaded,
             skillUnavailable: skillDiscovery.unavailable,
-            hasExplicitUrl,
-          });
-          this.#toolGuardState.current = toWebfetchGuardState(selection);
-          const governance = this.#toolGovernance.current.snapshot();
-          if (governance.stopReason && governance.stopReason !== reportedGovernanceStop) {
-            reportedGovernanceStop = governance.stopReason;
-            this.report(BusEvents.Element.Data, {
-              step: "tool-governance-stop",
-              stepNumber,
-              ...governance,
-            });
-          }
-          const selectionKey = `${selection.webfetchAllowed}:${selection.webfetchGuardReason}`;
-          if (selectionKey !== reportedToolSelection) {
-            reportedToolSelection = selectionKey;
-            this.report(BusEvents.Element.Data, {
-              step: "tool-policy",
-              stepNumber,
-              activeCount: selection.activeTools.length,
-              memorySearchAttemptCount: memorySearch.attemptCount,
-              memorySearchFound: memorySearch.found,
-              memorySearchUnavailable: memorySearch.unavailable,
-              memoryRead: memoryRead.read,
-              memoryReadUnavailable: memoryRead.unavailable,
-              memorySuggestsSkill: memoryRead.suggestsSkill,
-              skillChecked: skillDiscovery.checked,
-              skillLoaded: skillDiscovery.loaded,
-              skillUnavailable: skillDiscovery.unavailable,
-              webfetchAllowed: selection.webfetchAllowed,
-              webfetchGuardReason: selection.webfetchGuardReason,
-            });
-          }
-          const nextSkillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
-          let instructions: string | undefined;
-          if (nextSkillRevision !== skillRevision) {
-            skillRevision = nextSkillRevision;
-            const skillContext = this.#skillService?.buildContext(this.#session?.sessionId) ?? "";
-            const owner = {
-              sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
-              ...(this.#session?.currentTopic ? { topicId: this.#session.currentTopic } : {}),
-            };
-            const scope = this.#session?.currentTopic ? "topic" as const : "session" as const;
-            if (skillContext) {
-              this.#contextService.put({
-                scope,
-                owner,
-                entry: {
-                  key: "topic-skills",
-                  source: "skill-service",
-                  channel: "instructions",
-                  trust: "trusted",
-                  priority: 600,
-                  content: skillContext,
-                },
-              });
-            } else {
-              this.#contextService.remove(scope, owner, "topic-skills");
-            }
-            const stepSnapshot = this.#contextService.createSnapshot({
-              ...input.contextOwner,
-              stepId: String(stepNumber),
-            });
-            instructions = stepSnapshot.content;
-            this.bus.emit(BusEvents.Context.SnapshotRelease as any, { snapshotId: stepSnapshot.id } as any);
-            this.report(BusEvents.Element.Data, {
-              step: "step-snapshot-created",
-              stepNumber,
-              snapshotId: stepSnapshot.id,
-              revision: nextSkillRevision,
-              skillContextLength: skillContext.length,
-            });
-          }
-          return {
             activeTools: selection.activeTools,
-            ...(this.#toolGovernance.current.shouldForceText() ? { toolChoice: "none" as const } : {}),
-            messages: pruneConsumedTransientTools(messages),
-            ...(instructions === undefined ? {} : { instructions }),
-          };
-        },
-      });
+            webfetchAllowed: selection.webfetchAllowed,
+            webfetchGuardReason: selection.webfetchGuardReason,
+          });
+        }
 
-      let timedOut = false;
-      const timeoutTimer = setTimeout(() => {
-        timedOut = true;
-        this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: this.#stepCounter.count });
-        abortController.abort();
-      }, STREAM_TIMEOUT_MS);
+        const forceText = forceFinalText || this.#toolGovernance.current.shouldForceText() || Boolean(frameworkStopReason);
+        const instructions = [currentSystemText, stepInstruction].filter(Boolean).join("\n\n");
+        const activeModelTools = Object.fromEntries(
+          selection.activeTools.flatMap(name => modelTools[name] ? [[name, modelTools[name]]] : []),
+        );
+        const streamResult = streamText({
+          model,
+          instructions: instructions || undefined,
+          messages: pruneConsumedTransientTools(modelMessages),
+          tools: selection.activeTools.length > 0 ? activeModelTools : undefined,
+          ...(forceText ? { toolChoice: "none" as const } : {}),
+          maxOutputTokens: this.#maxTokens,
+          providerOptions: this.#providerOptions,
+          abortSignal: streamSignal,
+        });
+        const stepCalls: ManualToolCall[] = [];
+        let stepText = "";
+        let stepReasoning = "";
 
-      const COMPLETE_MARKER = "<<<COMPLETE>>>";
-      const MARKER_LEN = COMPLETE_MARKER.length;
-      let textBuffer = "";
-      let completeDetected = false;
-
-      try {
-        let stepToolCalls: { toolName: string; ok: boolean }[] = [];
         for await (const chunk of streamResult.stream) {
-          const pt = (chunk as any).type;
-
-          if (pt === "start" || pt === "source" || pt === "raw" || pt === "object"
-            || pt === "response-metadata" || pt === "message-metadata") continue;
-
-          if (pt !== "tool-call" && pt !== "tool-result" && stepToolCalls.length > 0) {
-            const success = stepToolCalls.filter(t => t.ok).length;
-            const failed = stepToolCalls.length - success;
-            reportTransport(BusEvents.Transport.ToolStepFinished, {
-              stepNumber: this.#stepCounter.count,
-              total: stepToolCalls.length,
-              success,
-              failed,
-              toolNames: stepToolCalls.map(t => t.toolName),
-            });
-            stepToolCalls = [];
-          }
-
-          if (pt === "reasoning-delta" || pt === "reasoning") {
-            const text = (chunk as any).textDelta ?? (chunk as any).text ?? "";
+          const part = chunk as any;
+          if (part.type === "reasoning-delta" || part.type === "reasoning") {
+            const text = part.textDelta ?? part.text ?? "";
             if (text) {
-              const offset = reasoningText.length;
-              reasoningText += text;
+              const offset = transportReasoningLength;
+              stepReasoning += text;
+              transportReasoningLength += text.length;
               reportTransport(BusEvents.Transport.Reason, { textDelta: text, offset });
             }
-            continue;
-          }
-
-          if (pt === "text-delta") {
-            const text = (chunk as any).text ?? "";
-            if (completeDetected) continue;
-
-            textBuffer += text;
-            const markerIdx = textBuffer.indexOf(COMPLETE_MARKER);
-
-            if (markerIdx >= 0) {
-              const safe = textBuffer.slice(0, markerIdx);
-              if (safe.length > 0) {
-                const offset = fullText.length;
-                fullText += safe;
-                reportTransport(BusEvents.Transport.Delta, { textDelta: safe, offset });
-              }
-              completeDetected = true;
-              this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
-              textBuffer = "";
-              continue;
-            }
-
-            if (textBuffer.length > MARKER_LEN * 3) {
-              const sendLen = textBuffer.length - MARKER_LEN + 1;
-              const safe = textBuffer.slice(0, sendLen);
-              const offset = fullText.length;
-              fullText += safe;
-              reportTransport(BusEvents.Transport.Delta, { textDelta: safe, offset });
-              textBuffer = textBuffer.slice(-(MARKER_LEN - 1));
-            }
-            continue;
-          }
-
-          if (pt === "tool-call") {
-            const c = chunk as any;
-            if (c.toolName === "intent" && !intentData) {
-              intentData = intentSignal.value ?? c.input;
-            }
-            this.report(BusEvents.Element.Data, { step: "tool-call-start", toolName: c.toolName, stepCount: this.#stepCounter.count, args: JSON.stringify(c.input ?? c.args).slice(0, 200) });
-            reportTransport(BusEvents.Transport.ToolStarted, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", input: c.input });
-            continue;
-          }
-
-          if (pt === "tool-result") {
-            const c = chunk as any;
-            if (c.toolName === "intent") continue;
-            const status = takeToolExecutionStatus(this.#toolResults, c.toolName);
-            const rawResult = c.output ?? c.result;
-            const toolOutput = status?.output ?? stringifyToolOutput(rawResult);
-            const toolError = c.error ?? status?.error;
-            const toolOk = status?.ok ?? !toolError;
-            const outcome = status?.outcome ?? resolveToolOutcome({ ok: toolOk });
-            const resultPreview = rawResult === undefined ? "" : JSON.stringify(rawResult).slice(0, 300);
-            this.report(BusEvents.Element.Data, {
-              step: "tool-call-finish",
-              toolName: c.toolName,
-              stepCount: this.#stepCounter.count,
-              result: resultPreview,
-              ok: toolOk,
-              outcomeStatus: outcome.status,
-              progress: outcome.progress,
-              error: toolError,
+          } else if (part.type === "text-delta") {
+            stepText += part.text ?? "";
+          } else if (part.type === "tool-call") {
+            stepCalls.push({
+              toolCallId: part.toolCallId ?? `manual-${modelStep}-${stepCalls.length}`,
+              toolName: part.toolName,
+              input: part.input ?? part.args,
             });
-            reportTransport(BusEvents.Transport.ToolFinished, { toolName: c.toolName, toolCallId: c.toolCallId ?? "", result: rawResult, error: toolError });
-            stepToolCalls.push({ toolName: c.toolName, ok: outcome.progress !== "none" });
-            allToolCalls.push({ toolName: c.toolName, outcome });
-            if (outcome.status === "success" && status?.contextInjection) {
-              const scope = injectToolContext({
-                contextService: this.#contextService,
-                injection: status.contextInjection,
-                sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
-                topicId: this.#session?.currentTopic || undefined,
-                contextOwner: input.contextOwner,
-                stepId: String(this.#stepCounter.count),
-              });
-              this.report(BusEvents.Element.Data, {
-                step: "tool-context-injected",
-                toolName: c.toolName,
-                scope,
-                key: status.contextInjection.entry.key,
-              });
-            }
-            if (this.#session?.addToolResult) {
-              this.#session.addToolResult({
-                toolName: c.toolName,
-                topic: this.#session.currentTopic ?? "",
-                timestamp: Date.now(),
-                ok: toolOk,
-                outcome,
-                output: toolOutput,
-                error: toolError,
-              });
-            }
-            continue;
-          }
-
-          if (pt === "finish") {
-            finishReason = (chunk as any).finishReason ?? finishReason;
-            continue;
-          }
-
-          if (pt === "error") {
-            const err = (chunk as any).error ?? {};
+          } else if (part.type === "finish" || part.type === "finish-step") {
+            finishReason = part.finishReason ?? finishReason;
+          } else if (part.type === "error") {
+            const err = part.error ?? {};
             streamFailed = true;
             if (err.statusCode) streamErrorCode = err.statusCode;
-            this.report(BusEvents.Element.Data, { step: "stream-llm-error", errorName: err.name, statusCode: err.statusCode, message: (err.message ?? "").slice(0, 500), responseBody: (err.responseBody ?? "").slice(0, 500) });
-            continue;
-          }
-
-          if (pt === "abort") {
+            this.report(BusEvents.Element.Data, {
+              step: "stream-llm-error",
+              errorName: err.name,
+              statusCode: err.statusCode,
+              message: (err.message ?? "").slice(0, 500),
+              responseBody: (err.responseBody ?? "").slice(0, 500),
+            });
+          } else if (part.type === "abort") {
             streamFailed = true;
             this.report(BusEvents.Element.Data, { step: "abort", level: "warn" });
-            continue;
           }
         }
-      } finally {
-        clearTimeout(timeoutTimer);
-        completeStep(latestPreparedStep);
-      }
 
-      if (!completeDetected && textBuffer.length > 0) {
-        const offset = fullText.length;
-        fullText += textBuffer;
-        reportTransport(BusEvents.Transport.Delta, { textDelta: textBuffer, offset });
-      }
-
-      this.report(BusEvents.Element.Data, { step: "stream-loop-ended", timedOut, finishReason: finishReason || "natural", stepCount: this.#stepCounter.count, fullTextLen: fullText.length });
-
-      if (allToolCalls.length > 0) {
-        const uniqueNames = [...new Set(allToolCalls.map(t => t.toolName))];
-        const success = allToolCalls.filter(t => t.outcome.status === "success").length;
-        reportTransport(BusEvents.Transport.ToolGroupComplete, {
-          total: allToolCalls.length,
-          success,
-          failed: allToolCalls.length - success,
-          toolNames: uniqueNames,
-        });
-      }
-
-      tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0;
-
-      if (tokenOverflow) {
-        const tu = this.#session?.contextTokens ?? 0;
-        const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
-        const effectiveLimit = this.#configContextLimit - this.#maxTokens;
-
-        if (ratio <= 0.8) {
-          tokenOverflow = false;
-          this.report(BusEvents.Element.Data, { step: "stream-error-not-overflow", ratio: +ratio.toFixed(3), tu, effectiveLimit });
-        } else {
-          this.report(BusEvents.Element.Data, { step: "token-overflow-detected", taskIntent: this.#taskIntent, msgCount: userMessages.length, toolCount: tools.length, ratio: +ratio.toFixed(3), tu, effectiveLimit });
-          return {
-            ...input,
-            mode: "executing",
-            responseText: "",
-            reasoningContent: "",
-            tokenUsage: { total: 0 },
-            intents: [],
-            tokenOverflow: true,
-            contextSnapshotAccepted: false,
-          };
+        try {
+          lastUsage = await Promise.race([
+            streamResult.usage,
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("streamResult usage timeout")), 30_000)
+            ),
+          ]);
+          cumulativeUsage += lastUsage?.totalTokens ?? 0;
+        } catch (err: any) {
+          streamFailed = true;
+          finishReason ||= "error";
+          this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
         }
+
+        this.report(BusEvents.Element.Data, {
+          step: "model-step-ended",
+          stepNumber: modelStep,
+          finishReason: finishReason || "natural",
+          toolCallCount: stepCalls.length,
+          textLength: stepText.length,
+        });
+
+        if (stepCalls.length === 0) {
+          reasoningText = stepReasoning;
+          const markerIndex = stepText.indexOf("<<<COMPLETE>>>");
+          if (markerIndex >= 0) {
+            stepText = stepText.slice(0, markerIndex);
+            completeDetected = true;
+            this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
+          }
+          const finalStepText = stripToolCallMarkup(stepText);
+          const stoppedWithoutProgress = shouldDiscardUnverifiedFinal(
+            allToolCalls.map(call => call.outcome),
+            this.#toolGovernance.current.snapshot().stopReason ?? frameworkStopReason,
+          );
+          if (finalStepText && stoppedWithoutProgress) {
+            this.report(BusEvents.Element.Data, {
+              step: "unverified-final-discarded",
+              stepNumber: modelStep,
+              textLength: finalStepText.length,
+              reason: "governance_stopped_without_progress",
+            });
+          } else if (finalStepText) {
+            const offset = fullText.length;
+            fullText += finalStepText;
+            reportTransport(BusEvents.Transport.Delta, { textDelta: finalStepText, offset });
+          }
+          completeStep(modelStep);
+          break;
+        }
+
+        if (forceText) {
+          this.report(BusEvents.Element.Data, {
+            step: "tool-call-ignored",
+            stepNumber: modelStep,
+            reason: "framework_force_text",
+            toolNames: stepCalls.map(call => call.toolName),
+          });
+          completeStep(modelStep);
+          break;
+        }
+
+        const stepRecords = new Map<string, ToolStepRecord>();
+        const policyResults: NonNullable<MemorySearchStep["toolResults"]> = [];
+        let successfulCalls = 0;
+        let activeCallCount = 0;
+        let intentRequested = false;
+        const activeToolNames = new Set(selection.activeTools);
+
+        for (const call of stepCalls) {
+          this.report(BusEvents.Element.Data, {
+            step: "tool-call-start",
+            toolName: call.toolName,
+            stepNumber: modelStep,
+            args: stringifyToolOutput(call.input).slice(0, 200),
+          });
+          reportTransport(BusEvents.Transport.ToolStarted, {
+            toolName: call.toolName,
+            toolCallId: call.toolCallId,
+            input: call.input,
+          });
+
+          if (call.toolName === "intent") {
+            activeCallCount++;
+            intentRequested = true;
+            const parsed = IntentInputSchema.safeParse(call.input);
+            if (parsed.success) {
+              intentData = parsed.data;
+              successfulCalls++;
+            }
+            reportTransport(BusEvents.Transport.ToolFinished, {
+              toolName: call.toolName,
+              toolCallId: call.toolCallId,
+              result: parsed.success ? "Intent received" : undefined,
+              error: parsed.success ? undefined : "Invalid intent input",
+            });
+            continue;
+          }
+
+          let status: ToolExecutionStatus;
+          if (!activeToolNames.has(call.toolName)) {
+            status = {
+              ok: false,
+              output: "",
+              error: `Tool ${call.toolName} is not active in ${selection.webfetchGuardReason}`,
+              outcome: { status: "blocked", progress: "none", code: "inactive_tool" },
+            };
+          } else {
+            activeCallCount++;
+            const executor = this.#aiTools[call.toolName]?.execute;
+            if (typeof executor !== "function") {
+              status = {
+                ok: false,
+                output: "",
+                error: `No executor registered for ${call.toolName}`,
+                outcome: { status: "error", progress: "none", code: "missing_executor" },
+              };
+            } else {
+              try {
+                await executor(call.input, { abortSignal: streamSignal });
+                status = takeToolExecutionStatus(this.#toolResults, call.toolName) ?? {
+                  ok: false,
+                  output: "",
+                  error: `Executor did not report an outcome for ${call.toolName}`,
+                  outcome: { status: "error", progress: "none", code: "missing_outcome" },
+                };
+              } catch (err: any) {
+                status = {
+                  ok: false,
+                  output: "",
+                  error: err?.message ?? String(err),
+                  outcome: { status: "error", progress: "none" },
+                };
+              }
+            }
+          }
+
+          const record: ToolStepRecord = {
+            toolName: call.toolName,
+            input: call.input,
+            output: status.output,
+            outcome: status.outcome,
+          };
+          stepRecords.set(call.toolCallId, record);
+          policyResults.push(record);
+          allToolCalls.push({ toolName: call.toolName, outcome: status.outcome });
+          if (status.outcome.progress !== "none") successfulCalls++;
+          this.report(BusEvents.Element.Data, {
+            step: "tool-call-finish",
+            toolName: call.toolName,
+            stepNumber: modelStep,
+            result: status.output.slice(0, 300),
+            ok: status.ok,
+            outcomeStatus: status.outcome.status,
+            progress: status.outcome.progress,
+            error: status.error,
+          });
+          reportTransport(BusEvents.Transport.ToolFinished, {
+            toolName: call.toolName,
+            toolCallId: call.toolCallId,
+            result: status.output,
+            error: status.error,
+          });
+          if (status.outcome.status === "success" && status.contextInjection) {
+            const scope = injectToolContext({
+              contextService: this.#contextService,
+              injection: status.contextInjection,
+              sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+              topicId: this.#session?.currentTopic || undefined,
+              contextOwner: input.contextOwner,
+              stepId: String(modelStep),
+            });
+            this.report(BusEvents.Element.Data, {
+              step: "tool-context-injected",
+              toolName: call.toolName,
+              scope,
+              key: status.contextInjection.entry.key,
+            });
+          }
+          this.#session?.addToolResult?.({
+            toolName: call.toolName,
+            topic: this.#session.currentTopic ?? "",
+            timestamp: Date.now(),
+            ok: status.ok,
+            outcome: status.outcome,
+            output: status.output,
+            error: status.error,
+          });
+        }
+
+        frameworkSteps.push({ toolResults: policyResults });
+        consecutiveInactiveSteps = activeCallCount === 0 ? consecutiveInactiveSteps + 1 : 0;
+        if (consecutiveInactiveSteps >= 3) {
+          frameworkStopReason = "inactive_tool_calls";
+          this.report(BusEvents.Element.Data, {
+            step: "tool-governance-stop",
+            stepNumber: modelStep,
+            stopReason: frameworkStopReason,
+            consecutiveInactiveSteps,
+          });
+        }
+        const projectedMessages = projectProgressToolMessages(stepCalls, stepRecords);
+        if (projectedMessages.length > 0) {
+          modelMessages = pruneConsumedTransientTools([...modelMessages, ...projectedMessages]);
+        }
+        const nextGovernance = this.#toolGovernance.current.snapshot();
+        const nextMemorySearch = summarizeMemorySearch({ automaticQuery, automaticStatus, steps: frameworkSteps });
+        const nextMemoryRead = summarizeMemoryRead(frameworkSteps);
+        const nextSkillDiscovery = summarizeSkillDiscovery(frameworkSteps);
+        const nextSelection = selectActiveToolsForStep({
+          availableToolNames: tools,
+          memorySearchAttemptCount: nextMemorySearch.attemptCount,
+          memorySearchFound: nextMemorySearch.found,
+          memorySearchUnavailable: nextMemorySearch.unavailable,
+          memoryRead: nextMemoryRead.read,
+          memoryReadUnavailable: nextMemoryRead.unavailable,
+          memorySuggestsSkill: nextMemoryRead.suggestsSkill,
+          hasSkillContext,
+          skillChecked: nextSkillDiscovery.checked,
+          skillLoaded: nextSkillDiscovery.loaded,
+          skillUnavailable: nextSkillDiscovery.unavailable,
+          hasExplicitUrl,
+        });
+        stepInstruction = buildToolStepInstruction({
+          noProgress: successfulCalls === 0,
+          stopReason: nextGovernance.stopReason ?? frameworkStopReason,
+          webfetchGuardReason: nextSelection.webfetchGuardReason,
+          nextAction: nextSelection.webfetchGuardMessage,
+        });
+        forceFinalText = intentRequested || Boolean(nextGovernance.stopReason ?? frameworkStopReason);
+        reportTransport(BusEvents.Transport.ToolStepFinished, {
+          stepNumber: modelStep,
+          total: stepCalls.length,
+          success: successfulCalls,
+          failed: stepCalls.length - successfulCalls,
+          toolNames: stepCalls.map(call => call.toolName),
+        });
+        completeStep(modelStep);
+        modelStep++;
       }
-
-      const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
-
-      let response: any;
-      let usage: any;
-      let totalUsage: any;
-
-      try {
-        response = await Promise.race([
-          streamResult.response,
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("streamResult.response timeout")), 30_000)
-          ),
-        ]);
-      } catch (err: any) {
-        streamFailed = true;
-        this.report(BusEvents.Element.Data, { step: "response-error", level: "warn", error: err?.message ?? String(err) });
-        response = { messages: [] };
-        if (!finishReason) finishReason = "error";
-      }
-
-      try {
-        [usage, totalUsage] = await Promise.race([
-          Promise.all([streamResult.usage, streamResult.totalUsage]),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("streamResult usage timeout")), 30_000)
-          ),
-        ]);
-      } catch (err: any) {
-        streamFailed = true;
-        this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
-        usage = { totalTokens: 0 };
-        totalUsage = usage;
-        if (!finishReason) finishReason = "error";
-      }
-
-      const reasoningContent = reasoningText;
-      const metrics = resolveTokenMetrics(usage, totalUsage);
-      const tokenUsage: TokenUsage = { total: metrics.totalUsageTokens };
-      if (this.#session?.setContextTokens) {
-        this.#session.setContextTokens(metrics.contextTokens);
-      }
-
-      fullText = sanitizeForJSON(fullText);
-      const finalGovernance = this.#toolGovernance.current.snapshot();
-      this.report(BusEvents.Element.Data, {
-        step: "done",
-        outputLen: fullText.length,
-        totalUsageTokens: tokenUsage.total,
-        contextTokens: metrics.contextTokens,
-        inputTokens: usage?.inputTokens ?? 0,
-        outputTokens: usage?.outputTokens ?? 0,
-        hasIntents: intents.length > 0,
-        finishReason,
-        stepCount: this.#stepCounter.count,
-        maxSteps: this.#maxSteps,
-        toolAttempts: finalGovernance.attempts,
-        toolExecutions: finalGovernance.executions,
-        toolBlocked: finalGovernance.blocked,
-        toolConsecutiveNoProgress: finalGovernance.consecutiveNoProgress,
-        toolStopReason: finalGovernance.stopReason,
-      });
-
-      if (this.#stepCounter.count >= this.#maxSteps) {
-        this.report(BusEvents.Element.Data, { step: "maxSteps-exhausted", level: "warn", stepCount: this.#stepCounter.count, maxSteps: this.#maxSteps });
-      }
-
-      const chainAction = completeDetected ? undefined
-        : intents.some(i => i.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
-        : finishReason === "length" ? "follow_up"
-        : finishReason === "error" && streamErrorCode < 400 ? "follow_up"
-        : undefined;
-
-      return {
-        ...input,
-        mode: "executing",
-        responseText: fullText,
-        reasoningContent: String(reasoningContent),
-        tokenUsage,
-        intents,
-        chainAction,
-        tokenOverflow,
-        errorStatusCode: streamErrorCode,
-        finishReason,
-        completeDetected,
-        toolOutcomeSummary: summarizeToolOutcomes(allToolCalls.map(call => call.outcome)),
-        contextSnapshotAccepted: !timedOut && !streamFailed,
-      };
     } catch (err: any) {
+      streamFailed = true;
+      finishReason = "error";
+      streamErrorCode = err?.statusCode ?? 0;
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
-      if (fullText.length > 0) {
+    } finally {
+      clearTimeout(timeoutTimer);
+    }
+
+    const finalGovernance = this.#toolGovernance.current.snapshot();
+    if (!fullText && (finalGovernance.stopReason || frameworkStopReason)) {
+      fullText = "未获得可用的工具证据，当前工具执行已停止。";
+      reportTransport(BusEvents.Transport.Delta, { textDelta: fullText, offset: 0 });
+    }
+    this.report(BusEvents.Element.Data, {
+      step: "stream-loop-ended",
+      timedOut,
+      finishReason: finishReason || "natural",
+      stepCount: this.#stepCounter.count,
+      modelStepCount: modelStep + 1,
+      fullTextLen: fullText.length,
+    });
+
+    if (allToolCalls.length > 0) {
+      const uniqueNames = [...new Set(allToolCalls.map(call => call.toolName))];
+      const success = allToolCalls.filter(call => call.outcome.status === "success").length;
+      reportTransport(BusEvents.Transport.ToolGroupComplete, {
+        total: allToolCalls.length,
+        success,
+        failed: allToolCalls.length - success,
+        toolNames: uniqueNames,
+      });
+    }
+
+    tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0 && !streamFailed;
+    if (tokenOverflow) {
+      const tu = this.#session?.contextTokens ?? 0;
+      const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
+      const effectiveLimit = this.#configContextLimit - this.#maxTokens;
+      if (ratio <= 0.8) {
+        tokenOverflow = false;
+        this.report(BusEvents.Element.Data, { step: "stream-error-not-overflow", ratio: +ratio.toFixed(3), tu, effectiveLimit });
+      } else {
+        this.report(BusEvents.Element.Data, {
+          step: "token-overflow-detected",
+          taskIntent: this.#taskIntent,
+          msgCount: userMessages.length,
+          toolCount: tools.length,
+          ratio: +ratio.toFixed(3),
+          tu,
+          effectiveLimit,
+        });
         return {
           ...input,
           mode: "executing",
-          responseText: sanitizeForJSON(fullText),
+          responseText: "",
           reasoningContent: "",
           tokenUsage: { total: 0 },
           intents: [],
-          chainAction: "follow_up",
-          tokenOverflow: false,
-          errorStatusCode: err.statusCode ?? 0,
-          finishReason: "error",
-          completeDetected: false,
+          tokenOverflow: true,
           contextSnapshotAccepted: false,
         };
       }
-      return {
-        ...input,
-        mode: "executing",
-        responseText: sanitizeForJSON(`Error: ${err?.message ?? String(err)}`),
-        tokenOverflow,
-        errorStatusCode: err.statusCode ?? 0,
-        finishReason: "error",
-        completeDetected: false,
-        contextSnapshotAccepted: false,
-      };
     }
+
+    const intents: IntentRequest[] = intentData ? [toIntentRequest(intentData)] : [];
+    const contextTokens = lastUsage?.totalTokens ?? 0;
+    const tokenUsage: TokenUsage = { total: cumulativeUsage || contextTokens };
+    this.#session?.setContextTokens?.(contextTokens);
+    fullText = sanitizeForJSON(stripToolCallMarkup(fullText));
+    this.report(BusEvents.Element.Data, {
+      step: "done",
+      outputLen: fullText.length,
+      totalUsageTokens: tokenUsage.total,
+      contextTokens,
+      inputTokens: lastUsage?.inputTokens ?? 0,
+      outputTokens: lastUsage?.outputTokens ?? 0,
+      hasIntents: intents.length > 0,
+      finishReason,
+      stepCount: this.#stepCounter.count,
+      modelStepCount: modelStep + 1,
+      maxSteps: this.#maxSteps,
+      toolAttempts: finalGovernance.attempts,
+      toolExecutions: finalGovernance.executions,
+      toolBlocked: finalGovernance.blocked,
+      toolConsecutiveNoProgress: finalGovernance.consecutiveNoProgress,
+      toolStopReason: finalGovernance.stopReason,
+    });
+
+    const chainAction = completeDetected ? undefined
+      : intents.some(intent => intent.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
+      : finishReason === "length" ? "follow_up"
+      : finishReason === "error" && streamErrorCode < 400 ? "follow_up"
+      : undefined;
+    return {
+      ...input,
+      mode: "executing",
+      responseText: fullText || (streamFailed ? "工具循环执行失败。" : ""),
+      reasoningContent: reasoningText,
+      tokenUsage,
+      intents,
+      chainAction,
+      tokenOverflow,
+      errorStatusCode: streamErrorCode,
+      finishReason,
+      completeDetected,
+      toolOutcomeSummary: summarizeToolOutcomes(allToolCalls.map(call => call.outcome)),
+      contextSnapshotAccepted: !timedOut && !streamFailed,
+    };
   }
 
 }

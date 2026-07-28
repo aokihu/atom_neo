@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { PredictionFlowState } from "./types";
+import { isPromptEligibleMessage } from "../../../session/message-policy";
 
 const MAX_USER_MESSAGES = 5;
 const MAX_ASSISTANT_REFERENCES = 3;
@@ -10,7 +11,7 @@ const MAX_ASSISTANT_LEN = 120;
 
 export function buildPredictionContext(session: any, currentUserMessage: string) {
   const messages: Array<{ role: string; content: string; visible?: boolean }> = session?.messages ?? [];
-  const visible = messages.filter(message => message.visible !== false);
+  const visible = messages.filter(message => isPromptEligibleMessage(message as any));
   const users = visible.filter(message => message.role === "user");
   if (users.at(-1)?.content?.trim() === currentUserMessage) users.pop();
   return {

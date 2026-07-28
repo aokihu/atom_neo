@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
+import { isPromptEligibleMessage } from "../../../session/message-policy";
 
 export class CollectPromptsElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #session: any;
@@ -23,9 +24,8 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
     if (input.mode !== "initial") return input;
 
     const allMsgs = this.#session.messages ?? [];
-    this.report(BusEvents.Element.Data, { step: "session-state", totalMsgs: allMsgs.length, visibleMsgs: allMsgs.filter((m: any) => m.visible !== false).length, contextRelevance: this.#contextRelevance });
-
-    const visibleMsgs = allMsgs.filter((m: any) => m.visible !== false);
+    const visibleMsgs = allMsgs.filter((m: any) => isPromptEligibleMessage(m));
+    this.report(BusEvents.Element.Data, { step: "session-state", totalMsgs: allMsgs.length, visibleMsgs: visibleMsgs.length, contextRelevance: this.#contextRelevance });
     const limitedMsgs = this.#contextRelevance === "standalone" ? visibleMsgs.slice(-2) : visibleMsgs;
 
     const messages = limitedMsgs.map((m: any) => {

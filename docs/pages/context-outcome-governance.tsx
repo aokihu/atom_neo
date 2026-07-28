@@ -19,13 +19,13 @@ export default function ContextOutcomeGovernancePage({
 
       <Section title="一个结果，四个不同去向">
         <CodeBlock lang="text" code={`ToolResult
-  ├─ current step        所有状态，帮助本轮恢复
+  ├─ conversation step   仅 progress 结果投影给模型
   ├─ ToolCallLedger      结构化 outcome，不注入模型
   ├─ Session audit       供日志和 TUI 诊断
   └─ ContextService      只有显式 contextInjection`} />
         <Callout type="info" title="丢弃不等于失明">
-          error、empty 和 blocked 不进入跨轮 Context，但当前工具循环仍会看到简短原因，因此 Agent
-          可以更换搜索词、参数或工具。
+          error、empty 和 blocked 的 Call + Result 会整组从模型消息中删除；框架仍保留 Outcome、
+          fingerprint 和 Guard 状态，并用最小 step instruction 与逐步收窄的 activeTools 控制下一步。
         </Callout>
       </Section>
 
@@ -34,10 +34,10 @@ export default function ContextOutcomeGovernancePage({
           headers={["状态", "进度", "当前循环", "跨轮 Context"]}
           rows={[
             [<Badge color="green">success</Badge>, "evidence / state_changed", "保留", "仅显式 Injection"],
-            [<Badge color="orange">empty</Badge>, "none", "简短反馈", "丢弃"],
-            [<Badge color="red">error</Badge>, "none", "简短错误", "丢弃"],
-            [<Badge color="purple">blocked / deferred</Badge>, "none", "下一步提示", "丢弃"],
-            [<Badge color="blue">cancelled</Badge>, "none", "取消状态", "丢弃"],
+            [<Badge color="orange">empty</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
+            [<Badge color="red">error</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
+            [<Badge color="purple">blocked / deferred</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
+            [<Badge color="blue">cancelled</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
           ]}
         />
         <CodeBlock lang="ts" code={`type ToolOutcome = {
@@ -63,7 +63,7 @@ export default function ContextOutcomeGovernancePage({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "10px" }}>
           {[
             ["1", "契约", "Outcome 类型与 legacy 归一化"],
-            ["2", "执行", "Ledger、Guard、Context 边界"],
+            ["2", "执行", "schema-only SDK + 手工 Tool Loop"],
             ["3", "迁移", "内置 Tool 显式标注"],
             ["4", "判断", "Prediction 与 Post 权重"],
             ["5", "压缩", "筛选与事实优先摘要"],
@@ -76,8 +76,8 @@ export default function ContextOutcomeGovernancePage({
           ))}
         </div>
         <Callout type="ok" title="迁移策略">
-          内置 Tool 本轮显式迁移；MCP 原始结果在当前 conversation 的后续 steps 中完整可见，
-          conversation 结束后降为 reference evidence，不能单独支撑 Post/Compact 的完成事实。
+          内置 Tool 和 MCP 都由 Atom 手工执行；只有成功的 MCP 原始结果在当前 conversation 后续
+          steps 中按 reference evidence 可见，失败和空结果不会投影给模型。
         </Callout>
       </Section>
 
