@@ -47,7 +47,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onCancelT
   const [filter, setFilter] = useState("");
 
   const showMenu = filter.startsWith("/");
-  const borderColor = sessionBusy ? colors.status.warning : colors.status.success;
+  const borderColor = sessionBusy ? colors.status.warning : colors.decoration.subtle;
 
   const cmdMatches = useMemo(() => {
     if (!showMenu || filter.length < 1) return [];
@@ -220,17 +220,20 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onCancelT
       )}
       <box
         marginTop={1}
+        marginLeft={1}
         marginRight={1}
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        paddingRight={2}
-        border={["left"]}
+        paddingLeft={1}
+        paddingRight={1}
+        border
         borderColor={borderColor}
-        borderStyle="heavy"
-        backgroundColor={colors.bg.codeBlock}
+        borderStyle="single"
+        backgroundColor={colors.bg.popup}
         flexDirection="column"
       >
+        <box height={1} flexDirection="row" justifyContent="space-between">
+          <text fg={colors.accent.brand}>COMMAND</text>
+          <text fg={colors.text.muted}>{sessionBusy ? "LOCKED" : "READY"}</text>
+        </box>
         <textarea
           ref={taRef}
           placeholder="Type a message..."
@@ -239,9 +242,9 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onCancelT
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused={!disabled}
-          height={3}
-          backgroundColor={colors.bg.codeBlock}
-          focusedBackgroundColor={colors.bg.codeBlock}
+          height={2}
+          backgroundColor={colors.bg.popup}
+          focusedBackgroundColor={colors.bg.popup}
           textColor={colors.text.primary}
           placeholderColor={colors.text.muted}
         />

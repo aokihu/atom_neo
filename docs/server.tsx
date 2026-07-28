@@ -48,6 +48,7 @@ import ProtocolPage from "./pages/protocol";
 import SandboxPage from "./pages/sandbox";
 import SessionContextPage from "./pages/session-context";
 import TestingPage from "./pages/testing";
+import TuiInterfacePage from "./pages/tui-interface";
 import ToolPluginPage from "./pages/tool-plugin";
 import TypeSystemPage from "./pages/type-system";
 import DefaultDocPage from "./pages/default";
@@ -83,6 +84,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   sandbox: SandboxPage,
   session: SessionContextPage,
   testing: TestingPage,
+  "tui-interface": TuiInterfacePage,
   "tool-plugin": ToolPluginPage,
   "type-system": TypeSystemPage,
 };

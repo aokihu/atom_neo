@@ -1,142 +1,156 @@
-import { useState, useEffect, useRef } from "react";
-import type { ServerInfo } from "../types";
-import { useTheme } from "./App";
+import type { ReactNode } from "react";
 import { useChatStore } from "../stores/chat";
+import { useTheme } from "./App";
 
-function gauge(used: number, limit: number, width = 10): string {
-  const r = Math.min(used / Math.max(limit, 1), 1);
-  const f = Math.round(r * width);
-  return '█'.repeat(f) + '░'.repeat(width - f);
+export const SIDEBAR_WIDTH = 30;
+export const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - 3;
+
+export function buildGauge(used: number, limit: number, width: number): string {
+  const ratio = Math.min(used / Math.max(limit, 1), 1);
+  const filled = Math.round(ratio * width);
+  return "█".repeat(filled) + "░".repeat(width - filled);
 }
 
 function pct(used: number, limit: number): string {
-  return Math.round((used / Math.max(limit, 1)) * 100) + '%';
+  return Math.round((used / Math.max(limit, 1)) * 100) + "%";
 }
 
-const STATUS_ICON: Record<string, string> = {
-  pending: '☐',
-  in_progress: '◐',
-  completed: '✓',
-  cancelled: '✕',
+const TODO_ICON: Record<string, string> = {
+  pending: "○",
+  in_progress: "◐",
+  completed: "✓",
+  cancelled: "✕",
 };
 
-interface SidebarProps {
-  serverInfo: ServerInfo;
-  contextLimit: number;
-}
-
-function fmtUptime(totalSec: number): string {
-  if (totalSec < 60) return `${totalSec}s`;
-
-  const d = Math.floor(totalSec / 86400);
-  const h = Math.floor((totalSec % 86400) / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-
-  let result = '';
-  if (d > 0) result += `${d}d`;
-  if (h > 0) result += `${h}h`;
-  result += `${m}m`;
-  return result;
-}
-
-export function Sidebar({ serverInfo, contextLimit }: SidebarProps) {
+function TelemetrySection({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
   const { colors } = useTheme();
-  const [uptime, setUptime] = useState(0);
-  const startRef = useRef(Date.now());
-  const [mcpExpanded, setMcpExpanded] = useState(false);
-  const contextTokens = useChatStore(s => s.contextTokens);
-  const todoItems = useChatStore(s => s.todoItems);
-  const toolInfos = useChatStore(s => s.toolInfos);
-  const mcpServers = useChatStore(s => s.mcpServers);
-
-  useEffect(() => {
-    const interval = uptime < 60 ? 1000 : 60_000;
-    const t = setInterval(() => {
-      setUptime(Math.floor((Date.now() - startRef.current) / 1000));
-    }, interval);
-    return () => clearInterval(t);
-  }, [uptime < 60]);
+  return (
+    <box
+      flexDirection="column"
+      paddingLeft={1}
+      paddingRight={1}
+      marginBottom={1}
+    >
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={colors.text.muted}>{title}</text>
+        {meta && <text fg={colors.text.muted}>{meta}</text>}
+      </box>
+      {children}
+    </box>
+  );
+}
+export function Sidebar({ contextLimit }: { contextLimit: number }) {
+  const { colors } = useTheme();
+  const contextTokens = useChatStore(state => state.contextTokens);
+  const todoItems = useChatStore(state => state.todoItems);
+  const toolInfos = useChatStore(state => state.toolInfos);
+  const mcpServers = useChatStore(state => state.mcpServers);
+  const messages = useChatStore(state => state.messages);
 
   const ratio = Math.round((contextTokens / Math.max(contextLimit, 1)) * 100);
-  const builtinCount = toolInfos.filter(t => t.source === "builtin").length;
-  const mcpTotal = mcpServers.length;
-  const mcpOnline = mcpServers.filter(s => s.online).length;
+  const entries = messages.flatMap(message => message.role === "tool-group" ? message.entries : []);
+  const runningTools = entries.filter(entry => entry.phase === "preparing" || entry.phase === "executing").length;
+  const webFetches = entries.filter(entry => entry.toolName.toLowerCase() === "webfetch");
+  const webSuccess = webFetches.filter(entry => entry.phase === "done").length;
+  const webFailed = webFetches.filter(entry => entry.phase === "error").length;
+  const mcpOnline = mcpServers.filter(server => server.online).length;
+  const builtinCount = toolInfos.filter(tool => tool.source === "builtin").length;
+  const toolState = (phase: (typeof entries)[number]["phase"]) => (
+    phase === "preparing" || phase === "executing" ? "RUN" : phase === "done" ? "OK" : "ERR"
+  );
 
   return (
-    <box flexShrink={0} minWidth={24} width="28%" paddingLeft={1} paddingRight={1} paddingTop={1} flexDirection="column" gap={2}>
-      {/* Server block */}
-      <box flexDirection="column">
-        <text>
-          <strong fg={colors.accent.brand}>Server</strong>
+    <box
+      width={SIDEBAR_WIDTH}
+      flexShrink={0}
+      flexDirection="column"
+      border={["left"]}
+      borderColor={colors.decoration.subtle}
+      borderStyle="single"
+      overflow="hidden"
+      backgroundColor={colors.bg.page}
+    >
+      <TelemetrySection title="CONTEXT" meta={pct(contextTokens, contextLimit)}>
+        <text fg={ratio > 90 ? colors.status.error : ratio > 75 ? colors.status.warning : colors.status.success}>
+          {buildGauge(contextTokens, contextLimit, SIDEBAR_CONTENT_WIDTH)}
         </text>
-        <box backgroundColor={colors.bg.codeBlock} padding={1} flexDirection="column">
-          <box flexDirection="row">
-            <text fg={colors.text.muted} width={7}>Uptime</text>
-            <text fg={colors.text.secondary}>{fmtUptime(uptime)}</text>
-          </box>
-          <box flexDirection="row">
-            <text fg={colors.text.muted} width={7}>Tools</text>
-            <text fg={colors.text.secondary}>{`${builtinCount} builtin`}</text>
-          </box>
-          <box flexDirection="row">
-            <text fg={colors.text.muted} width={7}>Context</text>
-            <text fg={ratio > 90 ? colors.status.error : ratio > 75 ? colors.status.warning : colors.status.success}>
-              {gauge(contextTokens, contextLimit)}
-            </text>
-            <text fg={colors.text.secondary}> {pct(contextTokens, contextLimit)}</text>
-          </box>
-        </box>
-      </box>
+        <text fg={colors.text.secondary}>{`${contextTokens.toLocaleString()} / ${contextLimit.toLocaleString()}`}</text>
+      </TelemetrySection>
 
-      {/* MCP Servers block */}
-      {mcpServers.length > 0 && (
-        <box flexDirection="column" onMouseUp={() => setMcpExpanded(!mcpExpanded)}>
-          <box flexDirection="row" gap={0}>
-            <text>
-              <strong fg={colors.accent.brand}>MCP Tools</strong>
-            </text>
-            <text fg={colors.text.muted}>{` (${mcpOnline}/${mcpTotal})`}</text>
-            <text fg={colors.text.muted}>{mcpExpanded ? ' ▲' : ' ▼'}</text>
-          </box>
-          {mcpExpanded && (
-            <box backgroundColor={colors.bg.codeBlock} padding={1} flexDirection="column" gap={1}>
-              {mcpServers.map((s, i) => (
-                <box key={i} flexDirection="row" gap={1}>
-                  <text fg={s.online ? colors.status.success : colors.text.muted}>{s.online ? '●' : '○'}</text>
-                  <text fg={s.online ? colors.text.primary : colors.text.muted}>{s.name}</text>
-                </box>
-              ))}
-            </box>
-          )}
-        </box>
-      )}
-
-      {/* TODO block */}
-      {todoItems.length > 0 && (
-        <box flexDirection="column">
-          <text>
-            <strong fg={colors.accent.brand}>TODO</strong>
-          </text>
-          <box backgroundColor={colors.bg.codeBlock} padding={1} flexDirection="column" gap={1}>
-            {todoItems.map((item, i) => {
-              const icon = STATUS_ICON[item.status] ?? '?';
-              const iconColor = item.status === 'in_progress' ? colors.status.warning
-                : item.status === 'completed' ? colors.status.success
-                : item.status === 'cancelled' ? colors.status.error
+      <TelemetrySection title="TOOLS" meta={`${runningTools} RUN`}>
+        {entries.length === 0
+          ? (
+            <>
+              <box flexDirection="row" justifyContent="space-between">
+                <text fg={colors.text.muted}>BUILTIN</text>
+                <text fg={colors.text.muted}>{builtinCount}</text>
+              </box>
+              <box flexDirection="row" justifyContent="space-between">
+                <text fg={colors.text.muted}>MCP</text>
+                <text fg={colors.text.muted}>{toolInfos.filter(tool => tool.source === "mcp").length}</text>
+              </box>
+            </>
+          )
+          : entries.slice(-3).map(entry => {
+            const state = toolState(entry.phase);
+            const stateColor = state === "ERR" ? colors.status.error
+              : state === "RUN" ? colors.status.warning
                 : colors.text.muted;
-              const textColor = item.status === 'in_progress' ? colors.text.primary
-                : item.status === 'completed' || item.status === 'cancelled' ? colors.text.muted
-                : colors.text.secondary;
-              return (
-                <box key={i} flexDirection="row" gap={1}>
-                  <text fg={iconColor}>{icon}</text>
-                  <text fg={textColor}>{item.content}</text>
-                </box>
-              );
-            })}
-          </box>
+            return (
+              <box key={entry.toolCallId} flexDirection="row" justifyContent="space-between">
+                <text fg={state === "RUN" ? colors.text.secondary : colors.text.muted}>{entry.toolName}</text>
+                <text fg={stateColor}>{state}</text>
+              </box>
+            );
+          })}
+      </TelemetrySection>
+
+      <TelemetrySection title="MCP" meta={`${mcpOnline}/${mcpServers.length}`}>
+        {mcpServers.length === 0
+          ? <text fg={colors.text.muted}>EMPTY</text>
+          : mcpServers.slice(0, 4).map(server => (
+            <box key={server.name} flexDirection="row" justifyContent="space-between">
+              <text fg={colors.text.muted}>{server.name}</text>
+              <text fg={server.online ? colors.text.muted : colors.status.error}>
+                {server.online ? "ONLINE" : "OFFLINE"}
+              </text>
+            </box>
+          ))}
+      </TelemetrySection>
+
+      <TelemetrySection title="TODO" meta={String(todoItems.length)}>
+        {todoItems.length === 0
+          ? <text fg={colors.text.muted}>EMPTY</text>
+          : todoItems.slice(0, 5).map((item, index) => {
+            const iconColor = item.status === "in_progress" ? colors.status.warning
+              : item.status === "completed" ? colors.status.success
+                : item.status === "cancelled" ? colors.status.error
+                  : colors.text.muted;
+            return (
+              <box key={`${item.content}-${index}`} flexDirection="row" gap={1}>
+                <text fg={iconColor}>{TODO_ICON[item.status] ?? "?"}</text>
+                <text fg={item.status === "in_progress" ? colors.text.secondary : colors.text.muted}>
+                  {item.content}
+                </text>
+              </box>
+            );
+          })}
+      </TelemetrySection>
+
+      <TelemetrySection title="NETWORK" meta="SESSION">
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={colors.text.muted}>WEBFETCH</text>
+          <text fg={colors.text.muted}>{webFetches.length}</text>
         </box>
-      )}
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={colors.text.muted}>SUCCESS</text>
+          <text fg={colors.text.muted}>{webSuccess}</text>
+        </box>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={colors.text.muted}>FAILED</text>
+          <text fg={webFailed > 0 ? colors.status.error : colors.text.muted}>{webFailed}</text>
+        </box>
+      </TelemetrySection>
     </box>
   );
 }

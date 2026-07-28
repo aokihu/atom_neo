@@ -9,6 +9,7 @@ export type ThemeColors = {
 };
 
 export type ThemeName =
+  | "edex"
   | "github-dark"
   | "github-light"
   | "dracula"
@@ -40,6 +41,8 @@ export type Message =
   | { role: "tool-group"; id: string; timestamp: number; entries: ToolEntry[]; collapsed: boolean; summary?: ToolSummary }
   | { role: "error"; content: string; id: string; timestamp: number }
   | { role: "info"; content: string; id: string; timestamp: number };
+
+export type ToolGroupMessage = Extract<Message, { role: "tool-group" }>;
 
 export type TodoItem = {
   content: string;

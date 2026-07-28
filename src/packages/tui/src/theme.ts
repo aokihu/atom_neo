@@ -2,6 +2,15 @@ import { SyntaxStyle, RGBA } from "@opentui/core";
 import type { ThemeColors, ThemeName } from "./types";
 
 export const THEMES: Record<ThemeName, ThemeColors> = {
+  "edex": {
+    bg:    { page: "#05090c", codeBlock: "#081218", input: "#081218", popup: "#0c1b22" },
+    border:{ default: "#376c7b" },
+    decoration:{ subtle: "#16313a" },
+    text:  { muted: "#4a626c", secondary: "#8196a0", primary: "#d6e0e5", bright: "#e8f2f5", medium: "#a8bec6" },
+    accent:{ brand: "#63cbea" },
+    code:  { red: "#ef6b73", cyan: "#8fd8e8", blue:{ light: "#63cbea" }, purple: "#a9a4d6", orange: "#d7a85a" },
+    status:{ success: "#73d65c", warning: "#f5c451", error: "#ef6b73" },
+  },
   "github-dark": {
     bg:    { page: "#0d1117", codeBlock: "#161b22", input: "#1c2128", popup: "#252b33" },
     border:{ default: "#21262d" },
@@ -67,8 +76,8 @@ export const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
-export function getTheme(name: ThemeName = "github-dark"): { colors: ThemeColors; syntaxStyle: SyntaxStyle } {
-  const c = THEMES[name] ?? THEMES["github-dark"];
+export function getTheme(name: ThemeName = "edex"): { colors: ThemeColors; syntaxStyle: SyntaxStyle } {
+  const c = THEMES[name] ?? THEMES.edex;
   return { colors: c, syntaxStyle: buildSyntaxStyle(c) };
 }
 

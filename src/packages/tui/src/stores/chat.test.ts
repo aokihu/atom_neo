@@ -9,6 +9,9 @@ describe("chat store task completion", () => {
       activeAssistantId: null,
       busy: false,
       showPreparing: false,
+      streamReceivedChars: 0,
+      streamChunkCount: 0,
+      streamTokenBatches: [],
     });
   });
 
@@ -44,6 +47,25 @@ describe("chat store task completion", () => {
         { toolCallId: "success", phase: "done", detail: "sunny" },
         { toolCallId: "failure", phase: "error", detail: "offline" },
       ],
+    });
+  });
+
+  test("records the latest stream token estimates and resets them for a new task", () => {
+    for (const size of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+      useChatStore.getState().recordStreamChunk("x".repeat(size));
+    }
+
+    expect(useChatStore.getState()).toMatchObject({
+      streamReceivedChars: 45,
+      streamChunkCount: 9,
+      streamTokenBatches: [1, 1, 1, 2, 2, 2, 2, 3],
+    });
+
+    useChatStore.getState().prepareForSend();
+    expect(useChatStore.getState()).toMatchObject({
+      streamReceivedChars: 0,
+      streamChunkCount: 0,
+      streamTokenBatches: [],
     });
   });
 });
