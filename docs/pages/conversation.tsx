@@ -47,7 +47,7 @@ export default function ConversationPage({ content, title, description, category
           rows={[
             [<Badge color="purple">system</Badge>, "唯一 TOON Context Snapshot；内部包含 System Prompt、AGENTS、Skill 等 entries", <><code>system = snapshot.content</code></>],
             [<Badge color="blue">messages</Badge>, "可见的 user / assistant 历史与当前输入", "过滤孤立 role:tool"],
-            [<Badge color="orange">tools</Badge>, "只向 AI SDK 提供 schema；webfetch 始终可见", "执行、Outcome 与循环由 Atom 控制"],
+            [<Badge color="orange">tools</Badge>, "全部 schema 始终开放，由 LLM 自主选择", "Atom 只执行 Tool 并保护循环边界"],
           ]}
         />
         <CodeBlock lang="text" code={`Prompt Registry + AGENTS + Skill + runtime sources
@@ -65,41 +65,39 @@ Tool executors + ToolGuard + Ledger       → Atom Tool Loop`} />
   → Tool Call schema validation
   → Atom Ledger reserves execution
   → Atom ToolRunner executes
-  → structured ToolOutcome
-      ├─ evidence / state_changed → next step Call + Result
-      └─ empty / error / blocked / deferred / cancelled → discard pair
-  → Atom narrows next-step activeTools from Guard state
+  → Tool Call + Tool Result returned to the next model step
+  → metadata.effect updates logs and no-progress warning only
   → final Assistant text only`} />
         <ComparisonTable
           headers={["职责", "所有者"]}
           rows={[
             ["模型适配、流式解析、Tool Call 参数校验", <Badge color="orange">AI SDK</Badge>],
-            ["执行权限、重复检测、并发与次数预算", <Badge color="blue">Atom</Badge>],
-            ["Outcome、Context 投影、MCP reference 生命周期", <Badge color="purple">Atom</Badge>],
+            ["安全权限、完全重复检测与执行上限", <Badge color="blue">Atom</Badge>],
+            ["Tool 选择、结果解释与下一步判断", <Badge color="purple">LLM</Badge>],
             ["最终回复与 Session 持久化", <Badge color="green">Atom</Badge>],
           ]}
         />
       </Section>
 
-      <Section title="Web 查询的能力发现顺序">
-        <CodeBlock lang="text" code={`已有 Context / 查询方法 / Skill
-  └─ Prediction.memoryQuery → 自动搜索 Memory
-      ├─ 命中摘要 → read_memory → 普通方法可查询
-      │                         └─ 含 Skill 线索 → skill_load / skill_section
-      ├─ 空结果   → skill_list → 再次调用 webfetch
-      └─ 服务异常 / 明确 URL → 直接允许 webfetch`} />
+      <Section title="Tool 自主调用与循环保护">
+        <CodeBlock lang="text" code={`Prediction → structured classification only
+Conversation LLM → Memory / Skill / MCP / WebFetch / Filesystem
+  ├─ normal call → execute and return full Tool Result
+  ├─ repeated no-result → add a judgment warning; keep tools available
+  ├─ exact duplicate → block the duplicate and explain why
+  └─ execution limit → end the Tool Loop`} />
         <ComparisonTable
-          headers={["状态", "ToolGuard 行为"]}
+          headers={["状态", "框架行为"]}
           rows={[
-            ["尚未搜索 Memory", "拦截 webfetch，并要求先 search_memory"],
-            ["Memory 命中 Skill 线索", "等待 Skill 成功加载；不存在或失败时允许降级"],
-            ["Memory 为空且未检查 Skill", "拦截并要求 skill_list"],
-            ["前置检查已完成 / 服务不可用 / 输入含 URL", "允许执行 webfetch"],
+            ["正常 Tool 调用", "不筛选、不改写、不隐藏结果"],
+            ["连续无结果", "只提示 LLM 重新判断，不停机"],
+            ["完全重复调用", "阻止重复执行，返回循环提示"],
+            ["达到执行上限", "停止 Tool Loop，让 LLM 收尾"],
           ]}
         />
-        <Callout type="tip" title="可见不等于可执行">
-          Agent 始终知道 <code>webfetch</code> 存在；Guard 的结构化状态直接改变下一 step 策略，
-          无效 Tool Call 与 Result 不进入后续消息。
+        <Callout type="tip" title="框架不是 Tool 路由器">
+          Prompt 要求 LLM 在 WebFetch 前先查询 Memory 与 Skill；框架不维护业务前置状态，
+          也不隐藏或拦截正常 Tool。
         </Callout>
       </Section>
 
@@ -132,7 +130,8 @@ Tool executors + ToolGuard + Ledger       → Atom Tool Loop`} />
             ["输出预算", <><code>maxOutputTokens</code> 由系统配置，默认 4096；压缩阈值预留这部分空间</>],
             ["完成标记", <><code>&lt;&lt;&lt;COMPLETE&gt;&gt;&gt;</code> 用滑动窗口跨 chunk 识别，标记后文本丢弃</>],
             ["Unicode", <><code>String.toWellFormed()</code> 修复孤立代理；截断统一使用 <code>substringWellFormed</code></>],
-            ["工具结果", "仅 progress 结果进入当前 Conversation 下一 step；无效 Call + Result 整组丢弃"],
+            ["工具结果", "所有已执行 Call + Result 返回当前 Conversation；不自动持久化"],
+            ["无进展", "只提示；不收窄 Tool，不丢弃最终文本"],
           ]}
         />
       </Section>

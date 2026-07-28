@@ -38,14 +38,8 @@ describe("webfetch tool adapter", () => {
       options: { abortSignal: abortController.signal, sessionId: "session-1" },
     }]);
     expect(result).toEqual({
-      ok: true,
-      output: "page",
-      data: {
-        status: 200,
-        contentType: "text/plain",
-        rateLimit: { domain: "example.com", waitedMs: 1_000 },
-      },
-      outcome: { status: "success", progress: "evidence", code: "success" },
+      content: "page",
+      metadata: { ok: true, effect: "evidence" },
     });
   });
 
@@ -59,8 +53,8 @@ describe("webfetch tool adapter", () => {
     });
 
     expect(await tool.execute({ url: "https://example.com", isMobile: true })).toMatchObject({
-      ok: true,
-      output: "mobile page",
+      content: "mobile page",
+      metadata: { ok: true, effect: "evidence" },
     });
     expect(requests).toEqual([expect.objectContaining({ isMobile: true })]);
   });
@@ -76,7 +70,7 @@ describe("webfetch tool adapter", () => {
 
     const result = await tool.execute({ url: 123 });
 
-    expect(result.ok).toBe(false);
+    expect(result.metadata.ok).toBe(false);
     expect(called).toBe(false);
   });
 
@@ -86,10 +80,66 @@ describe("webfetch tool adapter", () => {
     });
 
     expect(await tool.execute({ url: "https://example.com" })).toMatchObject({
-      ok: true,
-      output: "",
-      outcome: { status: "empty", progress: "none", code: "success" },
+      metadata: { ok: true, effect: "none" },
     });
+  });
+
+  test("projects only relevant HTML excerpts using the task query", async () => {
+    const tool = createWebFetchTool({
+      webFetch: async () => ({
+        ok: true,
+        code: "success",
+        content: `${"navigation ".repeat(2_000)}浙江大学紫金港校区设有游泳馆和游泳池。${"footer ".repeat(2_000)}`,
+        contentType: "text/html",
+      }),
+    });
+
+    const result = await tool.execute(
+      { url: "https://example.com/zju", stripHtml: true },
+      { evidenceQuery: "浙江大学 游泳馆" },
+    );
+
+    expect(String(result.content)).toContain("浙江大学紫金港校区设有游泳馆");
+    expect(String(result.content).length).toBeLessThan(16_385);
+    expect(result.metadata).toEqual({ ok: true, effect: "evidence" });
+  });
+
+  test("rejects HTML that only mentions part of the requested subject", async () => {
+    const tool = createWebFetchTool({
+      webFetch: async () => ({
+        ok: true,
+        code: "success",
+        content: "浙江大学历史、院系和校区介绍。",
+        contentType: "text/html",
+      }),
+    });
+
+    const result = await tool.execute(
+      { url: "https://example.com/zju", stripHtml: true },
+      { evidenceQuery: "浙江大学 游泳馆" },
+    );
+
+    expect(result.content).toBeUndefined();
+    expect(result.metadata).toEqual({ ok: true, effect: "none" });
+  });
+
+  test("prefers a search URL query over an abbreviated task query", async () => {
+    const tool = createWebFetchTool({
+      webFetch: async () => ({
+        ok: true,
+        code: "success",
+        content: "浙江工业大学朝晖校区游泳馆设有标准泳池。",
+        contentType: "text/html",
+      }),
+    });
+
+    const result = await tool.execute(
+      { url: "https://www.baidu.com/s?wd=浙江工业大学+游泳馆", stripHtml: true },
+      { evidenceQuery: "浙工大游泳馆" },
+    );
+
+    expect(String(result.content)).toContain("浙江工业大学朝晖校区游泳馆");
+    expect(result.metadata).toEqual({ ok: true, effect: "evidence" });
   });
 
   test("maps a domain cooldown to an explicit no-progress outcome", async () => {
@@ -105,14 +155,11 @@ describe("webfetch tool adapter", () => {
     });
 
     expect(await tool.execute({ url: "https://google.com" })).toEqual({
-      ok: false,
-      output: "",
-      error: "WEBFETCH_DOMAIN_COOLDOWN [google.com]: retry after 60s",
-      data: {
-        status: 429,
-        rateLimit: { domain: "google.com", waitedMs: 0, retryAfterMs: 60_000 },
+      metadata: {
+        ok: false,
+        effect: "none",
+        error: "WEBFETCH_DOMAIN_COOLDOWN [google.com]: retry after 60s",
       },
-      outcome: { status: "error", progress: "none", code: "domain_cooldown" },
     });
   });
 });

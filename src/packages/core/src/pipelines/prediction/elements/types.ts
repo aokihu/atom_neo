@@ -9,8 +9,6 @@ export type PredictionFlowState = {
   task: any;
   session: any;
   userMessage: string;
-  userContextMessages?: string;
-  assistantReference?: string;
   prediction?: IntentPredictionResult;
   error?: string;
   abortSignal?: AbortSignal;

@@ -7,18 +7,10 @@ export enum PermissionLevel {
   FULL = 2,
 }
 
-export type ToolGuardDecision = {
-  allowed: boolean;
-  reason: string;
-  message?: string;
-};
-
-export type ToolGuardState = Readonly<Record<string, ToolGuardDecision>>;
-
 export type ToolExecuteOptions = {
   abortSignal?: AbortSignal;
   sessionId?: string;
-  guardState?: ToolGuardState;
+  evidenceQuery?: string;
 };
 
 export type ToolDefinition = {
@@ -37,47 +29,23 @@ export type ToolContextInjection = {
   entry: Omit<ContextEntry, "revision">;
 };
 
-export type ToolOutcomeStatus =
-  | "success"
-  | "empty"
-  | "error"
-  | "blocked"
-  | "deferred"
-  | "cancelled";
+export type ToolEffect = "none" | "reference" | "evidence" | "state_changed";
 
-export type ToolProgress = "evidence" | "state_changed" | "none";
-
-export type ToolOutcome = {
-  status: ToolOutcomeStatus;
-  progress: ToolProgress;
-  evidenceWeight?: "primary" | "reference";
-  code?: string;
-};
+export type ToolResultMetadata =
+  | {
+      ok: true;
+      effect: ToolEffect;
+      contextInjection?: ToolContextInjection;
+      error?: never;
+    }
+  | {
+      ok: false;
+      effect: "none";
+      error: string;
+      contextInjection?: never;
+    };
 
 export type ToolResult = {
-  ok: boolean;
-  output: string;
-  error?: string;
-  data?: unknown;
-  outcome?: ToolOutcome;
-  contextInjection?: ToolContextInjection;
-  metadata?: {
-    tokensUsed?: number;
-    durationMs?: number;
-  };
+  content?: unknown;
+  metadata: ToolResultMetadata;
 };
-
-export function resolveToolOutcome(result: Pick<ToolResult, "ok" | "data" | "outcome">): ToolOutcome {
-  if (result.outcome) return result.outcome;
-  if (
-    result.ok
-    && typeof result.data === "object"
-    && result.data !== null
-    && (result.data as { status?: unknown }).status === "deferred"
-  ) {
-    return { status: "deferred", progress: "none" };
-  }
-  return result.ok
-    ? { status: "success", progress: "evidence" }
-    : { status: "error", progress: "none" };
-}

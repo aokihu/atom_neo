@@ -10,7 +10,7 @@ function makeTool(name: string, perm?: PermissionLevel): ToolDefinition {
     description: "test",
     source: "builtin",
     inputSchema: z.object({}),
-    execute: async () => ({ ok: true, output: "" }),
+    execute: async () => ({ metadata: { ok: true, effect: "none" } }),
     permission: perm,
   };
 }

@@ -17,11 +17,11 @@ collect-prompts (source)
 
 | 顺序 | Element | 职责 | mode 变化 |
 |------|---------|------|-----------|
-| 1 | `collect-prompts` | 从 Session 读取可见消息；standalone 只取最近两条 | `initial → streaming` |
-| 2 | `record-context` | 将 System、AGENTS、Skill、环境、TODO、Memory 摘要记录到 ContextService，同时生成去重后的 user messages | `streaming → context_recorded` |
+| 1 | `collect-prompts` | 按 Prediction 分类从 Session 选择历史，始终保留当前 User 原文 | `initial → streaming` |
+| 2 | `record-context` | 将 System、AGENTS、Skill、环境与 TODO 记录到 ContextService，同时生成去重后的 messages | `streaming → context_recorded` |
 | 3 | `apply-source-context` | 应用显式 Source Context，不读取 Tool 审计历史 | mode 不变 |
 | 4 | `collect-context` | 从 ContextService 创建不可变 TOON Snapshot | `context_recorded → formatted` |
-| 5 | `stream-llm` | 调用单 step AI SDK，手工执行 Tool Loop，更新 ToolGuard、Outcome 和 Context 投影 | `formatted → executing` |
+| 5 | `stream-llm` | 调用单 step AI SDK，手工执行 Tool Loop，更新治理 metadata 和 Context 投影 | `formatted → executing` |
 | 6 | `token-ratio` | 基于输入上限和输出保留预算计算占用比 | mode 不变 |
 | 7 | `check-follow-up` | 区分无计划续写和 TODO 续跑 | `executing → ready_to_finalize` |
 | 8 | `finalize` | 提交或释放 Snapshot，返回 chain / post-check 决策 | 返回 PipelineResult |
@@ -69,39 +69,34 @@ HTTP / WebSocket 在 Task 入队前已经把用户消息写入 Session。`record
 | workspace | `workspace-agents` | AGENTS compiler | pinned |
 | session / topic | `topic-skills` | SkillService | 随 Topic / Session |
 | task | `task-environment` | 当前时间、sandbox、TODO、预算 | Task |
-| task | `memory-summaries` | Prediction Memory 查询 | Task |
 | session / topic | Memory projection | `read_memory` 显式选择 | pinned 或 TTL |
 
 `collect-context` 只从 ContextService 获取 Snapshot，不再重复搜索 Memory 或拼装业务数据。
 
-## 4. ToolGuard 与 webfetch
+## 4. Tool 自主调用与循环保护
 
-所有工具都可以出现在工具列表中。AI SDK 只生成并校验 Tool Call，Atom 在执行前检查
-`webfetch` 前置发现流程：
+所有工具始终出现在工具列表中，由 LLM 决定调用顺序、参数与次数。Prediction 不预先执行
+Memory 查询，WebFetch 也没有 Memory/Skill 的框架前置门控。Prompt 明确要求 LLM 在
+WebFetch 前先查询 Memory 与 Skill；顺序由 LLM 遵守，框架不维护业务状态。
 
 ```text
-Agent calls webfetch
-  ├── 已有相关完整 Memory / Skill Context / 明确 URL → allow
-  ├── 尚未查询 Memory → block，提示 search_memory
-  ├── Memory 命中 Skill 线索 → block，提示 skill_load / skill_section
-  ├── Memory 为空但未检查 Skill → block，提示 skill_list
-  └── Memory / Skill 服务不可用或检查完成 → allow
+LLM Tool Call
+  → exact duplicate? block once and tell LLM to reassess
+  → otherwise execute Tool
+  → return the Tool Call + Tool Result to the next model step
+  → repeated no-result? add a warning, keep every Tool available
+  → execution limit reached? stop the Tool loop
 ```
 
-Memory 与 Skill 工具对所有 intent 可见，但能力发现链中的互斥前置工具由框架逐 step 收窄：
-`memory_search_required` 只开放 `search_memory`，`memory_review_required` 不再开放
-`search_memory`，`skill_search_required` 只开放 `skill_list`，`skill_load_required`
-只开放 `skill_load` / `skill_section`；这些前置阶段除 `intent` 外不开放其他业务工具。
-能力发现完成后恢复业务工具与 `webfetch`，但本轮已判定为空的发现工具不会重新开放。
-Guard 的拒绝结果由手工循环消费，原始工具函数不会运行，对应 Tool Call 也不会进入下一模型 step。
+框架不根据 `effect` 隐藏正常 Tool Result，不动态收窄 Tool，也不替 LLM决定查询是否相关。
+`metadata.effect` 只用于日志、Post 分析和无进展提醒。
 
 ### 工具结果生命周期
 
 - Tool schema 与 executor 分离；AI SDK 不自动执行 Tool，也不维护多 step Tool Loop。
-- `success/evidence` 与 `success/state_changed` 的 Call + Result 只投影到当前 Conversation 的下一 step。
-- `empty/error/blocked/deferred/cancelled` 的 Call + Result 整组丢弃；只有 Outcome 留在框架 Ledger 和审计记录。
-- MCP 成功结果按 `reference` evidence 投影到当前 Conversation，Conversation 结束后丢弃。
-- `search_history` / `read_history` 和 Memory traversal 的成功大文本最多保留给紧接着的 consumer step。
+- 每个已执行 Tool 的 Call + Result 都投影到当前 Conversation 后续 step，包括空结果与错误。
+- MCP 成功结果按 `reference` 投影到当前 Conversation，Conversation 结束后丢弃。
+- Tool Result 不自动写入 Topic/Session Context；Conversation 结束后只保留审计记录。
 - `read_memory` 只有显式传入 Context projection 参数时才成为 pinned 或 TTL Context。
 
 ### 手工 Tool Loop
@@ -111,17 +106,16 @@ streamText（单 step，schema-only tools）
   → 收集 Tool Calls
   → Ledger 预检 / 去重 / 预算
   → Atom ToolRunner 执行
-  → resolve ToolOutcome
-      ├─ progress → 投影 Call + Result，进入下一 step
-      └─ no progress → 丢弃 Call + Result，更新 Guard / Ledger
-  → 按 Guard 状态收窄下一 step 的 activeTools
+  → 返回 Tool Call + Tool Result 给下一模型 step
+  → metadata.effect 只更新 Ledger 计数
+  → 连续无进展只追加判断提示；Tool schema 保持开放
   → 无 Tool Call或框架停止
   → 只提交最终 Assistant 文本
 ```
 
-下一 step 的模型消息由 Atom 重新构建，不使用 AI SDK 自动累积的 `responseMessages`。这样工具结果
-是否进入 Context 由 Outcome 决定，而不是由 SDK 内部循环决定。若 `progress:none` 达到停止阈值且
-当前循环没有任何 evidence/state change，框架丢弃模型随后生成的未经验证断言，返回结构化的无证据停止说明。
+下一 step 的模型消息由 Atom 重新构建，不使用 AI SDK 自动累积的 `responseMessages`。Atom 保持
+Tool Call/Result 配对，但不筛选正常结果，也不丢弃模型最终文本。完全重复的 Tool Call 与执行总上限
+是仅有的强制循环边界。
 
 ## 5. 输出预算与压缩阈值
 

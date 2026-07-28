@@ -1,7 +1,7 @@
 # Session
 
 `message-policy.ts` 统一过滤失败 Tool Assistant 消息，Prediction、Conversation 与 Compact 不再各自解释
-DSML 或 `toolOutcomeSummary`。
+DSML 或 `toolEffectSummary`。
 
 - `context.ts`：内存中的 Session 状态、消息序号、TODO 与 Continuation。
 - `store.ts`：Session 缓存、恢复、挂起与淘汰。

@@ -1,21 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { resolveToolOutcome } from "./tool";
+import type { ToolResult } from "./tool";
 
-describe("resolveToolOutcome", () => {
-  test("preserves an explicit framework outcome", () => {
-    expect(resolveToolOutcome({
-      ok: true,
-      outcome: { status: "empty", progress: "none", code: "no_matches" },
-    })).toEqual({ status: "empty", progress: "none", code: "no_matches" });
+describe("ToolResult", () => {
+  test("keeps model content separate from framework metadata", () => {
+    const result: ToolResult = {
+      content: "verified fact",
+      metadata: { ok: true, effect: "evidence" },
+    };
+    expect(result.content).toBe("verified fact");
+    expect(result.metadata).toEqual({ ok: true, effect: "evidence" });
   });
 
-  test("recognizes legacy deferred guard results", () => {
-    expect(resolveToolOutcome({ ok: true, data: { status: "deferred" } }))
-      .toEqual({ status: "deferred", progress: "none" });
-  });
-
-  test("keeps legacy tools compatible without parsing output text", () => {
-    expect(resolveToolOutcome({ ok: true })).toEqual({ status: "success", progress: "evidence" });
-    expect(resolveToolOutcome({ ok: false })).toEqual({ status: "error", progress: "none" });
+  test("represents failures without model content", () => {
+    const result: ToolResult = {
+      metadata: { ok: false, effect: "none", error: "offline" },
+    };
+    expect(result).toEqual({
+      metadata: { ok: false, effect: "none", error: "offline" },
+    });
   });
 });

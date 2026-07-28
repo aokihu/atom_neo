@@ -13,6 +13,7 @@
 | `runtime-service.ts` | 运行时资源协调 |
 | `service-manager.ts` | 服务注册、启动与停止 |
 
-Memory 搜索只返回摘要；完整正文读取通过 `read_memory` 进入
+Memory 搜索只返回摘要；完整正文读取通过 `read_memory` 进入，并附带双向去重的关联节点数量，
+由 LLM 判断是否继续遍历。`traverse_memory` 同时探索入边和出边。读取正文会调用
 `MemoryService.recordRead()`，这是唯一增加真实使用分的路径。排名公式应保留在
 `memory-ranking.ts`，避免数据库操作与评分策略重复实现。

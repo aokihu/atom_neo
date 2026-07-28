@@ -2,7 +2,7 @@ import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { TodoItem } from "../../../session/context";
-import type { ToolOutcomeSummary } from "../../conversation/elements/types";
+import type { ToolEffectSummary } from "../../conversation/elements/types";
 import type { PostConversationFlowState } from "./types";
 
 type AssistantPart = {
@@ -10,23 +10,20 @@ type AssistantPart = {
   metadata?: Record<string, unknown>;
 };
 
-const emptyToolOutcomeSummary = (): ToolOutcomeSummary => ({
+const emptyToolEffectSummary = (): ToolEffectSummary => ({
   evidence: 0,
   referenceEvidence: 0,
   stateChanged: 0,
-  empty: 0,
-  error: 0,
-  blocked: 0,
-  deferred: 0,
-  cancelled: 0,
+  none: 0,
+  failed: 0,
 });
 
-function collectToolOutcomeSummary(parts: readonly AssistantPart[]): ToolOutcomeSummary {
-  const summary = emptyToolOutcomeSummary();
+function collectToolEffectSummary(parts: readonly AssistantPart[]): ToolEffectSummary {
+  const summary = emptyToolEffectSummary();
   for (const part of parts) {
-    const value = part.metadata?.toolOutcomeSummary;
+    const value = part.metadata?.toolEffectSummary;
     if (!value || typeof value !== "object") continue;
-    for (const key of Object.keys(summary) as Array<keyof ToolOutcomeSummary>) {
+    for (const key of Object.keys(summary) as Array<keyof ToolEffectSummary>) {
       const count = (value as Record<string, unknown>)[key];
       if (typeof count === "number" && Number.isFinite(count)) summary[key] += count;
     }
@@ -40,13 +37,13 @@ export function buildAssistantReview(parts: readonly AssistantPart[], todos: rea
   const metadata = parts.at(-1)?.metadata ?? {};
   const finishReason = typeof metadata.finishReason === "string" ? metadata.finishReason : "";
   const completeDetected = metadata.completeDetected === true;
-  const toolOutcomeSummary = collectToolOutcomeSummary(parts);
+  const toolEffectSummary = collectToolEffectSummary(parts);
   if (parts.length === 0) {
-    return { response: "", assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected, toolOutcomeSummary };
+    return { response: "", assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected, toolEffectSummary };
   }
 
   if (assistantLength + parts.length - 1 <= 2400 && todos.length === 0) {
-    return { response: parts.map(part => part.content).join("\n"), assistantLength, activeTodoCount: 0, finishReason, completeDetected, toolOutcomeSummary };
+    return { response: parts.map(part => part.content).join("\n"), assistantLength, activeTodoCount: 0, finishReason, completeDetected, toolEffectSummary };
   }
 
   const counts = Object.fromEntries(
@@ -70,7 +67,7 @@ export function buildAssistantReview(parts: readonly AssistantPart[], todos: rea
     "[Response Tail]",
     substringWellFormed(lastContent, Math.max(0, lastContent.length - 1300)),
   ].join("\n");
-  return { response, assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected, toolOutcomeSummary };
+  return { response, assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected, toolEffectSummary };
 }
 
 export class CollectInputElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
@@ -112,7 +109,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       activeTodoCount: review.activeTodoCount,
       finishReason: review.finishReason,
       completeDetected: review.completeDetected,
-      toolOutcomeSummary: review.toolOutcomeSummary,
+      toolEffectSummary: review.toolEffectSummary,
       taskIntent: prediction.intent ?? "conversation",
     });
 
@@ -129,7 +126,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       activeTodoCount: review.activeTodoCount,
       finishReason: review.finishReason,
       completeDetected: review.completeDetected,
-      toolOutcomeSummary: review.toolOutcomeSummary,
+      toolEffectSummary: review.toolEffectSummary,
     };
   }
 }

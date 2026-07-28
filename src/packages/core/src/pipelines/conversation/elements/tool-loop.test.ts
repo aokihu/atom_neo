@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildToolStepInstruction,
-  projectProgressToolMessages,
-  shouldDiscardUnverifiedFinal,
+  projectToolMessages,
   stripToolCallMarkup,
   toSchemaOnlyTools,
 } from "./tool-loop";
@@ -18,76 +17,64 @@ describe("manual tool loop context projection", () => {
     expect(tools.search.description).toBe("search");
   });
 
-  test("projects only calls with framework progress", () => {
+  test("projects every executed Tool result", () => {
     const calls = [
       { toolCallId: "ok-1", toolName: "search", input: { q: "useful" } },
       { toolCallId: "empty-1", toolName: "search", input: { q: "empty" } },
     ];
-    const messages = projectProgressToolMessages(calls, new Map([
+    const messages = projectToolMessages(calls, new Map([
       ["ok-1", {
         toolName: "search",
         input: calls[0]!.input,
-        output: "evidence",
-        outcome: { status: "success", progress: "evidence" },
+        content: "evidence",
+        metadata: { ok: true, effect: "evidence" },
       }],
       ["empty-1", {
         toolName: "search",
         input: calls[1]!.input,
-        output: "No results",
-        outcome: { status: "empty", progress: "none" },
+        metadata: { ok: true, effect: "none" },
       }],
     ]));
 
     expect(JSON.stringify(messages)).toContain("ok-1");
-    expect(JSON.stringify(messages)).not.toContain("empty-1");
-    expect(JSON.stringify(messages)).not.toContain("No results");
+    expect(JSON.stringify(messages)).toContain("empty-1");
   });
 
-  test("drops the whole batch when every outcome has no progress", () => {
+  test("projects framework errors to the model", () => {
     const calls = [{ toolCallId: "error-1", toolName: "webfetch", input: { url: "https://example.com" } }];
-    expect(projectProgressToolMessages(calls, new Map([
+    const messages = projectToolMessages(calls, new Map([
       ["error-1", {
         toolName: "webfetch",
         input: calls[0]!.input,
-        output: "timeout",
-        outcome: { status: "error", progress: "none" },
+        content: "",
+        metadata: { ok: false, effect: "none", error: "timeout" },
       }],
-    ]))).toEqual([]);
+    ]));
+
+    expect(JSON.stringify(messages)).toContain("error-1");
+    expect(JSON.stringify(messages)).toContain("timeout");
   });
 
-  test("uses framework state instead of raw failure output", () => {
+  test("warns without choosing the next Tool and stops only at the hard limit", () => {
     expect(buildToolStepInstruction({
-      noProgress: true,
-      webfetchGuardReason: "skill_search_required",
-      nextAction: "Call skill_list.",
-    })).toContain("skill_search_required");
+      consecutiveNoProgress: 2,
+      warningThreshold: 3,
+    })).toBe("");
+    const warning = buildToolStepInstruction({
+      consecutiveNoProgress: 3,
+      warningThreshold: 3,
+    });
+    expect(warning).toContain("Reassess");
+    expect(warning).not.toContain("skill_list");
     expect(buildToolStepInstruction({
-      noProgress: true,
-      webfetchGuardReason: "skill_search_required",
-      nextAction: "Call skill_list.",
-    })).toContain("Call skill_list.");
-    expect(buildToolStepInstruction({
-      noProgress: true,
-      stopReason: "consecutive_no_progress",
-    })).toContain("has stopped");
+      consecutiveNoProgress: 3,
+      warningThreshold: 3,
+      stopReason: "tool_call_limit",
+    })).toContain("execution limit");
   });
 
   test("removes provider tool-call markup from persisted Assistant text", () => {
     expect(stripToolCallMarkup("先查询。<｜｜DSML｜｜tool_calls>bad")).toBe("先查询。");
     expect(stripToolCallMarkup("<｜｜DSML｜｜tool_calls>bad")).toBe("");
-  });
-
-  test("discards a final assertion only when governance stopped without progress", () => {
-    expect(shouldDiscardUnverifiedFinal([
-      { status: "empty", progress: "none" },
-      { status: "error", progress: "none" },
-    ], "consecutive_no_progress")).toBe(true);
-    expect(shouldDiscardUnverifiedFinal([
-      { status: "success", progress: "evidence" },
-      { status: "error", progress: "none" },
-    ], "consecutive_no_progress")).toBe(false);
-    expect(shouldDiscardUnverifiedFinal([
-      { status: "empty", progress: "none" },
-    ])).toBe(false);
   });
 });

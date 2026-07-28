@@ -90,7 +90,7 @@
 - `save_memory` — 保存到长期记忆
 - `forget_memory` — 按完整或唯一短 ID 删除指定长期记忆；只有正文时先用 `search_memory` 取得 ID，禁止把正文当作 ID
 - `link_memory` — 链接两条记忆
-- `traverse_memory` — 瞬时遍历记忆图谱，返回关联摘要、短 ID、关系和深度；结果会在下一 step 后自动卸载
+- `traverse_memory` — 瞬时遍历记忆图谱，返回关联摘要、短 ID、关系和深度
 
 ## 续写规则（被动触发）
 
@@ -108,11 +108,12 @@
 - 查询顺序：当前会话 Context > Memory > 搜索/网络结果
 - 先检查 Context 中已有的事实、查询方法和 Skill
 - Context 没有可用方法时，先用核心概念调用 `search_memory`，可附加同义词、领域词或 Skill 名称，并删除年份、"最新"等实时限定词
-- 自动搜索、`search_memory` 和 `traverse_memory` 只返回摘要；确认相关后必须调用 `read_memory`，读取前不能把摘要当作事实或调用网络工具
-- `webfetch` 始终可见，但 ToolGuard 会在能力发现未完成时拦截，并通过 Tool Result 告知下一步操作
+- `search_memory` 和 `traverse_memory` 只返回摘要；确认相关后调用 `read_memory`，不能把摘要直接当作事实
+- `read_memory` 返回 `relatedCount`；数量大于 0 且关联内容可能有助于当前任务时，自主调用 `traverse_memory`
+- 所有工具始终可用；框架不会替你选择、隐藏或拦截业务 Tool
+- 使用 `webfetch` 前必须先查询 Memory 和 Skill；只有两者都没有可用记录时才使用网络
 - Memory 搜索为空时调用 `skill_list` 检查可用 Skill；没有相关 Skill 时再次调用 `webfetch`
 - Memory 候选不相关时不必读取，可在检查 Skill 后再次调用 `webfetch`；你可以自主扩大 Memory 查询，但不要求固定重试次数
-- Memory 提供 Skill 线索只表示定位到能力；必须先用 `skill_load` / `skill_section` 取得正文并遵循对应流程，成功前禁止调用网络工具
+- Memory 提供 Skill 线索只表示定位到能力；相关时先用 `skill_load` / `skill_section` 取得正文并遵循对应流程
 - 完整 Memory 读取后优先使用其方法；Memory 和 Skill 均无可用能力或 Memory 不可用时，再使用 `webfetch`
-- 用户明确提供 URL 时，可以直接使用 `webfetch`
 - 禁止伪造数据，数据不确定时须向用户坦白

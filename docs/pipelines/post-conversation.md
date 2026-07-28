@@ -41,7 +41,7 @@ type PostConversationFlowState = {
   predictedTaskIntent: string;
   stepCount: number;
   assistantParts: number;
-  toolOutcomeSummary: ToolOutcomeSummary;
+  toolEffectSummary: ToolEffectSummary;
   analysis?: AnalysisResult;
 };
 
@@ -89,7 +89,7 @@ initial
 
 - **门控**: 无 `apiKey`、无消息或分析结果时跳过，默认 `{ status: "satisfactory" }`
 - **System Prompt**: `resolvePrompt(PromptKey.ANALYZE_RESULT, ...)`
-- **User Prompt**: 用户请求（前 500 字符）+ Tool Outcome 统计 + AI 回复头尾声明（前 3000 字符）
+- **User Prompt**: 用户请求（前 500 字符）+ Tool effect 统计 + AI 回复头尾声明（前 3000 字符）
   + TODO/结束元数据 + 任务类型描述
 - 判断优先级固定为：User 请求 > primary evidence/stateChanged > MCP reference evidence > 完成元数据
   > Assistant 自述；MCP reference 只能辅助判断。

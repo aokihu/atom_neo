@@ -111,7 +111,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       shouldPostCheck,
       finishReason: input.finishReason,
       completeDetected: input.completeDetected,
-      toolOutcomeSummary: input.toolOutcomeSummary,
+      toolEffectSummary: input.toolEffectSummary,
     };
   }
 

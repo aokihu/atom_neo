@@ -18,15 +18,12 @@ describe("session message policy", () => {
       content: "我继续搜索",
       metadata: {
         completeDetected: false,
-        toolOutcomeSummary: {
+        toolEffectSummary: {
           evidence: 0,
           referenceEvidence: 0,
           stateChanged: 0,
-          empty: 1,
-          error: 0,
-          blocked: 1,
-          deferred: 1,
-          cancelled: 0,
+          none: 2,
+          failed: 1,
         },
       },
     })).toBe(true);
@@ -43,7 +40,13 @@ describe("session message policy", () => {
       content: "已验证回答",
       metadata: {
         completeDetected: false,
-        toolOutcomeSummary: { evidence: 1, error: 1 },
+        toolEffectSummary: {
+          evidence: 1,
+          referenceEvidence: 0,
+          stateChanged: 0,
+          none: 0,
+          failed: 1,
+        },
       },
     })).toBe(false);
   });

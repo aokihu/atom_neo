@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
 import type { SkillServiceLike } from "../../skills/types";
-import { TOOL_OUTCOMES } from "../outcome";
+import { toolResult } from "../outcome";
 
 export function createSkillTools(svc: SkillServiceLike): ToolDefinition[] {
   return [
@@ -22,8 +22,8 @@ function createSkillListTool(svc: SkillServiceLike): ToolDefinition {
     execute: async () => {
       const list = svc.list();
       return list.length > 0
-        ? { ok: true, output: JSON.stringify(list), outcome: TOOL_OUTCOMES.evidence }
-        : { ok: true, output: "[]", outcome: TOOL_OUTCOMES.empty };
+        ? toolResult.reference(list)
+        : toolResult.none();
     },
   };
 }
@@ -39,12 +39,8 @@ function createSkillLoadTool(svc: SkillServiceLike): ToolDefinition {
     execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name } = args as { name: string };
       const result = svc.load(name, opts?.sessionId);
-      if (!result.ok) return { ok: false, output: result.error ?? "", outcome: TOOL_OUTCOMES.error };
-      return {
-        ok: true,
-        output: `Loaded skill "${name}" with sections: ${result.sections?.join(", ")}`,
-        outcome: TOOL_OUTCOMES.stateChanged,
-      };
+      if (!result.ok) return toolResult.failure(result.error ?? `Unable to load skill "${name}"`);
+      return toolResult.stateChanged(`Loaded skill "${name}" with sections: ${result.sections?.join(", ")}`);
     },
   };
 }
@@ -61,8 +57,8 @@ function createSkillSectionTool(svc: SkillServiceLike): ToolDefinition {
     execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name, section } = args as { name: string; section: string };
       const ok = svc.loadSection(name, section, opts?.sessionId);
-      if (!ok) return { ok: false, output: `Section "${section}" not found in skill "${name}"`, outcome: TOOL_OUTCOMES.error };
-      return { ok: true, output: `Loaded section "${section}" from skill "${name}"`, outcome: TOOL_OUTCOMES.stateChanged };
+      if (!ok) return toolResult.failure(`Section "${section}" not found in skill "${name}"`);
+      return toolResult.stateChanged(`Loaded section "${section}" from skill "${name}"`);
     },
   };
 }
@@ -79,8 +75,8 @@ function createSkillRemoveSectionTool(svc: SkillServiceLike): ToolDefinition {
     execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name, section } = args as { name: string; section: string };
       const ok = svc.removeSection(name, section, opts?.sessionId);
-      if (!ok) return { ok: false, output: `Section "${section}" not found in skill "${name}"`, outcome: TOOL_OUTCOMES.error };
-      return { ok: true, output: `Removed section "${section}" from skill "${name}"`, outcome: TOOL_OUTCOMES.stateChanged };
+      if (!ok) return toolResult.failure(`Section "${section}" not found in skill "${name}"`);
+      return toolResult.stateChanged(`Removed section "${section}" from skill "${name}"`);
     },
   };
 }
@@ -96,7 +92,7 @@ function createSkillUnloadTool(svc: SkillServiceLike): ToolDefinition {
     execute: async (args: unknown, opts?: ToolExecuteOptions) => {
       const { name } = args as { name: string };
       svc.unload(name, opts?.sessionId);
-      return { ok: true, output: `Unloaded skill "${name}"`, outcome: TOOL_OUTCOMES.stateChanged };
+      return toolResult.stateChanged(`Unloaded skill "${name}"`);
     },
   };
 }

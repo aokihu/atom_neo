@@ -27,7 +27,7 @@ export default function NetworkServicePage({ content, title, description, catego
           headers={["层", "负责", "不负责"]}
           rows={[
             [<Badge color="blue">Tool Adapter</Badge>, "名称、Schema、权限、ToolResult 映射", "HTTP、限速、正文处理"],
-            [<Badge color="purple">Governance</Badge>, "前置条件、判重、预算、无进展停止", "网络并发与 429 冷却"],
+            [<Badge color="purple">Governance</Badge>, "安全边界、完全重复判定、预算、无进展提醒", "网络并发与 429 冷却"],
             [<Badge color="green">NetworkService</Badge>, "生命周期、共享调度器、日志、子功能入口", "AI SDK 类型、Prompt、Agent 决策"],
             [<Badge color="orange">WebFetch</Badge>, "URL、HTTP、Timeout/Abort、HTML 提取", "搜索、下载、流式传输"],
           ]}

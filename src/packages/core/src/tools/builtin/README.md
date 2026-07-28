@@ -3,7 +3,7 @@
 - `fs.ts` / `bash.ts`：Sandbox 文件与命令执行。
 - `memory.ts`：Memory 搜索、读取、保存、关系与删除。
 - `skill.ts`：Skill 发现与分段加载。
-- `webfetch.ts`：受 ToolGuard 前置规则保护，将 Schema 输入转交同进程 NetworkService 的薄适配器。
+- `webfetch.ts`：将 Schema 输入转交同进程 NetworkService 的薄适配器；ToolGuard 只保留安全检查。
 - `history.ts`：仅访问当前 Session 的原始归档搜索与分页读取。
 - `schedule.ts`：Hook/Schedule 管理。
 - `intent.ts` / `todowrite.ts`：Agent 意图与 TODO 状态工具。

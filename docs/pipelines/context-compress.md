@@ -44,7 +44,7 @@ compress-input (source)
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `compress-input` | source | 从 Session 原始消息中选择完整前缀；筛除无效 Tool Outcome，并标注 User/Assistant 事实权重 |
+| 1 | `compress-input` | source | 从 Session 原始消息中选择完整前缀；筛除无效 Tool Result，并标注 User/Assistant 事实权重 |
 | 2 | `compress-archive` | transform | 通过 `SessionPersistenceService` 可靠写入不可变 `message-{n}.jsonl`；失败时停止提交 |
 | 3 | `compress-summarize` | transform | 使用“旧累计摘要 + 本次可见消息”生成新的累计摘要 |
 | 4 | `compress-finalize` | sink | checkpoint latest/context/session，成功后按 `seq` 清理内存前缀；仅自动恢复场景续跑原 Conversation |
@@ -124,7 +124,7 @@ const compressResolved = runtime.getResolvedModel("basic") ?? resolved;
 Session 原始消息
   → archiveMessages：待归档的完整前缀
   → keepMessages：保留的完整后缀
-  → summaryMessages：archiveMessages 中可见且不含无效 Tool Outcome 的 user/assistant
+  → summaryMessages：archiveMessages 中可见且不含无效 Tool Result 的 user/assistant
 ```
 
 归档集合和删除集合必须是同一批原始消息，不能先过滤消息再按数量删除 Session 原数组。

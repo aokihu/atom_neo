@@ -40,17 +40,14 @@ export type {
   NetworkServiceLike,
 } from "./network";
 
-export { PermissionLevel, resolveToolOutcome } from "./tool";
+export { PermissionLevel } from "./tool";
 export type {
   ToolDefinition,
   ToolResult,
-  ToolOutcome,
-  ToolOutcomeStatus,
-  ToolProgress,
+  ToolEffect,
+  ToolResultMetadata,
   ToolExecuteOptions,
   ToolContextInjection,
-  ToolGuardDecision,
-  ToolGuardState,
 } from "./tool";
 
 export { PipelineResultType, PipelineEnqueueTransition } from "./pipeline";

@@ -18,8 +18,8 @@ const forget = createForgetMemoryTool();
 describe("saveMemoryTool", () => {
   test("returns error when no memory service", async () => {
     const result = await save.execute({ content: "test memory", tags: ["test"] });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("memory service not connected");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toContain("memory service not connected");
   });
 
   test("returns error when memory service save fails", async () => {
@@ -31,8 +31,8 @@ describe("saveMemoryTool", () => {
 
     const result = await tool.execute({ content: "test memory", tags: ["test"] });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("disk full");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toBe("disk full");
   });
 
   test("passes an optional summary to the memory service", async () => {
@@ -46,14 +46,31 @@ describe("saveMemoryTool", () => {
 
     const result = await tool.execute({ content: "full memory", summary: "short preview", tags: ["test"] });
 
-    expect(result.ok).toBe(true);
+    expect(result.metadata.ok).toBe(true);
     expect(savedArgs).toEqual(["full memory", ["test"], "short preview", {
       baseWeight: undefined,
       confidence: undefined,
       kind: undefined,
       pinned: undefined,
       supersedesId: undefined,
+      ttlSeconds: undefined,
     }]);
+  });
+
+  test("adds a hard expiry to realtime and temporary memories", async () => {
+    const options: Record<string, unknown>[] = [];
+    const tool = createSaveMemoryTool({
+      save: (_content: string, _tags: string[], _summary: string | undefined, value: Record<string, unknown>) => {
+        options.push(value);
+        return "abcdef123456";
+      },
+    });
+
+    await tool.execute({ content: "current weather", kind: "realtime_data" });
+    await tool.execute({ content: "temporary state", kind: "temporary_state" });
+
+    expect(options[0]?.ttlSeconds).toBe(6 * 60 * 60);
+    expect(options[1]?.ttlSeconds).toBe(7 * 24 * 60 * 60);
   });
 
   test("passes a superseded memory ID to the atomic save operation", async () => {
@@ -67,15 +84,15 @@ describe("saveMemoryTool", () => {
 
     const result = await tool.execute({ content: "new fact", supersedesId: "abc123" });
 
-    expect(result.ok).toBe(true);
+    expect(result.metadata.ok).toBe(true);
     expect(options.supersedesId).toBe("abc123");
   });
 });
 
 describe("searchMemoryTool", () => {
-  test("returns placeholder when no memory service", async () => {
+  test("returns a framework failure when no memory service is available", async () => {
     const result = await search.execute({ query: "test" });
-    expect(result.ok).toBe(true);
+    expect(result.metadata.ok).toBe(false);
   });
 
   test("returns short IDs with summaries but not full content", async () => {
@@ -90,13 +107,13 @@ describe("searchMemoryTool", () => {
 
     const result = await tool.execute({ query: "CODE=9528" });
 
-    expect(result.ok).toBe(true);
-    expect(result.output).toContain('<MemorySummary id="abcdef" tags="identifier">');
-    expect(result.output).toContain("Remembered identifier");
-    expect(result.output).not.toContain("CODE=9528 is a remembered identifier.");
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toContain('<MemorySummary id="abcdef" tags="identifier">');
+    expect(result.content).toContain("Remembered identifier");
+    expect(result.content).not.toContain("CODE=9528 is a remembered identifier.");
   });
 
-  test("asks for a non-overlapping retry when no memory matches", async () => {
+  test("returns no model content when no memory matches", async () => {
     let query = "";
     const tool = createSearchMemoryTool({
       search: (value: string) => {
@@ -108,14 +125,15 @@ describe("searchMemoryTool", () => {
     const result = await tool.execute({ query: "台风 最新 2026" });
 
     expect(query).toBe("台风 最新 2026");
-    expect(result.output).toContain("different, non-overlapping keywords");
+    expect(result.content).toBeUndefined();
+    expect(result.metadata).toEqual({ ok: true, effect: "none" });
   });
 });
 
 describe("readMemoryTool", () => {
   test("returns error when no memory service", async () => {
     const result = await read.execute({ id: "abc123" });
-    expect(result.ok).toBe(false);
+    expect(result.metadata.ok).toBe(false);
   });
 
   test("returns full content for a selected summary ID", async () => {
@@ -127,16 +145,17 @@ describe("readMemoryTool", () => {
         summary: "Remembered identifier",
         tags: ["identifier"],
       }),
+      countRelated: () => 2,
       recordRead: (id: string) => { recordedId = id; },
     });
 
     const result = await tool.execute({ id: "abcdef" });
 
-    expect(result.ok).toBe(true);
-    expect(result.output).toContain('<Memory id="abcdef" tags="identifier">');
-    expect(result.output).toContain("CODE=9528 is a remembered identifier.");
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toContain('<Memory id="abcdef" tags="identifier" relatedCount="2">');
+    expect(result.content).toContain("CODE=9528 is a remembered identifier.");
     expect(recordedId).toBe("abcdef1234567890");
-    expect(result.contextInjection).toBeUndefined();
+    expect(result.metadata.contextInjection).toBeUndefined();
   });
 
   test("requests a pinned session projection when explicitly selected", async () => {
@@ -154,7 +173,7 @@ describe("readMemoryTool", () => {
       injectToContext: { retention: "pinned" },
     });
 
-    expect(result.contextInjection).toEqual({
+    expect(result.metadata.contextInjection).toEqual({
       scope: "session",
       entry: {
         key: "memory:abcdef1234567890",
@@ -165,7 +184,7 @@ describe("readMemoryTool", () => {
         pinned: true,
         content: [{
           role: "assistant",
-          content: '<Memory id="abcdef" tags="workflow">\nPersistent workflow guidance.\n</Memory>',
+          content: '<Memory id="abcdef" tags="workflow" relatedCount="0">\nPersistent workflow guidance.\n</Memory>',
         }],
       },
     });
@@ -187,9 +206,9 @@ describe("readMemoryTool", () => {
       injectToContext: { retention: "ttl", ttlSeconds: 900 },
     });
 
-    const expiresAt = result.contextInjection?.entry.expiresAt;
-    expect(result.contextInjection?.scope).toBe("topic");
-    expect(result.contextInjection?.entry.pinned).toBeUndefined();
+    const expiresAt = result.metadata.contextInjection?.entry.expiresAt;
+    expect(result.metadata.contextInjection?.scope).toBe("topic");
+    expect(result.metadata.contextInjection?.entry.pinned).toBeUndefined();
     expect(expiresAt).toBeGreaterThanOrEqual(before + 900_000);
     expect(expiresAt).toBeLessThanOrEqual(Date.now() + 900_000);
   });
@@ -201,23 +220,23 @@ describe("readMemoryTool", () => {
       injectToContext: { retention: "ttl" },
     });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("ttlSeconds");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toContain("ttlSeconds");
   });
 
   test("returns error when the selected memory is missing", async () => {
     const tool = createReadMemoryTool({ getById: () => null });
     const result = await tool.execute({ id: "abc123" });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("Memory not found: abc123");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toBe("Memory not found: abc123");
   });
 });
 
 describe("traverseMemoryTool", () => {
-  test("returns placeholder when no memory service", async () => {
+  test("returns a framework failure when no memory service is available", async () => {
     const result = await traverse.execute({ startId: "test" });
-    expect(result.ok).toBe(true);
+    expect(result.metadata.ok).toBe(false);
   });
 
   test("returns summaries and IDs without exposing full content", async () => {
@@ -229,30 +248,24 @@ describe("traverseMemoryTool", () => {
         tags: ["workflow"],
         sourceId: "1234567890abcdef",
         relation: "depends_on",
+        direction: "outgoing",
         depth: 1,
       }],
     });
 
     const result = await tool.execute({ startId: "abcdef" });
 
-    expect(result.output).toContain('<MemorySummary id="abcdef" tags="workflow" sourceId="123456" relation="depends_on" depth="1">');
-    expect(result.output).toContain("Related workflow");
-    expect(result.output).not.toContain("private full memory body");
-    expect(result.data).toEqual([{
-      id: "abcdef1234567890",
-      summary: "Related workflow",
-      tags: ["workflow"],
-      sourceId: "1234567890abcdef",
-      relation: "depends_on",
-      depth: 1,
-    }]);
+    expect(result.content).toContain('<MemorySummary id="abcdef" tags="workflow" sourceId="123456" relation="depends_on" direction="outgoing" depth="1">');
+    expect(result.content).toContain("Related workflow");
+    expect(result.content).not.toContain("private full memory body");
+    expect(result.metadata).toEqual({ ok: true, effect: "reference" });
   });
 });
 
 describe("linkMemoryTool", () => {
-  test("returns ok when no memory service", async () => {
+  test("returns a framework failure when no memory service is available", async () => {
     const result = await link.execute({ source: "a", target: "b", relation: "relates_to" });
-    expect(result.ok).toBe(true);
+    expect(result.metadata.ok).toBe(false);
   });
 });
 
@@ -260,8 +273,8 @@ describe("forgetMemoryTool", () => {
   test("returns error when no memory service", async () => {
     const result = await forget.execute({ id: "abc123" });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("memory service not connected");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toContain("memory service not connected");
   });
 
   test("returns error when memory is missing", async () => {
@@ -271,8 +284,8 @@ describe("forgetMemoryTool", () => {
 
     const result = await tool.execute({ id: "abc123" });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("Memory not found: abc123");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toBe("Memory not found: abc123");
   });
 
   test("rejects memory content passed as an ID", async () => {
@@ -286,8 +299,8 @@ describe("forgetMemoryTool", () => {
 
     const result = await tool.execute({ id: "CODE=9528 is a remembered identifier." });
 
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("Memory ID must be a full or short hexadecimal ID");
+    expect(result.metadata.ok).toBe(false);
+    expect(result.metadata.error).toContain("Memory ID must be a full or short hexadecimal ID");
     expect(forgetCalled).toBe(false);
   });
 
@@ -298,7 +311,7 @@ describe("forgetMemoryTool", () => {
 
     const result = await tool.execute({ id: "abc123" });
 
-    expect(result.ok).toBe(true);
-    expect(result.output).toBe("Forgot memory: abc123");
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toBe("Forgot memory: abc123");
   });
 });

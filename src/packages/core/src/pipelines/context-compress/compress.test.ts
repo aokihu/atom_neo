@@ -29,7 +29,16 @@ describe("compress-input", () => {
       role: "assistant",
       content: "No matches",
       timestamp: 1,
-      metadata: { toolOutcome: { status: "empty", progress: "none" } },
+      metadata: {
+        completeDetected: false,
+        toolEffectSummary: {
+          evidence: 0,
+          referenceEvidence: 0,
+          stateChanged: 0,
+          none: 1,
+          failed: 0,
+        },
+      },
     })).toBe(false);
     expect(isSummaryEligibleMessage({
       role: "assistant",
@@ -37,15 +46,12 @@ describe("compress-input", () => {
       timestamp: 1,
       metadata: {
         completeDetected: false,
-        toolOutcomeSummary: {
+        toolEffectSummary: {
           evidence: 0,
           referenceEvidence: 0,
           stateChanged: 0,
-          empty: 1,
-          error: 0,
-          blocked: 0,
-          deferred: 2,
-          cancelled: 0,
+          none: 2,
+          failed: 1,
         },
       },
     })).toBe(false);
@@ -59,15 +65,12 @@ describe("compress-input", () => {
       content: "verified",
       timestamp: 1,
       metadata: {
-        toolOutcomeSummary: {
+        toolEffectSummary: {
           evidence: 1,
           referenceEvidence: 0,
           stateChanged: 0,
-          empty: 0,
-          error: 0,
-          blocked: 0,
-          deferred: 0,
-          cancelled: 0,
+          none: 0,
+          failed: 0,
         },
       },
     })).toBe("assistant_with_tool_evidence: verified");

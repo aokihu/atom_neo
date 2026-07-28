@@ -2,6 +2,9 @@ const QUERY_NOISE = new Set([
   "最新", "实时", "当前", "现在", "今日", "今天", "近期", "最近", "动态", "动向", "信息",
   "latest", "current", "recent", "realtime", "real-time", "today", "now", "info", "information", "update", "updates",
 ]);
+const CHINESE_QUERY_NOISE = ["查询一下", "查一下", "查询", "一下", ...QUERY_NOISE]
+  .filter((term) => /\p{Script=Han}/u.test(term))
+  .sort((left, right) => right.length - left.length);
 const MAX_SEARCH_TERMS = 16;
 
 export function containsSkillHint(text: string): boolean {
@@ -12,10 +15,14 @@ function getConceptTerms(query: string): string[] {
   const segments = query.trim().toLowerCase()
     .split(/[\s,，。！？!?;；:：、/\\|()[\]{}"'`]+/u)
     .filter(Boolean);
-  const hasConcept = segments.some((term) => !/^\d+$/.test(term) && !QUERY_NOISE.has(term));
-  const filtered = hasConcept
-    ? segments.filter((term) => !/^\d+$/.test(term) && !QUERY_NOISE.has(term))
-    : segments;
+  const concepts = segments
+    .filter((term) => !/^\d+$/.test(term) && !QUERY_NOISE.has(term))
+    .map((term) => CHINESE_QUERY_NOISE.reduce(
+      (cleaned, noise) => cleaned.replaceAll(noise, ""),
+      term,
+    ))
+    .filter(Boolean);
+  const filtered = concepts.length > 0 ? concepts : segments;
   return [...new Set(filtered)];
 }
 

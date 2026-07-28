@@ -4,7 +4,7 @@ import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
-import { parseIntentPrediction } from "./elements/predict-intent";
+import { IntentPredictionSchema } from "./elements/predict-intent";
 
 beforeAll(() => {
   registerPredictionElements();
@@ -12,22 +12,23 @@ beforeAll(() => {
 });
 
 describe("prediction pipeline elements", () => {
-  test("parses a core Memory query for information lookup", () => {
-    const prediction = parseIntentPrediction({
+  test("parses the retained Prediction classification fields", () => {
+    const prediction = IntentPredictionSchema.parse({
       difficulty: "easy",
-      model_profile: "basic",
+      modelProfile: "basic",
       intent: "question",
-      context_relevance: "standalone",
-      memory_query: " 台风 ",
+      contextRelevance: "standalone",
       topic: "knowledge.weather.typhoon",
       reasoning: "current information lookup",
     });
 
     expect(prediction.intent).toBe("question");
-    expect(prediction.memoryQuery).toBe("台风");
+    expect(prediction.modelProfile).toBe("basic");
+    expect(prediction.contextRelevance).toBe("standalone");
+    expect(prediction).not.toHaveProperty("memoryQuery");
   });
 
-  test("predict-input extracts user message from task payload", async () => {
+  test("predict-input preserves the exact user message from task payload", async () => {
     const bus = makeBus();
     const Ctor = resolveElement("predict-input");
     const el = new Ctor({
@@ -35,15 +36,15 @@ describe("prediction pipeline elements", () => {
       kind: "source",
       bus,
       session: null,
-      task: { payload: [{ data: "hello world" }] },
+      task: { payload: [{ data: "  hello world\n" }] },
     });
 
-    const result = await el.process({ mode: "initial", task: { payload: [{ data: "hello world" }] } });
+    const result = await el.process({ mode: "initial", task: { payload: [{ data: "  hello world\n" }] } });
     expect(result.mode).toBe("predicting");
-    expect(result.userMessage).toBe("hello world");
+    expect(result.userMessage).toBe("  hello world\n");
   });
 
-  test("predict-input builds context from session messages", async () => {
+  test("predict-input ignores session history", async () => {
     const bus = makeBus();
     const session = {
       sessionId: "s1",
@@ -65,55 +66,8 @@ describe("prediction pipeline elements", () => {
 
     const result = await el.process({ mode: "initial", task: { payload: [{ data: "你搜索了吗" }] } });
     expect(result.userMessage).toBe("你搜索了吗");
-    expect(result.userContextMessages).toContain("能够介绍一下杭州的景点吗");
-    expect(result.userContextMessages).not.toContain("好的，我来搜索一下");
-    expect(result.assistantReference).toContain("好的，我来搜索一下");
-  });
-
-  test("predict-input handles empty session for context", async () => {
-    const bus = makeBus();
-    const Ctor = resolveElement("predict-input");
-    const el = new Ctor({
-      name: "predict-input",
-      kind: "source",
-      bus,
-      session: { sessionId: "s1", messages: [] },
-      task: { payload: [{ data: "hello" }] },
-    });
-
-    const result = await el.process({ mode: "initial", task: { payload: [{ data: "hello" }] } });
-    expect(result.userMessage).toBe("hello");
-    expect(result.userContextMessages).toBe("");
-    expect(result.assistantReference).toBe("");
-  });
-
-  test("predict-input excludes failed Tool Assistant content", async () => {
-    const bus = makeBus();
-    const session = {
-      sessionId: "s1",
-      messages: [
-        { role: "user", content: "浙江大学有游泳馆吗" },
-        {
-          role: "assistant",
-          content: "<｜｜DSML｜｜tool_calls>webfetch",
-          metadata: {
-            completeDetected: false,
-            toolOutcomeSummary: { evidence: 0, stateChanged: 0, empty: 1, deferred: 2 },
-          },
-        },
-        { role: "user", content: "你再搜索一下" },
-      ],
-    };
-    const Ctor = resolveElement("predict-input");
-    const el = new Ctor({ name: "predict-input", kind: "source", bus, session, task: {} });
-
-    const result = await el.process({
-      mode: "initial",
-      task: { payload: [{ data: "你再搜索一下" }] },
-    });
-
-    expect(result.assistantReference).toBe("");
-    expect(result.userContextMessages).toContain("浙江大学有游泳馆吗");
+    expect(result).not.toHaveProperty("userContextMessages");
+    expect(result).not.toHaveProperty("assistantReference");
   });
 
   test("predict-input handles empty payload", async () => {
@@ -153,7 +107,7 @@ describe("prediction pipeline elements", () => {
     expect(result.mode).toBe("routing");
     expect(result.prediction).toBeDefined();
     expect(result.prediction!.difficulty).toBe("medium");
-    expect(result.prediction!.memoryQuery).toBe("");
+    expect(result.prediction).not.toHaveProperty("memoryQuery");
   });
 
   test("predict-intent falls back on empty message", async () => {
@@ -196,7 +150,7 @@ describe("prediction pipeline elements", () => {
       task: { id: "t1", chatId: "c1", payload: [{ type: "text", data: "hello" }] },
       session,
       userMessage: "hello",
-      prediction: { difficulty: "mygod", modelProfile: "advanced", intent: "instruction", contextRelevance: "standalone", memoryQuery: "", topic: "code.test", reasoning: "needs shell" },
+      prediction: { difficulty: "mygod", modelProfile: "advanced", intent: "instruction", contextRelevance: "standalone", topic: "code.test", reasoning: "needs shell" },
     });
 
     expect(result.type).toBe("complete");
@@ -264,7 +218,7 @@ describe("prediction pipeline elements", () => {
       task: { id: "t1", chatId: "c1" },
       session,
       userMessage: "new task",
-      prediction: { difficulty: "easy", modelProfile: "fast", intent: "conversation", contextRelevance: "standalone", memoryQuery: "", topic: "new", reasoning: "changed" },
+      prediction: { difficulty: "easy", modelProfile: "basic", intent: "conversation", contextRelevance: "standalone", topic: "new", reasoning: "changed" },
     });
 
     expect(cleared).toEqual(["s1"]);

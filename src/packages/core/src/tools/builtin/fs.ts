@@ -4,7 +4,7 @@ import { PermissionLevel } from "@atom-neo/shared";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { readdir, stat, cp, rename } from "node:fs/promises";
 import { resolve, dirname, relative } from "node:path";
-import { TOOL_OUTCOMES } from "../outcome";
+import { toolResult } from "../outcome";
 
 function createSandbox(sandbox: string) {
   const root = resolve(sandbox);
@@ -36,7 +36,7 @@ export function createReadTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const content = readFileSync(sb.sp(p.filepath), "utf-8");
         const lines = content.split("\n");
@@ -44,9 +44,9 @@ export function createReadTool(sb: Sandbox): ToolDefinition {
         const end = p.limit ? start + p.limit : undefined;
         const output = lines.slice(start, end).join("\n");
         return output
-          ? { ok: true, output, outcome: TOOL_OUTCOMES.evidence }
-          : { ok: true, output: "(empty)", outcome: TOOL_OUTCOMES.empty };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+          ? toolResult.evidence(output)
+          : toolResult.none();
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
   };
@@ -59,13 +59,13 @@ export function createWriteTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const resolved = sb.sp(p.filepath);
         if (!existsSync(dirname(resolved))) mkdirSync(dirname(resolved), { recursive: true });
         writeFileSync(resolved, p.content, "utf-8");
-        return { ok: true, output: `Wrote ${p.content.length} bytes to ${p.filepath}`, outcome: TOOL_OUTCOMES.stateChanged };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+        return toolResult.stateChanged(`Wrote ${p.content.length} bytes to ${p.filepath}`);
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.FILE_WRITE,
   };
@@ -78,14 +78,14 @@ export function createLsTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const entries = await readdir(sb.sp(p.path), { withFileTypes: true });
         const result = entries.map(e => `${e.isDirectory() ? "d" : "-"} ${e.name}`).join("\n");
         return result
-          ? { ok: true, output: result, data: { count: entries.length }, outcome: TOOL_OUTCOMES.evidence }
-          : { ok: true, output: "(empty)", data: { count: 0 }, outcome: TOOL_OUTCOMES.empty };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+          ? toolResult.evidence(result)
+          : toolResult.none();
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
   };
@@ -98,7 +98,7 @@ export function createTreeTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const lines: string[] = [];
         async function walk(dir: string, prefix: string, depth: number) {
@@ -114,9 +114,9 @@ export function createTreeTool(sb: Sandbox): ToolDefinition {
         }
         await walk(sb.sp(p.path), "", 0);
         return lines.length > 0
-          ? { ok: true, output: lines.join("\n"), outcome: TOOL_OUTCOMES.evidence }
-          : { ok: true, output: p.path, outcome: TOOL_OUTCOMES.empty };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+          ? toolResult.evidence(lines.join("\n"))
+          : toolResult.none();
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
   };
@@ -129,7 +129,7 @@ export function createGrepTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const target = sb.sp(p.path);
         const results: string[] = [];
@@ -156,9 +156,9 @@ export function createGrepTool(sb: Sandbox): ToolDefinition {
           }
         }
         return results.length > 0
-          ? { ok: true, output: results.slice(0, 100).join("\n"), data: { matchCount: results.length }, outcome: TOOL_OUTCOMES.evidence }
-          : { ok: true, output: "No matches", data: { matchCount: 0 }, outcome: TOOL_OUTCOMES.empty };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+          ? toolResult.evidence(results.slice(0, 100).join("\n"))
+          : toolResult.none();
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
   };
@@ -171,11 +171,11 @@ export function createCpTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         await cp(sb.sp(p.source), sb.sp(p.dest), { recursive: true });
-        return { ok: true, output: `Copied ${p.source} → ${p.dest}`, outcome: TOOL_OUTCOMES.stateChanged };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+        return toolResult.stateChanged(`Copied ${p.source} → ${p.dest}`);
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.FILE_WRITE,
   };
@@ -188,11 +188,11 @@ export function createMvTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         await rename(sb.sp(p.source), sb.sp(p.dest));
-        return { ok: true, output: `Moved ${p.source} → ${p.dest}`, outcome: TOOL_OUTCOMES.stateChanged };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+        return toolResult.stateChanged(`Moved ${p.source} → ${p.dest}`);
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.FILE_WRITE,
   };
@@ -208,7 +208,7 @@ export function createGlobTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const glob = new Bun.Glob(p.pattern);
         const results: string[] = [];
@@ -220,9 +220,9 @@ export function createGlobTool(sb: Sandbox): ToolDefinition {
         }
         results.sort();
         return results.length > 0
-          ? { ok: true, output: results.join("\n"), data: { matchCount: results.length }, outcome: TOOL_OUTCOMES.evidence }
-          : { ok: true, output: "No matches", data: { matchCount: 0 }, outcome: TOOL_OUTCOMES.empty };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+          ? toolResult.evidence(results.join("\n"))
+          : toolResult.none();
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
   };
@@ -239,22 +239,22 @@ export function createEditTool(sb: Sandbox): ToolDefinition {
     source: "builtin", inputSchema: schema,
     execute: async (args) => {
       const p = parse(schema, args);
-      if (!p) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
+      if (!p) return toolResult.failure("Invalid input");
       try {
         const resolved = sb.sp(p.filepath);
         const content = readFileSync(resolved, "utf-8");
         const idx = content.indexOf(p.oldString);
         if (idx === -1) {
-          return { ok: false, output: "", error: "oldString not found in file", outcome: TOOL_OUTCOMES.error };
+          return toolResult.failure("oldString not found in file");
         }
         const secondIdx = content.indexOf(p.oldString, idx + 1);
         if (secondIdx !== -1) {
-          return { ok: false, output: "", error: "oldString found multiple times in file. Provide larger string with more surrounding context to disambiguate.", outcome: TOOL_OUTCOMES.error };
+          return toolResult.failure("oldString found multiple times in file. Provide larger string with more surrounding context to disambiguate.");
         }
         const edited = content.slice(0, idx) + p.newString + content.slice(idx + p.oldString.length);
         writeFileSync(resolved, edited, "utf-8");
-        return { ok: true, output: `Replaced 1 occurrence in ${p.filepath}`, outcome: TOOL_OUTCOMES.stateChanged };
-      } catch (err) { return { ok: false, output: "", error: String(err), outcome: TOOL_OUTCOMES.error }; }
+        return toolResult.stateChanged(`Replaced 1 occurrence in ${p.filepath}`);
+      } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.FILE_WRITE,
   };

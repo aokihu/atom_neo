@@ -1,9 +1,27 @@
-import type { ToolOutcome } from "@atom-neo/shared";
+import type { ToolContextInjection, ToolEffect, ToolResult } from "@atom-neo/shared";
 
-export const TOOL_OUTCOMES = {
-  evidence: { status: "success", progress: "evidence" },
-  stateChanged: { status: "success", progress: "state_changed" },
-  empty: { status: "empty", progress: "none" },
-  error: { status: "error", progress: "none" },
-  cancelled: { status: "cancelled", progress: "none" },
-} as const satisfies Record<string, ToolOutcome>;
+function success(
+  effect: ToolEffect,
+  content?: unknown,
+  contextInjection?: ToolContextInjection,
+): ToolResult {
+  return {
+    ...(content === undefined ? {} : { content }),
+    metadata: {
+      ok: true,
+      effect,
+      ...(contextInjection ? { contextInjection } : {}),
+    },
+  };
+}
+
+export const toolResult = {
+  evidence: (content: unknown) => success("evidence", content),
+  reference: (content: unknown, contextInjection?: ToolContextInjection) =>
+    success("reference", content, contextInjection),
+  stateChanged: (content?: unknown) => success("state_changed", content),
+  none: () => success("none"),
+  failure: (error: string): ToolResult => ({
+    metadata: { ok: false, effect: "none", error },
+  }),
+};

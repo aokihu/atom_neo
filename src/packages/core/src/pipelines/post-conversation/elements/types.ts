@@ -1,4 +1,4 @@
-import type { ToolOutcomeSummary } from "../../conversation/elements/types";
+import type { ToolEffectSummary } from "../../conversation/elements/types";
 
 export type PostConversationMode = "initial" | "analyzing" | "acting";
 
@@ -25,7 +25,7 @@ export type PostConversationFlowState = {
   activeTodoCount: number;
   finishReason: string;
   completeDetected: boolean;
-  toolOutcomeSummary: ToolOutcomeSummary;
+  toolEffectSummary: ToolEffectSummary;
   analysis?: AnalysisResult;
   abortSignal?: AbortSignal;
 };

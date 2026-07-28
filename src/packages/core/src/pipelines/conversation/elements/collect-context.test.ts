@@ -14,10 +14,10 @@ function makeContextService(bus: ReturnType<typeof makeBus>) {
   return service;
 }
 
-function makeSession(memoryQuery: string) {
+function makeSession() {
   return {
     sessionId: "s1",
-    pendingPrediction: { difficulty: "easy", memoryQuery },
+    pendingPrediction: { difficulty: "easy" },
     tokenUsage: { total: 0 },
     currentTopic: "knowledge.weather.typhoon",
   };
@@ -30,7 +30,6 @@ function rows(snapshot?: ContextSnapshot): Array<Record<string, unknown>> {
 
 async function buildSnapshot(params: {
   session?: any;
-  memory?: any;
   taskIntent?: string;
   getCompiledPrompt?: () => string;
   skillService?: any;
@@ -55,62 +54,18 @@ async function buildSnapshot(params: {
 }
 
 describe("conversation context pipeline", () => {
-  test("records Prediction Memory summaries as untrusted messages", async () => {
-    let searchQuery = "";
-    const memory = {
-      search: async (query: string) => {
-        searchQuery = query;
-        return [{
-          id: "abcdef123456",
-          content: "查询台风信息时使用 Typhoon Skill。",
-          summary: "台风查询方法",
-          tags: ["skill", "typhoon"],
-        }];
-      },
-    };
+  test("does not add automatic Memory results to Context", async () => {
     const { result } = await buildSnapshot(
-      { memory, session: makeSession("台风"), taskIntent: "conversation" },
+      { session: makeSession(), taskIntent: "conversation" },
       { mode: "streaming", task: { id: "t1" } },
     );
 
-    expect(searchQuery).toBe("台风");
-    expect(result.memorySearchStatus).toBe("found");
-    const memoryRow = rows(result.contextSnapshot).find(row => row.source === "memory");
-    const snapshotText = String(memoryRow?.content ?? "");
-    expect(memoryRow?.trust).toBe("untrusted");
-    expect(snapshotText).toContain('<MemorySummary id="abcdef" tags="skill,typhoon">');
-    expect(snapshotText).toContain("台风查询方法");
-    expect(snapshotText).not.toContain("Typhoon Skill");
-  });
-
-  test("records an unavailable Memory search without failing the pipeline", async () => {
-    const bus = makeBus();
-    const events: Record<string, unknown>[] = [];
-    bus.on(BusEvents.Element.Data, event => events.push(event.payload));
-    const { result } = await buildSnapshot({
-      memory: { search: async () => { throw new Error("memory unavailable"); } },
-      session: makeSession("台风"),
-    }, { mode: "streaming", task: { id: "t1" } }, bus);
-
-    expect(result.memorySearchAttempted).toBe(true);
-    expect(result.memorySearchStatus).toBe("unavailable");
-    expect(events.some(event => event.step === "memory-search-error")).toBe(true);
-  });
-
-  test("skips Memory when Prediction has no query", async () => {
-    let called = false;
-    const { result } = await buildSnapshot({
-      memory: { search: async () => { called = true; return []; } },
-      session: makeSession(""),
-    }, { mode: "streaming", task: { id: "t1" } });
-
-    expect(called).toBe(false);
-    expect(result.memorySearchStatus).toBe("not_started");
+    expect(rows(result.contextSnapshot).some(row => row.source === "memory")).toBe(false);
   });
 
   test("context-collect only reads the service and does not consume one-shot entries", async () => {
     const session = new SessionContext("s1");
-    session.pendingPrediction = { difficulty: "easy", memoryQuery: "" };
+    session.pendingPrediction = { difficulty: "easy" };
     session.resetForNewTopic("topic-a");
     const bus = makeBus();
     const contextService = makeContextService(bus);
@@ -145,7 +100,7 @@ describe("conversation context pipeline", () => {
 
   test("removes legacy tool history before compiling a new snapshot", async () => {
     const session = new SessionContext("s1");
-    session.pendingPrediction = { difficulty: "easy", memoryQuery: "" };
+    session.pendingPrediction = { difficulty: "easy" };
     const bus = makeBus();
     const contextService = makeContextService(bus);
     contextService.put({
@@ -174,7 +129,7 @@ describe("conversation context pipeline", () => {
 
   test("compiles all matching scopes into one immutable lean snapshot", async () => {
     const session = new SessionContext("s1");
-    session.pendingPrediction = { difficulty: "easy", memoryQuery: "" };
+    session.pendingPrediction = { difficulty: "easy" };
     const { result } = await buildSnapshot({
       session,
       getCompiledPrompt: () => "workspace rules",
@@ -202,7 +157,7 @@ describe("conversation context pipeline", () => {
   });
 
   test("does not duplicate a user message already checkpointed in the session", async () => {
-    const { result } = await buildSnapshot({ session: makeSession("") }, {
+    const { result } = await buildSnapshot({ session: makeSession() }, {
       mode: "streaming",
       task: { id: "t1", payload: [{ data: "current request" }] },
       prompts: [{ role: "user", content: "current request" }],

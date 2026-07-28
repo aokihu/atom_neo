@@ -6,15 +6,12 @@ describe("buildAssistantReview", () => {
     const review = buildAssistantReview([{
       content: "short answer",
       metadata: {
-        toolOutcomeSummary: {
+        toolEffectSummary: {
           evidence: 1,
           referenceEvidence: 2,
           stateChanged: 0,
-          empty: 2,
-          error: 0,
-          blocked: 0,
-          deferred: 0,
-          cancelled: 0,
+          none: 2,
+          failed: 0,
         },
       },
     }]);
@@ -22,7 +19,7 @@ describe("buildAssistantReview", () => {
     expect(review.response).toBe("short answer");
     expect(review.assistantLength).toBe(12);
     expect(review.activeTodoCount).toBe(0);
-    expect(review.toolOutcomeSummary).toMatchObject({ evidence: 1, referenceEvidence: 2, empty: 2 });
+    expect(review.toolEffectSummary).toMatchObject({ evidence: 1, referenceEvidence: 2, none: 2 });
   });
 
   test("keeps the head, tail, TODO state, and finish metadata for long output", () => {

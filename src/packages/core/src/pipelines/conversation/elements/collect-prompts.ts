@@ -4,6 +4,18 @@ import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 import { isPromptEligibleMessage } from "../../../session/message-policy";
 
+export function selectPromptMessages<T extends { role: string }>(
+  messages: readonly T[],
+  contextRelevance: string,
+): T[] {
+  if (contextRelevance === "standalone") {
+    const currentUser = [...messages].reverse().find(message => message.role === "user");
+    return currentUser ? [currentUser] : [];
+  }
+  if (contextRelevance === "follow_up") return messages.slice(-3);
+  return [...messages];
+}
+
 export class CollectPromptsElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #session: any;
   #contextRelevance: string;
@@ -26,7 +38,7 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
     const allMsgs = this.#session.messages ?? [];
     const visibleMsgs = allMsgs.filter((m: any) => isPromptEligibleMessage(m));
     this.report(BusEvents.Element.Data, { step: "session-state", totalMsgs: allMsgs.length, visibleMsgs: visibleMsgs.length, contextRelevance: this.#contextRelevance });
-    const limitedMsgs = this.#contextRelevance === "standalone" ? visibleMsgs.slice(-2) : visibleMsgs;
+    const limitedMsgs = selectPromptMessages(visibleMsgs, this.#contextRelevance);
 
     const messages = limitedMsgs.map((m: any) => {
       const msg: any = { role: m.role, content: m.content };

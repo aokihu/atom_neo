@@ -40,10 +40,12 @@ describe("session history tools", () => {
     const hidden = await search.execute({ query: "internal" }, { sessionId: "s1" });
     const other = await search.execute({ query: "exact" }, { sessionId: "s2" });
 
-    expect(result.ok).toBe(true);
-    expect(result.output).toContain("message-000001");
-    expect(hidden.output).toBe("No matching session history.");
-    expect(other.output).toBe("No matching session history.");
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toContain("message-000001");
+    expect(hidden.content).toBeUndefined();
+    expect(hidden.metadata).toEqual({ ok: true, effect: "none" });
+    expect(other.content).toBeUndefined();
+    expect(other.metadata).toEqual({ ok: true, effect: "none" });
   });
 
   test("prefers an immutable archive when latest contains the same message", async () => {
@@ -51,8 +53,8 @@ describe("session history tools", () => {
     persistence.checkpoint(session, "message");
 
     const result = await search.execute({ query: "exact" }, { sessionId: session.sessionId });
-    expect(result.output).toContain('archiveId="message-000001"');
-    expect(result.output).not.toContain('archiveId="message-latest"');
+    expect(result.content).toContain('archiveId="message-000001"');
+    expect(result.content).not.toContain('archiveId="message-latest"');
   });
 
   test("rejects physical paths and reads a bounded archive", async () => {
@@ -60,10 +62,10 @@ describe("session history tools", () => {
     const invalid = await read.execute({ archiveId: "../../session.json" }, { sessionId: "s1" });
     const result = await read.execute({ archiveId: "message-000001", limit: 1 }, { sessionId: "s1" });
 
-    expect(invalid.ok).toBe(false);
-    expect(result.ok).toBe(true);
-    expect(result.output).toContain("exact weather decision");
-    expect(result.output).not.toContain("internal");
+    expect(invalid.metadata.ok).toBe(false);
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toContain("exact weather decision");
+    expect(result.content).not.toContain("internal");
   });
 
   test("pages through a long Unicode message without losing text", async () => {
@@ -84,9 +86,10 @@ describe("session history tools", () => {
         { archiveId, fromSeq: 1, toSeq: 1, offset, limit: 1 },
         { sessionId: session.sessionId },
       );
-      expect(result.ok).toBe(true);
-      expect(result.output.isWellFormed()).toBe(true);
-      const lines = result.output.split("\n").map(line => JSON.parse(line));
+      expect(result.metadata.ok).toBe(true);
+      const content = String(result.content);
+      expect(content.isWellFormed()).toBe(true);
+      const lines = content.split("\n").map((line: string) => JSON.parse(line));
       restored += lines.find(line => line.content !== undefined)?.content ?? "";
       const cursor = lines.find(line => line.type === "history_cursor")?.next;
       if (!cursor) break;
@@ -113,8 +116,8 @@ describe("session history tools", () => {
 
     for (let page = 0; page < 3; page++) {
       const result = await read.execute(args, { sessionId: session.sessionId });
-      expect(result.ok).toBe(true);
-      const lines = result.output.split("\n").map(line => JSON.parse(line));
+      expect(result.metadata.ok).toBe(true);
+      const lines = String(result.content).split("\n").map((line: string) => JSON.parse(line));
       restored.push(...lines.flatMap(line => line.seq === undefined ? [] : [line.seq]));
       const cursor = lines.find(line => line.type === "history_cursor")?.next;
       if (!cursor) break;
@@ -140,17 +143,17 @@ describe("session history tools", () => {
       { archiveId: "message-latest", fromSeq: 1, toSeq: 30, limit: 20 },
       { sessionId: session.sessionId },
     );
-    const cursor = first.output.split("\n")
-      .map(line => JSON.parse(line))
-      .find(line => line.type === "history_cursor")?.next;
+    const cursor = String(first.content).split("\n")
+      .map((line: string) => JSON.parse(line))
+      .find((line: any) => line.type === "history_cursor")?.next;
     expect(cursor.checkpointRevision).toBe(1);
 
     session.addMessage({ role: "assistant", content: "changed", timestamp: 31, visible: true });
     persistence.checkpoint(session, "message");
     const second = await read.execute(cursor, { sessionId: session.sessionId });
 
-    expect(second.ok).toBe(false);
-    expect(second.error).toBe("History cursor expired");
+    expect(second.metadata.ok).toBe(false);
+    expect(second.metadata.error).toBe("History cursor expired");
   });
 
   test("binds the first latest read to the searched checkpoint and exact anchor", async () => {
@@ -168,8 +171,8 @@ describe("session history tools", () => {
     const read = tools.find(tool => tool.name === "read_history")!;
 
     const found = await search.execute({ query: "message 1" }, { sessionId: session.sessionId });
-    expect(found.output).toContain('archiveId="message-latest"');
-    expect(found.output).toContain('checkpointRevision="1"');
+    expect(found.content).toContain('archiveId="message-latest"');
+    expect(found.content).toContain('checkpointRevision="1"');
 
     persistence.archiveMessages(session.sessionId, session.messages.slice(0, 2));
     session.removeMessages([1, 2]);
@@ -179,8 +182,8 @@ describe("session history tools", () => {
       { sessionId: session.sessionId },
     );
 
-    expect(stale.ok).toBe(false);
-    expect(stale.error).toBe("History cursor expired");
+    expect(stale.metadata.ok).toBe(false);
+    expect(stale.metadata.error).toBe("History cursor expired");
   });
 
   test("rejects missing anchors, reversed ranges, and unsafe offsets", async () => {
@@ -218,11 +221,11 @@ describe("session history tools", () => {
       { sessionId: session.sessionId },
     );
 
-    expect(missing.error).toBe("History cursor expired");
-    expect(unanchored.error).toBe("Invalid input");
-    expect(reversed.error).toBe("Invalid input");
-    expect(splitPair.error).toBe("Invalid history offset");
-    expect(beyond.error).toBe("Invalid history offset");
-    expect(atEnd.error).toBe("Invalid history offset");
+    expect(missing.metadata.error).toBe("History cursor expired");
+    expect(unanchored.metadata.error).toBe("Invalid input");
+    expect(reversed.metadata.error).toBe("Invalid input");
+    expect(splitPair.metadata.error).toBe("Invalid history offset");
+    expect(beyond.metadata.error).toBe("Invalid history offset");
+    expect(atEnd.metadata.error).toBe("Invalid history offset");
   });
 });

@@ -19,32 +19,33 @@ export default function ContextOutcomeGovernancePage({
 
       <Section title="一个结果，四个不同去向">
         <CodeBlock lang="text" code={`ToolResult
-  ├─ conversation step   仅 progress 结果投影给模型
-  ├─ ToolCallLedger      结构化 outcome，不注入模型
+  ├─ conversation step   所有已执行结果均投影
+  ├─ ToolCallLedger      消费 metadata，不注入模型
   ├─ Session audit       供日志和 TUI 诊断
   └─ ContextService      只有显式 contextInjection`} />
-        <Callout type="info" title="丢弃不等于失明">
-          error、empty 和 blocked 的 Call + Result 会整组从模型消息中删除；框架仍保留 Outcome、
-          fingerprint 和 Guard 状态，并用最小 step instruction 与逐步收窄的 activeTools 控制下一步。
+        <Callout type="info" title="当前轮完整，跨轮克制">
+          失败和 effect:none 的 Call + Result 也会返回当前 Conversation；Conversation 结束后，
+          普通 Tool Result 不自动进入 Topic/Session Context。所有 Tool 始终开放，Memory 与 Skill
+          的优先顺序由 Prompt 要求 LLM 遵守。
         </Callout>
       </Section>
 
-      <Section title="框架可识别的 Outcome">
+      <Section title="最小 ToolResult">
         <ComparisonTable
-          headers={["状态", "进度", "当前循环", "跨轮 Context"]}
+          headers={["effect", "含义", "当前循环", "跨轮 Context"]}
           rows={[
-            [<Badge color="green">success</Badge>, "evidence / state_changed", "保留", "仅显式 Injection"],
-            [<Badge color="orange">empty</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
-            [<Badge color="red">error</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
-            [<Badge color="purple">blocked / deferred</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
-            [<Badge color="blue">cancelled</Badge>, "none", "Call + Result 整组丢弃", "丢弃"],
+            [<Badge color="green">evidence</Badge>, "主要证据", "投影 content", "仅显式 Injection"],
+            [<Badge color="purple">reference</Badge>, "MCP / Memory 当前轮参考", "投影 content", "默认丢弃"],
+            [<Badge color="blue">state_changed</Badge>, "状态变更", "按需投影 content", "仅显式 Injection"],
+            [<Badge color="orange">none</Badge>, "没有可用结果", "投影空结果", "不持久化"],
           ]}
         />
-        <CodeBlock lang="ts" code={`type ToolOutcome = {
-  status: "success" | "empty" | "error" | "blocked" | "deferred" | "cancelled";
-  progress: "evidence" | "state_changed" | "none";
-  evidenceWeight?: "primary" | "reference";
-  code?: string;
+        <CodeBlock lang="ts" code={`type ToolResult = {
+  content?: unknown;
+  metadata:
+    | { ok: true; effect: "none" | "reference" | "evidence" | "state_changed";
+        contextInjection?: ToolContextInjection }
+    | { ok: false; effect: "none"; error: string };
 };`} />
       </Section>
 
@@ -52,7 +53,7 @@ export default function ContextOutcomeGovernancePage({
         <ComparisonTable
           headers={["Pipeline", "主事实", "Assistant 的角色", "防污染动作"]}
           rows={[
-            ["Prediction", "最近 User 请求", "低预算 reference", "与 User 历史分字段"],
+            ["Prediction", "当前 User 原文", "不读取 Assistant", "Output.object 结构化分类"],
             ["Post", "User 请求 + Tool evidence", "待验证 claim", "重试建议保持 untrusted"],
             ["Compact", "User 决策 + verified evidence", "未验证叙述", "无效结果不进入摘要输入"],
           ]}
@@ -62,7 +63,7 @@ export default function ContextOutcomeGovernancePage({
       <Section title="六阶段小步实施">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "10px" }}>
           {[
-            ["1", "契约", "Outcome 类型与 legacy 归一化"],
+            ["1", "契约", "content 与 metadata 两层"],
             ["2", "执行", "schema-only SDK + 手工 Tool Loop"],
             ["3", "迁移", "内置 Tool 显式标注"],
             ["4", "判断", "Prediction 与 Post 权重"],
@@ -76,8 +77,8 @@ export default function ContextOutcomeGovernancePage({
           ))}
         </div>
         <Callout type="ok" title="迁移策略">
-          内置 Tool 和 MCP 都由 Atom 手工执行；只有成功的 MCP 原始结果在当前 conversation 后续
-          steps 中按 reference evidence 可见，失败和空结果不会投影给模型。
+          内置 Tool 和 MCP 都由 Atom 手工执行；正常 Tool Result 不按 effect 过滤，空结果与失败也会
+          返回当前 Conversation，但不会自动进入跨轮 Context。
         </Callout>
       </Section>
 
@@ -85,10 +86,11 @@ export default function ContextOutcomeGovernancePage({
         <ComparisonTable
           headers={["场景", "必须满足"]}
           rows={[
-            ["连续空搜索", "不算进展、不写持久 Context，并触发 no-progress 保护"],
-            ["搜索词改变并命中", "evidence 解除重复保护，后续可正常完成"],
+            ["连续空搜索", "不写持久 Context，只提示模型重新判断"],
+            ["完全重复调用", "阻止重复执行并返回循环提示"],
+            ["正常 Tool Result", "完整返回当前 Conversation，不由框架筛选"],
             ["Assistant 错误结论", "不能覆盖 User 请求或 Tool evidence"],
-            ["Compact", "不把 error/empty 重新总结成事实"],
+            ["Compact", "不把失败或 effect:none 结果重新总结成事实"],
             ["显式 Memory/Skill 投影", "保持既有 scope、TTL、pin 与 trust 语义"],
           ]}
         />

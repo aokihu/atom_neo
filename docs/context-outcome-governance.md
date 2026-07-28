@@ -1,6 +1,6 @@
-# Tool Outcome 与 Context 治理改造计划
+# Tool Result 与 Context 治理
 
-> **Purpose**: 用框架可识别的 Tool Outcome 统一工具结果、进度判定、跨轮 Context、Prediction、Post 与 Compact，避免错误或空结果持续污染后续推理。
+> **Purpose**: 严格分离 LLM 需要的 Tool 内容与运行框架需要的元数据，避免重复字段、无效结果和错误内容污染后续推理。
 
 ---
 
@@ -13,68 +13,57 @@
 2. 工具结果既用于当前工具循环恢复，又被写入跨轮 Context。
 3. Prediction、Post 与 Compact 把 Assistant 叙述当成接近事实的历史。
 
-本次改造覆盖所有 Tool，不为 WebFetch 添加特例。目标是：
+本次 ToolResult 契约改造覆盖所有 Tool。目标是：
 
-- Tool 直接返回框架可识别的结构化 Outcome。
-- 无效结果由框架审计和状态机消费，不把原始 Tool Call / Tool Result 交给后续模型 step。
+- Tool 只返回一份 LLM 内容和一份框架元数据。
+- 所有已执行 Tool 的结果都交给当前 Conversation 的后续模型 step，框架不替 LLM 筛选。
 - 只有明确的 Context Injection 可以进入跨轮 Context；普通结果不再自动沉淀。
-- Tool Governance 根据 `progress` 而不是 `ok` 判断是否真正前进。
-- Prediction 以 User 请求为主，Assistant 只作为低权重参考。
+- Tool Governance 根据 `metadata.effect` 判断是否真正前进。
+- Prediction 只读取当前 User 原文，不读取 Assistant。
 - Post 使用工具证据和完成元数据校验 Assistant 声明。
 - Compact 只总结有资格的可见消息，并忽略无效工具残留。
 
 ## 2. 统一数据契约
 
 ```typescript
-type ToolOutcomeStatus =
-  | "success"
-  | "empty"
-  | "error"
-  | "blocked"
-  | "deferred"
-  | "cancelled";
+type ToolEffect = "none" | "reference" | "evidence" | "state_changed";
 
-type ToolProgress = "evidence" | "state_changed" | "none";
-
-type ToolOutcome = {
-  status: ToolOutcomeStatus;
-  progress: ToolProgress;
-  evidenceWeight?: "primary" | "reference";
-  code?: string;
-};
-
-type ToolResult = {
-  ok: boolean;                 // 兼容执行协议；不再用于判定语义进度
-  output: string;              // 仅供当前工具循环消费
-  error?: string;
-  data?: unknown;
-  outcome?: ToolOutcome;       // 迁移期可选，由统一函数补齐 legacy 结果
-  contextInjection?: ToolContextInjection;
-  metadata?: ToolResultMetadata;
-};
+type ToolResult =
+  | {
+      content?: unknown; // 唯一提供给 LLM 的结果
+      metadata: {
+        ok: true;
+        effect: ToolEffect;
+        contextInjection?: ToolContextInjection;
+      };
+    }
+  | {
+      metadata: {
+        ok: false;
+        effect: "none";
+        error: string; // 框架诊断字段；失败时序列化为简洁 Tool Result 供 LLM 判断
+      };
+    };
 ```
 
-### 状态矩阵
+### Effect 矩阵
 
-| status | 含义 | progress | 下一模型 step | 跨轮 Context |
-|--------|------|----------|----------------|--------------|
-| `success` | 获得可用事实 | `evidence` | 保留 Call + 安全 Result | 仅显式 Injection |
-| `success` | 写入或状态操作完成 | `state_changed` | 保留 Call + 安全 Result | 仅显式 Injection |
-| `empty` | 执行成功但没有结果 | `none` | Call + Result 整组丢弃 | 丢弃 |
-| `error` | 参数、传输或执行失败 | `none` | Call + Result 整组丢弃 | 丢弃 |
-| `blocked` | 框架策略禁止执行 | `none` | Call + Result 整组丢弃 | 丢弃 |
-| `deferred` | 前置条件不足，尚未执行 | `none` | Call + Result 整组丢弃 | 丢弃 |
-| `cancelled` | 用户或任务取消 | `none` | Call + Result 整组丢弃 | 丢弃 |
+| effect | 含义 | 下一模型 step | 跨轮 Context |
+|--------|------|----------------|--------------|
+| `evidence` | 获得可用于当前结论的主要证据 | 投影 content | 仅显式 Injection |
+| `reference` | MCP/Memory 等当前轮参考结果 | 投影 content | 默认不写入，不能单独证明完成 |
+| `state_changed` | 写入或状态操作完成 | 按需投影 content | 仅显式 Injection |
+| `none` | 成功执行但没有可用结果 | 投影空结果 | 不持久化 |
 
-`ok` 与 `status` 不等价：`empty` 和 `deferred` 可以是协议层 `ok: true`，但必须是
-`progress: "none"`。框架禁止通过解析 `output` 文本判断这些状态。
+失败结果由 `metadata.ok:false` 表达，并作为本轮 Tool Result 返回给 LLM；所有 Tool schema 始终
+向模型开放。框架禁止通过解析 `content` 文本判断 effect。
 
 ## 3. Context 边界
 
 ```
 ToolResult
-  ├─ ToolCallLedger           outcome + fingerprint + 计数，不注入 LLM
-  ├─ Conversation evidence    仅 success，供当前手工循环
+  ├─ ToolCallLedger           effect + fingerprint + 计数，不注入 LLM
+  ├─ Conversation Tool Loop   所有 Call + Result，供当前手工循环
   ├─ Session tool result      结构化审计记录，不作为 Prompt Context
   └─ ContextService           仅 contextInjection 显式投影
 ```
@@ -83,10 +72,9 @@ ToolResult
 
 - 删除普通 Tool Result 自动生成 `tool-history` Context 的行为。
 - AI SDK 只负责单 step Tool Call 解析，Tool 不向 SDK 提供 `execute`；执行与循环由 Atom 控制。
-- 无效结果对应的 Assistant Tool Call 与 Tool Result 必须整组删除，避免 AI SDK 的 missing result 校验和
-  response messages 累积污染。
-- `error`、`empty`、`blocked`、`deferred`、`cancelled` 不进入 Topic/Session Context。
-- `success` 也不自动持久化正文，避免旧证据无限累积；需要跨轮使用时由 Tool 返回
+- Tool Call 与 Tool Result 必须保持配对；empty/error 只存在于当前 Conversation，不进入
+  Topic/Session Context 或后续 Conversation。
+- 有效 content 也不自动持久化，避免旧证据无限累积；需要跨轮使用时由 Tool 返回
   `contextInjection`，沿用现有 scope、TTL、pin 与 trust 边界。
 - Session 中的结构化 ToolResult 可用于 TUI、日志和诊断，但 Prediction、Post、Compact 只能读取
   经过筛选的投影，不能把审计记录整段重新注入模型。
@@ -95,15 +83,15 @@ ToolResult
 
 ### Prediction
 
-- 最近 User 消息是主输入，保持完整或高字符预算。
-- 历史 User 消息提供主题延续信息。
-- Assistant 消息单列为 `assistant_reference`，字符预算更低，并明确标记为未验证参考。
-- 不把 Assistant 的搜索词或结论混入 User 历史字段。
+- 只读取当前 User 原文，不读取历史 User、Assistant 或 Tool 内容。
+- 使用 `Output.object` 返回结构化分类，不从自由文本提取 JSON。
+- 保留 difficulty、modelProfile、intent、contextRelevance、topic 与 reasoning。
+- 不生成 memoryQuery，不调用 Tool，也不修改用户输入。
 
 ### Post
 
 - 保留 Assistant 回复用于质量检查，但显式标记为 `claim`。
-- 同时提供本轮 Tool Outcome 摘要：有效证据数、状态变更数、empty/error/blocked 数和 finish metadata。
+- 同时提供本轮 Tool effect 摘要：主要证据数、参考证据数、状态变更数、无结果数和失败数。
 - `satisfactory` 不能只根据 Assistant 自述“已完成”；需要与请求类型和工具证据一致。
 - Post 生成的 retry suggestion 保持 `untrusted`，只作为下一轮参考，不能升级为 trusted instruction。
 
@@ -119,36 +107,46 @@ ToolResult
 
 ### Phase 1 — 契约与归一化
 
-- 在 shared types 中增加 `ToolOutcome`、状态与进度类型。
-- 提供唯一的 `resolveToolOutcome(result)` 兼容函数。
-- Legacy ToolResult 回退规则：`ok:false → error/none`，`ok:true → success/evidence`。
-- 为归一化矩阵增加单元测试。
+- shared types 只保留 `ToolResult.content` 与 `ToolResult.metadata`。
+- 删除通用 `output`、`data`、`code`、`status`、`progress`、`evidenceWeight`。
+- Tool 需要结构化 LLM 结果时直接把对象放入 `content`，不再同时维护文本与 data。
 
 ### Phase 2 — 执行与治理
 
 - 将 Tool schema 与 executor 分离；AI SDK 只接收不带 `execute` 的 schema Tool。
-- Stream 层改为单 step 手工循环，统一执行 Tool、解析 Outcome 并写入 Session 审计记录。
-- ToolCallLedger 由 `ok` 改为 `progress !== "none"`。
-- Guard 的阻塞结果显式返回 `blocked/deferred` 与稳定 code。
+- Stream 层改为单 step 手工循环，统一执行 Tool、读取 metadata 并写入 Session 审计记录。
+- 所有 Tool schema 始终开放，由 LLM 自主决定调用顺序与次数；框架不再动态收窄 `activeTools`。
+- Prediction 不执行 Memory 查询；Memory、Skill、WebFetch 全部由 Conversation LLM 自主调用。
+- Prompt 要求 LLM 在 WebFetch 前先查询 Memory 与 Skill；框架不维护或强制该业务前置状态。
+- 不使用 provider-specific `toolChoice`，也不维护 Memory review、retry、Skill load 或 WebFetch
+  前置路由状态。
+- ToolCallLedger 根据 `metadata.effect !== "none"` 判断有效进展。
+- 连续无进展只生成辅助判断提示，不隐藏 Tool、不阻止下一次正常调用；完全重复调用与执行总上限
+  才触发强制循环保护。
 - 删除普通 `tool-history` Context 写入，只保留 `contextInjection`。
-- 只有 `evidence/state_changed` 可以投影到下一模型 step；无效 Call/Result 整组丢弃。
+- 所有实际执行的 Call/Result 投影到当前 Conversation；Conversation 结束后不自动持久化。
 - 增加重复空结果、重复错误和改变查询后恢复的测试。
 
 ### Phase 3 — 内置 Tool 迁移
 
-- Search/grep/glob 的无匹配返回 `empty/none`。
-- 参数、网络、进程失败返回 `error/none`。
-- 用户取消返回 `cancelled/none`。
-- 文件写入、Memory/Skill 生命周期变化返回 `success/state_changed`。
-- 读取到有效内容返回 `success/evidence`。
-- MCP 与旧 Plugin 先通过兼容函数工作，不强制一次性迁移外部生态。
-- MCP 成功结果统一标为 `evidenceWeight:"reference"`：当前 conversation 的后续 steps 完整可用并算策略进展，但在 Post/Compact
-  中不能单独支撑已完成结论；明确 `isError`、结构为空或显式无进展 Outcome 仍为 `progress:"none"`。
+- Search/grep/glob 的无匹配返回 `ok:true/effect:"none"`，且没有 content。
+- 参数、网络、进程失败返回 `ok:false/effect:"none"`。
+- 文件写入、Memory/Skill 生命周期变化返回 `ok:true/effect:"state_changed"`。
+- 读取到有效内容返回 `ok:true/effect:"evidence"`。
+- MCP 由其结构映射为 `reference`、`none` 或失败，不解析自然语言，也不接受旧 Outcome 字段。
+- MCP 成功结果统一使用 `effect:"reference"`：当前 conversation 的后续 steps 完整可用并算策略进展，但在 Post/Compact
+  中不能单独支撑已完成结论；明确 `isError` 或结构为空使用 `effect:"none"`。
+- Memory 摘要与完整读取均使用 `effect:"reference"`；读取成功只表示取得参考内容，不等于已经验证与当前任务相关。
+- `realtime_data` 与 `temporary_state` 保存时由框架补充有效期，过期节点不再参与搜索、读取和遍历。
+- WebFetch 对 HTML 结果按当前任务查询抽取相关片段；相关词覆盖不足时返回
+  `ok:true/effect:"none"`，不把“大页面存在正文”直接升级为 evidence。
 
 ### Phase 4 — Prediction 与 Post
 
-- Prediction 输入拆分 User 主上下文与 Assistant Reference。
-- Post 收集结构化 Outcome 统计和 Assistant 完成元数据。
+- Prediction 只读取当前 User 原文，并使用 `Output.object` 返回结构化分类。
+- `standalone` 只投递当前 User；`follow_up` 只保留最近一组 User/Assistant 交互和当前 User。
+- Prediction 不生成查询词，不修改 User 原文，不调用任何 Tool。
+- Post 收集结构化 effect 统计和 Assistant 完成元数据。
 - Post retry suggestion 降为 untrusted message/reference。
 - 增加 Assistant 错误自述不会压过 User 请求或工具证据的测试。
 
@@ -170,13 +168,16 @@ ToolResult
 
 ## 6. 完成标准
 
-- 任一 Tool 的语义状态无需解析 `output` 即可判定。
+- 任一 Tool 的语义效果无需解析 `content` 即可判定。
 - error/empty 不会出现在新生成的 Topic/Session Context Snapshot 或 Compact Summary 输入中。
-- Agent 不读取原始失败内容；框架通过 Tool 可用性、Guard 状态和最小 step instruction 控制下一步。
-- 能力发现链进入下一状态后，前一状态的工具从 `activeTools` 移除，避免模型重复执行已判定为空的动作。
-- 连续 `progress:none` 会触发已有 no-progress 保护；新的 evidence/state change 可以解除重复保护。
-- 因连续无进展停止且整轮没有有效 evidence/state change 时，不接受模型随后生成的具体事实断言。
-- Prediction 的 User 请求与 Assistant Reference 在数据结构和 Prompt 中明确分离。
+- 所有实际执行的 Tool Result 都返回当前 Conversation 的后续 step，框架不按 effect 筛选。
+- 所有 Tool schema 始终开放；WebFetch 与 Memory/Skill 一样由 LLM 决定是否调用。
+- Prediction 只返回结构化分类，不执行 Memory 查询或生成 Tool 参数。
+- standalone/follow-up 不再携带无关会话历史；短期 Memory 过期后不可检索。
+- WebFetch HTML 只向下一模型 step 投影相关片段。
+- 连续 `effect:none` 只触发辅助提示；完全重复调用或执行总上限才阻止 Tool Loop。
+- 框架不丢弃模型最终文本。
+- Prediction 输入与 Conversation 当前 User 输入保持逐字一致。
 - Post 不会仅凭 Assistant 自述判定任务完成，retry suggestion 不是 trusted instruction。
 - 现有 `contextInjection` 的 Memory/Skill 投影行为保持兼容。
 
@@ -184,5 +185,5 @@ ToolResult
 
 - 不删除 Session JSONL 审计历史。
 - 不引入新的 Memory 检索或语义相关性模型。
-- 不通过关键词解析 Tool `output` 推断 Outcome。
+- 不通过关键词解析 Tool `content` 推断 effect。
 - 不重写全部 Plugin/MCP；本次只提供统一兼容入口和内置 Tool 迁移路径。

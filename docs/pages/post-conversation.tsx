@@ -27,7 +27,7 @@ export default function PostConversationPage({ content, title, description, cate
       <Section title="3 个 Element 的判断链">
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
           {[
-            ["1", "post-collect-input", "提取用户请求、Tool Outcome、回复头尾和 TODO 元数据", "blue"],
+            ["1", "post-collect-input", "提取用户请求、Tool effect、回复头尾和 TODO 元数据", "blue"],
             ["2", "post-analyze-result", "按 User > primary evidence > MCP reference > Assistant claim 分析", "purple"],
             ["3", "post-finalize", "结束、等待用户，或安全重试", "green"],
           ].map(([step, name, detail, color], index, all) => (

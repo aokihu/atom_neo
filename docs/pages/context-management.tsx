@@ -87,11 +87,11 @@ export default function ContextManagementPage({ content, title, description, cat
       <Section title="Step Snapshot">
         <CodeBlock lang="text" code={`TaskSnapshot: 固定当前分层输入
       ↓ skill revision 变化
-prepareStep: 从 ContextService 获取新 Snapshot
+手工 Tool Loop: 从 ContextService 获取新 Snapshot
       ↓
 只替换下一步骤的 TOON System Message`} />
         <Callout type="ok" title="预期结果">
-          Skill load/unload 在下一模型步骤生效，topic 切换时自动清空；Memory 不重复检索；在途 Snapshot 保持稳定可重放。
+          Skill load/unload 在下一模型步骤生效，topic 切换时自动清空；Memory 是否再次检索由 LLM 判断；在途 Snapshot 保持稳定可重放。
         </Callout>
         <Callout type="info" title="可真正卸载">
           Skill Tool 只返回加载回执，正文只进入可替换的 StepSnapshot，不会残留在 Tool history 中。

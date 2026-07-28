@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PermissionLevel, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { ToolDefinition } from "@atom-neo/shared";
 import type { SessionPersistenceService } from "../../session/persistence-service";
-import { TOOL_OUTCOMES } from "../outcome";
+import { toolResult } from "../outcome";
 
 const searchSchema = z.object({
   query: z.string().min(1),
@@ -89,8 +89,8 @@ export const createHistoryTools = (persistence: SessionPersistenceService): Tool
     permission: PermissionLevel.READ_ONLY,
     execute: async (args, options) => {
       const parsed = searchSchema.safeParse(args);
-      if (!parsed.success) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
-      if (!options?.sessionId) return { ok: false, output: "", error: "Session unavailable", outcome: TOOL_OUTCOMES.error };
+      if (!parsed.success) return toolResult.failure("Invalid input");
+      if (!options?.sessionId) return toolResult.failure("Session unavailable");
       try {
         const revisionBefore = persistence.getHistoryArchiveRevision(options.sessionId, "message-latest");
         const matches = persistence.searchHistory(options.sessionId, parsed.data);
@@ -105,10 +105,10 @@ export const createHistoryTools = (persistence: SessionPersistenceService): Tool
           return `<HistoryMatch archiveId="${match.archiveId}" seq="${match.seq}" role="${match.role}" timestamp="${match.timestamp}"${revision}>\n${preview(match.content)}\n</HistoryMatch>`;
         }).join("\n");
         return matches.length > 0
-          ? { ok: true, output, data: { count: matches.length }, outcome: TOOL_OUTCOMES.evidence }
-          : { ok: true, output: "No matching session history.", data: { count: 0 }, outcome: TOOL_OUTCOMES.empty };
+          ? toolResult.reference(output)
+          : toolResult.none();
       } catch (error) {
-        return { ok: false, output: "", error: error instanceof Error ? error.message : String(error), outcome: TOOL_OUTCOMES.error };
+        return toolResult.failure(error instanceof Error ? error.message : String(error));
       }
     },
   },
@@ -120,8 +120,8 @@ export const createHistoryTools = (persistence: SessionPersistenceService): Tool
     permission: PermissionLevel.READ_ONLY,
     execute: async (args, options) => {
       const parsed = readSchema.safeParse(args);
-      if (!parsed.success) return { ok: false, output: "", error: "Invalid input", outcome: TOOL_OUTCOMES.error };
-      if (!options?.sessionId) return { ok: false, output: "", error: "Session unavailable", outcome: TOOL_OUTCOMES.error };
+      if (!parsed.success) return toolResult.failure("Invalid input");
+      if (!options?.sessionId) return toolResult.failure("Session unavailable");
       try {
         const limit = parsed.data.limit ?? 20;
         const toSeq = parsed.data.toSeq ?? Number.MAX_SAFE_INTEGER;
@@ -193,14 +193,11 @@ export const createHistoryTools = (persistence: SessionPersistenceService): Tool
           cursor = createCursor(next, 0);
         }
         if (cursor) lines.push(JSON.stringify({ type: "history_cursor", next: cursor }));
-        return {
-          ok: true,
-          output: lines.join("\n") || "No messages in the requested range.",
-          data: { count: lines.length - (cursor ? 1 : 0), cursor },
-          outcome: lines.length > 0 ? TOOL_OUTCOMES.evidence : TOOL_OUTCOMES.empty,
-        };
+        return lines.length > 0
+          ? toolResult.reference(lines.join("\n"))
+          : toolResult.none();
       } catch (error) {
-        return { ok: false, output: "", error: error instanceof Error ? error.message : String(error), outcome: TOOL_OUTCOMES.error };
+        return toolResult.failure(error instanceof Error ? error.message : String(error));
       }
     },
   },

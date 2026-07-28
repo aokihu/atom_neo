@@ -10,17 +10,13 @@ export type ConversationMode =
   | "ready_to_finalize";
 
 export type Message = { role: string; content: string; reasoning_content?: string };
-export type MemorySearchStatus = "not_started" | "found" | "empty" | "unavailable";
 
-export type ToolOutcomeSummary = {
+export type ToolEffectSummary = {
   evidence: number;
   referenceEvidence: number;
   stateChanged: number;
-  empty: number;
-  error: number;
-  blocked: number;
-  deferred: number;
-  cancelled: number;
+  none: number;
+  failed: number;
 };
 
 export const appendCurrentUserMessage = (messages: Message[], content?: string): Message[] => {
@@ -43,9 +39,6 @@ export type ConversationFlowState = {
   contextOwner?: ContextOwner;
   contextSnapshot?: ContextSnapshot;
   contextSnapshotAccepted?: boolean;
-  memorySearchAttempted?: boolean;
-  memorySearchStatus?: MemorySearchStatus;
-  injectedMemoryCount?: number;
   systemText?: string;
   userMessages?: Message[];
   responseText?: string;
@@ -62,6 +55,6 @@ export type ConversationFlowState = {
   errorStatusCode?: number;
   finishReason?: string;
   completeDetected?: boolean;
-  toolOutcomeSummary?: ToolOutcomeSummary;
+  toolEffectSummary?: ToolEffectSummary;
   abortSignal?: AbortSignal;
 };

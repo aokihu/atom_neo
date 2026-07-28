@@ -129,13 +129,14 @@ You can use the following tools to load and manage skills — domain operation g
 - Lookup order: Current Conversation Context > Memory > Search/Web Results.
 - First inspect Context for existing facts, lookup methods, and Skills; follow an available method without repeating capability discovery.
 - If Context has no usable method, call \`search_memory\` with core concepts plus optional synonyms, domain terms, or Skill names; remove years and freshness words such as "latest".
-- Automatic Memory search, \`search_memory\`, and \`traverse_memory\` return summaries only. \`traverse_memory\` also provides source, relation, and depth metadata, and its browsing result is unloaded after the next step. If a summary is relevant, call \`read_memory\` for the full content; do not treat a summary as fact or use network tools before reading it.
-- ToolGuard and the manual Tool Loop expose only the tools executable in the current capability-discovery state; do not call a tool that is inactive for the current step.
-- After a Memory search is empty, do not retry it with different keywords. Call \`skill_list\`; if no Skill is relevant, call \`webfetch\`.
-- An irrelevant Memory candidate does not need to be read. Call \`skill_list\`, then use \`webfetch\` after Skill discovery is complete.
-- A Skill hint in Memory only locates a capability; it is not loaded yet. Use \`skill_load\` / \`skill_section\` to obtain and follow its content before calling any network tool.
-- Prefer a method from a fully read Memory. Use \`webfetch\` or other network tools only when Memory and Skill have no usable capability or Memory is unavailable; real-time data does not bypass capability discovery.
-- If the user provides an explicit URL, \`webfetch\` may be used directly.
+- \`search_memory\` and \`traverse_memory\` return summaries only. \`traverse_memory\` also provides source, relation, and depth metadata. If a summary is relevant, call \`read_memory\` for the full content; do not treat a summary as fact.
+- \`read_memory\` returns \`relatedCount\`. When it is greater than zero and relations may help with the current task, decide whether to call \`traverse_memory\` for related summaries.
+- All tools remain available. Choose each Tool call from the task and returned results; the framework does not choose for you.
+- After an empty Memory search, prefer \`skill_list\`. Only adjust the query when you have a materially different retrieval concept.
+- Before using \`webfetch\`, query both Memory and Skills. Use the network only when neither contains a usable record. You must follow this order; the framework does not hide or intercept Tools.
+- An irrelevant Memory candidate does not need to be read. Continue with \`skill_list\`, then decide whether \`webfetch\` is needed.
+- A Skill hint in Memory only locates a capability; it is not loaded yet. When relevant, use \`skill_load\` / \`skill_section\` to obtain and follow its content.
+- Prefer a method from a fully read Memory. Use \`webfetch\` or other network tools when both Memory and Skills have no usable record.
 - Information confirmed in prior conversation turns takes precedence over real-time search results.
 - Never fabricate data. Be honest with the user if data is uncertain.
 - Tool results may be outdated or erroneous — cross-reference with context before responding.`,
@@ -147,7 +148,7 @@ You can use the following tools to load and manage skills — domain operation g
    - "hard": complex task with 3+ sub-steps that should be planned with a todo list
    - "mygod": extremely complex, very large scope, must be done step-by-step with todo
 
-2. model_profile: "basic" | "balanced" | "advanced"
+2. modelProfile: "basic" | "balanced" | "advanced"
    - "basic": lightweight model is sufficient (simple Q&A, short text)
    - "balanced": moderate reasoning depth needed (code generation, multi-file changes)
    - "advanced": deep reasoning, complex debugging, or architectural analysis required
@@ -158,17 +159,12 @@ You can use the following tools to load and manage skills — domain operation g
    - "creative": generative creation (write articles, design architecture, generate content)
    - "conversation": discussion, greetings, and casual chat that need no external facts or references; never classify information lookup here
 
-4. context_relevance: "standalone" | "follow_up" | "continuation"
+4. contextRelevance: "standalone" | "follow_up" | "continuation"
    - "standalone": new topic, unrelated to conversation history
    - "follow_up": follows up on the previous response, needs full context
    - "continuation": explicitly continuing a previously interrupted task
 
-5. memory_query: one core keyword or short phrase for Memory retrieval
-   - Prefer text likely to occur directly in relevant Memory, e.g. "look up typhoon information" → "typhoon"
-   - Never copy the full user sentence or return multiple parallel keywords
-   - Return an empty string "" when Memory lookup is unnecessary
-
-6. topic: a stable dot-separated label for the conversation subject
+5. topic: a stable dot-separated label for the conversation subject
    Format: "<category>.<domain>.<specific>" (e.g., "creative.history.ancient", "tools.filesystem.explore")
    Categories: creative | tools | code | knowledge | chat
    - Be specific enough to distinguish different tasks
@@ -176,9 +172,9 @@ You can use the following tools to load and manage skills — domain operation g
    - When user switches to a completely new subject → output NEW topic
    - Empty string "" if the message is too vague to classify
 
-When recent conversation history is provided in the prompt, use it to determine
-context_relevance. A standalone message in a multi-turn conversation may still be
-"standalone" if it switches to a completely new topic.
+Prediction receives only the current user text. Do not complete, rewrite, translate,
+or generate Tool parameters from it. Determine contextRelevance only from the current
+input; explicit continuation wording can be classified as continuation.
 
 Difficulty vs Model Profile:
 The difficulty describes how complex the user's TASK is. Model profile describes
@@ -190,8 +186,8 @@ how much REASONING POWER is needed. They are independent:
 When difficulty is "hard" or "mygod", the assistant will be instructed to use a todo list
 to plan and execute step by step. This is an execution strategy, not a model requirement.
 
-Reply ONLY with JSON in this exact format:
-{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","memory_query":"...","topic":"...","reasoning":"brief explanation"}`,
+Return the structured schema:
+{"difficulty":"...","modelProfile":"...","intent":"...","contextRelevance":"...","topic":"...","reasoning":"brief explanation"}`,
 
   [PromptKey.ANALYZE_RESULT]: `You are a conversation quality evaluator. Determine whether the AI **completed** the user's request and generate a behavioral fingerprint.
 
@@ -233,7 +229,7 @@ Reply ONLY with JSON: {"status":"satisfactory|blocked|needs_user_input","reason"
 
 Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false, "reason":"brief"}`,
 
-  [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history in 500 characters or fewer. Evidence priority is user_goal, assistant_with_tool_evidence, then assistant_reference_unverified. Preserve user goals, verified tool evidence, confirmed decisions, and real state changes. Never promote Assistant reference text to fact by itself, and ignore no-progress error, empty, blocked, deferred, or cancelled tool outcomes.`,
+  [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history in 500 characters or fewer. Evidence priority is user_goal, assistant_with_tool_evidence, then assistant_reference_unverified. Preserve user goals, verified tool evidence, confirmed decisions, and real state changes. Never promote Assistant reference text to fact by itself, and ignore failed or effect:none Tool results.`,
 
   [PromptKey.GUIDANCE_RETRY]: `(System hint: The previous response did not fully satisfy the user's request. Please continue completing the user's request unobtrusively. Do not mention permission changes, retries, or previous capability limitations.)`,
 
