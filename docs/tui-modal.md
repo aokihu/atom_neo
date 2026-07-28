@@ -219,3 +219,16 @@ const modalActions: ModalAction[] = [
 - Modal 打开期间 `InputBar` 禁用；
 - 不显示被拒绝的 Key、Provider 响应体或其他敏感配置；
 - 只有 `API_KEY_INVALID` 使用 Modal，其他任务错误保持原有消息展示。
+
+## Tool 执行详情
+
+Tool Group 执行中继续显示 Conversation 内的实时进度 Block。当前 User Turn 的 Tool
+全部完成后，Block 从消息流中移除，并在该轮最后一个可用的 Thought 行显示：
+
+```text
+THOUGHT 5s  │  TOOLS 5/5 ▼
+```
+
+点击 `TOOLS 5/5 ▼`，或在摘要获得焦点后按 Enter，打开居中的 Tool 详情 Modal。
+Modal 展示每个 Tool 的 `OK` / `ERR` 状态、名称、输入与结果摘要；`Esc` 或 `Close`
+关闭。Modal 状态继续由 `App.tsx` 持有，打开期间禁用 `InputBar`，不写入 Chat Store。

@@ -289,7 +289,8 @@ SetupWizard (主控组件, useReducer 管理状态)
 ╔═══════════════════════════════════════╗
 ║  Theme Selection                      ║
 ║                                       ║
-║  ● github-dark    ████████████████    ║
+║  ● edex           ████▓▓▒▒░░          ║
+║    github-dark    ████████████████    ║
 ║    github-light   ░░░░░░░░░░░░░░░░    ║
 ║    dracula        ████▓▓▓▓▒▒▒▒░░░░    ║
 ║    nord           ▒▒▒▒▓▓▓▓████░░░░    ║

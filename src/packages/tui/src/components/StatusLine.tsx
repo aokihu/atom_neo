@@ -1,3 +1,4 @@
+import { useTerminalDimensions } from "@opentui/react";
 import { BounceBarSpinner } from "./BounceBarSpinner";
 import { useTheme } from "./App";
 import { useChatStore } from "../stores/chat";
@@ -8,6 +9,7 @@ interface StatusLineProps {
 
 export function StatusLine({ hint }: StatusLineProps) {
   const { colors } = useTheme();
+  const { width } = useTerminalDimensions();
   const processing = useChatStore(s => {
     if (s.busy) return true;
     return s.messages.some(m =>
@@ -17,7 +19,16 @@ export function StatusLine({ hint }: StatusLineProps) {
   });
 
   return (
-    <box height={1} flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
+    <box
+      height={2}
+      flexShrink={0}
+      flexDirection="row"
+      justifyContent="space-between"
+      paddingLeft={2}
+      paddingRight={2}
+      border={["top"]}
+      borderColor={colors.border.default}
+    >
       {processing
         ? (
           <box flexDirection="row" alignItems="center">
@@ -25,9 +36,9 @@ export function StatusLine({ hint }: StatusLineProps) {
             <text marginLeft={1} fg={colors.text.muted}>processing</text>
           </box>
         )
-        : <text fg={colors.text.muted}>◉ ready</text>}
+        : <text fg={colors.status.success}>● ready</text>}
       <text fg={colors.text.muted}>
-        {hint ?? '↑↓ history  / commands  ↩ send'}
+        {hint ?? (width >= 100 ? "↑↓ history  / commands  ↩ send  Esc×2 cancel" : "/ commands  ↩ send")}
       </text>
     </box>
   );

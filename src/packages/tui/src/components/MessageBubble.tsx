@@ -1,22 +1,21 @@
-import type { Message } from "../types";
+import type { Message, ToolGroupMessage } from "../types";
 import { SyntaxStyle } from "@opentui/core";
 import { useTheme } from "./App";
 import { UserMessage } from "./UserMessage";
 import { AssistantMessage } from "./AssistantMessage";
 import { ToolMessageBox } from "./ToolMessageBox";
 
-export function fmtTime(ts: number): string {
-  const d = new Date(ts);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-}
-
-export function formatDuration(seconds: number): string {
-  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds >= 60) return `${Math.floor(seconds / 60)}m`;
-  return `${seconds}s`;
-}
-
-export function MessageBubble({ message, syntaxStyle }: { message: Message; syntaxStyle: SyntaxStyle }) {
+export function MessageBubble({
+  message,
+  syntaxStyle,
+  completedToolGroups,
+  onOpenToolDetails,
+}: {
+  message: Message;
+  syntaxStyle: SyntaxStyle;
+  completedToolGroups?: ToolGroupMessage[];
+  onOpenToolDetails?: (groups: ToolGroupMessage[]) => void;
+}) {
   const { colors } = useTheme();
 
   switch (message.role) {
@@ -24,10 +23,17 @@ export function MessageBubble({ message, syntaxStyle }: { message: Message; synt
       return <UserMessage message={message} />;
 
     case "assistant":
-      return <AssistantMessage message={message as Message & { role: "assistant" }} syntaxStyle={syntaxStyle} />;
+      return (
+        <AssistantMessage
+          message={message as Message & { role: "assistant" }}
+          syntaxStyle={syntaxStyle}
+          completedToolGroups={completedToolGroups}
+          onOpenToolDetails={onOpenToolDetails}
+        />
+      );
 
     case "tool-group":
-      return <ToolMessageBox message={message} />;
+      return <ToolMessageBox message={message} onOpenDetails={onOpenToolDetails} />;
 
     case "error":
       return (

@@ -30,6 +30,7 @@ export const PROVIDERS: Record<string, { apiKeyEnv: string; models: string[]; ba
 };
 
 export const THEMES = [
+  "edex",
   "github-dark",
   "github-light",
   "dracula",
@@ -52,7 +53,7 @@ export function initialState(): WizardState {
       balanced: "deepseek/deepseek-v4-flash",
       basic: "deepseek/deepseek-v4-flash",
     },
-    theme: "github-dark",
+    theme: "edex",
     projectDescription: "",
   };
 }

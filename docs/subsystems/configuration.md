@@ -89,7 +89,7 @@ const ConfigSchema = z.object({
   providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
   transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({...}),
   gateway: z.object({ port: z.number().int().default(3000) }).default({...}),
-  tui: z.object({ theme: z.enum(["github-dark", "github-light", "dracula", "nord", "tokyo-night", "solarized-dark", "monokai"]).default("github-dark") }).default({...}),
+  tui: z.object({ theme: z.enum(["edex", "github-dark", "github-light", "dracula", "nord", "tokyo-night", "solarized-dark", "monokai"]).default("edex") }).default({...}),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;
@@ -149,7 +149,7 @@ const providerOptions = {
   providers: {},
   transport: { maxOutputTokens: 4096 },
   gateway: { port: 3000 },
-  tui: { theme: "github-dark" },
+  tui: { theme: "edex" },
 }
 ```
 
@@ -162,6 +162,9 @@ const providerOptions = {
 - 绿色（`status.success`） — `enabled`（强制启用）
 - 黄色（`status.warning`） — `adaptive`（模型自适应）
 - 灰色（`text.muted`） — `disabled`（已关闭）
+
+**`edex` 主题（默认）**：使用近黑背景、淡青色边框与分段标题。它只改变颜色，
+TUI 的 Runtime / Conversation / Telemetry 响应式布局对所有主题生效。
 
 **架构说明**：`config.json` 中 `thinking` 的值由 `server.ts` 翻译为 AI SDK 的 `providerOptions` 对象，再透传给 `StreamLLMElement`。Element 不感知 provider 具体选项结构，仅负责将 `providerOptions` 原样注入 `streamText()`。未来扩展其他 provider（OpenAI `reasoningEffort`、Gemini `thinkingConfig`）时只需修改 `server.ts` 的翻译逻辑，无需改动 Element 代码。
 

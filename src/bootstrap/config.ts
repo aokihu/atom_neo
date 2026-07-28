@@ -40,10 +40,10 @@ const ConfigSchema = z.object({
   }).default({ port: 3000, clients: [] }),
   tui: z.object({
     theme: z.enum([
-      "github-dark", "github-light", "dracula", "nord",
+      "edex", "github-dark", "github-light", "dracula", "nord",
       "tokyo-night", "solarized-dark", "monokai",
-    ]).default("github-dark"),
-  }).default({ theme: "github-dark" }),
+    ]).default("edex"),
+  }).default({ theme: "edex" }),
   permission: z.object({
     whitelist: z.array(z.string()).default([]),
   }).default({ whitelist: [] }),

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Message, TodoItem, ToolInfo, MCPServerInfo } from "../types";
+import { estimateReceivedTokens } from "../components/format";
 
 let _counter = 0;
 function now() { return Date.now(); }
@@ -19,6 +20,9 @@ type ChatState = {
   busy: boolean;
   showPreparing: boolean;
   contextTokens: number;
+  streamReceivedChars: number;
+  streamChunkCount: number;
+  streamTokenBatches: number[];
   todoItems: TodoItem[];
   toolInfos: ToolInfo[];
   mcpServers: MCPServerInfo[];
@@ -34,6 +38,7 @@ type ChatState = {
   handleToolEvent: (event: ToolEventParams) => "created" | "updated" | null;
   handleToolStepFinish: (total: number, success: number, failed: number, toolNames: string[]) => void;
   handleToolGroupComplete: (total: number, success: number, failed: number, toolNames: string[]) => void;
+  recordStreamChunk: (text: string) => void;
 
   setBusy: (busy: boolean) => void;
   setContextTokens: (total: number) => void;
@@ -56,6 +61,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   busy: false,
   showPreparing: false,
   contextTokens: 0,
+  streamReceivedChars: 0,
+  streamChunkCount: 0,
+  streamTokenBatches: [],
   todoItems: [],
   toolInfos: [],
   mcpServers: [],
@@ -77,9 +85,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: s.messages.map(m => (m.id === id ? { ...m, ...patch } as Message : m)),
     })),
 
-  clearMessages: () => set({ messages: [], toolGroupId: null, activeAssistantId: null }),
+  clearMessages: () => set({
+    messages: [],
+    toolGroupId: null,
+    activeAssistantId: null,
+    streamReceivedChars: 0,
+    streamChunkCount: 0,
+    streamTokenBatches: [],
+  }),
 
   handleDelta(delta: string, offset: number, reasoning?: string, thinkingDuration?: number) {
+    get().recordStreamChunk(delta);
     set(s => {
       if (s.activeAssistantId) {
         return {
@@ -107,8 +123,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  handleReason(_delta: string) {
+  handleReason(delta: string) {
+    get().recordStreamChunk(delta);
     set({ showPreparing: false });
+  },
+
+  recordStreamChunk(text: string) {
+    if (!text) return;
+    set(s => ({
+      streamReceivedChars: s.streamReceivedChars + text.length,
+      streamChunkCount: s.streamChunkCount + 1,
+      streamTokenBatches: [...s.streamTokenBatches, estimateReceivedTokens(text.length)].slice(-8),
+    }));
   },
 
   handleToolEvent(event: ToolEventParams): "created" | "updated" | null {
@@ -247,6 +273,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeAssistantId: null,
       showPreparing: true,
       busy: true,
+      streamReceivedChars: 0,
+      streamChunkCount: 0,
+      streamTokenBatches: [],
     });
   },
 
