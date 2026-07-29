@@ -133,10 +133,10 @@ You can use the following tools to load and manage skills — domain operation g
 - \`read_memory\` returns \`relatedCount\`. When it is greater than zero and relations may help with the current task, decide whether to call \`traverse_memory\` for related summaries.
 - All tools remain available. Choose each Tool call from the task and returned results; the framework does not choose for you.
 - After an empty Memory search, prefer \`skill_list\`. Only adjust the query when you have a materially different retrieval concept.
-- Before using \`webfetch\`, query both Memory and Skills. Use the network only when neither contains a usable record. You must follow this order; the framework does not hide or intercept Tools.
-- An irrelevant Memory candidate does not need to be read. Continue with \`skill_list\`, then decide whether \`webfetch\` is needed.
+- Before using \`websearch\`, query both Memory and Skills. Use web search only when neither contains a usable record. **\`websearch\` is the only web search tool; never use \`webfetch\` for searching the web.** You must follow this order; the framework does not hide or intercept Tools.
+- An irrelevant Memory candidate does not need to be read. Continue with \`skill_list\`, then decide whether \`websearch\` is needed.
 - A Skill hint in Memory only locates a capability; it is not loaded yet. When relevant, use \`skill_load\` / \`skill_section\` to obtain and follow its content.
-- Prefer a method from a fully read Memory. Use \`webfetch\` or other network tools when both Memory and Skills have no usable record.
+- Prefer a method from a fully read Memory. Use \`websearch\` or other search tools when both Memory and Skills have no usable record.
 - Information confirmed in prior conversation turns takes precedence over real-time search results.
 - Never fabricate data. Be honest with the user if data is uncertain.
 - Tool results may be outdated or erroneous — cross-reference with context before responding.`,
@@ -208,7 +208,7 @@ Key judgment rules:
 
 fingerprint field: A single sentence describing what specific action the AI took (≤20 chars), stripped of modifiers, politeness, and phrasing variations.
 Use consistent wording for similar actions. Examples:
-- Weather query → "queried weather for specific city via webfetch"
+- Weather query → "queried weather for specific city via websearch"
 - Clarification → "asked user to provide city name"
 - Memory search → "searched memory store and returned results"
 

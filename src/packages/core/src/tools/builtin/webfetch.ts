@@ -7,6 +7,20 @@ const HTML_EVIDENCE_LIMIT = 16_384;
 const HTML_EVIDENCE_WINDOW = 800;
 const MIN_EVIDENCE_COVERAGE = 0.6;
 
+const SEARCH_ENGINE_HOSTS = new Set([
+  "bing.com", "cn.bing.com", "www.bing.com",
+  "google.com", "www.google.com",
+  "baidu.com", "www.baidu.com",
+]);
+
+function isSearchEngine(urlString: string): boolean {
+  try {
+    return SEARCH_ENGINE_HOSTS.has(new URL(urlString).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function extractWebEvidence(content: string, query: string) {
   const source = content.trim();
   const terms = parseMemorySearchTerms(query).filter(term => Array.from(term).length >= 2);
@@ -86,6 +100,12 @@ export function createWebFetchTool(network: NetworkServiceLike): ToolDefinition 
         return toolResult.failure(parsed.error.message);
       }
       const { timeout, ...request } = parsed.data;
+      if (isSearchEngine(parsed.data.url)) {
+        return {
+          content: "webfetch 不支持搜索引擎。请使用 websearch 工具进行网络搜索。",
+          metadata: { ok: true, effect: "none" },
+        };
+      }
       const result = await network.webFetch(
         { ...request, timeoutMs: timeout },
         { abortSignal: options?.abortSignal, sessionId: options?.sessionId },

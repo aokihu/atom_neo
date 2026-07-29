@@ -133,10 +133,10 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - \`read_memory\` 返回 \`relatedCount\`；数量大于 0 且关联内容可能有助于当前任务时，自主调用 \`traverse_memory\` 查看关联摘要
 - 所有工具始终可用；根据任务和已有结果自主决定下一次 Tool 调用，框架不会替你选择
 - Memory 搜索为空后优先调用 \`skill_list\` 检查可用 Skill；只有存在实质不同的检索概念时才考虑调整 query
-- 使用 \`webfetch\` 前必须先查询 Memory 和 Skill；只有两者都没有可用记录时才使用网络。该顺序由你遵守，框架不会隐藏或拦截 Tool
-- Memory 候选不相关时不必读取，继续调用 \`skill_list\`；完成 Skill 检查后再决定是否使用 \`webfetch\`
+- 使用 \`websearch\` 前必须先查询 Memory 和 Skill；只有两者都没有可用记录时才使用网络搜索。**websearch 是唯一的网络搜索工具，严禁使用 \`webfetch\` 进行搜索**。该顺序由你遵守，框架不会隐藏或拦截 Tool
+- Memory 候选不相关时不必读取，继续调用 \`skill_list\`；完成 Skill 检查后再决定是否使用 \`websearch\`
 - Memory 提供 Skill 线索只表示定位到能力，不表示能力已加载；相关时先用 \`skill_load\` / \`skill_section\` 取得正文并遵循对应流程
-- 完整 Memory 读取后优先使用其方法；Memory 和 Skill 都无可用记录时使用 \`webfetch\` 等搜索/网络工具
+- 完整 Memory 读取后优先使用其方法；Memory 和 Skill 都无可用记录时使用 \`websearch\` 等搜索工具
 - 上一次对话中已确认的信息优先于实时搜索结果
 - 禁止伪造数据，数据不确定时须向用户坦白
 - 工具获取的数据可能存在过时或错误，需结合上下文判断合理性`,
@@ -206,7 +206,7 @@ Prediction 只接收当前用户原文。不要补全、改写、翻译或生成
 
 fingerprint字段: 用一句话描述AI执行了什么具体行动（20字以内），去除修饰语、敬语、句式变化。
 相同行动尽量用一致的词描述。例如:
-- 天气查询 → "通过webfetch查询了指定城市天气"
+- 天气查询 → "通过websearch查询了指定城市天气"
 - 追问 → "询问用户提供城市名称"
 - 搜索记忆 → "搜索了记忆库并返回结果"
 

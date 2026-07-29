@@ -6,6 +6,7 @@ import {
 } from "./builtin/fs";
 import { createBashTool } from "./builtin/bash";
 import { createWebFetchTool } from "./builtin/webfetch";
+import { createWebSearchTool } from "./builtin/websearch";
 import {
   createSearchMemoryTool, createReadMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,
@@ -41,6 +42,7 @@ export function createAllTools(
     createIntentTool(),
     createTodoWriteTool(),
     createWebFetchTool(network),
+    createWebSearchTool(network),
     createGlobTool(sb), createEditTool(sb),
     ...(persistence ? createHistoryTools(persistence) : []),
   ];

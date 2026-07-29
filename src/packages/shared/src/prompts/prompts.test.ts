@@ -25,8 +25,11 @@ describe("Memory discovery prompts", () => {
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("所有工具始终可用");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("framework does not choose");
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("框架不会替你选择");
-    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("Before using `webfetch`, query both Memory and Skills");
-    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("使用 `webfetch` 前必须先查询 Memory 和 Skill");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("websearch");
+
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("websearch");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("never use `webfetch` for searching");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("严禁使用 `webfetch` 进行搜索");
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("Only adjust the query");
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("只有存在实质不同的检索概念");
     expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("read_memory");

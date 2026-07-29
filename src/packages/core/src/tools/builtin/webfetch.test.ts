@@ -134,7 +134,7 @@ describe("webfetch tool adapter", () => {
     });
 
     const result = await tool.execute(
-      { url: "https://www.baidu.com/s?wd=浙江工业大学+游泳馆", stripHtml: true },
+      { url: "https://example.com/results?q=浙江工业大学+游泳馆", stripHtml: true },
       { evidenceQuery: "浙工大游泳馆" },
     );
 
@@ -154,7 +154,7 @@ describe("webfetch tool adapter", () => {
       }),
     });
 
-    expect(await tool.execute({ url: "https://google.com" })).toEqual({
+    expect(await tool.execute({ url: "https://example.org" })).toEqual({
       metadata: {
         ok: false,
         effect: "none",
