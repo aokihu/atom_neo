@@ -67,19 +67,20 @@ export class MemoryService extends BaseService {
 
   // == Public API ==
 
-  async search(query: string, limit = 3): Promise<MemoryNode[]> {
+  async search(query: string, limit = 3, kind?: MemoryKind): Promise<MemoryNode[]> {
     const terms = parseMemorySearchTerms(query);
     if (terms.length === 0) return [];
 
     const candidateLimit = Math.max(limit * 10, 30);
     const ranks = new Map<string, number>();
+    const kindFilter = kind ? `AND nodes.kind = '${kind.replaceAll("'", "''")}'` : "";
     const ftsTerms = terms.filter((term) => Array.from(term).length >= 3);
     if (ftsTerms.length > 0) {
       const matchQuery = ftsTerms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" OR ");
       const rows = this.#db.prepare(
         `SELECT nodes.id, bm25(memory_fts) AS rank
          FROM memory_fts JOIN nodes ON nodes.rowid = memory_fts.rowid
-         WHERE memory_fts MATCH ? AND (nodes.expires_at IS NULL OR nodes.expires_at > ?)
+         WHERE memory_fts MATCH ? AND (nodes.expires_at IS NULL OR nodes.expires_at > ?) ${kindFilter}
          ORDER BY rank LIMIT ?`,
       ).all(matchQuery, this.#now(), candidateLimit) as Array<{ id: string; rank: number }>;
       for (const row of rows) ranks.set(row.id, row.rank);
@@ -92,7 +93,7 @@ export class MemoryService extends BaseService {
         .join(" OR ");
       const params = shortTerms.flatMap((term) => [term, term, term]);
       const rows = this.#db.prepare(
-        `SELECT id FROM nodes WHERE (${where}) AND (expires_at IS NULL OR expires_at > ?) LIMIT ?`,
+        `SELECT id FROM nodes WHERE (${where}) AND (expires_at IS NULL OR expires_at > ?) ${kindFilter} LIMIT ?`,
       ).all(...params, this.#now(), candidateLimit) as Array<{ id: string }>;
       for (const row of rows) if (!ranks.has(row.id)) ranks.set(row.id, 0);
     }

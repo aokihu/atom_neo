@@ -16,6 +16,7 @@ export default function PromptsPage({ content, title, description, category }: D
         <CodeBlock lang="text" code={`prompts/
 ├── keys.ts                 统一 PromptKey
 ├── model_profiles.ts       Provider 语言与模型映射
+├── version.ts              SYSTEM_PROMPT_VERSION (防止缓存)
 ├── variants/lang/          zh / en 完整基础提示词
 ├── variants/models/        按模型选择性追加文本
 ├── registry.ts             注册、合成、缓存

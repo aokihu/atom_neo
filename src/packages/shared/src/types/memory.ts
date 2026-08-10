@@ -1,8 +1,21 @@
 export type MemoryScope = "core" | "short" | "long";
 
+export const MEMORY_KIND_VALUES = [
+  "identity",
+  "preference",
+  "stable_fact",
+  "decision",
+  "workflow",
+  "temporary_state",
+  "realtime_data",
+] as const;
+
+export type MemoryKind = typeof MEMORY_KIND_VALUES[number];
+
 export type MemoryNode = {
   id: string;
   scope: MemoryScope;
+  kind: MemoryKind;
   content: string;
   summary: string;
   tags: string[];

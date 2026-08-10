@@ -24,6 +24,7 @@ src/packages/shared/src/prompts/
   registry.ts           — PromptRegistry: 惰性合成 + Map 缓存
   keys.ts               — PromptKey 枚举
   model_profiles.ts     — LANGUAGE_MAP + MODEL_REFINEMENT_MAP
+  version.ts            — SYSTEM_PROMPT_VERSION (主版本.次版本, 防止缓存)
   variants/
     lang/
       zh.ts             — 中文基础版 (每个 PromptKey 对应一份完整提示词)
@@ -101,6 +102,21 @@ server.ts 启动
   └─ resolvePrompt(BASE_SYSTEM, "deepseek", "deepseek-v4-pro")
       └─ cache.get() → O(1) 直接返回
 ```
+
+## 提示词版本号
+
+`version.ts` 定义 `SYSTEM_PROMPT_VERSION`（格式 `主版本.次版本`，如 `1.0`），注入到 BASE_SYSTEM 提示词最前面：
+
+```
+[SystemPrompt v1.0]
+
+# 行为准则
+...
+```
+
+- **用途**：防止 LLM 提供商缓存旧版本提示词。版本号变化即视为全新的 System Prompt。
+- **自动递增**：当 `zh.ts` 或 `en.ts` 的 BASE_SYSTEM 内容被修改并提交时，`pre-commit` hook 自动递增次版本号。主版本号需手动修改。
+- **安装 hook**：`bun run prepare`（已在 `npm install` / `bun install` 时自动执行）
 
 ## PromptKey 枚举
 

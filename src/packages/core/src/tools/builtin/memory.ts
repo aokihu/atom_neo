@@ -1,10 +1,11 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
-import { PermissionLevel } from "@atom-neo/shared";
+import { PermissionLevel, MEMORY_KIND_VALUES } from "@atom-neo/shared";
 import { toolResult } from "../outcome";
 
 const searchMemoryInputSchema = z.object({
-  query: z.string().describe("One or more broad concepts, synonyms, domain terms, or Skill names; avoid dates and freshness words"),
+  query: z.string().describe("搜索核心概念、同义词、领域词或 Skill 名称；删除年份、\"最新\"等实时限定词"),
+  kind: z.enum(MEMORY_KIND_VALUES).optional().describe("按类型过滤：stable_fact/decision/preference/identity 为事实类，workflow/temporary_state 为技能流程类"),
   limit: z.number().optional().default(3),
 });
 
@@ -37,7 +38,7 @@ const saveMemoryInputSchema = z.object({
   summary: z.string().optional().describe("Concise retrieval preview; omit when content is already concise"),
   tags: z.array(z.string()).optional().default([]),
   baseWeight: z.number().min(0).max(100).optional(),
-  kind: z.enum(["identity", "preference", "stable_fact", "decision", "workflow", "temporary_state", "realtime_data"]).optional(),
+  kind: z.enum(MEMORY_KIND_VALUES).optional(),
   ttlSeconds: z.number().int().positive().optional()
     .describe("Optional hard expiry. Defaults to 7 days for temporary_state and 6 hours for realtime_data."),
   confidence: z.number().min(0).max(1).optional(),
@@ -77,7 +78,7 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
       }
       const r = searchMemoryInputSchema.safeParse(args);
       if (!r.success) return toolResult.failure(r.error.message);
-      const nodes = await memory.search(r.data.query, r.data.limit);
+      const nodes = await memory.search(r.data.query, r.data.limit, r.data.kind);
       if (nodes.length === 0) return toolResult.none();
       const output = nodes.map(formatMemorySummary).join("\n");
       return toolResult.reference(output);
