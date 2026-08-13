@@ -20,6 +20,7 @@ export type ToolDefinition = {
   inputSchema: z.ZodType<Record<string, unknown>>;
   execute(args: unknown, opts?: ToolExecuteOptions): Promise<ToolResult>;
   permission?: PermissionLevel;
+  allowSameToolBatch?: boolean;
   requiresApproval?: boolean;
   silent?: boolean;
 };

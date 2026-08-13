@@ -49,6 +49,15 @@ describe("Memory discovery prompts", () => {
     expect(enBases[PromptKey.BASE_SYSTEM]).toContain("replacement are atomic");
   });
 
+  test("base prompts require same-name Tool batches and cross-step ordering", () => {
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("一个模型 step 只能选择一种 Tool");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("多次调用 `search_memory`");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("整批拒绝混合 Tool");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("Choose only one Tool name in each model step");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("several `search_memory` queries");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("rejects the entire mixed");
+  });
+
   test("result analysis checks long-response tails and active TODOs", () => {
     expect(zhBases[PromptKey.ANALYZE_RESULT]).toContain("Response Head 与 Response Tail");
     expect(zhBases[PromptKey.ANALYZE_RESULT]).toContain("pending/in_progress");

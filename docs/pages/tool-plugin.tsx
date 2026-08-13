@@ -31,6 +31,9 @@ export interface ToolDefinition {
 
   /** Optional: permission level required */
   permission?: PermissionLevel;
+
+  /** Allow same-name multi-call batches in one model step. */
+  allowSameToolBatch?: boolean;
 }
 
 export type ToolResult = {
@@ -242,6 +245,8 @@ export class ToolRegistry {
           headers={["规则", "第一阶段行为", "边界"]}
           rows={[
             ["工具可见性", "所有已注册 Tool 始终开放", "框架不做业务路由"],
+            ["同名批次", "仅 allowSameToolBatch=true 可多调用", "按 Call 顺序执行，不并发"],
+            ["非法多调用", "执行前整批拒绝", "混合 Tool 或默认单次 Tool 均不部分执行"],
             ["相同调用", "同一进展窗口内只执行一次", "不同 Tool 成功后允许重新读取变化资源"],
             ["无进展", "只提示 LLM 重新判断", "不会隐藏 Tool 或强制收尾"],
             ["调用预算", "真实执行次数最多为本次 maxSteps", "手工 Tool Loop 同时限制模型 step"],
@@ -249,6 +254,11 @@ export class ToolRegistry {
             ["WebFetch 节流", "NetworkService：普通域名 1 秒；搜索引擎主域 5 秒", "跨 Task、Session 和查询 URL 生效"],
           ]}
         />
+        <Callout type="info" title="显式 opt-in，不看权限猜测">
+          <code>READ_ONLY</code> 不等于可批量：<code>intent</code>、<code>todowrite</code> 和 Skill
+          状态工具也可能改变控制状态。MCP/插件 Tool 缺少 Atom 批量元数据时默认单次；支持 POST 的
+          <code>webfetch</code> 同样默认单次。
+        </Callout>
         <Callout type="warn" title="HTTP 成功不等于证据">
           WebFetch 会在适配层检查正文并按当前查询抽取相关片段。HTTP 成功但正文为空或不相关时返回
           <code>effect:none</code>，不会投影到模型 Context。

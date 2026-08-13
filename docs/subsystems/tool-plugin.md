@@ -32,6 +32,9 @@ export interface ToolDefinition {
 
   /** Optional: permission level required */
   permission?: PermissionLevel;
+
+  /** Explicitly allow multiple calls with this same tool name in one model step. */
+  allowSameToolBatch?: boolean;
 }
 
 export type ToolResult = {
@@ -124,6 +127,11 @@ Topic/Session Context。
 禁止通过解析 `content` 文本猜测 effect。MCP 原始结果在当前 conversation 的后续 steps 中按
 `reference` 使用，不能自动持久化或单独作为 Post/Compact 的完成事实。
 
+`allowSameToolBatch` 默认是 `false`，不能从 `PermissionLevel.READ_ONLY` 推断。只有确认无副作用、
+多次调用之间不依赖前一次结果的查询 Tool 才显式设为 `true`。控制状态 Tool（例如 `intent`、
+`todowrite`、Skill load/unload）、写入 Tool、支持 POST 的 `webfetch`，以及没有 Atom 元数据的
+MCP/插件 Tool 每个模型 step 只能调用一次。
+
 ## 3. File System Tools
 
 ```typescript
@@ -201,6 +209,20 @@ createForgetMemoryTool(memory)   // { id }
 - 遍历摘要保留在当前 Conversation，但不写入 Session Tool Context。
 - `skill_load` / `skill_section` 用 `state_changed` 通知框架刷新 Skill Context。
 - Agent 可以自主扩大 Memory 查询；MCP 与其他非 WebFetch 工具不参与门控。
+
+### 同名 Tool 批次
+
+```text
+允许: search_memory(query=A) + search_memory(query=B)
+拒绝: search_memory(query=A) + ls(path=".")
+拒绝: write(file=A) + write(file=B)
+```
+
+- 一个 step 有多个 Call 时，所有 `toolName` 必须相同，且该 Tool 必须设置
+  `allowSameToolBatch: true`。
+- Runtime 在执行任何 Call 前验证整个批次。非法批次不执行任何 executor，并为每个
+  `call_id` 返回 `TOOL_BATCH_BLOCKED` 失败结果。
+- 合法批次不是并发执行：Atom 按模型返回顺序逐个 `await`，收齐结果后再进入下一 step。
 
 ## 5. Session History Tools
 

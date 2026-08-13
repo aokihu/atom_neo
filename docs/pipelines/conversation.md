@@ -79,8 +79,17 @@ HTTP / WebSocket 在 Task 入队前已经把用户消息写入 Session。`record
 Memory 查询，WebFetch 也没有 Memory/Skill 的框架前置门控。Prompt 明确要求 LLM 在
 WebFetch 前先查询 Memory 与 Skill；顺序由 LLM 遵守，框架不维护业务状态。
 
+一个模型 step 可以返回多个 Tool Call，但必须满足“同名批次”契约：
+
+- 多个 Call 的 `toolName` 必须完全相同，不允许在同一 step 混合不同工具。
+- 只有 `ToolDefinition.allowSameToolBatch=true` 的无副作用查询工具允许同名多调用；默认关闭。
+- 写入、控制、Skill 状态工具、支持 POST 的 WebFetch，以及未知 MCP/插件 Tool 每 step 只能调用一次。
+- 批次仍按 Call 顺序逐个执行；整批结果全部返回后，LLM 才能在下一 step 选择其他 Tool。
+- 违反契约时整批在 executor 之前拒绝，每个 `call_id` 都返回配对失败结果，不执行任何部分调用。
+
 ```text
 LLM Tool Call
+  → mixed names or non-batchable multi-call? reject the whole batch
   → exact duplicate? block once and tell LLM to reassess
   → otherwise execute Tool
   → return the Tool Call + Tool Result to the next model step
@@ -89,6 +98,7 @@ LLM Tool Call
 ```
 
 框架不根据 `effect` 隐藏正常 Tool Result，不动态收窄 Tool，也不替 LLM决定查询是否相关。
+同名批次校验只维护执行原子性和顺序，不承担业务相关性判断。
 `metadata.effect` 只用于日志、Post 分析和无进展提醒。
 
 ### 工具结果生命周期
@@ -104,8 +114,9 @@ LLM Tool Call
 ```text
 streamText（单 step，schema-only tools）
   → 收集 Tool Calls
+  → 同名批次预检；非法批次整批拒绝
   → Ledger 预检 / 去重 / 预算
-  → Atom ToolRunner 执行
+  → Atom ToolRunner 按 Call 顺序执行
   → 返回 Tool Call + Tool Result 给下一模型 step
   → metadata.effect 只更新 Ledger 计数
   → 连续无进展只追加判断提示；Tool schema 保持开放

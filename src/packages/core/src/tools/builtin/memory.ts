@@ -84,6 +84,7 @@ export function createSearchMemoryTool(memory?: any): ToolDefinition {
       return toolResult.reference(output);
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 
@@ -126,6 +127,7 @@ export function createReadMemoryTool(memory?: any): ToolDefinition {
       return toolResult.reference(output, contextInjection);
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 
@@ -178,6 +180,7 @@ export function createTraverseMemoryTool(memory?: any): ToolDefinition {
       return toolResult.reference(nodes.map(formatMemoryTraversalSummary).join("\n"));
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 

@@ -86,6 +86,9 @@ export default function ContextOutcomeGovernancePage({
         <ComparisonTable
           headers={["场景", "必须满足"]}
           rows={[
+            ["同 step 混合 Tool", "执行前整批拒绝，所有 Call 保持结果配对"],
+            ["非 batchable Tool 多调用", "整批拒绝，不产生部分状态变更"],
+            ["合法同名查询批次", "顺序执行，收齐结果后才能切换 Tool"],
             ["连续空搜索", "不写持久 Context，只提示模型重新判断"],
             ["完全重复调用", "阻止重复执行并返回循环提示"],
             ["正常 Tool Result", "完整返回当前 Conversation，不由框架筛选"],

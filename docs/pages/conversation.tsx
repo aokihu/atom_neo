@@ -82,6 +82,8 @@ Tool executors + ToolGuard + Ledger       → Atom Tool Loop`} />
       <Section title="Tool 自主调用与循环保护">
         <CodeBlock lang="text" code={`Prediction → structured classification only
 Conversation LLM → Memory / Skill / MCP / WebFetch / Filesystem
+  ├─ same-name batch → validate opt-in, then execute calls in order
+  ├─ mixed/non-batchable multi-call → reject the whole batch before execution
   ├─ normal call → execute and return full Tool Result
   ├─ repeated no-result → add a judgment warning; keep tools available
   ├─ exact duplicate → block the duplicate and explain why
@@ -89,15 +91,17 @@ Conversation LLM → Memory / Skill / MCP / WebFetch / Filesystem
         <ComparisonTable
           headers={["状态", "框架行为"]}
           rows={[
+            ["合法同名批次", "按 Call 顺序执行，收齐结果后进入下一 step"],
+            ["混合或非批量多调用", "整批拒绝，每个 call_id 返回配对错误"],
             ["正常 Tool 调用", "不筛选、不改写、不隐藏结果"],
             ["连续无结果", "只提示 LLM 重新判断，不停机"],
             ["完全重复调用", "阻止重复执行，返回循环提示"],
             ["达到执行上限", "停止 Tool Loop，让 LLM 收尾"],
           ]}
         />
-        <Callout type="tip" title="框架不是 Tool 路由器">
+        <Callout type="tip" title="顺序治理，不做业务路由">
           Prompt 要求 LLM 在 WebFetch 前先查询 Memory 与 Skill；框架不维护业务前置状态，
-          也不隐藏或拦截正常 Tool。
+          也不判断 Tool 是否与任务相关。同名批次校验只阻止混合执行和部分副作用。
         </Callout>
       </Section>
 

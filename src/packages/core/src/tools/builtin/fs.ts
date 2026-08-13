@@ -49,6 +49,7 @@ export function createReadTool(sb: Sandbox): ToolDefinition {
       } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 
@@ -88,6 +89,7 @@ export function createLsTool(sb: Sandbox): ToolDefinition {
       } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 
@@ -119,6 +121,7 @@ export function createTreeTool(sb: Sandbox): ToolDefinition {
       } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 
@@ -161,6 +164,7 @@ export function createGrepTool(sb: Sandbox): ToolDefinition {
       } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 
@@ -225,6 +229,7 @@ export function createGlobTool(sb: Sandbox): ToolDefinition {
       } catch (err) { return toolResult.failure(String(err)); }
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }
 

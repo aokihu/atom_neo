@@ -44,6 +44,18 @@ describe("ToolCallLedger", () => {
     expect(ledger.snapshot().stopReason).toBeUndefined();
   });
 
+  test("counts a rejected batch without reserving executions", () => {
+    const ledger = new ToolCallLedger({ maxExecutions: 10 });
+
+    expect(ledger.rejectBatch(3)).toMatchObject({
+      attempts: 3,
+      executions: 0,
+      blocked: 3,
+      consecutiveNoProgress: 1,
+    });
+    expect(ledger.shouldForceText()).toBe(false);
+  });
+
   test("allows materially different queries after empty search results", () => {
     const ledger = new ToolCallLedger({ maxExecutions: 10, maxConsecutiveNoProgress: 3 });
     for (const query of ["浙江大学 游泳馆", "ZJU swimming pool", "浙江大学 体育设施"]) {

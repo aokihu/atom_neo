@@ -16,9 +16,11 @@ import type { SkillServiceLike } from "../../../skills/types";
 import type { ContextService } from "../../../context/context-service";
 import {
   buildToolStepInstruction,
+  formatToolBatchBlock,
   projectToolMessages,
   stripToolCallMarkup,
   toSchemaOnlyTools,
+  validateToolCallBatch,
 } from "./tool-loop";
 import type { ManualToolCall, ToolStepRecord } from "./tool-loop";
 import {
@@ -107,6 +109,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #toolGovernance: { current: ToolCallLedger };
   #skillService?: SkillServiceLike;
   #contextService: ContextService;
+  #sameToolBatchNames: ReadonlySet<string>;
 
   constructor(params: {
     name: string;
@@ -138,6 +141,9 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
+    this.#sameToolBatchNames = new Set(
+      params.tools.filter(tool => tool.allowSameToolBatch === true).map(tool => tool.name),
+    );
     this.#toolGovernance = { current: new ToolCallLedger({ maxExecutions: this.#maxSteps }) };
     this.#builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance, this.#session);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
@@ -372,6 +378,60 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           });
           completeStep(modelStep);
           break;
+        }
+
+        const batchDecision = validateToolCallBatch(stepCalls, this.#sameToolBatchNames);
+        if (!batchDecision.allowed) {
+          const error = formatToolBatchBlock(batchDecision);
+          const metadata = { ok: false, effect: "none", error } as const;
+          const stepRecords = new Map<string, ToolStepRecord>();
+          const governanceState = this.#toolGovernance.current.rejectBatch(stepCalls.length);
+          this.report(BusEvents.Element.Data, {
+            step: "tool-batch-blocked",
+            stepNumber: modelStep,
+            reason: batchDecision.reason,
+            toolNames: batchDecision.toolNames,
+            callCount: stepCalls.length,
+            ...governanceState,
+          });
+          for (const call of stepCalls) {
+            stepRecords.set(call.toolCallId, {
+              toolName: call.toolName,
+              input: call.input,
+              content: "",
+              metadata,
+            });
+            allToolCalls.push({ toolName: call.toolName, metadata });
+            reportTransport(BusEvents.Transport.ToolStarted, {
+              toolName: call.toolName,
+              toolCallId: call.toolCallId,
+              input: call.input,
+            });
+            reportTransport(BusEvents.Transport.ToolFinished, {
+              toolName: call.toolName,
+              toolCallId: call.toolCallId,
+              error,
+            });
+            this.#session?.addToolResult?.({
+              toolName: call.toolName,
+              topic: this.#session.currentTopic ?? "",
+              timestamp: Date.now(),
+              content: "",
+              metadata,
+            });
+          }
+          modelMessages = [...modelMessages, ...projectToolMessages(stepCalls, stepRecords)];
+          stepInstruction = error;
+          reportTransport(BusEvents.Transport.ToolStepFinished, {
+            stepNumber: modelStep,
+            total: stepCalls.length,
+            success: 0,
+            failed: stepCalls.length,
+            toolNames: stepCalls.map(call => call.toolName),
+          });
+          completeStep(modelStep);
+          modelStep++;
+          continue;
         }
 
         const stepRecords = new Map<string, ToolStepRecord>();

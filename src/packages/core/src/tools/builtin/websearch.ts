@@ -102,5 +102,6 @@ export function createWebSearchTool(network: NetworkServiceLike): ToolDefinition
         : toolResult.none();
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 }

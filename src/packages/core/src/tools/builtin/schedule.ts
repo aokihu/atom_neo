@@ -101,6 +101,7 @@ export function createScheduleTools(
       }
     },
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
   };
 
   const scheduleUpdate: ToolDefinition = {

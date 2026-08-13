@@ -109,6 +109,18 @@ register() again
           <code>String.toWellFormed()</code> 只修复非法代理字符；字面量 <code>\u</code>、路径和代码必须原样保留。
         </Callout>
       </Section>
+
+      <Section title="Tool 批次行为约束">
+        <CodeBlock lang="text" code={`one model step
+  → one Tool name
+  → optional multiple calls with different arguments
+  → wait for every result
+  → choose another Tool only in the next step`} />
+        <Callout type="info" title="Prompt 说明 + Runtime 硬校验">
+          BASE_SYSTEM 禁止同一 step 混合不同 Tool。只有显式允许的只读查询 Tool 可以同名多调用；
+          Runtime 会在任何 executor 运行前验证整个批次，因此非法批次不会产生部分副作用。
+        </Callout>
+      </Section>
     </div>
   );
 }

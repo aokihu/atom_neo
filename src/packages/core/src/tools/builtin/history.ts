@@ -87,6 +87,7 @@ export const createHistoryTools = (persistence: SessionPersistenceService): Tool
     source: "builtin",
     inputSchema: searchSchema,
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
     execute: async (args, options) => {
       const parsed = searchSchema.safeParse(args);
       if (!parsed.success) return toolResult.failure("Invalid input");
@@ -118,6 +119,7 @@ export const createHistoryTools = (persistence: SessionPersistenceService): Tool
     source: "builtin",
     inputSchema: readSchema,
     permission: PermissionLevel.READ_ONLY,
+    allowSameToolBatch: true,
     execute: async (args, options) => {
       const parsed = readSchema.safeParse(args);
       if (!parsed.success) return toolResult.failure("Invalid input");

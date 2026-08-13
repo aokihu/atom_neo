@@ -37,4 +37,16 @@ describe("registerBuiltinTools", () => {
     expect(names).toContain("search_history");
     expect(names).toContain("read_history");
   });
+
+  test("opts only side-effect-free query tools into same-name batches", () => {
+    const tools = createAllTools({ sandbox, network, whitelist: [] });
+    const byName = new Map(tools.map(tool => [tool.name, tool]));
+
+    for (const name of ["search_memory", "read_memory", "grep", "websearch"]) {
+      expect(byName.get(name)?.allowSameToolBatch).toBe(true);
+    }
+    for (const name of ["write", "intent", "todowrite", "webfetch", "save_memory"]) {
+      expect(byName.get(name)?.allowSameToolBatch).not.toBe(true);
+    }
+  });
 });

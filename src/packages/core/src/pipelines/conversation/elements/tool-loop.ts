@@ -14,6 +14,30 @@ export type ToolStepRecord = {
   metadata: ToolResultMetadata;
 };
 
+export type ToolBatchBlockReason = "mixed_tool_names" | "tool_not_batchable";
+
+export type ToolBatchDecision =
+  | { allowed: true }
+  | { allowed: false; reason: ToolBatchBlockReason; toolNames: string[] };
+
+export function validateToolCallBatch(
+  calls: readonly ManualToolCall[],
+  allowSameToolBatchNames: ReadonlySet<string>,
+): ToolBatchDecision {
+  if (calls.length <= 1) return { allowed: true };
+  const toolNames = [...new Set(calls.map(call => call.toolName))];
+  if (toolNames.length !== 1) return { allowed: false, reason: "mixed_tool_names", toolNames };
+  return allowSameToolBatchNames.has(toolNames[0]!)
+    ? { allowed: true }
+    : { allowed: false, reason: "tool_not_batchable", toolNames };
+}
+
+export function formatToolBatchBlock(decision: Extract<ToolBatchDecision, { allowed: false }>): string {
+  return decision.reason === "mixed_tool_names"
+    ? `TOOL_BATCH_BLOCKED [mixed_tool_names]: one model step may call only one Tool name; received ${decision.toolNames.join(", ")}. Wait for one Tool batch to finish before choosing another Tool.`
+    : `TOOL_BATCH_BLOCKED [tool_not_batchable]: ${decision.toolNames[0]} allows only one call per model step. Wait for its result before calling it again or choosing another Tool.`;
+}
+
 export function toSchemaOnlyTools(tools: Record<string, any>): Record<string, any> {
   return Object.fromEntries(Object.entries(tools).map(([name, value]) => {
     if (!value || typeof value !== "object") return [name, value];

@@ -82,6 +82,13 @@ The system rates task difficulty and injects it into context (\`[Task Difficulty
 - If todo list exists but current reply is unrelated to its tasks, update progress first before continuing.
 - **Do not output progress narration or self-talk** (e.g., "step X complete", "updating progress", "moving to next item"). When transitioning between tasks, only update todowrite and end the current reply normally — no narration text at all.
 
+## Tool Batches and Ordering
+- Choose only one Tool name in each model step; never mix different Tool names in the same step.
+- Only side-effect-free read/query Tools may emit multiple same-name Calls with different arguments in one step, for example several \`search_memory\` queries.
+- Write, control, Skill-state, WebFetch, and other single-call Tools may be called only once per step.
+- Runtime still executes a valid same-name batch in order. Wait for every result and assess the complete batch before choosing another Tool in the next step.
+- Runtime rejects the entire mixed or non-batchable multi-call batch. Use the returned errors to choose again instead of repeating the invalid batch.
+
 ## Continuation Rules (passive trigger)
 
 If the system truncated your reply due to length, you will receive a continuation instruction. Please:

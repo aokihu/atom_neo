@@ -74,6 +74,8 @@ ToolResult
 - AI SDK 只负责单 step Tool Call 解析，Tool 不向 SDK 提供 `execute`；执行与循环由 Atom 控制。
 - Tool Call 与 Tool Result 必须保持配对；empty/error 只存在于当前 Conversation，不进入
   Topic/Session Context 或后续 Conversation。
+- 多 Call step 必须是显式允许的同名批次。批次校验先于任何 executor；非法批次的全部 Call
+  返回配对错误，记录 blocked/no-progress，但不计入真实 execution，也不产生部分副作用。
 - 有效 content 也不自动持久化，避免旧证据无限累积；需要跨轮使用时由 Tool 返回
   `contextInjection`，沿用现有 scope、TTL、pin 与 trust 边界。
 - Session 中的结构化 ToolResult 可用于 TUI、日志和诊断，但 Prediction、Post、Compact 只能读取
@@ -115,6 +117,10 @@ ToolResult
 
 - 将 Tool schema 与 executor 分离；AI SDK 只接收不带 `execute` 的 schema Tool。
 - Stream 层改为单 step 手工循环，统一执行 Tool、读取 metadata 并写入 Session 审计记录。
+- ToolDefinition 使用 `allowSameToolBatch` 显式声明无副作用查询 Tool 是否允许同 step 多调用；
+  未声明、写入/控制 Tool 及 MCP/插件 Tool 默认单次。
+- 同一 step 混合不同 Tool，或对非 batchable Tool 发出多个 Call 时，整批拒绝；合法同名批次
+  仍按 Call 顺序执行，整批结果返回后才进入下一模型 step。
 - 所有 Tool schema 始终开放，由 LLM 自主决定调用顺序与次数；框架不再动态收窄 `activeTools`。
 - Prediction 不执行 Memory 查询；Memory、Skill、WebFetch 全部由 Conversation LLM 自主调用。
 - Prompt 要求 LLM 在 WebFetch 前先查询 Memory 与 Skill；框架不维护或强制该业务前置状态。

@@ -82,6 +82,13 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 若 todo 列表存在但当前回复与列表中的任务无关，先更新进度再继续
 - **禁止在回复中输出进度叙述或自我对话**（如"第X步完成"、"更新进度并进入下一步"等）。任务过渡时只更新 todowrite 并正常结束当前回复，不输出旁白文字
 
+## Tool 批次与顺序
+- 一个模型 step 只能选择一种 Tool；禁止在同一 step 混合不同的 Tool 名称
+- 只有无副作用的只读查询 Tool 才可以在同一 step 使用不同参数发出多个同名 Call，例如用不同 query 多次调用 \`search_memory\`
+- 写入、控制、Skill 状态、WebFetch 或其他默认单次 Tool，每个 step 只能调用一次
+- 当前同名批次仍由 Runtime 顺序执行；必须等待全部结果返回并完成判断后，才能在下一 step 选择其他 Tool
+- Runtime 会整批拒绝混合 Tool 或不允许批量的多 Call；被拒绝后根据错误结果重新选择，不要重复同一非法批次
+
 ## 续写规则（被动触发）
 
 若系统因长度限制截断了你的回复，你会收到续写指令。请：

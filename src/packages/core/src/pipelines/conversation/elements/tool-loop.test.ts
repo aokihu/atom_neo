@@ -1,10 +1,78 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildToolStepInstruction,
+  formatToolBatchBlock,
   projectToolMessages,
   stripToolCallMarkup,
   toSchemaOnlyTools,
+  validateToolCallBatch,
 } from "./tool-loop";
+
+const call = (toolCallId: string, toolName: string, input: unknown = {}) => ({
+  toolCallId,
+  toolName,
+  input,
+});
+
+describe("Tool call batches", () => {
+  const batchable = new Set(["search_memory", "read_memory"]);
+
+  test("allows different queries through the same batchable Tool", () => {
+    expect(validateToolCallBatch([
+      call("memory-1", "search_memory", { query: "杭州" }),
+      call("memory-2", "search_memory", { query: "天气流程" }),
+    ], batchable)).toEqual({ allowed: true });
+  });
+
+  test("rejects mixed Tool names as one batch", () => {
+    const decision = validateToolCallBatch([
+      call("memory-1", "search_memory", { query: "天气" }),
+      call("ls-1", "ls", { path: "." }),
+    ], batchable);
+
+    expect(decision).toEqual({
+      allowed: false,
+      reason: "mixed_tool_names",
+      toolNames: ["search_memory", "ls"],
+    });
+    if (decision.allowed) throw new Error("expected mixed batch to be blocked");
+    expect(formatToolBatchBlock(decision)).toContain("TOOL_BATCH_BLOCKED [mixed_tool_names]");
+  });
+
+  test("rejects repeated state, control, WebFetch, and unknown MCP Tools", () => {
+    for (const toolName of ["write", "intent", "todowrite", "webfetch", "mcp_weather"]) {
+      expect(validateToolCallBatch([
+        call(`${toolName}-1`, toolName),
+        call(`${toolName}-2`, toolName),
+      ], batchable)).toEqual({
+        allowed: false,
+        reason: "tool_not_batchable",
+        toolNames: [toolName],
+      });
+    }
+  });
+
+  test("allows different Tools only as separate single-call steps", () => {
+    expect(validateToolCallBatch([call("memory-1", "search_memory")], batchable)).toEqual({ allowed: true });
+    expect(validateToolCallBatch([call("ls-1", "ls")], batchable)).toEqual({ allowed: true });
+  });
+
+  test("keeps a rejected result paired with every call id", () => {
+    const calls = [call("memory-1", "search_memory"), call("ls-1", "ls")];
+    const error = "TOOL_BATCH_BLOCKED [mixed_tool_names]";
+    const messages = projectToolMessages(calls, new Map(calls.map(item => [item.toolCallId, {
+      toolName: item.toolName,
+      input: item.input,
+      content: "",
+      metadata: { ok: false as const, effect: "none" as const, error },
+    }])));
+    const projected = JSON.stringify(messages);
+
+    expect(projected).toContain("memory-1");
+    expect(projected).toContain("ls-1");
+    expect(projected.match(/TOOL_BATCH_BLOCKED/g)).toHaveLength(2);
+  });
+});
 
 describe("manual tool loop context projection", () => {
   test("removes execute callbacks before tools reach AI SDK", () => {

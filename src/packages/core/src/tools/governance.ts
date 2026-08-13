@@ -101,6 +101,14 @@ export class ToolCallLedger {
     return this.snapshot();
   }
 
+  rejectBatch(callCount: number): ToolGovernanceSnapshot {
+    const count = Math.max(1, Math.floor(callCount));
+    this.#attempts += count;
+    this.#blocked += count;
+    this.#markNoProgress();
+    return this.snapshot();
+  }
+
   shouldForceText(): boolean {
     return this.#stopReason !== undefined;
   }

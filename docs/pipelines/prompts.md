@@ -118,6 +118,13 @@ server.ts 启动
 - **自动递增**：当 `zh.ts` 或 `en.ts` 的 BASE_SYSTEM 内容被修改并提交时，`pre-commit` hook 自动递增次版本号。主版本号需手动修改。
 - **安装 hook**：`bun run prepare`（已在 `npm install` / `bun install` 时自动执行）
 
+## Tool 批次约束
+
+BASE_SYSTEM 同时约束模型的单 step Tool 选择：允许同一个只读查询 Tool 使用不同参数发出多个
+Call，但禁止在一个 step 混合不同 Tool；必须等待当前批次的全部结果返回后，才能在下一 step
+选择其他 Tool。Runtime 使用 ToolDefinition 的显式 opt-in 做硬校验，因此 Prompt 是行为说明，
+不是唯一防线。
+
 ## PromptKey 枚举
 
 | Key | 用途 | 使用位置 |
