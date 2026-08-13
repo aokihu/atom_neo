@@ -8,6 +8,7 @@ export {
   PermissionLevel,
   PipelineResultType,
   PipelineEnqueueTransition,
+  MEMORY_KIND_VALUES,
 } from "./types";
 export type {
   UUID,
@@ -28,6 +29,7 @@ export type {
   IntentPredictionResult,
   MemoryNode,
   MemoryLink,
+  MemoryKind,
   MemoryScope,
   MemorySearchRequest,
   MemorySearchResult,
@@ -40,10 +42,10 @@ export type {
   NetworkServiceLike,
   ToolDefinition,
   ToolResult,
+  ToolEffect,
+  ToolResultMetadata,
   ToolExecuteOptions,
   ToolContextInjection,
-  ToolGuardDecision,
-  ToolGuardState,
   PipelineResult,
   FlowState,
   ConversationContinuationAction,

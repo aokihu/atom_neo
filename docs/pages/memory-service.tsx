@@ -78,7 +78,8 @@ CREATE TABLE edges (
             [<Badge color="blue">search</Badge>, <code>search(query, limit?)</code>, "候选词 OR 搜索正文/tags，按相关度、权重和时效排序"],
             [<Badge color="blue">getById</Badge>, <code>getById(memoryId)</code>, "将摘要候选的 ID 恢复并读取完整正文"],
             [<Badge color="green">save</Badge>, <code>save(content, tags?, summary?, options?)</code>, "可用 supersedesId 原子替代旧节点"],
-            [<Badge color="purple">traverse</Badge>, <code>traverse(startId, maxSteps?)</code>, "BFS 返回 sourceId、relation、depth，工具层只展示摘要"],
+            [<Badge color="blue">countRelated</Badge>, <code>countRelated(memoryId)</code>, "双向去重统计未过期关联节点"],
+            [<Badge color="purple">traverse</Badge>, <code>traverse(startId, maxSteps?)</code>, "双向 BFS 返回 sourceId、relation、direction、depth"],
             [<Badge color="blue">findFullId</Badge>, <code>findFullId(memoryId)</code>, "将唯一短 ID 查回完整 ID"],
             [<Badge color="orange">link</Badge>, <code>link(source, target, relation)</code>, "恢复完整 ID 后建立唯一关系边"],
             [<Badge color="red">forget</Badge>, <code>forget(id)</code>, "按完整 ID 或唯一短 ID 删除节点、正文、索引和关联边"],
@@ -94,7 +95,7 @@ CREATE TABLE edges (
 </MemorySummary>
 
 read_memory({ id: "2d4bed" })
-<Memory id="2d4bed" tags="project,tech-stack">
+<Memory id="2d4bed" tags="project,tech-stack" relatedCount="2">
 项目使用 TypeScript 和 Bun 运行时
 </Memory>`} />
         <CodeBlock lang="text" code={`用户描述要删除的正文
@@ -114,19 +115,24 @@ read_memory({ id: "2d4bed" })
           headers={["阶段", "行为", "结果"]}
           rows={[
             ["Context", "检查已注入的 Memory 与 Skill", "已有查询方法时直接遵循"],
-            ["Memory", "搜索摘要、正文与 tags，只注入候选摘要", "记录 found / empty / unavailable"],
-            ["Read", "确认候选相关后调用 read_memory", "取得完整正文"],
+            ["Memory", "Conversation 按需搜索摘要、正文与 tags", "结果返回当前 Tool Loop"],
+            ["Read", "确认候选相关后调用 read_memory", "取得完整正文与 relatedCount"],
             ["Skill", "Memory 提供 Skill 线索时加载对应 section", "取得可复用查询流程"],
-            ["Web", "普通方法命中，或 Skill 成功加载后开放 webfetch", "获取最终实时数据"],
+            ["Web", "Memory 与 Skill 均无可用记录后由 LLM 调用 webfetch", "获取最终实时数据"],
           ]}
         />
         <CodeBlock lang="text" code={`用户: 现在查一下台风的信息
-  → Prediction.memoryQuery = "台风"
-  → collect-context 搜索 Memory
-  → 命中查询方法 / Skill 线索
-  → 按方法开放并执行 webfetch`} />
-        <Callout type="info" title="空结果需要扩大查询">
-          空结果不会立即开放 Web。Agent 必须使用互不相似且更宽的查询重试；三个不同查询仍为空，或 Memory 不可用时才进入 Web。年份、实时性修饰词及存在关键词或中文片段重叠的组合不累计次数。用户提供明确 URL 时可直接访问。
+  → Prediction 只输出结构化分类
+  → Conversation 自主调用 search_memory
+  → LLM 判断摘要 / Skill / WebFetch 的下一步`} />
+        <Callout type="info" title="空结果返回模型">
+          框架不限制 Agent 的 Memory 查询次数，也不比较查询相似度。空结果返回当前 Conversation，
+          连续无结果时只增加辅助判断提示。
+        </Callout>
+        <Callout type="info" title="关联数量由 LLM 决定是否展开">
+          <code>read_memory</code> 在 Memory 标签上返回双向去重的 <code>relatedCount</code>。
+          数量大于 0 时，LLM 自主决定是否调用 <code>traverse_memory</code>；遍历摘要通过
+          <code>direction</code> 标明入边或出边。
         </Callout>
       </Section>
 
@@ -134,11 +140,13 @@ read_memory({ id: "2d4bed" })
         <ComparisonTable
           headers={["事件", "变化"]}
           rows={[
-            ["摘要曝光", "自动搜索、search_memory、traverse_memory 均令 retrieval_count +1"],
+            ["摘要曝光", "search_memory、traverse_memory 均令 retrieval_count +1"],
             ["read_memory", "懒衰减 usage_score 后 +1，read_count +1"],
             ["选择率", "平滑 read/retrieval 比例占质量分 5%"],
             ["RETAIN_MEMORY", "base_weight +10，更新 last_confirmed_at"],
             ["时间流逝", "动态降低 usage/freshness，不修改 base_weight"],
+            ["temporary_state", "默认 7 天硬过期，过期后不再搜索、读取或遍历"],
+            ["realtime_data", "默认 6 小时硬过期，避免天气、价格等短期数据长期污染"],
             ["supersedes", "save_memory 在事务中保存新节点并替代旧节点"],
             ["pinned", "freshness 固定为 100"],
           ]}
@@ -146,11 +154,11 @@ read_memory({ id: "2d4bed" })
       </Section>
 
       <Section title="瞬时图谱浏览">
-        <p><code>traverse_memory</code> 返回摘要、短 ID、来源节点、关系类型和遍历深度。结果仅供紧接着的一个模型 step 选择节点，随后自动从 AI SDK messages 中裁剪，也不会写入跨轮次 Session Tool Context。</p>
+        <p><code>traverse_memory</code> 双向遍历关系，返回摘要、短 ID、来源节点、关系方向、关系类型和遍历深度。结果保留在当前 Conversation 的 Tool Loop 中，但不会写入跨轮次 Session Tool Context。</p>
         <CodeBlock lang="xml" code={`<MemorySummary id="a1b2c3" tags="workflow" depth="0">
 根记忆摘要
 </MemorySummary>
-<MemorySummary id="d4e5f6" tags="skill" sourceId="a1b2c3" relation="depends_on" depth="1">
+<MemorySummary id="d4e5f6" tags="skill" sourceId="a1b2c3" relation="depends_on" direction="outgoing" depth="1">
 关联记忆摘要
 </MemorySummary>`} />
       </Section>
@@ -160,9 +168,9 @@ read_memory({ id: "2d4bed" })
           headers={["工具", "权限", "职责"]}
           rows={[
             [<code>search_memory</code>, "READ_ONLY", "搜索并返回摘要与短 ID"],
-            [<code>read_memory</code>, "READ_ONLY", "按完整或唯一短 ID 读取完整正文"],
+            [<code>read_memory</code>, "READ_ONLY", "读取完整正文并返回 relatedCount"],
             [<code>save_memory</code>, "FILE_WRITE", "保存正文；supersedesId 可原子替代旧记忆"],
-            [<code>traverse_memory</code>, "READ_ONLY", "瞬时返回摘要、短 ID 和关系元数据"],
+            [<code>traverse_memory</code>, "READ_ONLY", "双向返回摘要、短 ID、关系与方向"],
             [<code>link_memory</code>, "FILE_WRITE", "关联两条记忆"],
             [<code>forget_memory</code>, "FILE_WRITE", "按完整 ID或唯一短 ID删除记忆"],
           ]}

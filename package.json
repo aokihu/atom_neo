@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
@@ -17,7 +17,8 @@
     "test": "bun test",
     "typecheck": "bun run --workspaces typecheck",
     "build": "bun run --workspaces build",
-    "build:bin": "mkdir -p dist && bun -e 'const{writeFileSync}=require(\"fs\");const pkg=require(\"./package.json\");writeFileSync(\"src/version.ts\",`export const VERSION = \\\"${pkg.version}\\\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun"
+    "build:bin": "mkdir -p dist && bun -e 'const{writeFileSync}=require(\"fs\");const pkg=require(\"./package.json\");writeFileSync(\"src/version.ts\",`export const VERSION = \\\"${pkg.version}\\\";\\n`)' && bun build ./src/main.ts --compile --outfile dist/atom --target bun",
+    "prepare": "bash scripts/setup-git-hooks.sh"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.12",

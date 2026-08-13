@@ -287,7 +287,7 @@ categories: creative | tools | code | knowledge | chat
     ├─ newTopic !== session.currentTopic → resetForNewTopic(newTopic)
     └─ newTopic === session.currentTopic → 保持上下文
   → collect-context: 注入 [主题约束] 到 context
-  → stream-llm: activeTools 由 intent 独立控制
+  → stream-llm: 始终向 LLM 提供全部 Tool schema
 ```
 
 ## 4. resetForNewTopic()
@@ -303,12 +303,13 @@ resetForNewTopic(topic: string): void {
 }
 ```
 
-## 5. 双重边界
+## 5. 职责边界
 
 | 边界层 | 实现 | 效果 |
 |--------|------|------|
-| 主题约束 | context 注入 + activeTools | LLM 被约束在主题范围内 |
-| 工具过滤 | intent → getActiveToolNames() | instruction→17工具, question→12工具, creative→11工具, conversation→8工具 |
+| 主题约束 | context 注入 | 为 LLM 提供当前主题信息，不过滤 Tool |
+| Tool 选择 | 全量 Tool schema | 调用顺序与次数由 LLM 决定 |
+| 网络前置条件 | WebFetch 执行器 | Memory 与 Skill 查询成功完成后才允许联网 |
 
 ---
 

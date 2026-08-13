@@ -3,6 +3,7 @@ import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { toolResult } from "../outcome";
 
 const OUTPUT_LIMIT = 65536;
 
@@ -22,7 +23,7 @@ export function createBashTool(sandbox: string): ToolDefinition {
     inputSchema: schema,
     execute: async (args, opts?: ToolExecuteOptions) => {
       const r = schema.safeParse(args);
-      if (!r.success) return { ok: false, output: "", error: r.error.message };
+      if (!r.success) return toolResult.failure(r.error.message);
       const { command, timeout } = r.data;
 
       const proc = Bun.spawn(["sh", "-c", command], {
@@ -59,17 +60,20 @@ export function createBashTool(sandbox: string): ToolDefinition {
         const err = stderr.trim();
 
         if (opts?.abortSignal?.aborted) {
-          return { ok: false, output: out, error: "Command cancelled" };
+          return toolResult.failure("Command cancelled");
         }
         if (exitCode === 0) {
-          return { ok: true, output: out || err || "(no output)" };
+          const output = out || err;
+          return output
+            ? toolResult.evidence(output)
+            : toolResult.none();
         }
-        return { ok: false, output: out || "", error: err || `exit code ${exitCode}` };
+        return toolResult.failure(err || out || `exit code ${exitCode}`);
       } catch (err: any) {
         if (opts?.abortSignal?.aborted) {
-          return { ok: false, output: "", error: "Command cancelled" };
+          return toolResult.failure("Command cancelled");
         }
-        return { ok: false, output: "", error: `Command timed out after ${timeout}ms` };
+        return toolResult.failure(`Command timed out after ${timeout}ms`);
       }
     },
     permission: PermissionLevel.FULL,

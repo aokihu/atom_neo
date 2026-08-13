@@ -64,7 +64,6 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
     .transform("record-context", {
       contextService: deps.contextService,
-      memory: deps.memory,
       sandbox: deps.sandbox,
       session: deps.session,
       providerModel: deps.providerModel,

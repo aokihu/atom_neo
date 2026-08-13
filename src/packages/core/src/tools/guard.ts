@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ToolDefinition, ToolResult, ToolExecuteOptions } from "@atom-neo/shared";
+import { toolResult } from "./outcome";
 
 function resolveAliases(input: string, sandbox: string): string {
   return input.replace(/\$HOME\b/g, homedir()).replace(/\$SANDBOX\b/g, sandbox);
@@ -44,23 +45,6 @@ const PATH_ARGS: Record<string, string[]> = {
 
 const LIST_TOOLS = new Set(["ls", "tree"]);
 
-function checkDynamicPolicy(tool: ToolDefinition, opts?: ToolExecuteOptions): ToolResult | null {
-  const decision = opts?.guardState?.[tool.name];
-  if (!decision || decision.allowed) return null;
-  if (tool.name === "webfetch") {
-    return {
-      ok: true,
-      output: decision.message ?? "Complete the required Memory or Skill check, then retry webfetch.",
-      data: { status: "deferred", reason: decision.reason },
-    };
-  }
-  return {
-    ok: false,
-    output: "",
-    error: `TOOL_GUARD_BLOCKED [${decision.reason}]: ${decision.message ?? "Complete the required precondition and retry."}`,
-  };
-}
-
 function preCheck(
   tool: ToolDefinition,
   args: unknown,
@@ -71,20 +55,17 @@ function preCheck(
     const p = extractArg(args, key);
     if (!p) continue;
     if (isInsideAtomDir(sandbox, p)) {
-      return {
-        ok: false, output: "",
-        error: LIST_TOOLS.has(tool.name) ? "Directory not found" : "File not found",
-      };
+      return toolResult.failure(LIST_TOOLS.has(tool.name) ? "Directory not found" : "File not found");
     }
     if (!isInsideSandbox(sandbox, p) && !isWhitelisted(sandbox, p, resolvedWl)) {
-      return { ok: false, output: "", error: "Path is outside sandbox" };
+      return toolResult.failure("Path is outside sandbox");
     }
   }
 
   if (tool.name === "bash") {
     const cmd = extractArg(args, "command");
     if (cmd && cmd.includes(".atom")) {
-      return { ok: false, output: "", error: "Command not allowed" };
+      return toolResult.failure("Command not allowed");
     }
   }
 
@@ -92,9 +73,9 @@ function preCheck(
 }
 
 function postFilter(tool: ToolDefinition, result: ToolResult): ToolResult {
-  if (!result.ok || !LIST_TOOLS.has(tool.name)) return result;
-  if (typeof result.output !== "string") return result;
-  const filtered = result.output
+  if (!result.metadata.ok || !LIST_TOOLS.has(tool.name)) return result;
+  if (typeof result.content !== "string") return result;
+  const filtered = result.content
     .split("\n")
     .filter(l =>
       !l.endsWith(" .atom") &&
@@ -103,7 +84,9 @@ function postFilter(tool: ToolDefinition, result: ToolResult): ToolResult {
       !l.includes("└── .atom"),
     )
     .join("\n");
-  return { ...result, output: filtered || "(empty)" };
+  return filtered
+    ? { ...result, content: filtered }
+    : toolResult.none();
 }
 
 export function createToolGuard(
@@ -117,7 +100,7 @@ export function createToolGuard(
     get(target, prop) {
       if (prop !== "execute") return Reflect.get(target, prop);
       return async (args: unknown, opts?: ToolExecuteOptions) => {
-        const blocked = checkDynamicPolicy(target, opts) ?? preCheck(target, args, sandbox, resolvedWl);
+        const blocked = preCheck(target, args, sandbox, resolvedWl);
         if (blocked) return blocked;
         const result = await target.execute(args, opts);
         return postFilter(target, result);

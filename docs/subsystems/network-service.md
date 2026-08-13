@@ -26,7 +26,7 @@ AI SDK Tool Call
 | 层 | 负责 | 不负责 |
 |---|---|---|
 | Core Tool Adapter | Tool 名称、Schema、权限、ToolResult 映射 | HTTP、节流、正文处理 |
-| ToolGuard / Governance | 前置条件、判重、调用预算、无进展停止 | 网络并发与 429 冷却 |
+| ToolGuard / Governance | 安全边界、完全重复判定、调用预算、无进展提醒 | 网络并发与 429 冷却 |
 | NetworkService | 生命周期、共享域名调度、结构化日志、子功能入口 | AI SDK 类型、Prompt、Agent 决策 |
 | WebFetch | URL 校验、HTTP 请求、Timeout/Abort、HTML 提取 | 搜索、下载、流式传输 |
 

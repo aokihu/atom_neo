@@ -1,4 +1,4 @@
-import type { ToolResult } from "./tool";
+import type { ToolResultMetadata } from "./tool";
 
 export type SessionMessage = {
   seq?: number;
@@ -20,9 +20,8 @@ export type ToolResultEntry = {
   toolName: string;
   topic: string;
   timestamp: number;
-  ok: boolean;
-  output: string;
-  error?: string;
+  content?: string;
+  metadata: ToolResultMetadata;
   durationMs?: number;
 };
 

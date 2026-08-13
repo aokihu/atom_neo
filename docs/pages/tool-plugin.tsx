@@ -31,17 +31,24 @@ export interface ToolDefinition {
 
   /** Optional: permission level required */
   permission?: PermissionLevel;
+
+  /** Allow same-name multi-call batches in one model step. */
+  allowSameToolBatch?: boolean;
 }
 
 export type ToolResult = {
-  ok: boolean;
-  output: string;       // Text result for LLM context
-  error?: string;       // Error message if not ok
-  data?: unknown;       // Structured data for downstream use
-  metadata?: {
-    tokensUsed?: number;
-    durationMs?: number;
-  };
+  content?: unknown;    // The only result projected to the LLM
+  metadata:
+    | {
+        ok: true;
+        effect: "none" | "reference" | "evidence" | "state_changed";
+        contextInjection?: ToolContextInjection;
+      }
+    | {
+        ok: false;
+        effect: "none";
+        error: string;
+      };
 };
 
 export enum PermissionLevel {
@@ -51,6 +58,11 @@ export enum PermissionLevel {
 }`} />
         <Callout type="info" title="设计理念">
           Tool 是统一接口：文件系统、Memory、Bash、MCP 操作都通过同一 <code>execute(args) → ToolResult</code> 模式。
+          <code>content</code> 是唯一面向 LLM 的结果；<code>metadata</code> 只保存运行框架实际消费的
+          <code>ok/effect/error/contextInjection</code>。只有 reference、evidence 或 state_changed
+          才投影到当前手工循环，跨轮 Context 必须显式使用 contextInjection。
+          MCP 成功结果在当前 conversation 中按 reference evidence 可用；空结果和错误由框架消费，
+          不进入模型消息。
         </Callout>
       </Section>
 
@@ -67,9 +79,9 @@ export enum PermissionLevel {
             [<code>cp</code>, "Filesystem", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "复制文件"],
             [<code>mv</code>, "Filesystem", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "移动/重命名文件"],
             [<code>search_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按关键词搜索并返回摘要与短 ID"],
-            [<code>read_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "确认候选后按 ID 读取完整正文"],
+            [<code>read_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "读取完整正文并返回 relatedCount"],
             [<code>save_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "保存新节点，可原子替代旧记忆"],
-            [<code>traverse_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "瞬时图遍历，返回摘要与关系元数据"],
+            [<code>traverse_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "双向图遍历，返回摘要、关系与方向"],
             [<code>link_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "在两个记忆节点间建立关系"],
             [<code>forget_memory</code>, "Memory", <Badge color="orange">{`FILE_WRITE (1)`}</Badge>, "按完整或唯一短 ID 删除记忆"],
             [<code>recall_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 session 召回上下文化记忆"],
@@ -78,8 +90,9 @@ export enum PermissionLevel {
             [<code>bash</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行 shell 命令"],
           ]}
         />
-        <Callout type="info" title="动态工具门控">
-          内置 <code>webfetch</code> 始终可见。Agent 调用后，ToolGuard 在网络请求前检查 Memory 与 Skill 状态；条件不足时返回下一步操作而不访问网络。Memory 候选相关时先用 <code>read_memory</code>，不相关时检查 <code>skill_list</code>，完成能力发现后重试 <code>webfetch</code>。
+        <Callout type="info" title="Tool 自主选择">
+          所有 Tool 始终开放，由 LLM 决定调用顺序。ToolGuard 只处理安全边界，不为 WebFetch
+          增加 Memory 或 Skill 业务前置条件；本地优先顺序由 Prompt 要求 LLM 遵守。
         </Callout>
       </Section>
 
@@ -104,9 +117,11 @@ async function execute(args: unknown): Promise<ToolResult> {
   const parsed = inputSchema.safeParse(args);
   if (!parsed.success) {
     return {
-      ok: false,
-      output: "",
-      error: \`Invalid input: \${parsed.error.message}\`,
+      metadata: {
+        ok: false,
+        effect: "none",
+        error: \`Invalid input: \${parsed.error.message}\`,
+      },
     };
   }
 
@@ -116,15 +131,16 @@ async function execute(args: unknown): Promise<ToolResult> {
     const result = \`Processed \${field1} with limit \${field2}\`;
 
     return {
-      ok: true,
-      output: result,
-      data: { field1, field2 },
+      content: { message: result, field1, field2 },
+      metadata: { ok: true, effect: "evidence" },
     };
   } catch (error) {
     return {
-      ok: false,
-      output: "",
-      error: error instanceof Error ? error.message : String(error),
+      metadata: {
+        ok: false,
+        effect: "none",
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -215,42 +231,52 @@ export class ToolRegistry {
 
       <Section title="通用 Tool 调用治理">
         <Callout type="info" title="不重复注入 Tool Catalog">
-          Runtime 传入 Conversation Pipeline 的所有 Tool 继续由 AI SDK 原生 <code>tools</code> 字段暴露。
-          <code>ToolCallLedger</code> 位于 Tool 的 <code>execute</code> 包装层，只治理执行，不复制 Tool description 或 input schema。
+          Atom 只把当前 step 可用的 schema 交给 AI SDK，执行器保留在框架。
+          <code>ToolCallLedger</code> 只治理执行，不复制 Tool description 或 input schema。
         </Callout>
         <CodeBlock lang="text" code={`全部 Tool → AI SDK tools → 模型 Tool Call
                               ↓
                      ToolCallLedger.begin()
-                       ├─ execute → 记录结果与进展
-                       └─ blocked → 返回紧凑治理结果
+                       ├─ execute → 读取 metadata.effect
+                       └─ blocked → 返回一句模型指令
                               ↓
-        prepareStep: toolChoice = none（需要收尾时）`} />
+               下一 step 省略 tools（需要收尾时）`} />
         <ComparisonTable
           headers={["规则", "第一阶段行为", "边界"]}
           rows={[
-            ["工具可见性", "普通步骤暴露 Pipeline 收到的全部 Tool", "ToolGuard 等执行边界保持不变"],
+            ["工具可见性", "所有已注册 Tool 始终开放", "框架不做业务路由"],
+            ["同名批次", "仅 allowSameToolBatch=true 可多调用", "按 Call 顺序执行，不并发"],
+            ["非法多调用", "执行前整批拒绝", "混合 Tool 或默认单次 Tool 均不部分执行"],
             ["相同调用", "同一进展窗口内只执行一次", "不同 Tool 成功后允许重新读取变化资源"],
-            ["无进展", "失败或拦截连续 3 次后收尾", "成功结果即视为通用进展"],
-            ["调用预算", "真实执行次数最多为本次 maxSteps", "AI SDK stopWhen 仍是 step 硬上限"],
-            ["循环收尾", <><code>prepareStep</code> 返回 <code>toolChoice: none</code></>, "保留一次正常文本回答"],
+            ["无进展", "只提示 LLM 重新判断", "不会隐藏 Tool 或强制收尾"],
+            ["调用预算", "真实执行次数最多为本次 maxSteps", "手工 Tool Loop 同时限制模型 step"],
+            ["循环收尾", "下一 step 省略 tools", "不发送 provider-specific toolChoice"],
             ["WebFetch 节流", "NetworkService：普通域名 1 秒；搜索引擎主域 5 秒", "跨 Task、Session 和查询 URL 生效"],
           ]}
         />
-        <Callout type="warn" title="通用进展不是内容质量">
-          通用层只知道 Tool 是否成功执行。WebFetch 返回 HTTP 成功但正文为空、重复或被 CAPTCHA 阻断时，
-          仍需要后续 WebFetch 专项分类才能判定为无信息增量。
+        <Callout type="info" title="显式 opt-in，不看权限猜测">
+          <code>READ_ONLY</code> 不等于可批量：<code>intent</code>、<code>todowrite</code> 和 Skill
+          状态工具也可能改变控制状态。MCP/插件 Tool 缺少 Atom 批量元数据时默认单次；支持 POST 的
+          <code>webfetch</code> 同样默认单次。
+        </Callout>
+        <Callout type="warn" title="HTTP 成功不等于证据">
+          WebFetch 会在适配层检查正文并按当前查询抽取相关片段。HTTP 成功但正文为空或不相关时返回
+          <code>effect:none</code>，不会投影到模型 Context。
         </Callout>
         <Callout type="info" title="WebFetch 域名冷却">
           WebFetch Tool 只负责调用同进程 <code>NetworkService</code>。同一搜索引擎主域的请求起始时间至少间隔 5 秒，普通域名至少间隔 1 秒。HTTP 429
           优先采用更长的 <code>Retry-After</code>，否则默认冷却 60 秒；冷却期间直接返回
           <code>WEBFETCH_DOMAIN_COOLDOWN</code>，不会继续访问目标站点。并发调用会依次预留时间槽，
           等待服从 Task 取消；节流状态保存在当前进程内，重启后清空，并通过
-          <code>data.rateLimit</code> 记录等待与冷却信息。未来 download 或 stream 必须复用同一调度器，本阶段不创建占位实现。
+          调度与冷却信息由 NetworkService 自己记录，不复制到通用 ToolResult。未来 download 或 stream 必须复用同一调度器，本阶段不创建占位实现。
         </Callout>
-        <Callout type="info" title="前置检查使用温和引导">
-          WebFetch 尚未完成 Memory 或 Skill 前置检查时，会返回成功的 <code>deferred</code> 结果，
-          正文提示下一步应调用的工具，不再返回 <code>Error:</code> 或 <code>TOOL_GUARD_BLOCKED</code>。
-          真实的 HTTP、超时和网络错误仍保持失败结果。
+        <Callout type="info" title="本地证据顺序由模型执行">
+          Prompt 要求 LLM 在 WebFetch 前先查询 Memory 与 Skill；框架不维护
+          前置状态、不收窄 activeTools，也不使用 provider-specific toolChoice 强制 Tool。
+        </Callout>
+        <Callout type="info" title="HTML 证据片段">
+          WebFetch 使用当前任务查询从 HTML 正文中抽取相关片段；只有片段 content 提供给模型。
+          相关词覆盖不足时返回 <code>effect:none</code>；匹配过程不复制进 ToolResult。
         </Callout>
       </Section>
 

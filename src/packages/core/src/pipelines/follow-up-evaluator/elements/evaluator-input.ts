@@ -4,7 +4,8 @@ import { BusEvents } from "@atom-neo/shared";
 import type { EvaluatorFlowState } from "./types";
 
 const MAX_MESSAGES = 10;
-const MAX_MSG_LEN = 200;
+const MAX_USER_LEN = 300;
+const MAX_ASSISTANT_LEN = 120;
 
 export class EvaluatorInputElement extends BaseElement<any, EvaluatorFlowState> {
   #session: any;
@@ -25,7 +26,9 @@ export class EvaluatorInputElement extends BaseElement<any, EvaluatorFlowState> 
     const recent = msgs.slice(-MAX_MESSAGES);
     const summary = recent
       .filter(m => m.role === "user" || m.role === "assistant")
-      .map(m => `${m.role}: ${(m.content ?? "").slice(0, MAX_MSG_LEN)}`)
+      .map(m => m.role === "user"
+        ? `user_goal: ${(m.content ?? "").slice(0, MAX_USER_LEN)}`
+        : `assistant_reference_unverified: ${(m.content ?? "").slice(0, MAX_ASSISTANT_LEN)}`)
       .join("\n");
 
     this.report(BusEvents.Element.Data, { step: "done", msgCount: msgs.length, summaryLen: summary.length });

@@ -25,10 +25,13 @@ export type {
 export type {
   MemoryNode,
   MemoryLink,
+  MemoryKind,
   MemoryScope,
   MemorySearchRequest,
   MemorySearchResult,
 } from "./memory";
+
+export { MEMORY_KIND_VALUES } from "./memory";
 
 export type {
   WebFetchMethod,
@@ -44,10 +47,10 @@ export { PermissionLevel } from "./tool";
 export type {
   ToolDefinition,
   ToolResult,
+  ToolEffect,
+  ToolResultMetadata,
   ToolExecuteOptions,
   ToolContextInjection,
-  ToolGuardDecision,
-  ToolGuardState,
 } from "./tool";
 
 export { PipelineResultType, PipelineEnqueueTransition } from "./pipeline";

@@ -72,8 +72,11 @@ class MemoryService extends BaseService {
   // 按完整或唯一短 ID 读取完整正文
   getById(memoryId: string): MemoryNode | null
 
-  // 图谱遍历 — SQLite edges BFS
-  traverse(startId: string, maxSteps?: number): MemoryNode[]
+  // 双向去重统计未过期的关联节点
+  countRelated(memoryId: string): number
+
+  // 双向图谱遍历 — SQLite edges BFS
+  traverse(startId: string, maxSteps?: number): MemoryTraversalNode[]
 
   // 保存记忆；supersedesId 在同一事务中建立 new → old 替代关系
   save(content: string, tags?: string[], summary?: string, options?: MemorySaveOptions): string
@@ -117,7 +120,8 @@ class MemoryService extends BaseService {
 
 例如 `台风 最新 2026` 会删除实时限定词和年份，只保留 `台风`；只要 Memory 正文包含该概念就可进入结果集，不要求完整查询串连续出现。对没有空格的中文长句，会补充连续双字候选，避免“查询一下台风最新动向”无法召回包含“台风”的记忆。
 
-搜索仍是轻量级词法召回，不引入 embedding。Agent 搜索为空时必须继续换用不同且更宽的查询，直到三个不同查询均为空，例如删除时间词并改用不重叠的同义词、领域词或 Skill 名称。仅调整词序、加入年份/新鲜度修饰词，或继续包含已尝试的关键词及中文片段，都视为相似查询且不累计次数。
+搜索仍是轻量级词法召回，不引入 embedding。框架不限制 Agent 搜索次数，也不比较不同查询的
+相似度。空结果会返回当前 Conversation；是否改词重试或改用其他 Tool 由 Agent 自主决定。
 
 `memory_fts` 是由 `nodes` external-content 表和 SQLite Trigger 自动维护的派生索引，索引 `summary + content + tags`。升级时若检测到旧 schema 或旧 `nodes/*.txt`，服务会补充 `summary`（默认等于正文）、重建 FTS5 索引，并把文本正文迁入 SQLite。
 
@@ -143,7 +147,11 @@ freshness = 100 × exp(-ln(2) × elapsedDays / kindHalfLife)
 | temporary_state | 7 天 |
 | realtime_data | 1 天 |
 
-只有 `read_memory` 算真实使用：先把已有 `usage_score` 懒衰减到当前时间，再 `+1`，同时增加 `read_count`。自动搜索、`search_memory` 和 `traverse_memory` 每次向 Agent 展示摘要时增加 `retrieval_count`。平滑后的选择率只占质量分 5%，用于轻度降低“反复曝光但从未读取”的候选，不会压过词法相关性。`retain_memory` 令 `base_weight += 10`（上限 100）并更新 `last_confirmed_at`，不再重置读取次数。`pinned` 记忆的 freshness 固定为 100。
+`temporary_state` 和 `realtime_data` 通过 Tool 保存时还会写入明确的 `expires_at`：
+前者默认 7 天，后者默认 6 小时。过期节点不再参与搜索、读取、ID 解析和图遍历；
+freshness 评分只负责有效期内的排序，不能代替硬过期边界。
+
+只有 `read_memory` 算真实使用：先把已有 `usage_score` 懒衰减到当前时间，再 `+1`，同时增加 `read_count`。`search_memory` 和 `traverse_memory` 每次向 Agent 展示摘要时增加 `retrieval_count`。平滑后的选择率只占质量分 5%，用于轻度降低“反复曝光但从未读取”的候选，不会压过词法相关性。`retain_memory` 令 `base_weight += 10`（上限 100）并更新 `last_confirmed_at`，不再重置读取次数。`pinned` 记忆的 freshness 固定为 100。
 
 ## 6. 遍历流程
 
@@ -156,23 +164,14 @@ SELECT target_id FROM edges WHERE source_id = ?
   → Agent 确认相关后仍通过 read_memory 读取正文
 ```
 
-`traverse_memory` 是瞬时浏览视图。工具结果只保留给紧接着的一个 AI SDK step，供 Agent 选择要读取的节点；再下一 step 的 `prepareStep` 会裁剪对应 tool-call/tool-result。遍历结果也不写入 Session Tool Context，因此不会进入后续 Conversation。被选中的正文只有通过 `read_memory` 才进入当前工具循环并计为真实使用。
+`traverse_memory` 结果保留在当前 Conversation 的 Tool Loop 中，供 Agent 选择要读取的节点；
+它不写入 Session Tool Context，因此不会进入后续 Conversation。被选中的正文只有通过
+`read_memory` 才计为真实使用。
 
 ## 7. 注入 conversation context
 
-Prediction 在现有分类调用中额外生成 `memory_query`，例如把“现在查一下台风的信息”提炼为“台风”。`collect-context` 只在该字段非空时执行自动 Memory 搜索，不增加新的 LLM 调用，也不使用本地中文分词。
-
-自动搜索会设置 `memorySearchStatus = "found" | "empty" | "unavailable"`。异常只记录 Debug 信息，不阻断 Conversation；空结果要求 Agent 使用互不相似的查询继续检索。命中并实际注入的摘要数记录在 `injectedMemoryCount`。Agent 调用 `read_memory` 后才检查完整正文中的 `Skill` / `技能` 线索，并决定继续加载 Skill 或开放 Web。
-
-```typescript
-// collect-context 元素 — 自动搜索只注入摘要
-const memoryQuery = session.pendingPrediction?.memoryQuery?.trim() || "";
-const memories = memoryQuery ? await memory.search(memoryQuery) : [];
-for (const node of memories) {
-  const id = node.id.slice(0, 6);
-  contextData += `\n<MemorySummary id="${id}" tags="${node.tags.join(",")}">\n${node.summary}\n</MemorySummary>\n`;
-}
-```
+Prediction 不生成 Memory 查询词，也不执行 Memory 搜索。Conversation LLM 在需要本地证据时
+直接调用 `search_memory`，query 完全由 Conversation 根据当前 User 原文和可见 Context 决定。
 
 ### Context 中的 Memory 摘要格式
 
@@ -187,7 +186,7 @@ for (const node of memories) {
 | `id` | SHA-256 前 6 位，LLM 引用用；执行 `retain_memory` 时由 MemoryService 恢复为唯一完整 ID |
 | `tags` | 分类标签 |
 
-`search_memory` 使用相同的 `<MemorySummary>` 格式返回候选，只提供摘要和短 ID。Agent 确认候选与当前任务相关后，调用 `read_memory({ id })` 获取完整正文：
+`search_memory` 使用相同的 `<MemorySummary>` 格式返回候选，只提供摘要和短 ID。Agent 确认候选与当前任务相关后，调用 `read_memory({ id })` 获取完整正文。`relatedCount` 是当前有效入边和出边关联节点去重后的数量；大于 0 时，Agent 自主判断是否调用 `traverse_memory`：
 
 ```xml
 <MemorySummary id="2d4bed" tags="project,tech-stack">
@@ -196,12 +195,15 @@ for (const node of memories) {
 
 read_memory({ id: "2d4bed" })
 
-<Memory id="2d4bed" tags="project,tech-stack">
+<Memory id="2d4bed" tags="project,tech-stack" relatedCount="2">
 完整记忆正文
 </Memory>
 ```
 
 这里不存在独立的业务 `key`。当前实现中的完整 `id` 是正文的 SHA-256，短 ID 是它在 Context 和工具输出中的唯一前缀。
+
+`traverse_memory` 同时探索入边和出边，并在摘要上提供 `direction="incoming|outgoing"`，
+避免把有向关系的反向遍历误解成原始边方向。
 
 ## 8. 记忆生命周期管理
 
@@ -238,9 +240,9 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 | 工具 | 说明 |
 |------|------|
 | `search_memory` | 搜索记忆库；只返回摘要和可供后续操作使用的短 ID |
-| `read_memory` | Agent 确认候选相关后，按完整或唯一短 ID 读取完整正文 |
+| `read_memory` | 按完整或唯一短 ID 读取完整正文，并返回双向去重的 `relatedCount` |
 | `save_memory` | 保存正文、可选摘要和 tags；可用 `supersedesId` 原子替代旧记忆 |
-| `traverse_memory` | 瞬时遍历图谱；返回摘要、短 ID、关系、来源和深度，下一 step 后自动卸载 |
+| `traverse_memory` | 双向遍历图谱；返回摘要、短 ID、关系、方向、来源和深度，仅保留在当前 Conversation |
 | `link_memory` | 建立记忆关联 |
 | `forget_memory` | 按 ID 删除指定记忆及关联边；支持 Context/搜索结果中的短 ID，不接受正文 |
 

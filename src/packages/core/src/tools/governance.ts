@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
+import type { ToolEffect } from "@atom-neo/shared";
 
 export const DEFAULT_MAX_CONSECUTIVE_NO_PROGRESS = 3;
 
-export type ToolGovernanceStopReason = "tool_call_limit" | "consecutive_no_progress";
-export type ToolGovernanceBlockReason = "duplicate_request" | "tool_call_limit" | "governance_stopped";
+export type ToolGovernanceStopReason = "tool_call_limit";
+export type ToolGovernanceBlockReason = "duplicate_request" | "tool_call_limit";
 
 export type ToolGovernanceSnapshot = {
   attempts: number;
@@ -40,15 +41,9 @@ export function createToolCallFingerprint(toolName: string, args: unknown): stri
 }
 
 export function formatToolGovernanceBlock(decision: Extract<ToolCallDecision, { allowed: false }>): string {
-  const instruction = decision.reason === "duplicate_request"
+  return decision.reason === "duplicate_request"
     ? "Do not repeat this tool call unless another successful action changes its inputs or underlying state."
     : "Do not call another tool. Answer with the information already available.";
-  return JSON.stringify({
-    status: "blocked",
-    reason: decision.reason,
-    progress: false,
-    instruction,
-  });
 }
 
 export class ToolCallLedger {
@@ -78,7 +73,7 @@ export class ToolCallLedger {
         allowed: false,
         toolName,
         fingerprint,
-        reason: this.#stopReason === "tool_call_limit" ? "tool_call_limit" : "governance_stopped",
+        reason: "tool_call_limit",
       };
     }
     if (this.#fingerprintsSinceProgress.has(fingerprint)) {
@@ -93,13 +88,24 @@ export class ToolCallLedger {
     return { allowed: true, toolName, fingerprint };
   }
 
-  finish(decision: Extract<ToolCallDecision, { allowed: true }>, ok: boolean): ToolGovernanceSnapshot {
-    if (ok) {
+  finish(
+    decision: Extract<ToolCallDecision, { allowed: true }>,
+    effect: ToolEffect,
+  ): ToolGovernanceSnapshot {
+    if (effect !== "none") {
       this.#consecutiveNoProgress = 0;
       this.#fingerprintsSinceProgress = new Set([decision.fingerprint]);
     } else {
       this.#markNoProgress();
     }
+    return this.snapshot();
+  }
+
+  rejectBatch(callCount: number): ToolGovernanceSnapshot {
+    const count = Math.max(1, Math.floor(callCount));
+    this.#attempts += count;
+    this.#blocked += count;
+    this.#markNoProgress();
     return this.snapshot();
   }
 
@@ -121,8 +127,5 @@ export class ToolCallLedger {
 
   #markNoProgress(): void {
     this.#consecutiveNoProgress++;
-    if (this.#consecutiveNoProgress >= this.#maxConsecutiveNoProgress) {
-      this.#stopReason ??= "consecutive_no_progress";
-    }
   }
 }

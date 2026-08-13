@@ -36,8 +36,8 @@ describe("evaluator-input", () => {
 
     const result = await el.process({ mode: "initial", task: { id: "t1" } });
     expect(result.mode).toBe("analyzing");
-    expect(result.recentSummary).toContain("user: hello");
-    expect(result.recentSummary).toContain("assistant: hi there");
+    expect(result.recentSummary).toContain("user_goal: hello");
+    expect(result.recentSummary).toContain("assistant_reference_unverified: hi there");
   });
 
   test("handles empty session", async () => {
@@ -134,8 +134,10 @@ describe("evaluate-finalize", () => {
       evaluation: { health: "looping", suggestion: "try differently", upgradeModel: false, reason: "repeating" },
     });
 
-    expect(contextService.get("session", { sessionId: "s1" }, "evaluator-suggestion")?.content)
-      .toContain("try differently");
+    const suggestion = contextService.get("session", { sessionId: "s1" }, "evaluator-suggestion");
+    expect(suggestion?.channel).toBe("messages");
+    expect(suggestion?.trust).toBe("untrusted");
+    expect(JSON.stringify(suggestion?.content)).toContain("try differently");
     expect(capture.enqueued.pipeline).toBe("conversation");
   });
 

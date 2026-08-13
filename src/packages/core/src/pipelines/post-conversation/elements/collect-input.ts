@@ -2,6 +2,7 @@ import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { TodoItem } from "../../../session/context";
+import type { ToolEffectSummary } from "../../conversation/elements/types";
 import type { PostConversationFlowState } from "./types";
 
 type AssistantPart = {
@@ -9,18 +10,40 @@ type AssistantPart = {
   metadata?: Record<string, unknown>;
 };
 
+const emptyToolEffectSummary = (): ToolEffectSummary => ({
+  evidence: 0,
+  referenceEvidence: 0,
+  stateChanged: 0,
+  none: 0,
+  failed: 0,
+});
+
+function collectToolEffectSummary(parts: readonly AssistantPart[]): ToolEffectSummary {
+  const summary = emptyToolEffectSummary();
+  for (const part of parts) {
+    const value = part.metadata?.toolEffectSummary;
+    if (!value || typeof value !== "object") continue;
+    for (const key of Object.keys(summary) as Array<keyof ToolEffectSummary>) {
+      const count = (value as Record<string, unknown>)[key];
+      if (typeof count === "number" && Number.isFinite(count)) summary[key] += count;
+    }
+  }
+  return summary;
+}
+
 export function buildAssistantReview(parts: readonly AssistantPart[], todos: readonly TodoItem[] = []) {
   const assistantLength = parts.reduce((total, part) => total + part.content.length, 0);
   const activeTodos = todos.filter(todo => todo.status === "pending" || todo.status === "in_progress");
   const metadata = parts.at(-1)?.metadata ?? {};
   const finishReason = typeof metadata.finishReason === "string" ? metadata.finishReason : "";
   const completeDetected = metadata.completeDetected === true;
+  const toolEffectSummary = collectToolEffectSummary(parts);
   if (parts.length === 0) {
-    return { response: "", assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected };
+    return { response: "", assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected, toolEffectSummary };
   }
 
   if (assistantLength + parts.length - 1 <= 2400 && todos.length === 0) {
-    return { response: parts.map(part => part.content).join("\n"), assistantLength, activeTodoCount: 0, finishReason, completeDetected };
+    return { response: parts.map(part => part.content).join("\n"), assistantLength, activeTodoCount: 0, finishReason, completeDetected, toolEffectSummary };
   }
 
   const counts = Object.fromEntries(
@@ -44,7 +67,7 @@ export function buildAssistantReview(parts: readonly AssistantPart[], todos: rea
     "[Response Tail]",
     substringWellFormed(lastContent, Math.max(0, lastContent.length - 1300)),
   ].join("\n");
-  return { response, assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected };
+  return { response, assistantLength, activeTodoCount: activeTodos.length, finishReason, completeDetected, toolEffectSummary };
 }
 
 export class CollectInputElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
@@ -86,6 +109,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       activeTodoCount: review.activeTodoCount,
       finishReason: review.finishReason,
       completeDetected: review.completeDetected,
+      toolEffectSummary: review.toolEffectSummary,
       taskIntent: prediction.intent ?? "conversation",
     });
 
@@ -102,6 +126,7 @@ export class CollectInputElement extends BaseElement<PostConversationFlowState, 
       activeTodoCount: review.activeTodoCount,
       finishReason: review.finishReason,
       completeDetected: review.completeDetected,
+      toolEffectSummary: review.toolEffectSummary,
     };
   }
 }

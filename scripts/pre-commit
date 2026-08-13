@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# 当 zh.ts 或 en.ts 提示词文件被修改提交时，自动递增次版本号。
+set -e
+
+PROMPT_FILES=(
+  "src/packages/shared/src/prompts/variants/lang/zh.ts"
+  "src/packages/shared/src/prompts/variants/lang/en.ts"
+)
+VERSION_FILE="src/packages/shared/src/prompts/version.ts"
+
+STAGED=$(git diff --cached --name-only)
+
+prompt_changed=false
+for f in "${PROMPT_FILES[@]}"; do
+  if echo "$STAGED" | grep -qF "$f"; then
+    prompt_changed=true
+    break
+  fi
+done
+
+if [ "$prompt_changed" = false ]; then
+  exit 0
+fi
+
+bun run scripts/bump-prompt-version.ts

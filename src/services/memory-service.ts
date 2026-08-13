@@ -24,6 +24,7 @@ export type MemoryNode = {
   kind: MemoryKind;
   confidence: number;
   pinned: boolean;
+  expiresAt: number | null;
   lastReadAt: number | null;
   lastConfirmedAt: number | null;
   usageUpdatedAt: number | null;
@@ -36,12 +37,14 @@ export type MemorySaveOptions = {
   kind?: MemoryKind;
   confidence?: number;
   pinned?: boolean;
+  ttlSeconds?: number;
   supersedesId?: string;
 };
 
 export type MemoryTraversalNode = MemoryNode & {
   sourceId: string | null;
   relation: string | null;
+  direction: "incoming" | "outgoing" | null;
   depth: number;
 };
 
@@ -64,20 +67,22 @@ export class MemoryService extends BaseService {
 
   // == Public API ==
 
-  async search(query: string, limit = 3): Promise<MemoryNode[]> {
+  async search(query: string, limit = 3, kind?: MemoryKind): Promise<MemoryNode[]> {
     const terms = parseMemorySearchTerms(query);
     if (terms.length === 0) return [];
 
     const candidateLimit = Math.max(limit * 10, 30);
     const ranks = new Map<string, number>();
+    const kindFilter = kind ? `AND nodes.kind = '${kind.replaceAll("'", "''")}'` : "";
     const ftsTerms = terms.filter((term) => Array.from(term).length >= 3);
     if (ftsTerms.length > 0) {
       const matchQuery = ftsTerms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" OR ");
       const rows = this.#db.prepare(
         `SELECT nodes.id, bm25(memory_fts) AS rank
          FROM memory_fts JOIN nodes ON nodes.rowid = memory_fts.rowid
-         WHERE memory_fts MATCH ? ORDER BY rank LIMIT ?`,
-      ).all(matchQuery, candidateLimit) as Array<{ id: string; rank: number }>;
+         WHERE memory_fts MATCH ? AND (nodes.expires_at IS NULL OR nodes.expires_at > ?) ${kindFilter}
+         ORDER BY rank LIMIT ?`,
+      ).all(matchQuery, this.#now(), candidateLimit) as Array<{ id: string; rank: number }>;
       for (const row of rows) ranks.set(row.id, row.rank);
     }
 
@@ -87,8 +92,9 @@ export class MemoryService extends BaseService {
         .map(() => "instr(lower(summary), lower(?)) > 0 OR instr(lower(content), lower(?)) > 0 OR instr(lower(tags), lower(?)) > 0")
         .join(" OR ");
       const params = shortTerms.flatMap((term) => [term, term, term]);
-      const rows = this.#db.prepare(`SELECT id FROM nodes WHERE ${where} LIMIT ?`)
-        .all(...params, candidateLimit) as Array<{ id: string }>;
+      const rows = this.#db.prepare(
+        `SELECT id FROM nodes WHERE (${where}) AND (expires_at IS NULL OR expires_at > ?) ${kindFilter} LIMIT ?`,
+      ).all(...params, this.#now(), candidateLimit) as Array<{ id: string }>;
       for (const row of rows) if (!ranks.has(row.id)) ranks.set(row.id, 0);
     }
 
@@ -97,7 +103,11 @@ export class MemoryService extends BaseService {
     const candidates = [...ranks.keys()]
       .map((id) => this.#loadNode(id))
       .filter(Boolean)
-      .filter((node) => !this.#isSuperseded(node.id));
+      .filter((node) => !this.#isSuperseded(node.id))
+      .filter((node) => {
+        if (terms.length < 5) return true;
+        return this.#matchedTermCount(node, terms) / terms.length >= 0.4;
+      });
     const rankOrder = new Map(
       candidates
         .map((node) => node.id)
@@ -127,28 +137,47 @@ export class MemoryService extends BaseService {
     if (!fullStartId) return [];
     const visited = new Set<string>();
     const results: MemoryTraversalNode[] = [];
-    const queue = [{ id: fullStartId, depth: 0, sourceId: null as string | null, relation: null as string | null }];
+    const queue: Array<{
+      id: string;
+      depth: number;
+      sourceId: string | null;
+      relation: string | null;
+      direction: "incoming" | "outgoing" | null;
+    }> = [{ id: fullStartId, depth: 0, sourceId: null, relation: null, direction: null }];
 
     while (queue.length > 0 && results.length < 5) {
-      const { id, depth, sourceId, relation } = queue.shift()!;
+      const { id, depth, sourceId, relation, direction } = queue.shift()!;
       if (visited.has(id) || depth >= maxSteps) continue;
       visited.add(id);
 
       const node = this.#loadNode(id);
-      if (node) results.push({ ...node, sourceId, relation, depth });
+      if (!node) continue;
+      results.push({ ...node, sourceId, relation, direction, depth });
 
       const neighbors = this.#db.prepare(
-        "SELECT target_id, relation FROM edges WHERE source_id = ?",
-      ).all(id) as Array<{ target_id: string; relation: string }>;
+        `SELECT target_id AS id, relation, 'outgoing' AS direction FROM edges WHERE source_id = ?
+         UNION ALL
+         SELECT source_id AS id, relation, 'incoming' AS direction FROM edges WHERE target_id = ?`,
+      ).all(id, id) as Array<{
+        id: string;
+        relation: string;
+        direction: "incoming" | "outgoing";
+      }>;
       neighbors.sort((a, b) => {
-        const aNode = this.#loadNode(a.target_id);
-        const bNode = this.#loadNode(b.target_id);
+        const aNode = this.#loadNode(a.id);
+        const bNode = this.#loadNode(b.id);
         return (bNode ? this.#memoryQuality(bNode) : 0) - (aNode ? this.#memoryQuality(aNode) : 0);
       });
 
       for (const neighbor of neighbors.slice(0, 3)) {
-        if (!visited.has(neighbor.target_id)) {
-          queue.push({ id: neighbor.target_id, depth: depth + 1, sourceId: id, relation: neighbor.relation });
+        if (!visited.has(neighbor.id)) {
+          queue.push({
+            id: neighbor.id,
+            depth: depth + 1,
+            sourceId: id,
+            relation: neighbor.relation,
+            direction: neighbor.direction,
+          });
         }
       }
     }
@@ -165,6 +194,9 @@ export class MemoryService extends BaseService {
     const kind = options.kind ?? "stable_fact";
     const confidence = Math.min(1, Math.max(0, options.confidence ?? 1));
     const pinned = options.pinned ? 1 : 0;
+    const expiresAt = options.ttlSeconds === undefined
+      ? null
+      : now + Math.max(1, Math.floor(options.ttlSeconds)) * 1_000;
     const supersededMemoryId = options.supersedesId ? this.findFullId(options.supersedesId) : null;
     if (options.supersedesId && !supersededMemoryId) {
       throw new Error(`Memory not found: ${options.supersedesId}`);
@@ -176,9 +208,9 @@ export class MemoryService extends BaseService {
       this.#db.run(
         `INSERT INTO nodes (
            id, content, summary, tags, weight, access_count, base_weight, usage_score,
-           retrieval_count, read_count, kind, confidence, pinned, last_confirmed_at,
+           retrieval_count, read_count, kind, confidence, pinned, expires_at, last_confirmed_at,
            usage_updated_at, created_at, accessed_at
-         ) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)
+         ) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            content = excluded.content,
            summary = excluded.summary,
@@ -188,11 +220,13 @@ export class MemoryService extends BaseService {
            kind = CASE WHEN ? THEN excluded.kind ELSE nodes.kind END,
            confidence = CASE WHEN ? THEN excluded.confidence ELSE nodes.confidence END,
            pinned = MAX(nodes.pinned, excluded.pinned),
+           expires_at = CASE WHEN ? THEN excluded.expires_at ELSE nodes.expires_at END,
            last_confirmed_at = excluded.last_confirmed_at,
            accessed_at = excluded.accessed_at`,
         [
           hash, content, storedSummary, tags.join(","), baseWeight, baseWeight, kind, confidence,
-          pinned, now, now, now, now, options.kind !== undefined, options.confidence !== undefined,
+          pinned, expiresAt, now, now, now, now,
+          options.kind !== undefined, options.confidence !== undefined, options.ttlSeconds !== undefined,
         ],
       );
       if (supersededMemoryId) {
@@ -214,15 +248,35 @@ export class MemoryService extends BaseService {
     return fullMemoryId ? this.#loadNode(fullMemoryId) : null;
   }
 
+  countRelated(memoryId: string): number {
+    const fullMemoryId = this.findFullId(memoryId);
+    if (!fullMemoryId) return 0;
+    const row = this.#db.prepare(
+      `SELECT COUNT(*) AS count
+       FROM (
+         SELECT target_id AS id FROM edges WHERE source_id = ?
+         UNION
+         SELECT source_id AS id FROM edges WHERE target_id = ?
+       ) related
+       JOIN nodes ON nodes.id = related.id
+       WHERE related.id != ? AND (nodes.expires_at IS NULL OR nodes.expires_at > ?)`,
+    ).get(fullMemoryId, fullMemoryId, fullMemoryId, this.#now()) as { count: number };
+    return row.count;
+  }
+
   findFullId(memoryId: string): string | null {
     const key = memoryId.trim().toLowerCase();
     if (!/^[a-f0-9]+$/.test(key)) return null;
 
-    const exact = this.#db.prepare("SELECT id FROM nodes WHERE id = ?").get(key) as { id: string } | null;
+    const now = this.#now();
+    const exact = this.#db.prepare(
+      "SELECT id FROM nodes WHERE id = ? AND (expires_at IS NULL OR expires_at > ?)",
+    ).get(key, now) as { id: string } | null;
     if (exact) return exact.id;
 
-    const rows = this.#db.prepare("SELECT id FROM nodes WHERE id LIKE ? ORDER BY id LIMIT 2")
-      .all(`${key}%`) as Array<{ id: string }>;
+    const rows = this.#db.prepare(
+      "SELECT id FROM nodes WHERE id LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY id LIMIT 2",
+    ).all(`${key}%`, now) as Array<{ id: string }>;
     return rows.length === 1 ? rows[0].id : null;
   }
 
@@ -310,6 +364,7 @@ export class MemoryService extends BaseService {
       kind TEXT DEFAULT 'stable_fact',
       confidence REAL DEFAULT 1,
       pinned INTEGER DEFAULT 0,
+      expires_at INTEGER,
       last_read_at INTEGER,
       last_confirmed_at INTEGER,
       usage_updated_at INTEGER,
@@ -335,6 +390,7 @@ export class MemoryService extends BaseService {
     addColumn("kind", "kind TEXT DEFAULT 'stable_fact'");
     addColumn("confidence", "confidence REAL DEFAULT 1");
     addColumn("pinned", "pinned INTEGER DEFAULT 0");
+    addColumn("expires_at", "expires_at INTEGER");
     const lastReadAdded = addColumn("last_read_at", "last_read_at INTEGER");
     const lastConfirmedAdded = addColumn("last_confirmed_at", "last_confirmed_at INTEGER");
     const usageUpdatedAdded = addColumn("usage_updated_at", "usage_updated_at INTEGER");
@@ -417,7 +473,7 @@ export class MemoryService extends BaseService {
 
   #loadNode(id: string): MemoryNode | null {
     const row = this.#db.prepare("SELECT * FROM nodes WHERE id = ?").get(id) as any;
-    if (!row) return null;
+    if (!row || (row.expires_at !== null && row.expires_at <= this.#now())) return null;
     return {
       id: row.id,
       content: row.content as string,
@@ -430,6 +486,7 @@ export class MemoryService extends BaseService {
       kind: row.kind as MemoryKind,
       confidence: row.confidence as number,
       pinned: Boolean(row.pinned),
+      expiresAt: row.expires_at as number | null,
       lastReadAt: row.last_read_at as number | null,
       lastConfirmedAt: row.last_confirmed_at as number | null,
       usageUpdatedAt: row.usage_updated_at as number | null,

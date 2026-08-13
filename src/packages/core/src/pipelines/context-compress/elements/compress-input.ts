@@ -4,6 +4,24 @@ import { BusEvents } from "@atom-neo/shared";
 import type { ContextService } from "../../../context/context-service";
 import type { CompressFlowState } from "./types";
 import type { ContextCompressRequest } from "@atom-neo/shared";
+import type { SessionMessage } from "@atom-neo/shared";
+import { isFailedToolAssistant } from "../../../session/message-policy";
+
+export function isSummaryEligibleMessage(message: SessionMessage): boolean {
+  if (message.visible === false || (message.role !== "user" && message.role !== "assistant")) return false;
+  return !isFailedToolAssistant(message);
+}
+
+export function formatSummaryMessage(message: SessionMessage): string {
+  if (message.role === "user") return `user_goal: ${message.content}`;
+  const summary = message.metadata?.toolEffectSummary as {
+    evidence?: number;
+    referenceEvidence?: number;
+    stateChanged?: number;
+  } | undefined;
+  const verified = (summary?.evidence ?? 0) + (summary?.stateChanged ?? 0) > 0;
+  return `${verified ? "assistant_with_tool_evidence" : "assistant_reference_unverified"}: ${message.content}`;
+}
 
 function resolveStrategy(ratio: number): { keepCount: number; summaryMaxTokens: number } {
   if (ratio >= 1.2) return { keepCount: 1, summaryMaxTokens: 1600 };
@@ -42,8 +60,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
     const keepFromSafe = safeCount > 0 && safeCount < messages.length ? messages.length - safeCount : 0;
     const keepCount = keepFromSafe > 0 ? keepFromSafe : Math.min(strategy.keepCount, messages.length);
     const archiveMessages = messages.slice(0, messages.length - keepCount);
-    const summaryMessages = archiveMessages.filter(message =>
-      message.visible !== false && (message.role === "user" || message.role === "assistant"));
+    const summaryMessages = archiveMessages.filter(isSummaryEligibleMessage);
     const previous = this.#contextService.get(
       "session",
       { sessionId: this.#session?.sessionId ?? "default" },
@@ -55,7 +72,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
     const summaryText = [
       previousSummary ? `Previous cumulative summary:\n${previousSummary}` : "",
       summaryMessages.length > 0
-        ? `New archived messages:\n${summaryMessages.map(message => `${message.role}: ${message.content}`).join("\n")}`
+        ? `New archived messages:\n${summaryMessages.map(formatSummaryMessage).join("\n")}`
         : "",
     ].filter(Boolean).join("\n\n");
 

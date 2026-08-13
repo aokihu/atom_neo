@@ -33,6 +33,7 @@ import ConfigurationPage from "./pages/configuration";
 import ConversationPage from "./pages/conversation";
 import ContextCompressPage from "./pages/context-compress";
 import ContextManagementPage from "./pages/context-management";
+import ContextOutcomeGovernancePage from "./pages/context-outcome-governance";
 import DependencyInjectionPage from "./pages/dependency-injection";
 import ElementDesignPage from "./pages/element-design";
 import EnvironmentSetupPage from "./pages/environment-setup";
@@ -69,6 +70,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   conversation: ConversationPage,
   "context-compress": ContextCompressPage,
   "context-management": ContextManagementPage,
+  "context-outcome-governance": ContextOutcomeGovernancePage,
   "dependency-injection": DependencyInjectionPage,
   "element-design": ElementDesignPage,
   "environment-setup": EnvironmentSetupPage,

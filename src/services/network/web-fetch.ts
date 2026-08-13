@@ -108,7 +108,7 @@ export async function executeWebFetch(params: {
     const text = await response.text();
     const contentType = response.headers.get("content-type") ?? "";
     const extracted = shouldStrip && contentType.includes("text/html") ? stripHtml(text) : text;
-    const content = extracted.slice(0, OUTPUT_LIMIT) || "(no output)";
+    const content = extracted.slice(0, OUTPUT_LIMIT);
     const rateLimit = {
       domain: scheduled.domain,
       waitedMs: scheduled.waitedMs,

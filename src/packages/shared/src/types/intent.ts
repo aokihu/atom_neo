@@ -35,7 +35,6 @@ export type IntentPredictionResult = {
   modelProfile: ModelProfile;
   intent: IntentClass;
   contextRelevance: ContextRelevance;
-  memoryQuery: string;
   topic: string;
   reasoning: string;
 };

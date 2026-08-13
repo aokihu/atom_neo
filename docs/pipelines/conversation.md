@@ -7,6 +7,7 @@
 ```text
 collect-prompts (source)
   → record-context (transform)
+  → apply-source-context (transform)
   → collect-context (transform)
   → stream-llm (transform)
   → token-ratio (boundary)
@@ -16,13 +17,14 @@ collect-prompts (source)
 
 | 顺序 | Element | 职责 | mode 变化 |
 |------|---------|------|-----------|
-| 1 | `collect-prompts` | 从 Session 读取可见消息；standalone 只取最近两条 | `initial → streaming` |
-| 2 | `record-context` | 将 System、AGENTS、Skill、环境、TODO、Memory 摘要记录到 ContextService，同时生成去重后的 user messages | `streaming → context_recorded` |
-| 3 | `collect-context` | 从 ContextService 创建不可变 TOON Snapshot | `context_recorded → formatted` |
-| 4 | `stream-llm` | 调用 AI SDK、执行工具循环、更新 ToolGuard 和 Context | `formatted → executing` |
-| 5 | `token-ratio` | 基于输入上限和输出保留预算计算占用比 | mode 不变 |
-| 6 | `check-follow-up` | 区分无计划续写和 TODO 续跑 | `executing → ready_to_finalize` |
-| 7 | `finalize` | 提交或释放 Snapshot，返回 chain / post-check 决策 | 返回 PipelineResult |
+| 1 | `collect-prompts` | 按 Prediction 分类从 Session 选择历史，始终保留当前 User 原文 | `initial → streaming` |
+| 2 | `record-context` | 将 System、AGENTS、Skill、环境与 TODO 记录到 ContextService，同时生成去重后的 messages | `streaming → context_recorded` |
+| 3 | `apply-source-context` | 应用显式 Source Context，不读取 Tool 审计历史 | mode 不变 |
+| 4 | `collect-context` | 从 ContextService 创建不可变 TOON Snapshot | `context_recorded → formatted` |
+| 5 | `stream-llm` | 调用单 step AI SDK，手工执行 Tool Loop，更新治理 metadata 和 Context 投影 | `formatted → executing` |
+| 6 | `token-ratio` | 基于输入上限和输出保留预算计算占用比 | mode 不变 |
+| 7 | `check-follow-up` | 区分无计划续写和 TODO 续跑 | `executing → ready_to_finalize` |
+| 8 | `finalize` | 提交或释放 Snapshot，返回 chain / post-check 决策 | 返回 PipelineResult |
 
 旧的 `load-system-prompt`、`fetch-agents-prompt`、`inject-skill-context`、
 `format-system-messages` 和 `format-user-messages` 不在当前主链中；相关职责已经聚合到
@@ -45,7 +47,7 @@ ContextService entries
 AI SDK
   system: snapshot.content
   messages: visible user / assistant messages
-  tools: visible tools + per-call ToolGuard
+  tools: schema-only tools（不向 AI SDK 提供 execute）
 ```
 
 Snapshot 是一次调用的只读快照；编译状态、receipt、lease 和生命周期仍由 ContextService 内部管理，
@@ -67,33 +69,64 @@ HTTP / WebSocket 在 Task 入队前已经把用户消息写入 Session。`record
 | workspace | `workspace-agents` | AGENTS compiler | pinned |
 | session / topic | `topic-skills` | SkillService | 随 Topic / Session |
 | task | `task-environment` | 当前时间、sandbox、TODO、预算 | Task |
-| task | `memory-summaries` | Prediction Memory 查询 | Task |
 | session / topic | Memory projection | `read_memory` 显式选择 | pinned 或 TTL |
 
 `collect-context` 只从 ContextService 获取 Snapshot，不再重复搜索 Memory 或拼装业务数据。
 
-## 4. ToolGuard 与 webfetch
+## 4. Tool 自主调用与循环保护
 
-所有工具都可以出现在工具列表中。`webfetch` 不靠隐藏限制行为，而是在执行时检查前置发现流程：
+所有工具始终出现在工具列表中，由 LLM 决定调用顺序、参数与次数。Prediction 不预先执行
+Memory 查询，WebFetch 也没有 Memory/Skill 的框架前置门控。Prompt 明确要求 LLM 在
+WebFetch 前先查询 Memory 与 Skill；顺序由 LLM 遵守，框架不维护业务状态。
+
+一个模型 step 可以返回多个 Tool Call，但必须满足“同名批次”契约：
+
+- 多个 Call 的 `toolName` 必须完全相同，不允许在同一 step 混合不同工具。
+- 只有 `ToolDefinition.allowSameToolBatch=true` 的无副作用查询工具允许同名多调用；默认关闭。
+- 写入、控制、Skill 状态工具、支持 POST 的 WebFetch，以及未知 MCP/插件 Tool 每 step 只能调用一次。
+- 批次仍按 Call 顺序逐个执行；整批结果全部返回后，LLM 才能在下一 step 选择其他 Tool。
+- 违反契约时整批在 executor 之前拒绝，每个 `call_id` 都返回配对失败结果，不执行任何部分调用。
 
 ```text
-Agent calls webfetch
-  ├── 已有相关完整 Memory / Skill Context / 明确 URL → allow
-  ├── 尚未查询 Memory → block，提示 search_memory
-  ├── Memory 命中 Skill 线索 → block，提示 skill_load / skill_section
-  ├── Memory 为空但未检查 Skill → block，提示 skill_list
-  └── Memory / Skill 服务不可用或检查完成 → allow
+LLM Tool Call
+  → mixed names or non-batchable multi-call? reject the whole batch
+  → exact duplicate? block once and tell LLM to reassess
+  → otherwise execute Tool
+  → return the Tool Call + Tool Result to the next model step
+  → repeated no-result? add a warning, keep every Tool available
+  → execution limit reached? stop the Tool loop
 ```
 
-Memory 与 Skill 工具对所有 intent 可见。Guard 的拒绝结果会明确告诉 Agent 下一步需要执行什么，
-原始工具函数不会在拒绝时运行。
+框架不根据 `effect` 隐藏正常 Tool Result，不动态收窄 Tool，也不替 LLM决定查询是否相关。
+同名批次校验只维护执行原子性和顺序，不承担业务相关性判断。
+`metadata.effect` 只用于日志、Post 分析和无进展提醒。
 
 ### 工具结果生命周期
 
-- 普通工具结果可以按 Topic 记录，供下一步使用。
-- `search_history` / `read_history` 和 Memory traversal 的大文本结果只保留给紧接着的 consumer step。
-- consumer step 结束后立即从 AI SDK messages 中裁掉，不跨 Conversation 持久化。
+- Tool schema 与 executor 分离；AI SDK 不自动执行 Tool，也不维护多 step Tool Loop。
+- 每个已执行 Tool 的 Call + Result 都投影到当前 Conversation 后续 step，包括空结果与错误。
+- MCP 成功结果按 `reference` 投影到当前 Conversation，Conversation 结束后丢弃。
+- Tool Result 不自动写入 Topic/Session Context；Conversation 结束后只保留审计记录。
 - `read_memory` 只有显式传入 Context projection 参数时才成为 pinned 或 TTL Context。
+
+### 手工 Tool Loop
+
+```text
+streamText（单 step，schema-only tools）
+  → 收集 Tool Calls
+  → 同名批次预检；非法批次整批拒绝
+  → Ledger 预检 / 去重 / 预算
+  → Atom ToolRunner 按 Call 顺序执行
+  → 返回 Tool Call + Tool Result 给下一模型 step
+  → metadata.effect 只更新 Ledger 计数
+  → 连续无进展只追加判断提示；Tool schema 保持开放
+  → 无 Tool Call或框架停止
+  → 只提交最终 Assistant 文本
+```
+
+下一 step 的模型消息由 Atom 重新构建，不使用 AI SDK 自动累积的 `responseMessages`。Atom 保持
+Tool Call/Result 配对，但不筛选正常结果，也不丢弃模型最终文本。完全重复的 Tool Call 与执行总上限
+是仅有的强制循环边界。
 
 ## 5. 输出预算与压缩阈值
 
@@ -160,7 +193,7 @@ Pipeline completes
 
 | 机制 | 行为 |
 |------|------|
-| `stopWhen: stepCountIs(maxSteps)` | 控制 AI SDK 工具循环，默认 50 step |
+| Atom ToolCallLedger | 控制手工工具循环，默认最多 50 次执行、连续 3 次无进展 |
 | `<<<COMPLETE>>>` | 使用滑动窗口跨 chunk 识别，标记及之后文本不发送 |
 | offset | Transport delta 携带完整文本偏移，TUI 按 offset 合并 |
 | Unicode | `substringWellFormed()` 安全截断；`sanitizeForJSON()` 使用 `toWellFormed()` 修复孤立代理 |
@@ -209,6 +242,7 @@ src/packages/core/src/pipelines/conversation/
   elements/
     collect-prompts.ts
     record-context.ts
+    apply-source-context.ts
     collect-context.ts
     stream-llm.ts
     check-follow-up.ts

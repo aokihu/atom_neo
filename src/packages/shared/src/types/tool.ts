@@ -7,18 +7,10 @@ export enum PermissionLevel {
   FULL = 2,
 }
 
-export type ToolGuardDecision = {
-  allowed: boolean;
-  reason: string;
-  message?: string;
-};
-
-export type ToolGuardState = Readonly<Record<string, ToolGuardDecision>>;
-
 export type ToolExecuteOptions = {
   abortSignal?: AbortSignal;
   sessionId?: string;
-  guardState?: ToolGuardState;
+  evidenceQuery?: string;
 };
 
 export type ToolDefinition = {
@@ -28,6 +20,7 @@ export type ToolDefinition = {
   inputSchema: z.ZodType<Record<string, unknown>>;
   execute(args: unknown, opts?: ToolExecuteOptions): Promise<ToolResult>;
   permission?: PermissionLevel;
+  allowSameToolBatch?: boolean;
   requiresApproval?: boolean;
   silent?: boolean;
 };
@@ -37,14 +30,23 @@ export type ToolContextInjection = {
   entry: Omit<ContextEntry, "revision">;
 };
 
+export type ToolEffect = "none" | "reference" | "evidence" | "state_changed";
+
+export type ToolResultMetadata =
+  | {
+      ok: true;
+      effect: ToolEffect;
+      contextInjection?: ToolContextInjection;
+      error?: never;
+    }
+  | {
+      ok: false;
+      effect: "none";
+      error: string;
+      contextInjection?: never;
+    };
+
 export type ToolResult = {
-  ok: boolean;
-  output: string;
-  error?: string;
-  data?: unknown;
-  contextInjection?: ToolContextInjection;
-  metadata?: {
-    tokensUsed?: number;
-    durationMs?: number;
-  };
+  content?: unknown;
+  metadata: ToolResultMetadata;
 };

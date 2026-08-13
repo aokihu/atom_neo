@@ -25,6 +25,27 @@ function cleanup(dir: string): void {
 }
 
 describe("MemoryService save", () => {
+  test("hard-expires temporary memory from lookup and traversal", async () => {
+    let now = 1_000;
+    const { service, dir } = createMemoryService(() => now);
+    try {
+      const id = service.save("temporary weather", ["weather"], undefined, {
+        kind: "realtime_data",
+        ttlSeconds: 60,
+      });
+      expect(service.getById(id)?.expiresAt).toBe(61_000);
+      expect((await service.search("temporary weather"))).toHaveLength(1);
+
+      now = 61_001;
+      expect(service.getById(id)).toBeNull();
+      expect(service.findFullId(id)).toBeNull();
+      expect(service.traverse(id)).toEqual([]);
+      expect(await service.search("temporary weather")).toEqual([]);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   test("does not reset lifecycle when saving duplicate content", () => {
     const { service, dir } = createMemoryService();
     try {
@@ -231,6 +252,18 @@ describe("MemoryService save", () => {
 });
 
 describe("MemoryService search", () => {
+  test("rejects weak partial matches for a long unsegmented Chinese query", async () => {
+    const { service, dir } = createMemoryService();
+    try {
+      const relevant = service.save("浙江大学紫金港校区设有游泳馆和游泳池。");
+      service.save("浙江省杭州近期文娱活动与演出信息。");
+
+      expect((await service.search("浙江大学游泳馆", 3)).map(node => node.id)).toEqual([relevant]);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   test("parses broad terms and ignores a year when concepts are present", () => {
     expect(parseMemorySearchTerms("台风 最新 2026")).toEqual(["台风"]);
     expect(parseMemorySearchTerms("2026")).toEqual(["2026"]);
@@ -373,9 +406,42 @@ describe("MemoryService findFullId", () => {
 
       expect(service.link(source.slice(0, 6), target.slice(0, 6), "depends_on")).toBe(true);
       expect(service.link(source.slice(0, 6), target.slice(0, 6), "depends_on")).toBe(true);
+      expect(service.countRelated(source)).toBe(1);
+      expect(service.countRelated(target)).toBe(1);
       const traversal = service.traverse(source.slice(0, 6));
       expect(traversal.map((node) => node.id)).toEqual([source, target]);
-      expect(traversal[1]).toMatchObject({ sourceId: source, relation: "depends_on", depth: 1 });
+      expect(traversal[1]).toMatchObject({
+        sourceId: source,
+        relation: "depends_on",
+        direction: "outgoing",
+        depth: 1,
+      });
+
+      const reverseTraversal = service.traverse(target.slice(0, 6));
+      expect(reverseTraversal.map((node) => node.id)).toEqual([target, source]);
+      expect(reverseTraversal[1]).toMatchObject({
+        sourceId: target,
+        relation: "depends_on",
+        direction: "incoming",
+        depth: 1,
+      });
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  test("does not count expired related memories", () => {
+    let now = 1_000;
+    const { service, dir } = createMemoryService(() => now);
+    try {
+      const source = service.save("stable source");
+      const target = service.save("temporary target", [], undefined, { ttlSeconds: 60 });
+      service.link(source, target, "relates_to");
+
+      expect(service.countRelated(source)).toBe(1);
+      now = 61_001;
+      expect(service.countRelated(source)).toBe(0);
+      expect(service.traverse(source).map((node) => node.id)).toEqual([source]);
     } finally {
       cleanup(dir);
     }

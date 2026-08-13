@@ -1,16 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { decode } from "@toon-format/toon";
 import {
-  containsExplicitUrl,
   injectToolContext,
-  pruneConsumedTransientTools,
   resolveModelInput,
-  selectActiveToolsForStep,
+  resolveMCPToolMetadata,
   resolveTokenMetrics,
-  shouldPersistToolResult,
-  summarizeMemoryRead,
-  summarizeMemorySearch,
-  summarizeSkillDiscovery,
+  summarizeToolEffects,
   wrapMCPAiTools,
 } from "./stream-llm";
 
@@ -24,12 +19,6 @@ test("keeps cumulative model usage separate from the current context window", ()
     { totalTokens: 1_000 },
   )).toEqual({ contextTokens: 200, totalUsageTokens: 1_000 });
 });
-
-const availableToolNames = [
-  "read", "write", "search_memory", "read_memory", "save_memory", "forget_memory", "link_memory", "traverse_memory",
-  "skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload",
-  "todowrite", "intent", "webfetch", "bash", "search_history", "read_history", "mcp_weather",
-];
 
 test("uses the TOON Snapshot only as system text", () => {
   const userMessages = [{ role: "user", content: "current request" }];
@@ -53,16 +42,24 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
 
   expect(await wrapped.weather.execute({})).toEqual({ temperature: 20 });
   expect(statuses.get("weather")).toEqual([{
-    ok: true,
-    output: "{\"temperature\":20}",
+    content: "{\"temperature\":20}",
+    metadata: { ok: true, effect: "reference" },
   }]);
 
   expect(await wrapped.broken.execute({})).toBe("MCP tool error: offline");
   expect(statuses.get("broken")).toEqual([{
-    ok: false,
-    output: "",
-    error: "offline",
+    content: "",
+    metadata: { ok: false, effect: "none", error: "offline" },
   }]);
+});
+
+test("resolveMCPToolMetadata uses MCP structure instead of natural-language guessing", () => {
+  expect(resolveMCPToolMetadata({ isError: true, content: [{ type: "text", text: "offline" }] }))
+    .toEqual({ ok: false, effect: "none", error: "MCP tool returned isError" });
+  expect(resolveMCPToolMetadata({ content: [{ type: "text", text: "   " }] }))
+    .toEqual({ ok: true, effect: "none" });
+  expect(resolveMCPToolMetadata({ content: [], structuredContent: { count: 1 } }))
+    .toEqual({ ok: true, effect: "reference" });
 });
 
 test("wrapMCPAiTools blocks duplicate execution through the shared ledger", async () => {
@@ -73,290 +70,30 @@ test("wrapMCPAiTools blocks duplicate execution through the shared ledger", asyn
   }, () => {}, { count: 0 }, statuses, { current: new ToolCallLedger({ maxExecutions: 10 }) });
 
   expect(await wrapped.weather.execute({ city: "Hangzhou" })).toEqual({ temperature: 1 });
-  expect(JSON.parse(await wrapped.weather.execute({ city: "Hangzhou" }))).toMatchObject({
-    status: "blocked",
-    reason: "duplicate_request",
-  });
+  expect(await wrapped.weather.execute({ city: "Hangzhou" }))
+    .toContain("Do not repeat this tool call");
   expect(executions).toBe(1);
-  expect(statuses.get("weather")?.at(-1)).toMatchObject({
+  expect(statuses.get("weather")?.at(-1)?.metadata).toMatchObject({
     ok: false,
     error: "TOOL_GOVERNANCE_BLOCKED [duplicate_request]",
   });
 });
 
-function select(overrides: Partial<Parameters<typeof selectActiveToolsForStep>[0]> = {}) {
-  return selectActiveToolsForStep({
-    availableToolNames,
-    memorySearchAttemptCount: 0,
-    memorySearchFound: false,
-    memorySearchUnavailable: false,
-    memoryRead: false,
-    memoryReadUnavailable: false,
-    memorySuggestsSkill: false,
-    hasSkillContext: false,
-    skillChecked: false,
-    skillLoaded: false,
-    skillUnavailable: false,
-    hasExplicitUrl: false,
-    ...overrides,
-  });
-}
-
-describe("selectActiveToolsForStep", () => {
-  test("keeps webfetch visible while its guard requires Memory discovery", () => {
-    const selection = select();
-
-    expect(selection.activeTools).toContain("search_memory");
-    expect(selection.activeTools).toContain("read_memory");
-    expect(selection.activeTools).toContain("skill_load");
-    expect(selection.activeTools).toContain("skill_section");
-    expect(selection.activeTools).toContain("mcp_weather");
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(false);
-    expect(selection.webfetchGuardReason).toBe("memory_search_required");
-    expect(selection.webfetchGuardMessage).toContain("search_memory");
-  });
-
-  test("keeps webfetch visible and asks the Agent to review a Memory candidate", () => {
-    const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(false);
-    expect(selection.webfetchGuardReason).toBe("memory_review_required");
-    expect(selection.webfetchGuardMessage).toContain("read_memory");
-  });
-
-  test("unlocks webfetch after the selected Memory is read", () => {
-    const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(true);
-    expect(selection.webfetchGuardReason).toBe("memory_found");
-  });
-
-  test("requires Skill loading when Memory contains a Skill hint", () => {
-    const locked = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true });
-    const loaded = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillLoaded: true });
-    const unavailable = select({ memorySearchAttemptCount: 1, memorySearchFound: true, memoryRead: true, memorySuggestsSkill: true, skillUnavailable: true });
-
-    expect(locked.activeTools).toContain("webfetch");
-    expect(locked.webfetchAllowed).toBe(false);
-    expect(locked.webfetchGuardReason).toBe("skill_load_required");
-    expect(loaded.webfetchGuardReason).toBe("skill_context");
-    expect(unavailable.webfetchGuardReason).toBe("skill_unavailable");
-  });
-
-  test("asks for Skill discovery after one empty Memory search", () => {
-    const selection = select({ memorySearchAttemptCount: 1 });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(false);
-    expect(selection.webfetchGuardReason).toBe("skill_search_required");
-    expect(selection.webfetchGuardMessage).toContain("skill_list");
-  });
-
-  test("allows webfetch after Memory and Skill discovery complete", () => {
-    const selection = select({ memorySearchAttemptCount: 1, skillChecked: true });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(true);
-    expect(selection.webfetchGuardReason).toBe("capability_discovery_complete");
-  });
-
-  test("does not use repeated Memory searches as a Skill-discovery substitute", () => {
-    const selection = select({ memorySearchAttemptCount: 3 });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(false);
-    expect(selection.webfetchGuardReason).toBe("skill_search_required");
-  });
-
-  test("lets the Agent dismiss an irrelevant Memory candidate by checking Skills", () => {
-    const selection = select({ memorySearchAttemptCount: 3, memorySearchFound: true, skillChecked: true });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(true);
-    expect(selection.webfetchGuardReason).toBe("capability_discovery_complete");
-  });
-
-  test("unlocks webfetch when Memory is unavailable", () => {
-    const selection = select({ memorySearchAttemptCount: 1, memorySearchUnavailable: true });
-
-    expect(selection.activeTools).toContain("webfetch");
-    expect(selection.webfetchAllowed).toBe(true);
-    expect(selection.webfetchGuardReason).toBe("memory_unavailable");
-  });
-
-  test("allows explicit URLs and loaded Skill context to bypass Memory search", () => {
-    expect(select({ hasExplicitUrl: true }).webfetchGuardReason).toBe("explicit_url");
-    expect(select({ hasSkillContext: true }).webfetchGuardReason).toBe("skill_context");
-    expect(select({ hasExplicitUrl: true }).activeTools).toContain("webfetch");
-    expect(select({ hasSkillContext: true }).activeTools).toContain("webfetch");
-  });
-
-  test("keeps webfetch and specialized tools visible", () => {
-    const activeTools = select().activeTools;
-    expect(activeTools).toContain("webfetch");
-    expect(activeTools).toContain("search_history");
-    expect(activeTools).toContain("read_history");
-    expect(activeTools).toContain("bash");
-    expect(activeTools).toContain("write");
-  });
-
-  test("keeps every registered tool visible instead of filtering by intent", () => {
-    expect(select().activeTools).toEqual([...new Set(availableToolNames)]);
-  });
-
-  test("keeps every Skill tool active", () => {
-    const selection = select({ memorySearchAttemptCount: 1, memorySearchFound: true });
-
-    for (const name of ["skill_list", "skill_load", "skill_section", "skill_remove_section", "skill_unload"]) {
-      expect(selection.activeTools).toContain(name);
-    }
-  });
-});
-
-describe("summarizeMemorySearch", () => {
-  test("counts only mutually dissimilar queries", () => {
-    const sameQuery = summarizeMemorySearch({
-      automaticQuery: "台风",
-      automaticStatus: "empty",
-      steps: [{ toolResults: [
-        { toolName: "search_memory", input: { query: "台风 最新 2026" }, output: "No memories found." },
-        { toolName: "search_memory", input: { query: "台风查询技能" }, output: "No memories found." },
-      ] }],
+describe("Tool effect summaries", () => {
+  test("summarizes framework effects without reading content", () => {
+    expect(summarizeToolEffects([
+      { ok: true, effect: "evidence" },
+      { ok: true, effect: "reference" },
+      { ok: true, effect: "state_changed" },
+      { ok: true, effect: "none" },
+      { ok: false, effect: "none", error: "offline" },
+    ])).toEqual({
+      evidence: 1,
+      referenceEvidence: 1,
+      stateChanged: 1,
+      none: 1,
+      failed: 1,
     });
-    const distinctQueries = summarizeMemorySearch({
-      automaticQuery: "台风",
-      automaticStatus: "empty",
-      steps: [{ toolResults: [
-        { toolName: "search_memory", input: { query: "热带气旋 typhoon" }, output: "No memories found." },
-        { toolName: "search_memory", input: { query: "气象灾害 Skill" }, output: "No memories found." },
-      ] }],
-    });
-
-    expect(sameQuery.attemptCount).toBe(1);
-    expect(distinctQueries.attemptCount).toBe(3);
-  });
-
-  test("detects found and unavailable tool results", () => {
-    const found = summarizeMemorySearch({
-      automaticQuery: "",
-      automaticStatus: "not_started",
-      steps: [{ toolResults: [{ toolName: "search_memory", input: { query: "台风" }, output: '<MemorySummary id="abc123">method</MemorySummary>' }] }],
-    });
-    const unavailable = summarizeMemorySearch({
-      automaticQuery: "",
-      automaticStatus: "not_started",
-      steps: [{ toolResults: [{ toolName: "search_memory", input: { query: "台风" }, output: "(memory service not connected)" }] }],
-    });
-
-    expect(found.found).toBe(true);
-    expect(unavailable.unavailable).toBe(true);
-  });
-
-  test("detects full Memory reads and Skill hints", () => {
-    const result = summarizeMemoryRead([
-      { toolResults: [{ toolName: "read_memory", input: { id: "abc123" }, output: '<Memory id="abc123">使用 Typhoon Skill</Memory>' }] },
-    ]);
-
-    expect(result.read).toBe(true);
-    expect(result.suggestsSkill).toBe(true);
-  });
-});
-
-describe("summarizeSkillDiscovery", () => {
-  test("detects that the Skill catalog was checked", () => {
-    const result = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_list", input: {}, output: "[]" }] }]);
-
-    expect(result.checked).toBe(true);
-    expect(result.loaded).toBe(false);
-  });
-
-  test("detects successful and unavailable Skill loads", () => {
-    const loaded = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_load", input: { name: "typhoon" }, output: 'Loaded skill "typhoon"\n<skill name="typhoon">...</skill>' }] }]);
-    const unavailable = summarizeSkillDiscovery([{ toolResults: [{ toolName: "skill_load", input: { name: "missing" }, output: 'Error: Skill "missing" not found' }] }]);
-
-    expect(loaded.loaded).toBe(true);
-    expect(unavailable.unavailable).toBe(true);
-  });
-});
-
-describe("containsExplicitUrl", () => {
-  test("checks only the latest user message", () => {
-    expect(containsExplicitUrl([
-      { role: "user", content: "https://old.example.com" },
-      { role: "assistant", content: "done" },
-      { role: "user", content: "查一下台风" },
-    ])).toBe(false);
-    expect(containsExplicitUrl([
-      { role: "user", content: "查一下 https://typhoon.example.com" },
-    ])).toBe(true);
-  });
-});
-
-describe("transient memory traversal context", () => {
-  const traversalCall = { role: "assistant", content: [{
-    type: "tool-call", toolCallId: "traverse-1", toolName: "traverse_memory", input: { startId: "abc123" },
-  }] };
-  const traversalResult = { role: "tool", content: [{
-    type: "tool-result", toolCallId: "traverse-1", toolName: "traverse_memory",
-    output: { type: "text", value: '<MemorySummary id="abc123">root</MemorySummary>' },
-  }] };
-
-  test("keeps traversal results for the immediate consumer step", () => {
-    const messages = [{ role: "user", content: "browse memory" }, traversalCall, traversalResult] as any;
-    expect(pruneConsumedTransientTools(messages)).toEqual(messages);
-  });
-
-  test("removes traversal calls and results after another tool step", () => {
-    const messages = [
-      { role: "user", content: "browse memory" },
-      traversalCall,
-      traversalResult,
-      { role: "assistant", content: [{
-        type: "tool-call", toolCallId: "read-1", toolName: "read_memory", input: { id: "abc123" },
-      }] },
-      { role: "tool", content: [{
-        type: "tool-result", toolCallId: "read-1", toolName: "read_memory",
-        output: { type: "text", value: '<Memory id="abc123">full</Memory>' },
-      }] },
-    ] as any;
-
-    const pruned = pruneConsumedTransientTools(messages);
-    expect(JSON.stringify(pruned)).not.toContain("traverse_memory");
-    expect(JSON.stringify(pruned)).toContain("read_memory");
-  });
-
-  test("removes consumed history chunks after the next tool step", () => {
-    const messages = [
-      { role: "user", content: "verify the original" },
-      { role: "assistant", content: [{
-        type: "tool-call", toolCallId: "history-1", toolName: "read_history", input: { archiveId: "message-000001" },
-      }] },
-      { role: "tool", content: [{
-        type: "tool-result", toolCallId: "history-1", toolName: "read_history",
-        output: { type: "text", value: "archived text" },
-      }] },
-      { role: "assistant", content: [{
-        type: "tool-call", toolCallId: "search-1", toolName: "search_memory", input: { query: "next" },
-      }] },
-      { role: "tool", content: [{
-        type: "tool-result", toolCallId: "search-1", toolName: "search_memory",
-        output: { type: "text", value: "none" },
-      }] },
-    ] as any;
-
-    const pruned = pruneConsumedTransientTools(messages);
-    expect(JSON.stringify(pruned)).not.toContain("read_history");
-    expect(JSON.stringify(pruned)).toContain("search_memory");
-  });
-
-  test("does not persist traversal output across conversations", () => {
-    expect(shouldPersistToolResult("traverse_memory")).toBe(false);
-    expect(shouldPersistToolResult("search_history")).toBe(false);
-    expect(shouldPersistToolResult("read_history")).toBe(false);
-    expect(shouldPersistToolResult("read_memory")).toBe(true);
   });
 });
 

@@ -1,7 +1,10 @@
 import { PromptKey } from "../../keys";
+import { SYSTEM_PROMPT_VERSION } from "../../version";
 
 export const enBases: Partial<Record<PromptKey, string>> = {
-  [PromptKey.BASE_SYSTEM]: `# Behavior Guidelines
+  [PromptKey.BASE_SYSTEM]: `[SystemPrompt v${SYSTEM_PROMPT_VERSION}]
+
+# Behavior Guidelines
 
 ## Safety Boundaries
 - Never execute commands that could damage the system or data. Be especially wary of "rm -rf /" type commands.
@@ -79,6 +82,13 @@ The system rates task difficulty and injects it into context (\`[Task Difficulty
 - If todo list exists but current reply is unrelated to its tasks, update progress first before continuing.
 - **Do not output progress narration or self-talk** (e.g., "step X complete", "updating progress", "moving to next item"). When transitioning between tasks, only update todowrite and end the current reply normally — no narration text at all.
 
+## Tool Batches and Ordering
+- Choose only one Tool name in each model step; never mix different Tool names in the same step.
+- Only side-effect-free read/query Tools may emit multiple same-name Calls with different arguments in one step, for example several \`search_memory\` queries.
+- Write, control, Skill-state, WebFetch, and other single-call Tools may be called only once per step.
+- Runtime still executes a valid same-name batch in order. Wait for every result and assess the complete batch before choosing another Tool in the next step.
+- Runtime rejects the entire mixed or non-batchable multi-call batch. Use the returned errors to choose again instead of repeating the invalid batch.
+
 ## Continuation Rules (passive trigger)
 
 If the system truncated your reply due to length, you will receive a continuation instruction. Please:
@@ -128,14 +138,15 @@ You can use the following tools to load and manage skills — domain operation g
 - Data provided to users must be truthful and trustworthy.
 - Lookup order: Current Conversation Context > Memory > Search/Web Results.
 - First inspect Context for existing facts, lookup methods, and Skills; follow an available method without repeating capability discovery.
-- If Context has no usable method, call \`search_memory\` with core concepts plus optional synonyms, domain terms, or Skill names; remove years and freshness words such as "latest".
-- Automatic Memory search, \`search_memory\`, and \`traverse_memory\` return summaries only. \`traverse_memory\` also provides source, relation, and depth metadata, and its browsing result is unloaded after the next step. If a summary is relevant, call \`read_memory\` for the full content; do not treat a summary as fact or use network tools before reading it.
-- \`webfetch\` is always visible, but ToolGuard blocks execution until capability discovery is complete and returns the required next action in the Tool Result.
-- If a Memory search is empty, call \`skill_list\` to inspect available Skills. If none is relevant, call \`webfetch\` again.
-- An irrelevant Memory candidate does not need to be read; inspect Skills and retry \`webfetch\`. You may broaden Memory searches, but there is no fixed retry count.
-- A Skill hint in Memory only locates a capability; it is not loaded yet. Use \`skill_load\` / \`skill_section\` to obtain and follow its content before calling any network tool.
-- Prefer a method from a fully read Memory. Use \`webfetch\` or other network tools only when Memory and Skill have no usable capability or Memory is unavailable; real-time data does not bypass capability discovery.
-- If the user provides an explicit URL, \`webfetch\` may be used directly.
+- If Context has no usable method, search Memory in two rounds:
+  1. **Fact search**: build a query from the task's core concepts, synonyms, and domain terms to retrieve factual memories (kind: stable_fact/decision/preference/identity). Drop years and freshness words like "latest".
+  2. **Skill search**: build a query from "Skill name + workflow + how-to" (e.g., "\`build\` workflow", "deployment process") to capture skill/workflow memories (kind: workflow/temporary_state). Never skip this round.
+- After each round, call \`read_memory\` for relevant summaries; do not treat a summary as fact. When \`read_memory\` returns \`relatedCount\` > 0, decide whether to call \`traverse_memory\` for related summaries.
+- All tools remain available. Choose each Tool call from the task and returned results; the framework does not choose for you.
+- Only after both Memory search rounds return nothing, call \`skill_list\`. Only adjust the query for a third round when you have a materially different retrieval concept.
+- Before using \`websearch\`, query both Memory and Skills. Use web search only when neither contains a usable record. **\`websearch\` is the only web search tool; never use \`webfetch\` for searching the web.** You must follow this order; the framework does not hide or intercept Tools.
+- A Skill hint in Memory only locates a capability; it is not loaded yet. When relevant, use \`skill_load\` / \`skill_section\` to obtain and follow its content.
+- Prefer a method from a fully read Memory. Use \`websearch\` or other search tools when both Memory and Skills have no usable record.
 - Information confirmed in prior conversation turns takes precedence over real-time search results.
 - Never fabricate data. Be honest with the user if data is uncertain.
 - Tool results may be outdated or erroneous — cross-reference with context before responding.`,
@@ -147,7 +158,7 @@ You can use the following tools to load and manage skills — domain operation g
    - "hard": complex task with 3+ sub-steps that should be planned with a todo list
    - "mygod": extremely complex, very large scope, must be done step-by-step with todo
 
-2. model_profile: "basic" | "balanced" | "advanced"
+2. modelProfile: "basic" | "balanced" | "advanced"
    - "basic": lightweight model is sufficient (simple Q&A, short text)
    - "balanced": moderate reasoning depth needed (code generation, multi-file changes)
    - "advanced": deep reasoning, complex debugging, or architectural analysis required
@@ -158,17 +169,12 @@ You can use the following tools to load and manage skills — domain operation g
    - "creative": generative creation (write articles, design architecture, generate content)
    - "conversation": discussion, greetings, and casual chat that need no external facts or references; never classify information lookup here
 
-4. context_relevance: "standalone" | "follow_up" | "continuation"
+4. contextRelevance: "standalone" | "follow_up" | "continuation"
    - "standalone": new topic, unrelated to conversation history
    - "follow_up": follows up on the previous response, needs full context
    - "continuation": explicitly continuing a previously interrupted task
 
-5. memory_query: one core keyword or short phrase for Memory retrieval
-   - Prefer text likely to occur directly in relevant Memory, e.g. "look up typhoon information" → "typhoon"
-   - Never copy the full user sentence or return multiple parallel keywords
-   - Return an empty string "" when Memory lookup is unnecessary
-
-6. topic: a stable dot-separated label for the conversation subject
+5. topic: a stable dot-separated label for the conversation subject
    Format: "<category>.<domain>.<specific>" (e.g., "creative.history.ancient", "tools.filesystem.explore")
    Categories: creative | tools | code | knowledge | chat
    - Be specific enough to distinguish different tasks
@@ -176,9 +182,9 @@ You can use the following tools to load and manage skills — domain operation g
    - When user switches to a completely new subject → output NEW topic
    - Empty string "" if the message is too vague to classify
 
-When recent conversation history is provided in the prompt, use it to determine
-context_relevance. A standalone message in a multi-turn conversation may still be
-"standalone" if it switches to a completely new topic.
+Prediction receives only the current user text. Do not complete, rewrite, translate,
+or generate Tool parameters from it. Determine contextRelevance only from the current
+input; explicit continuation wording can be classified as continuation.
 
 Difficulty vs Model Profile:
 The difficulty describes how complex the user's TASK is. Model profile describes
@@ -190,8 +196,8 @@ how much REASONING POWER is needed. They are independent:
 When difficulty is "hard" or "mygod", the assistant will be instructed to use a todo list
 to plan and execute step by step. This is an execution strategy, not a model requirement.
 
-Reply ONLY with JSON in this exact format:
-{"difficulty":"...","model_profile":"...","intent":"...","context_relevance":"...","memory_query":"...","topic":"...","reasoning":"brief explanation"}`,
+Return the structured schema:
+{"difficulty":"...","modelProfile":"...","intent":"...","contextRelevance":"...","topic":"...","reasoning":"brief explanation"}`,
 
   [PromptKey.ANALYZE_RESULT]: `You are a conversation quality evaluator. Determine whether the AI **completed** the user's request and generate a behavioral fingerprint.
 
@@ -212,7 +218,7 @@ Key judgment rules:
 
 fingerprint field: A single sentence describing what specific action the AI took (≤20 chars), stripped of modifiers, politeness, and phrasing variations.
 Use consistent wording for similar actions. Examples:
-- Weather query → "queried weather for specific city via webfetch"
+- Weather query → "queried weather for specific city via websearch"
 - Clarification → "asked user to provide city name"
 - Memory search → "searched memory store and returned results"
 
@@ -233,7 +239,7 @@ Reply ONLY with JSON: {"status":"satisfactory|blocked|needs_user_input","reason"
 
 Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false, "reason":"brief"}`,
 
-  [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history into a summary of 500 characters or fewer. Preserve key information, decisions, and progress.`,
+  [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history in 500 characters or fewer. Evidence priority is user_goal, assistant_with_tool_evidence, then assistant_reference_unverified. Preserve user goals, verified tool evidence, confirmed decisions, and real state changes. Never promote Assistant reference text to fact by itself, and ignore failed or effect:none Tool results.`,
 
   [PromptKey.GUIDANCE_RETRY]: `(System hint: The previous response did not fully satisfy the user's request. Please continue completing the user's request unobtrusively. Do not mention permission changes, retries, or previous capability limitations.)`,
 

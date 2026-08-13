@@ -32,17 +32,24 @@ export interface ToolDefinition {
 
   /** Optional: permission level required */
   permission?: PermissionLevel;
+
+  /** Explicitly allow multiple calls with this same tool name in one model step. */
+  allowSameToolBatch?: boolean;
 }
 
 export type ToolResult = {
-  ok: boolean;
-  output: string;       // Text result for LLM context
-  error?: string;       // Error message if not ok
-  data?: unknown;       // Structured data for downstream use
-  metadata?: {
-    tokensUsed?: number;
-    durationMs?: number;
-  };
+  content?: unknown; // The only result projected to the LLM
+  metadata:
+    | {
+        ok: true;
+        effect: "none" | "reference" | "evidence" | "state_changed";
+        contextInjection?: ToolContextInjection;
+      }
+    | {
+        ok: false;
+        effect: "none";
+        error: string;
+      };
 };
 
 export enum PermissionLevel {
@@ -75,9 +82,11 @@ async function execute(args: unknown): Promise<ToolResult> {
   const parsed = inputSchema.safeParse(args);
   if (!parsed.success) {
     return {
-      ok: false,
-      output: "",
-      error: `Invalid input: ${parsed.error.message}`,
+      metadata: {
+        ok: false,
+        effect: "none",
+        error: `Invalid input: ${parsed.error.message}`,
+      },
     };
   }
 
@@ -88,15 +97,16 @@ async function execute(args: unknown): Promise<ToolResult> {
     const result = `Processed ${field1} with limit ${field2}`;
 
     return {
-      ok: true,
-      output: result,
-      data: { field1, field2 },
+      content: { message: result, field1, field2 },
+      metadata: { ok: true, effect: "evidence" },
     };
   } catch (error) {
     return {
-      ok: false,
-      output: "",
-      error: error instanceof Error ? error.message : String(error),
+      metadata: {
+        ok: false,
+        effect: "none",
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -110,6 +120,17 @@ export const myTool: ToolDefinition = {
   permission: PermissionLevel.READ_ONLY,
 };
 ```
+
+`content` 只保存 LLM 需要的结果；`metadata` 只保存框架消费的 `ok/effect/error/contextInjection`。
+`effect:none` 与失败结果也会投影到当前 Conversation 的下一模型 step，但不自动写入
+Topic/Session Context。
+禁止通过解析 `content` 文本猜测 effect。MCP 原始结果在当前 conversation 的后续 steps 中按
+`reference` 使用，不能自动持久化或单独作为 Post/Compact 的完成事实。
+
+`allowSameToolBatch` 默认是 `false`，不能从 `PermissionLevel.READ_ONLY` 推断。只有确认无副作用、
+多次调用之间不依赖前一次结果的查询 Tool 才显式设为 `true`。控制状态 Tool（例如 `intent`、
+`todowrite`、Skill load/unload）、写入 Tool、支持 POST 的 `webfetch`，以及没有 Atom 元数据的
+MCP/插件 Tool 每个模型 step 只能调用一次。
 
 ## 3. File System Tools
 
@@ -140,15 +161,16 @@ export const readTool: ToolDefinition = {
       const end = limit ? start + limit : undefined;
       const result = lines.slice(start, end).join("\n");
       return {
-        ok: true,
-        output: result || "(empty file)",
-        data: { filepath, lineCount: lines.length },
+        ...(result ? { content: result } : {}),
+        metadata: { ok: true, effect: result ? "evidence" : "none" },
       };
     } catch (error) {
       return {
-        ok: false,
-        output: "",
-        error: error instanceof Error ? error.message : String(error),
+        metadata: {
+          ok: false,
+          effect: "none",
+          error: error instanceof Error ? error.message : String(error),
+        },
       };
     }
   },
@@ -164,11 +186,11 @@ export const readTool: ToolDefinition = {
 // src/packages/core/src/tools/builtin/memory.ts
 
 createSearchMemoryTool(memory) // { query, limit? } -> MemorySummary
-createReadMemoryTool(memory)   // { id } -> Memory
+createReadMemoryTool(memory)   // { id } -> Memory + relatedCount
 // search_memory returns <MemorySummary>; read_memory returns <Memory>.
 
 createSaveMemoryTool(memory)     // { content, summary?, tags?, supersedesId? }
-createTraverseMemoryTool(memory) // { startId, maxSteps? } -> MemorySummary[] + relation metadata
+createTraverseMemoryTool(memory) // { startId, maxSteps? } -> bidirectional MemorySummary[] + relation/direction metadata
 createLinkMemoryTool(memory)     // { source, target, relation }
 createForgetMemoryTool(memory)   // { id }
 // forget_memory accepts only a full or unique short hexadecimal ID.
@@ -176,22 +198,31 @@ createForgetMemoryTool(memory)   // { id }
 // Updating a fact uses supersedesId so node creation and replacement are atomic.
 ```
 
-### Context → Memory → Web 工具门控
+### Context → Memory → Web 调用顺序
 
 - `search_memory`、`read_memory` 与 Skill 工具对所有 intent 可用。
-- 内置 `webfetch` 对所有 intent 始终可见，由 Agent 自主决定何时调用。
-- AI SDK `prepareStep` 只汇总 Memory 与 Skill 的发现状态，并通过 `ToolExecuteOptions.guardState` 交给 ToolGuard，不再隐藏 `webfetch`。
-- ToolGuard 在真正执行网络请求前检查状态；前置条件不足时不访问网络，返回 `TOOL_GUARD_BLOCKED` 和下一步操作。
-- 搜索命中只表示发现摘要，必须成功执行 `read_memory` 后才视为 Memory 已确认。
-- Memory 搜索为空时，Guard 要求 Agent 执行 `skill_list`；Skill 已检查后再次调用 `webfetch` 即可执行。
-- Memory 存在候选时，Guard 提示 Agent 读取相关候选；若候选不相关，Agent 可检查 Skill 后再次调用 `webfetch`，无需由 Pipeline 判断语义相关性。
+- 所有 Tool schema 始终开放，框架不按发现状态隐藏 Memory、Skill、History、MCP 或 WebFetch。
+- Prediction 不生成 Memory query，也不自动搜索 Memory。
+- Memory、Skill、History、MCP 与 WebFetch 的调用顺序和结果相关性全部由 Agent 判断。
+- Prompt 要求 Agent 在 WebFetch 前先查询 Memory 与 Skill；ToolGuard 不添加对应业务前置条件。
 - `traverse_memory` 同样只返回摘要和短 ID，不能绕过 `read_memory` 获取正文。
-- 遍历摘要仅供下一 AI SDK step 选择节点；随后由 `prepareStep.messages` 裁剪，且不写入 Session Tool Context。
-- 完整普通 Memory 已读取、Memory 与 Skill 均未发现可用能力、服务不可用、已有 Skill Context，或用户提供明确 URL 时允许执行 `webfetch`。
-- Memory 包含 Skill 线索时，即使已经命中也继续拦截 `webfetch`；成功执行 `skill_load` / `skill_section` 后允许执行，Skill 加载失败时允许降级。
-- `skill_load` / `skill_section` 的工具结果包含本轮已加载 Skill 正文，使后续 AI SDK step 可以立即遵循该方法。
-- Agent 可以自主扩大 Memory 查询，但 Guard 不再强制累计三次不同查询。
-- MCP 工具保持原有行为，不参与本阶段门控。
+- 遍历摘要保留在当前 Conversation，但不写入 Session Tool Context。
+- `skill_load` / `skill_section` 用 `state_changed` 通知框架刷新 Skill Context。
+- Agent 可以自主扩大 Memory 查询；MCP 与其他非 WebFetch 工具不参与门控。
+
+### 同名 Tool 批次
+
+```text
+允许: search_memory(query=A) + search_memory(query=B)
+拒绝: search_memory(query=A) + ls(path=".")
+拒绝: write(file=A) + write(file=B)
+```
+
+- 一个 step 有多个 Call 时，所有 `toolName` 必须相同，且该 Tool 必须设置
+  `allowSameToolBatch: true`。
+- Runtime 在执行任何 Call 前验证整个批次。非法批次不执行任何 executor，并为每个
+  `call_id` 返回 `TOOL_BATCH_BLOCKED` 失败结果。
+- 合法批次不是并发执行：Atom 按模型返回顺序逐个 `await`，收齐结果后再进入下一 step。
 
 ## 5. Session History Tools
 
@@ -226,6 +257,7 @@ read_history({
 - `search_history` 对 `message-latest` 命中同时返回 `checkpointRevision`，首次读取即可锁定检查点。`read_history` 还会要求显式 `fromSeq` 必须精确命中首条消息；latest 变化、anchor 消失、offset 越界或切入代理对时返回明确错误，禁止静默跳消息。
 - 搜索同时命中不可变分段与 latest 时优先返回不可变 `message-{n}` 引用。
 - 工具结果只供当前 step 使用，不写入长期 Session Tool Context。
+- 普通 Tool Result 只写结构化 Session 审计；跨轮 Context 仅接受显式 `contextInjection`。
 - `search_history` 和 `read_history` 对所有 intent 可见，不参与 Memory/Skill/Web 门控。
 
 通用 `read` / `bash` 仍不用于读取 `.atom` 内部状态；History Tool 通过
@@ -418,27 +450,28 @@ Builtin 与可执行 MCP Tool 共用同一个、仅在本次 `streamText()` 生�
                               Tool Result + 治理日志
                                       │
                                       ▼
-                    prepareStep: toolChoice = none（需要收尾时）
+                    下一 step 不提供 tools（需要收尾时）
 ```
 
 规则：
 
-- 普通步骤的 `activeTools` 包含 Runtime 传入 Conversation Pipeline 的全部 Tool，避免 Agent 因工具不可见而用 `bash` 替代专用能力；ToolGuard 等执行边界保持不变。
+- 所有已注册 Tool 在每个普通步骤中保持可见。
 - `intent` 是 Pipeline 终结信号，不进入执行治理；没有本地 `execute` 的 Provider Tool 也不进入 Ledger。
 - `toolName + 规范化参数` 生成不可逆短指纹，日志不记录完整参数；同一进展窗口内的相同指纹只真实执行一次。
 - 一个不同 Tool 调用成功后开始新的进展窗口，因此允许重新读取已经被其他成功操作改变的资源。
-- Tool 返回 `ok: true` 视为通用进展；执行失败、ToolGuard 拦截和 Ledger 拦截都计为无进展。网页正文质量与信息增量不在本阶段判断。
-- 连续 3 次无进展，或真实执行次数达到本次 LLM 调用的 `maxSteps`，Ledger 进入停止状态。
-- 停止状态不会直接终止 AI SDK Loop；下一次 `prepareStep` 返回 `toolChoice: "none"`，让模型使用已有结果生成正常的最终文本。`stopWhen` 仍作为 AI SDK step 硬上限。
-- 治理拦截返回紧凑 JSON，包含 `status`、`reason`、`progress` 和 `instruction`；不会再次执行 Tool。
+- Ledger 根据 `metadata.effect !== "none"` 提供进展参考；失败和无结果只增加无进展计数。
+- 连续无进展只向 LLM 提示重新判断，不停止或隐藏 Tool；完全重复调用会被拒绝，真实执行次数达到
+  `maxSteps` 时才强制收尾。
+- 停止状态不会发送 provider-specific `toolChoice`；下一 step 省略 tools，让模型使用已有结果生成最终文本。
+- 治理拦截只返回模型需要的一句指令；原因和计数保留在框架日志中。
 
 日志事件：
 
 | `step` | 关键字段 | 用途 |
 |---|---|---|
 | `tool-governance-decision` | `decision`、`reason`、`fingerprint`、计数器 | 记录执行或拦截决定 |
-| `tool-governance-result` | `ok`、`progress`、`stopReason`、计数器 | 记录执行后的治理状态 |
-| `tool-governance-stop` | `stepNumber`、`stopReason`、计数器 | 解释为何下一 step 使用 `toolChoice: none` |
+| `tool-governance-result` | `ok`、`effect`、`stopReason`、计数器 | 记录执行后的治理状态 |
+| `tool-governance-stop` | `stepNumber`、`stopReason`、计数器 | 解释为何下一 step 不再提供 tools |
 | `done` | `toolAttempts`、`toolExecutions`、`toolBlocked`、`toolStopReason` | 汇总本轮治理结果 |
 
 ### 7.1 WebFetch 域名节流
@@ -455,12 +488,8 @@ WebFetch Tool 是 `NetworkService.webFetch()` 的薄适配器。唯一 NetworkSe
   默认冷却 60 秒。
 - 冷却期间的新调用直接返回 `WEBFETCH_DOMAIN_COOLDOWN`，不发起网络请求；Service 重启后
   内存中的冷却状态清空。
-- 节流等待服从 Task 的 `AbortSignal`，并在 Tool Result `data.rateLimit` 中记录域名、
-  等待时间和冷却时间，便于日志诊断。
-- WebFetch 尚未完成 Memory/Skill 前置检查时，Tool 以成功的 `deferred` 结果温和提示下一步
-  所需动作，不返回 `Error:` 或 `TOOL_GUARD_BLOCKED`。这类引导不应触发连续失败收尾；真实的
-  HTTP、超时和网络失败仍保持失败结果。
-
+- 节流等待服从 Task 的 `AbortSignal`；域名、等待时间和冷却时间只写入 NetworkService 日志，
+  不扩充通用 ToolResult。
 页面质量分类、正文相似度和可用内容判定仍属于后续 WebFetch 专项治理；NetworkService
 只控制真实请求节奏，不把 HTTP 2xx 自动提升为有效证据。未来 download 或 stream 必须
 复用同一域名调度器，但本阶段不提供占位实现。
@@ -631,10 +660,11 @@ export const bashTool: ToolDefinition = {
   execute: async (args, context?: { approved?: boolean }) => {
     if (!context?.approved) {
       return {
-        ok: false,
-        output: "",
-        error: "Bash command requires user approval",
-        metadata: { requiresApproval: true },
+        metadata: {
+          ok: false,
+          effect: "none",
+          error: "Bash command requires user approval",
+        },
       };
     }
     // Execute command...

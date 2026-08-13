@@ -1,10 +1,12 @@
 # Prediction Pipeline
 
-> **Purpose**: 用户意图预分类 — 用 basic 模型做轻量级分类，输出任务复杂度、模型级别、任务类型、上下文关联度和 Memory 核心查询词。
+> **Purpose**: 用户输入预分类 — 用 basic 模型读取当前 User 原文，输出任务复杂度、模型级别、任务类型、上下文关联度和主题。
 
 ## 职责
 
-在正式会话之前，用 basic 模型对用户意图做轻量级分类，同时生成一个适合 Memory 检索的核心关键词，供 conversation pipeline 自动召回查询方法和 Skill 线索。
+在正式会话之前，用 basic 模型对当前 User 原文做轻量级分类。Prediction 不读取 Tool、不查询
+Memory/Skill/Web，也不生成或改写 Conversation 的用户输入；框架只消费结构化分类结果来选择
+模型、调整历史 Context 和管理 Topic。
 
 ## 触发方式
 
@@ -21,8 +23,8 @@ predict-input (source) → predict-intent (transform) → token-ratio (boundary)
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `predict-input` | source | 提取用户消息 + 最近对话上下文 |
-| 2 | `predict-intent` | transform | 调用 `generateText`（非流式），输出 `IntentPredictionResult` |
+| 1 | `predict-input` | source | 原样提取当前用户请求 |
+| 2 | `predict-intent` | transform | 调用 `generateText + Output.object`（非流式、无 Tool），输出 `IntentPredictionResult` |
 | 3 | `token-ratio` | boundary | 检查 token 使用比例 |
 | 4 | `predict-finalize` | sink | 写入 `session.pendingPrediction`，调度 conversation 任务 |
 
@@ -36,17 +38,19 @@ type PredictionFlowState = {
   task: any;
   session: any;
   userMessage: string;
-  contextMessages?: string;
   prediction?: IntentPredictionResult;
   error?: string;
 };
 ```
 
+`userMessage` 保持 Task payload 中的原始字符串。Prediction 不 `trim`、摘要、补全、翻译或拼接
+历史消息；Conversation 仍从 Session/Task 取得同一份原文。
+
 ## 状态转移
 
 ```
 initial
-  → predict-input:   提取消息 + 上下文 → predicting
+  → predict-input:   原样提取当前 User → predicting
   → predict-intent:  调用 LLM 分类     → routing
   → predict-finalize: 写入 session     → PipelineResult { type: "complete" }
 ```
@@ -59,11 +63,13 @@ type IntentPredictionResult = {
   modelProfile: "basic" | "balanced" | "advanced";        // 所需推理能力 → 模型选择
   intent: "instruction" | "question" | "creative" | "conversation";  // 任务意图 (Anthropic 风格)
   contextRelevance: "standalone" | "follow_up" | "continuation";
-  memoryQuery: string;                                    // 单一 Memory 核心查询词；无需查询时为空
   topic: string;                                          // 主题标签 → 会话状态管理
   reasoning: string;
 };
 ```
+
+该对象由 AI SDK `Output.object({ schema })` 校验后直接交给框架，不再从自由文本中提取 JSON。
+Prediction 调用不传 `tools`，也不存在 Tool execution step。
 
 ## 分类维度详解
 
@@ -95,20 +101,15 @@ type IntentPredictionResult = {
 | `creative` | 写长文、设计架构、生成内容 |
 | `conversation` | 不需要外部事实的闲聊、寒暄和讨论 |
 
-每个 intent 通过 `selectActiveToolsForStep()` 控制工具可见性；`search_memory`、`read_memory` 与 Skill 工具始终可用，内置 `webfetch` 按摘要搜索、正文读取和 Skill 加载状态动态开放。
-
-### memoryQuery（Memory 核心查询词）
-
-- 输出单一关键词或短语，例如“现在查一下台风的信息” → `台风`。
-- 关键词应尽可能直接出现在相关 Memory 正文中，不复制完整用户句子。
-- 无需 Memory 检索时输出空字符串；Prediction 失败时也回退为空，由 Conversation 工具门控要求 Agent 先调用 `search_memory`。
+intent 不控制工具可见性，所有已注册 Tool 始终由 Conversation 提供给 LLM。Prediction 不生成
+Tool 参数，也不提前执行任何查询。
 
 ### contextRelevance（上下文关联）
 
 | 值 | 含义 | collect-prompts 行为 |
 |-----|------|---------------------|
-| `standalone` | 新话题，不需要历史 | 只保留最近 2 轮消息 |
-| `follow_up` | 基于上一轮的追问 | 保留全部可见消息 |
+| `standalone` | 新话题，不需要历史 | 只保留当前 User 原文 |
+| `follow_up` | 基于上一轮的追问 | 保留最近一组交互与当前 User 原文 |
 | `continuation` | 明示继续之前任务 | 保留全部可见消息 + 不 reset chainDepth |
 
 ### topic（主题标签）
@@ -150,11 +151,11 @@ type PredictionPipelineDeps = {
 
 | 场景 | 行为 |
 |------|------|
-| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced", intent: "conversation", memoryQuery: "", topic: "" }` |
+| 预测 LLM 调用失败 | `catch` → fallback `{ difficulty: "medium", modelProfile: "balanced", intent: "conversation", contextRelevance: "standalone", topic: "" }` |
 | API 400 错误 (如消息损坏) | fallback 同上，不阻塞对话 |
 | 空用户消息 | fallback 同上 |
 | 无 apiKey | fallback 同上 |
-| 无 JSON 响应 | fallback 同上 |
+| 结构化输出校验失败 | fallback 同上 |
 
 无论如何都会调度 conversation pipeline，不会阻塞用户对话。
 

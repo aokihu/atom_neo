@@ -44,7 +44,7 @@ compress-input (source)
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
-| 1 | `compress-input` | source | 从 Session 原始消息中选择完整前缀；可见 user/assistant 消息单独用于摘要 |
+| 1 | `compress-input` | source | 从 Session 原始消息中选择完整前缀；筛除无效 Tool Result，并标注 User/Assistant 事实权重 |
 | 2 | `compress-archive` | transform | 通过 `SessionPersistenceService` 可靠写入不可变 `message-{n}.jsonl`；失败时停止提交 |
 | 3 | `compress-summarize` | transform | 使用“旧累计摘要 + 本次可见消息”生成新的累计摘要 |
 | 4 | `compress-finalize` | sink | checkpoint latest/context/session，成功后按 `seq` 清理内存前缀；仅自动恢复场景续跑原 Conversation |
@@ -63,7 +63,7 @@ type CompressFlowState = {
     resumeConversation: boolean;
   };
   archiveMessages: SessionMessage[]; // Session 原始消息的完整前缀
-  summaryMessages: SessionMessage[]; // archiveMessages 中可见的 user/assistant
+  summaryMessages: SessionMessage[]; // 可见且有摘要资格的 user/assistant
   archiveReceipt?: ArchiveReceipt;
   archiveError?: string;
   keepCount?: number;
@@ -124,7 +124,7 @@ const compressResolved = runtime.getResolvedModel("basic") ?? resolved;
 Session 原始消息
   → archiveMessages：待归档的完整前缀
   → keepMessages：保留的完整后缀
-  → summaryMessages：archiveMessages 中 visible !== false 的 user/assistant
+  → summaryMessages：archiveMessages 中可见且不含无效 Tool Result 的 user/assistant
 ```
 
 归档集合和删除集合必须是同一批原始消息，不能先过滤消息再按数量删除 Session 原数组。
@@ -132,7 +132,10 @@ Session 原始消息
 ### 摘要生成（compress-summarize）
 
 - 输入由当前 `conversation-summary` 与本次 `summaryMessages` 组成，生成覆盖全部冷历史的累计摘要。
-- 调用 LLM，prompt：`将以下对话历史总结为 500 字以内的摘要，保留关键信息、决策和进展。`
+- User 标记为 `user_goal`；有工具证据的 Assistant 标记为 `assistant_with_tool_evidence`，其余为
+  `assistant_reference_unverified`。
+- 摘要 Prompt 按 User 目标、有效工具证据、已确认决策和状态变化排序；无进展的
+  error/empty/blocked/deferred/cancelled 不进入摘要事实。
 - `maxTokens` 按压缩比动态取 400–1600，`temperature: 0`（确定性输出）
 - 无 text 或 apiKey 时跳过
 

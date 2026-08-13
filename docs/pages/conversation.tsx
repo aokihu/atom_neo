@@ -5,11 +5,12 @@ import { PageHeader, Section, CodeBlock, Callout, ComparisonTable, Badge } from 
 const elementGroups = [
   ["1", "读取消息", "collect-prompts", "blue"],
   ["2", "记录 Context", "record-context", "purple"],
-  ["3", "编译 Snapshot", "collect-context", "purple"],
-  ["4", "执行模型", "stream-llm", "orange"],
-  ["5", "计算预算", "token-ratio", "orange"],
-  ["6", "决定续跑", "check-follow-up", "blue"],
-  ["7", "统一收口", "finalize", "green"],
+  ["3", "应用 Source", "apply-source-context", "purple"],
+  ["4", "编译 Snapshot", "collect-context", "purple"],
+  ["5", "手工 Tool Loop", "stream-llm", "orange"],
+  ["6", "计算预算", "token-ratio", "orange"],
+  ["7", "决定续跑", "check-follow-up", "blue"],
+  ["8", "统一收口", "finalize", "green"],
 ] as const;
 
 export default function ConversationPage({ content, title, description, category }: DocPageProps) {
@@ -22,7 +23,7 @@ export default function ConversationPage({ content, title, description, category
         readTime={Math.max(1, Math.ceil(content.split(/\s+/).length / 200))}
       />
 
-      <Section title="当前 7 个 Element 的主链">
+      <Section title="当前 8 个 Element 的主链">
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "stretch" }}>
           {elementGroups.map(([step, name, detail, color], index) => (
             <React.Fragment key={name}>
@@ -46,7 +47,7 @@ export default function ConversationPage({ content, title, description, category
           rows={[
             [<Badge color="purple">system</Badge>, "唯一 TOON Context Snapshot；内部包含 System Prompt、AGENTS、Skill 等 entries", <><code>system = snapshot.content</code></>],
             [<Badge color="blue">messages</Badge>, "可见的 user / assistant 历史与当前输入", "过滤孤立 role:tool"],
-            [<Badge color="orange">tools</Badge>, "按意图筛选的工具定义；webfetch 始终可见", "执行资格由 ToolGuard 判定"],
+            [<Badge color="orange">tools</Badge>, "全部 schema 始终开放，由 LLM 自主选择", "Atom 只执行 Tool 并保护循环边界"],
           ]}
         />
         <CodeBlock lang="text" code={`Prompt Registry + AGENTS + Skill + runtime sources
@@ -55,27 +56,52 @@ export default function ConversationPage({ content, title, description, category
   → system: snapshot.content
 
 Session visible messages + current input → messages
-Tool registry + intent selection          → tools`} />
+Tool registry → schema-only definitions  → AI SDK Tool Calls
+Tool executors + ToolGuard + Ledger       → Atom Tool Loop`} />
       </Section>
 
-      <Section title="Web 查询的能力发现顺序">
-        <CodeBlock lang="text" code={`已有 Context / 查询方法 / Skill
-  └─ Prediction.memoryQuery → 自动搜索 Memory
-      ├─ 命中摘要 → read_memory → 普通方法可查询
-      │                         └─ 含 Skill 线索 → skill_load / skill_section
-      ├─ 空结果   → skill_list → 再次调用 webfetch
-      └─ 服务异常 / 明确 URL → 直接允许 webfetch`} />
+      <Section title="AI SDK 与 Atom 的职责边界">
+        <CodeBlock lang="text" code={`streamText（单 step）
+  → Tool Call schema validation
+  → Atom Ledger reserves execution
+  → Atom ToolRunner executes
+  → Tool Call + Tool Result returned to the next model step
+  → metadata.effect updates logs and no-progress warning only
+  → final Assistant text only`} />
         <ComparisonTable
-          headers={["状态", "ToolGuard 行为"]}
+          headers={["职责", "所有者"]}
           rows={[
-            ["尚未搜索 Memory", "拦截 webfetch，并要求先 search_memory"],
-            ["Memory 命中 Skill 线索", "等待 Skill 成功加载；不存在或失败时允许降级"],
-            ["Memory 为空且未检查 Skill", "拦截并要求 skill_list"],
-            ["前置检查已完成 / 服务不可用 / 输入含 URL", "允许执行 webfetch"],
+            ["模型适配、流式解析、Tool Call 参数校验", <Badge color="orange">AI SDK</Badge>],
+            ["安全权限、完全重复检测与执行上限", <Badge color="blue">Atom</Badge>],
+            ["Tool 选择、结果解释与下一步判断", <Badge color="purple">LLM</Badge>],
+            ["最终回复与 Session 持久化", <Badge color="green">Atom</Badge>],
           ]}
         />
-        <Callout type="tip" title="可见不等于可执行">
-          Agent 始终知道 <code>webfetch</code> 存在；Guard 用可解释的结果提示缺少哪一步，而不是把工具从列表隐藏。
+      </Section>
+
+      <Section title="Tool 自主调用与循环保护">
+        <CodeBlock lang="text" code={`Prediction → structured classification only
+Conversation LLM → Memory / Skill / MCP / WebFetch / Filesystem
+  ├─ same-name batch → validate opt-in, then execute calls in order
+  ├─ mixed/non-batchable multi-call → reject the whole batch before execution
+  ├─ normal call → execute and return full Tool Result
+  ├─ repeated no-result → add a judgment warning; keep tools available
+  ├─ exact duplicate → block the duplicate and explain why
+  └─ execution limit → end the Tool Loop`} />
+        <ComparisonTable
+          headers={["状态", "框架行为"]}
+          rows={[
+            ["合法同名批次", "按 Call 顺序执行，收齐结果后进入下一 step"],
+            ["混合或非批量多调用", "整批拒绝，每个 call_id 返回配对错误"],
+            ["正常 Tool 调用", "不筛选、不改写、不隐藏结果"],
+            ["连续无结果", "只提示 LLM 重新判断，不停机"],
+            ["完全重复调用", "阻止重复执行，返回循环提示"],
+            ["达到执行上限", "停止 Tool Loop，让 LLM 收尾"],
+          ]}
+        />
+        <Callout type="tip" title="顺序治理，不做业务路由">
+          Prompt 要求 LLM 在 WebFetch 前先查询 Memory 与 Skill；框架不维护业务前置状态，
+          也不判断 Tool 是否与任务相关。同名批次校验只阻止混合执行和部分副作用。
         </Callout>
       </Section>
 
@@ -104,11 +130,12 @@ Tool registry + intent selection          → tools`} />
         <ComparisonTable
           headers={["边界", "当前实现"]}
           rows={[
-            ["工具循环", <><code>stopWhen: stepCountIs(maxSteps)</code>，默认 50</>],
+            ["工具循环", <><code>ToolCallLedger</code> 控制手工循环，默认 50 次执行、连续 3 次无进展</>],
             ["输出预算", <><code>maxOutputTokens</code> 由系统配置，默认 4096；压缩阈值预留这部分空间</>],
             ["完成标记", <><code>&lt;&lt;&lt;COMPLETE&gt;&gt;&gt;</code> 用滑动窗口跨 chunk 识别，标记后文本丢弃</>],
             ["Unicode", <><code>String.toWellFormed()</code> 修复孤立代理；截断统一使用 <code>substringWellFormed</code></>],
-            ["工具结果", "进入按 topic 管理的 ToolContext，下一轮注入后消费，不生成孤立 tool 消息"],
+            ["工具结果", "所有已执行 Call + Result 返回当前 Conversation；不自动持久化"],
+            ["无进展", "只提示；不收窄 Tool，不丢弃最终文本"],
           ]}
         />
       </Section>

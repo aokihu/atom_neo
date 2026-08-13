@@ -114,10 +114,11 @@ createSnapshot -> acquire lease -> model success -> commitSnapshot
 ## 6. Turn 与 Step Snapshot
 
 - TaskSnapshot 在根任务开始时固定 system、workspace 和基础 session revision。
-- Skill revision 变化时，`prepareStep` 向 ContextService 请求新的 Snapshot，并只替换下一步骤的 TOON System Message。
+- Skill revision 变化时，手工 Tool Loop 向 ContextService 请求新的 Snapshot，并只替换下一步骤的 TOON System Message。
 - Skill load/unload 在下一模型步骤生效，topic 切换时清空当前 Session 的激活 Skill。
 - Skill Tool 只返回加载回执，不把 Skill 正文写入 Tool history；正文仅存在于可替换的 StepSnapshot。
-- Memory 不在每个步骤重复检索，Tool 结果由步骤消息自然追加。
+- Memory 是否再次检索由 LLM 根据当前结果决定；所有已执行 Tool Result 都投影到当前
+  Conversation 的后续步骤。
 
 `read_memory` 提供 `injectToContext` 参数：
 

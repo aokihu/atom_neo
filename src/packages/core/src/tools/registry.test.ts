@@ -9,7 +9,7 @@ const mockTool: ToolDefinition = {
   description: "A test tool",
   source: "builtin",
   inputSchema: z.object({ val: z.string() }),
-  execute: async () => ({ ok: true, output: "done" }),
+  execute: async () => ({ content: "done", metadata: { ok: true, effect: "evidence" } }),
 };
 
 describe("ToolRegistry", () => {

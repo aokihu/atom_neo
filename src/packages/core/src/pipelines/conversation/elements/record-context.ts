@@ -1,6 +1,5 @@
 import { BaseElement, BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type {
-  ContextMessage,
   ContextOwner,
   ContextScope,
   PipelineEventBus,
@@ -10,10 +9,9 @@ import { DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import type { ContextService } from "../../../context/context-service";
 import type { SkillServiceLike } from "../../../skills/types";
 import { appendCurrentUserMessage } from "./types";
-import type { ConversationFlowState, MemorySearchStatus } from "./types";
+import type { ConversationFlowState } from "./types";
 
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
-  #memory: any;
   #cwd: string;
   #session: any;
   #providerModel: string;
@@ -28,7 +26,6 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     contextService: ContextService;
-    memory?: any;
     sandbox?: string;
     session?: any;
     providerModel?: string;
@@ -39,7 +36,6 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#contextService = params.contextService;
-    this.#memory = params.memory;
     this.#cwd = params.sandbox ?? process.cwd();
     this.#session = params.session;
     this.#providerModel = params.providerModel ?? "";
@@ -57,6 +53,8 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     const taskId = input.task?.id ?? "task";
     const taskOwner = compactOwner({ sessionId, topicId, taskId });
     const topicOwner = compactOwner({ sessionId, topicId });
+    this.#contextService.remove("session", { sessionId }, "tool-history");
+    if (topicId) this.#contextService.remove("topic", { sessionId, topicId }, "tool-history");
     const systemPrompt = this.#resolve(PromptKey.BASE_SYSTEM);
     const compiledAgentsPrompt = this.#getCompiledPrompt();
     const skillContext = this.#skillService?.buildContext(sessionId) ?? "";
@@ -68,32 +66,12 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     const taskInstructions = this.#buildTaskInstructions();
     this.#putText("task", taskOwner, "task-environment", "collect-context", taskInstructions, 700);
 
-    const memoryResult = await this.#collectMemories();
-    if (memoryResult.messages.length > 0) {
-      this.#contextService.put({
-        scope: "task",
-        owner: taskOwner,
-        entry: {
-          key: "memory-summaries",
-          source: "memory",
-          channel: "messages",
-          trust: "untrusted",
-          priority: 650,
-          content: memoryResult.messages,
-        },
-      });
-    }
-
     const userMessages = (input.prompts ?? [])
       .filter(prompt => prompt.role !== "tool")
       .map(prompt => ({ role: prompt.role, content: prompt.content }));
     appendCurrentUserMessage(userMessages, input.task?.payload?.[0]?.data);
     this.report(BusEvents.Element.Data, {
       step: "done",
-      memoryQuery: memoryResult.query,
-      memorySearchAttempted: memoryResult.attempted,
-      memorySearchStatus: memoryResult.status,
-      injectedMemoryCount: memoryResult.messages.length,
       taskIntent: this.#taskIntent,
     });
 
@@ -101,9 +79,6 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       ...input,
       mode: "context_recorded",
       contextOwner: { workspaceId: this.#cwd, ...taskOwner },
-      memorySearchAttempted: memoryResult.attempted,
-      memorySearchStatus: memoryResult.status,
-      injectedMemoryCount: memoryResult.messages.length,
       userMessages,
     };
   }
@@ -172,34 +147,6 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     return parts.join("\n\n");
   }
 
-  async #collectMemories(): Promise<{
-    query: string;
-    attempted: boolean;
-    status: MemorySearchStatus;
-    messages: readonly ContextMessage[];
-  }> {
-    const query = this.#session?.pendingPrediction?.memoryQuery?.trim() || "";
-    if (!query) return { query, attempted: false, status: "not_started", messages: [] };
-    if (!this.#memory) {
-      this.report(BusEvents.Element.Data, { step: "memory-search-unavailable", memoryQuery: query });
-      return { query, attempted: true, status: "unavailable", messages: [] };
-    }
-    try {
-      const memories = await this.#memory.search(query) || [];
-      const messages = memories.map((node: any) => ({
-        role: "assistant",
-        content: `<MemorySummary id="${node.id.slice(0, 6)}" tags="${node.tags?.join(",") || ""}">\n${node.summary}\n</MemorySummary>`,
-      }));
-      return { query, attempted: true, status: messages.length ? "found" : "empty", messages };
-    } catch (error) {
-      this.report(BusEvents.Element.Data, {
-        step: "memory-search-error",
-        memoryQuery: query,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { query, attempted: true, status: "unavailable", messages: [] };
-    }
-  }
 }
 
 function compactOwner(owner: ContextOwner): ContextOwner {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
+import { toolResult } from "../outcome";
 
 export const TodoItemSchema = z.object({
   content: z.string().describe("Task description"),
@@ -40,9 +41,9 @@ export function createTodoWriteTool(): ToolDefinition {
       const inProgressCount = todos.filter(t => t.status === "in_progress").length;
       if (inProgressCount > 1) {
         const errMsg = `一次只能有一个任务处于进行中(in_progress)状态，当前有 ${inProgressCount} 个。请只保留一个 in_progress，其余置为 pending。`;
-        return { ok: false, output: "", error: errMsg };
+        return toolResult.failure(errMsg);
       }
-      return { ok: true, output: formatProgress(todos) };
+      return toolResult.stateChanged(formatProgress(todos));
     },
     permission: PermissionLevel.READ_ONLY,
   };

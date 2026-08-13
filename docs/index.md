@@ -29,6 +29,7 @@
 | [tool-plugin.md](./subsystems/tool-plugin.md) | Tool 插件接口 | 创建 Tool |
 | [session.md](./core/session.md) | Per-Session 状态、目录持久化、Context 恢复、Topic 与 TUI 生命周期 | 操作会话 |
 | [context-management.md](./context-management.md) | Context 六层所有权、Snapshot、Receipt、自动卸载与预算 | 修改 Context 注入或生命周期 |
+| [context-outcome-governance.md](./context-outcome-governance.md) | Tool Result、跨轮 Context、Prediction、Post 与 Compact 的防污染治理 | 修改工具结果或上下文消费链 |
 | [memory-service.md](./subsystems/memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
 | [network-service.md](./subsystems/network-service.md) | 同进程网络 Service、WebFetch 子功能与域名调度 | 修改网络能力 |
 | [configuration.md](./subsystems/configuration.md) | 配置加载优先级、格式 | 添加配置项 |
@@ -43,7 +44,7 @@
 
 | 文档 | 说明 | 何时 |
 |------|------|------|
-| [pipelines/conversation.md](./pipelines/conversation.md) | 核心对话管线 — 9-Element 链、FlowState、流式生成、链式续写、TODO 顺序执行、Unicode 净化 | 理解核心流程 |
+| [pipelines/conversation.md](./pipelines/conversation.md) | 核心对话管线 — 8-Element 链、手工 Tool Loop、流式生成、链式续写、TODO 顺序执行、Unicode 净化 | 理解核心流程 |
 | [pipelines/prediction.md](./pipelines/prediction.md) | 意图预测管线 — 输入分类、难度评估、主题检测 | 理解意图分析 |
 | [pipelines/follow-up-evaluator.md](./pipelines/follow-up-evaluator.md) | 跟进评估管线 — 长会话质量保障、循环检测 | 理解质量守护 |
 | [pipelines/follow-up.md](./pipelines/follow-up.md) | 链式续写管线 — 轻量 source/sink 转换、continuation payload 注入 | 理解链式续写 |
