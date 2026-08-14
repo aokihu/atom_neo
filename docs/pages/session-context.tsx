@@ -33,6 +33,7 @@ export default function SessionContextPage({ content, title, description, catego
 ├── .checkpoints/g-{revision}-{uuid}/
 │   ├── session.json
 │   ├── context.json
+│   ├── tool-records.jsonl
 │   └── message-latest.jsonl
 ├── current -> .checkpoints/g-{revision}-{uuid}
 ├── session.json -> current/session.json
@@ -46,6 +47,7 @@ export default function SessionContextPage({ content, title, description, catego
             [<code>current</code>, "完整 checkpoint generation", "原子切换；唯一提交点"],
             [<code>session.json</code>, "Session 元数据、TODO、Continuation、Token 和归档游标", "current 兼容入口"],
             [<code>context.json</code>, "可恢复的 Session/Topic Context entries", "current 兼容入口"],
+            [<code>tool-records.jsonl</code>, "已封存 ToolsGroup 与完整 ToolRecord", "随 generation 原子保存"],
             [<code>message-{`{n}`}.jsonl</code>, "压缩产生的原始消息分段", "不可变"],
             [<code>message-latest.jsonl</code>, "尚未归档的最近消息", "current 兼容入口"],
           ]}
@@ -99,6 +101,15 @@ export default function SessionContextPage({ content, title, description, catego
   → ContextService.put(...)
   → createSnapshot(...)
   → compile a fresh TOON snapshot`} />
+      </Section>
+
+      <Section title="ToolRecord 保存范围">
+        <CodeBlock lang="text" code={`Conversation ToolsGroup
+  → Step 1..N belongs to this Conversation only
+  → seal on completion or interrupted restore
+  → persist full records in tool-records.jsonl
+  → rebuild bounded Context TOON summaries after restore
+  → never replay Tool execution`} />
       </Section>
 
       <Section title="保存与恢复">

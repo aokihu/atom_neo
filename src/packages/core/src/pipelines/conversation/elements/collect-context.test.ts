@@ -4,6 +4,7 @@ import { BusEvents } from "@atom-neo/shared";
 import type { ContextSnapshot } from "@atom-neo/shared";
 import { ContextService } from "../../../context/context-service";
 import { SessionContext } from "../../../session/context";
+import { ToolRecordStore } from "../../../tools/tool-record-store";
 import { makeBus } from "../../test-helpers";
 import { CollectContextElement } from "./collect-context";
 import { RecordContextElement } from "./record-context";
@@ -33,6 +34,7 @@ async function buildSnapshot(params: {
   taskIntent?: string;
   getCompiledPrompt?: () => string;
   skillService?: any;
+  toolRecordStore?: ToolRecordStore;
 }, input: any, bus = makeBus(), contextService = makeContextService(bus)) {
   const record = new RecordContextElement({
     name: "record-context",
@@ -125,6 +127,39 @@ describe("conversation context pipeline", () => {
 
     expect(contextService.get("session", { sessionId: "s1" }, "tool-history")).toBeUndefined();
     expect(rows(result.contextSnapshot).some(row => String(row.content).includes("webfetch: error"))).toBe(false);
+  });
+
+  test("compiles bounded ToolRecord summaries through the Context TOON path", async () => {
+    const session = new SessionContext("s1");
+    session.pendingPrediction = { difficulty: "easy" };
+    const toolRecordStore = new ToolRecordStore();
+    const group = toolRecordStore.beginGroup("s1", "conversation-previous", "knowledge.weather");
+    toolRecordStore.append(group, {
+      modelStep: 1,
+      batchIndex: 0,
+      toolCallId: "call-1",
+      toolName: "weather",
+      source: "mcp",
+      startedAt: 1,
+      durationMs: 2,
+      input: { cities: Array.from({ length: 40 }, (_, index) => `city-${index}`) },
+      output: Array.from({ length: 40 }, (_, index) => `forecast-${index}`),
+      metadata: { ok: true, effect: "reference" },
+    });
+    toolRecordStore.seal(group);
+
+    const { result } = await buildSnapshot({ session, toolRecordStore }, {
+      mode: "streaming",
+      task: { id: "conversation-current" },
+    });
+    const row = rows(result.contextSnapshot).find(item => item.source === "tool-record-store");
+    const content = String(row?.content);
+
+    expect(row?.channel).toBe("tool");
+    expect(content).toContain(group.id);
+    expect(content).toContain(`${group.id}-1`);
+    expect(content).toContain("list(40)");
+    expect(content).not.toContain("forecast-39");
   });
 
   test("compiles all matching scopes into one immutable lean snapshot", async () => {

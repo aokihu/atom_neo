@@ -52,6 +52,19 @@ describe("SessionPersistenceService", () => {
         content: [{ role: "assistant", content: "summary" }],
       },
     });
+    const toolsGroup = first.persistence.toolRecords.beginGroup(session.sessionId, "conversation-1");
+    const toolRecord = first.persistence.toolRecords.append(toolsGroup, {
+      modelStep: 1,
+      batchIndex: 0,
+      toolCallId: "call-1",
+      toolName: "weather",
+      source: "mcp",
+      startedAt: 3,
+      durationMs: 4,
+      input: { city: "Hangzhou" },
+      output: { temperature: 28 },
+      metadata: { ok: true, effect: "reference" },
+    });
 
     first.persistence.checkpoint(session, "task_completed");
 
@@ -63,6 +76,7 @@ describe("SessionPersistenceService", () => {
       "current",
       "message-latest.jsonl",
       "session.json",
+      "tool-records.jsonl",
     ]);
     expect(lstatSync(resolve(dir, "current")).isSymbolicLink()).toBe(true);
     expect(lstatSync(resolve(dir, "session.json")).isSymbolicLink()).toBe(true);
@@ -72,6 +86,9 @@ describe("SessionPersistenceService", () => {
     expect(restored.messages.map(message => message.content)).toEqual(["design context persistence"]);
     expect(restored.todoState[0]?.content).toBe("persist session");
     expect(restored.continuationContext?.nextPrompt).toBe("continue");
+    expect(second.persistence.toolRecords.getRecord(session.sessionId, toolRecord.id)?.output)
+      .toEqual({ temperature: 28 });
+    expect(second.persistence.toolRecords.exportSession(session.sessionId)[0]?.status).toBe("interrupted");
 
     const snapshot = second.contextService.createSnapshot({ sessionId: session.sessionId });
     const rows = (decode(snapshot.content) as { context: Array<{ content: string }> }).context;

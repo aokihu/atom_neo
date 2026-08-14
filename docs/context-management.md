@@ -130,6 +130,23 @@ createSnapshot -> acquire lease -> model success -> commitSnapshot
 
 `pinned` 适合家庭地址、长期偏好等需要在整个会话中持续可用的信息。`ttl` 适合天气查询方法、阶段性工作说明等临时信息；再次读取并注入同一条 Memory 会刷新过期时间，没有再次使用则自动卸载。
 
+### ToolRecord 摘要投影
+
+ToolRecordStore 是完整 Tool 调用详情的 Owner；ContextService 不是审计数据库。每次创建新
+Conversation Snapshot 前，`record-context` 将已封存 ToolsGroup 的有界摘要写入 Session scope：
+
+```text
+key      = tool-record-summary
+source   = tool-record-store
+channel  = tool
+trust    = untrusted
+```
+
+Entry content 保持结构化对象，由 Context compiler 转换为 TOON。摘要包含 Group ID、Step 范围、
+Tool 名称、成功/失败计数、Group 总结和最近记录的输入/输出摘要，不复制完整网页、文件、Memory
+正文或原始大数组。摘要不足时才调用 `request_tool_record(s)` 获取详情；查询结果只进入当前
+Conversation，查询 Tool 设置 `recordPolicy="exclude"`。
+
 过期时间属于 Memory 条目，而不是整个 Topic Bucket，因此一条临时 Memory 到期不会清除同层级的其他 Context。持久注入只是创建 Memory 的运行时 Context 投影，不复制或修改原始 Memory。Memory 始终按 `untrusted` 数据处理，不能进入 `instructions`。
 
 ## 7. 长任务的 Turn 生命周期
@@ -206,6 +223,7 @@ ContextService 通过 Snapshot ID 保存 SnapshotState 与紧凑 Manifest；Pipe
 | EventBus 生命周期 | Session/Topic/Task/Step 结束通知 ContextService | 已完成 |
 | Manifest / Replay | SnapshotState 内保存并通过 ID 查询 | 已完成 |
 | Memory 分级持久注入 | `pinned` 跟随 Session；`ttl` 跟随 Topic 并自动卸载 | 已完成 |
-| 大型 Tool Artifact 引用 | 当前仅保存 Tool history 摘要 | 需要开发 |
+| ToolRecord TOON 摘要 | Group 摘要常驻；完整记录按需查询 | 已完成 |
+| 大型 Tool Artifact 引用 | ToolRecord 对详情设有上限，超大结果仍待外置 | 需要开发 |
 
 ContextBucket 负责管理，SnapshotState 负责追踪，ContextSnapshot 只负责给模型看。

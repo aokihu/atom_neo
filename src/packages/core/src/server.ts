@@ -245,6 +245,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         orchestrator,
         skillService,
         contextService,
+        toolRecordStore: persistence.toolRecords,
       }).build(bus);
     },
 

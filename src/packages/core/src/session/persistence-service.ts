@@ -15,8 +15,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import type { SessionMessage } from "@atom-neo/shared";
+import type { SessionMessage, ToolsGroup } from "@atom-neo/shared";
 import type { ContextService, PersistedContextState } from "../context/context-service";
+import { ToolRecordStore } from "../tools/tool-record-store";
 import { SessionContext } from "./context";
 import type {
   ArchiveReceipt,
@@ -54,7 +55,7 @@ type HistoryRead = {
 const SEGMENT_PATTERN = /^message-(\d{6})\.jsonl$/;
 const ARCHIVE_ID_PATTERN = /^message-(?:\d{6}|latest)$/;
 const GENERATION_PATTERN = /^g-(\d{12})-[0-9a-f-]{36}$/;
-const CHECKPOINT_FILES = ["session.json", "context.json", "message-latest.jsonl"] as const;
+const CHECKPOINT_FILES = ["session.json", "context.json", "message-latest.jsonl", "tool-records.jsonl"] as const;
 
 const toSafeSessionId = (sessionId: string): string =>
   createHash("sha256").update(sessionId).digest("hex").substring(0, 32);
@@ -81,8 +82,26 @@ const parseJsonl = (content: string): { manifest?: MessageManifest; messages: Se
   return { manifest, messages };
 };
 
+const toToolRecordsJsonl = (checkpointRevision: number, groups: readonly ToolsGroup[]): string => [
+  JSON.stringify({ type: "manifest", schemaVersion: 1, checkpointRevision, count: groups.length }),
+  ...groups.map(group => JSON.stringify({ type: "tools-group", group })),
+].join("\n") + "\n";
+
+const parseToolRecordsJsonl = (content: string): { checkpointRevision?: number; groups: ToolsGroup[] } => {
+  let checkpointRevision: number | undefined;
+  const groups: ToolsGroup[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    const value = JSON.parse(line) as Record<string, unknown>;
+    if (value.type === "manifest") checkpointRevision = Number(value.checkpointRevision);
+    if (value.type === "tools-group" && value.group) groups.push(value.group as ToolsGroup);
+  }
+  return { checkpointRevision, groups };
+};
+
 export class SessionPersistenceService {
   #sessionsDir: string;
+  readonly toolRecords = new ToolRecordStore();
 
   constructor(
     sandbox: string,
@@ -110,11 +129,13 @@ export class SessionPersistenceService {
     const state = session.exportState({ checkpointRevision, status, archives, reason });
     const context = this.contextService.exportSessionState(session.sessionId, checkpointRevision);
     const latest = this.#createManifest("message-latest", latestMessages, { checkpointRevision });
+    const toolRecords = this.toolRecords.exportSession(session.sessionId);
 
     const generation = this.#writeGeneration(dir, checkpointRevision, {
       "message-latest.jsonl": toJsonl(latest, latestMessages),
       "context.json": JSON.stringify(context, null, 2) + "\n",
       "session.json": JSON.stringify(state, null, 2) + "\n",
+      "tool-records.jsonl": toToolRecordsJsonl(checkpointRevision, toolRecords),
     });
     this.#publishGeneration(dir, generation);
     this.#cleanupGenerations(dir, generation);
@@ -134,6 +155,10 @@ export class SessionPersistenceService {
       ? parseJsonl(readFileSync(latestPath, "utf8"))
       : { messages: [] };
     const contextPath = resolve(checkpointDir, "context.json");
+    const toolRecordsPath = resolve(checkpointDir, "tool-records.jsonl");
+    const toolRecords = existsSync(toolRecordsPath)
+      ? parseToolRecordsJsonl(readFileSync(toolRecordsPath, "utf8"))
+      : undefined;
     let context: PersistedContextState | undefined;
     if (existsSync(contextPath)) {
       context = JSON.parse(readFileSync(contextPath, "utf8")) as PersistedContextState;
@@ -142,10 +167,13 @@ export class SessionPersistenceService {
     if (generation) {
       const latestRevision = latest.manifest?.checkpointRevision;
       if (latestRevision !== state.checkpointRevision
-        || context?.checkpointRevision !== state.checkpointRevision) {
+        || context?.checkpointRevision !== state.checkpointRevision
+        || (toolRecords && toolRecords.checkpointRevision !== state.checkpointRevision)) {
         throw new Error(`Session checkpoint revision mismatch: ${state.checkpointRevision}`);
       }
     }
+    if (toolRecords) this.toolRecords.restoreSession(sessionId, toolRecords.groups);
+    else this.toolRecords.removeSession(sessionId);
     if (context) {
       this.contextService.restoreSessionState(context);
     }
@@ -253,6 +281,7 @@ export class SessionPersistenceService {
   }
 
   remove(sessionId: string): void {
+    this.toolRecords.removeSession(sessionId);
     rmSync(this.getSessionDirectory(sessionId, false), { recursive: true, force: true });
   }
 

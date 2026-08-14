@@ -13,10 +13,10 @@ describe("ToolResult", () => {
 
   test("represents failures without model content", () => {
     const result: ToolResult = {
-      metadata: { ok: false, effect: "none", error: "offline" },
+      metadata: { ok: false, effect: "none", error: "offline", errorSource: "tool" },
     };
     expect(result).toEqual({
-      metadata: { ok: false, effect: "none", error: "offline" },
+      metadata: { ok: false, effect: "none", error: "offline", errorSource: "tool" },
     });
   });
 });

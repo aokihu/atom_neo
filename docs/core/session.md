@@ -43,6 +43,10 @@ export class SessionContext {
 - `lastSafeMsgCount`
 - Tool loop 中间态、active Task 和 active Snapshot
 
+ToolRecord 与 Tool loop 中间态不同：已封存 ToolsGroup 属于可恢复的 Session 历史，但其中的
+`Step` 仍是 Conversation 级序号。Session 恢复不会继续旧 Conversation或重放 Tool；中断的活动
+Group 以 `interrupted` 封存，新 Conversation 使用新 Group 并从 Step 1 开始。
+
 ## 2. Session Store
 
 ```typescript
@@ -172,6 +176,9 @@ Session 恢复不等于 Task 恢复。重启后恢复状态；旧 checkpoint 若
 
 恢复时由 `ContextService` 导入这些 entry，再重新编译 Snapshot。`task`、`step`、`once`、
 Snapshot receipt 和 lease 不进入磁盘状态。
+
+完整 ToolRecord 使用独立 JSONL checkpoint 数据，不放入 `session.json` 或 TOON Snapshot；
+Context 中的 `tool-record-summary` 从恢复后的 Group 确定性重建。
 
 ### 4. Checkpoint 提交顺序
 

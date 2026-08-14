@@ -3,7 +3,7 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { streamText, tool, zodSchema } from "ai";
 import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import type { ToolContextInjection, ToolDefinition, ToolEffect, ToolResultMetadata } from "@atom-neo/shared";
+import type { ToolContextInjection, ToolDefinition, ToolEffect, ToolResultMetadata, ToolsGroup } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
@@ -14,6 +14,7 @@ import type { ConversationFlowState, ToolEffectSummary } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { ContextService } from "../../../context/context-service";
+import type { ToolRecordStore } from "../../../tools/tool-record-store";
 import {
   buildToolStepInstruction,
   formatToolBatchBlock,
@@ -68,6 +69,14 @@ export function summarizeToolEffects(metadata: readonly ToolResultMetadata[]): T
   return summary;
 }
 
+export function shouldRecordToolResult(
+  definition: Pick<ToolDefinition, "recordPolicy"> | undefined,
+  metadata: ToolResultMetadata,
+): boolean {
+  return definition?.recordPolicy !== "exclude"
+    && (metadata.ok || metadata.errorSource === "tool");
+}
+
 export function injectToolContext(params: {
   contextService: ContextService;
   injection: ToolContextInjection;
@@ -110,6 +119,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #skillService?: SkillServiceLike;
   #contextService: ContextService;
   #sameToolBatchNames: ReadonlySet<string>;
+  #toolRecordStore?: ToolRecordStore;
+  #toolDefinitions: ReadonlyMap<string, ToolDefinition>;
 
   constructor(params: {
     name: string;
@@ -128,6 +139,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     configContextLimit?: number;
     skillService?: SkillServiceLike;
     contextService: ContextService;
+    toolRecordStore?: ToolRecordStore;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -141,6 +153,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#configContextLimit = params.configContextLimit ?? DEFAULT_CONTEXT_LIMIT;
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
+    this.#toolRecordStore = params.toolRecordStore;
+    this.#toolDefinitions = new Map(params.tools.map(definition => [definition.name, definition]));
     this.#sameToolBatchNames = new Set(
       params.tools.filter(tool => tool.allowSameToolBatch === true).map(tool => tool.name),
     );
@@ -209,6 +223,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
     let modelMessages = [...userMessages] as ModelMessage[];
     const allToolCalls: { toolName: string; metadata: ToolResultMetadata }[] = [];
+    let toolsGroup: ToolsGroup | undefined;
     const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
     const abortController = new AbortController();
     const streamSignal = input.abortSignal
@@ -383,7 +398,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         const batchDecision = validateToolCallBatch(stepCalls, this.#sameToolBatchNames);
         if (!batchDecision.allowed) {
           const error = formatToolBatchBlock(batchDecision);
-          const metadata = { ok: false, effect: "none", error } as const;
+          const metadata = { ok: false, effect: "none", error, errorSource: "guard" } as const;
           const stepRecords = new Map<string, ToolStepRecord>();
           const governanceState = this.#toolGovernance.current.rejectBatch(stepCalls.length);
           this.report(BusEvents.Element.Data, {
@@ -412,13 +427,6 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               toolCallId: call.toolCallId,
               error,
             });
-            this.#session?.addToolResult?.({
-              toolName: call.toolName,
-              topic: this.#session.currentTopic ?? "",
-              timestamp: Date.now(),
-              content: "",
-              metadata,
-            });
           }
           modelMessages = [...modelMessages, ...projectToolMessages(stepCalls, stepRecords)];
           stepInstruction = error;
@@ -439,7 +447,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         let failedCalls = 0;
         let intentRequested = false;
 
-        for (const call of stepCalls) {
+        for (const [batchIndex, call] of stepCalls.entries()) {
           this.report(BusEvents.Element.Data, {
             step: "tool-call-start",
             toolName: call.toolName,
@@ -477,6 +485,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
                 ok: false,
                 effect: "none",
                 error: `No executor registered for ${call.toolName}`,
+                errorSource: "runtime",
               },
             };
           } else {
@@ -488,6 +497,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
                   ok: false,
                   effect: "none",
                   error: `Executor did not report metadata for ${call.toolName}`,
+                  errorSource: "runtime",
                 },
               };
             } catch (err: any) {
@@ -497,6 +507,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
                   ok: false,
                   effect: "none",
                   error: err?.message ?? String(err),
+                  errorSource: "runtime",
                 },
               };
             }
@@ -545,13 +556,47 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               key: contextInjection.entry.key,
             });
           }
-          this.#session?.addToolResult?.({
-            toolName: call.toolName,
-            topic: this.#session.currentTopic ?? "",
-            timestamp: Date.now(),
-            content: status.content,
-            metadata: status.metadata,
-          });
+          const definition = this.#toolDefinitions.get(call.toolName);
+          const recordable = shouldRecordToolResult(definition, status.metadata);
+          let toolRecord: ReturnType<ToolRecordStore["append"]> | undefined;
+          if (recordable && this.#toolRecordStore) {
+            toolsGroup ??= this.#toolRecordStore.beginGroup(
+              this.#session?.sessionId ?? input.task?.sessionId ?? "default",
+              input.task?.id ?? "task",
+              this.#session?.currentTopic ?? "",
+            );
+            toolRecord = this.#toolRecordStore.append(toolsGroup, {
+              modelStep,
+              batchIndex,
+              toolCallId: call.toolCallId,
+              toolName: call.toolName,
+              source: definition?.source ?? "mcp",
+              startedAt: status.startedAt ?? Date.now(),
+              durationMs: status.durationMs ?? 0,
+              input: call.input,
+              output: status.rawOutput ?? status.content,
+              metadata: status.metadata,
+            });
+            this.report(BusEvents.Element.Data, {
+              step: "tool-record-added",
+              toolsGroupId: toolsGroup.id,
+              recordId: toolRecord.id,
+              recordStep: toolRecord.step,
+              modelStep,
+              batchIndex,
+              toolName: call.toolName,
+            });
+          }
+          if (recordable) {
+            this.#session?.addToolResult?.({
+              toolName: call.toolName,
+              topic: this.#session.currentTopic ?? "",
+              timestamp: toolRecord?.startedAt ?? status.startedAt ?? Date.now(),
+              content: status.content,
+              metadata: status.metadata,
+              durationMs: toolRecord?.durationMs ?? status.durationMs ?? 0,
+            });
+          }
         }
 
         const projectedMessages = projectToolMessages(stepCalls, stepRecords);
@@ -582,6 +627,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
     } finally {
       clearTimeout(timeoutTimer);
+    }
+
+    if (toolsGroup && this.#toolRecordStore) {
+      this.#toolRecordStore.seal(toolsGroup, streamFailed || timedOut ? "interrupted" : "sealed");
+      this.report(BusEvents.Element.Data, {
+        step: "tool-record-group-sealed",
+        toolsGroupId: toolsGroup.id,
+        recordCount: toolsGroup.records.length,
+        status: toolsGroup.status,
+      });
     }
 
     const finalGovernance = this.#toolGovernance.current.snapshot();
@@ -690,7 +745,10 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
 type ToolExecutionStatus = {
   content: string;
+  rawOutput?: unknown;
   metadata: ToolResultMetadata;
+  startedAt?: number;
+  durationMs?: number;
 };
 
 function pushToolExecutionStatus(
@@ -737,7 +795,7 @@ export function resolveMCPToolMetadata(result: unknown): ToolResultMetadata {
   }
   const record = result as Record<string, unknown>;
   if (record.isError === true) {
-    return { ok: false, effect: "none", error: "MCP tool returned isError" };
+    return { ok: false, effect: "none", error: "MCP tool returned isError", errorSource: "tool" };
   }
   if (Array.isArray(record.content)) {
     const contentEvidence = record.content.some(part => {
@@ -787,7 +845,7 @@ function beginGovernedToolCall(params: {
   const error = `TOOL_GOVERNANCE_BLOCKED [${decision.reason}]`;
   pushToolExecutionStatus(params.toolResults, params.toolName, {
     content: output,
-    metadata: { ok: false, effect: "none", error },
+    metadata: { ok: false, effect: "none", error, errorSource: "guard" },
   });
   return { allowed: false, output };
 }
@@ -869,7 +927,10 @@ function buildAllAiTools(
               });
               pushToolExecutionStatus(toolResults, t.name, {
                 content,
+                rawOutput: r.content,
                 metadata: r.metadata,
+                startedAt: start,
+                durationMs: duration,
               });
               if (t.name === "todowrite" && r.metadata.ok && session?.setTodoState) {
                 session.setTodoState((args as any).todos ?? []);
@@ -883,13 +944,15 @@ function buildAllAiTools(
                 toolName: t.name,
                 stepCount: sc,
                 decision,
-                metadata: { ok: false, effect: "none", error },
+                metadata: { ok: false, effect: "none", error, errorSource: "tool" },
                 report,
                 governance,
               });
               pushToolExecutionStatus(toolResults, t.name, {
                 content: "",
-                metadata: { ok: false, effect: "none", error },
+                metadata: { ok: false, effect: "none", error, errorSource: "tool" },
+                startedAt: start,
+                durationMs: duration,
               });
               return `Tool execution error: ${error}`;
             }
@@ -953,7 +1016,10 @@ export function wrapMCPAiTools(
           });
           pushToolExecutionStatus(toolResults, name, {
             content: stringifyToolOutput(result),
+            rawOutput: result,
             metadata,
+            startedAt: start,
+            durationMs: duration,
           });
           return result;
         } catch (err: any) {
@@ -965,13 +1031,15 @@ export function wrapMCPAiTools(
             stepCount: sc,
             source: "mcp",
             decision,
-            metadata: { ok: false, effect: "none", error },
+            metadata: { ok: false, effect: "none", error, errorSource: "tool" },
             report,
             governance,
           });
           pushToolExecutionStatus(toolResults, name, {
             content: "",
-            metadata: { ok: false, effect: "none", error },
+            metadata: { ok: false, effect: "none", error, errorSource: "tool" },
+            startedAt: start,
+            durationMs: duration,
           });
           return `MCP tool error: ${error}`;
         }

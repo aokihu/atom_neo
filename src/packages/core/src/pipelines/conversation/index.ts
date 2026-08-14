@@ -19,6 +19,7 @@ import { DEFAULT_MAX_TOKENS } from "../../constants";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../skills/types";
 import type { ContextService } from "../../context/context-service";
+import type { ToolRecordStore } from "../../tools/tool-record-store";
 
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement);
@@ -57,6 +58,7 @@ export type ConversationPipelineDeps = {
   orchestrator?: InternalTaskOrchestrator;
   skillService?: SkillServiceLike;
   contextService: ContextService;
+  toolRecordStore: ToolRecordStore;
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
@@ -71,6 +73,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       taskIntent: deps.intent,
       getCompiledPrompt: deps.getCompiledPrompt,
       skillService: deps.skillService,
+      toolRecordStore: deps.toolRecordStore,
     })
     .transform("apply-source-context", {
       contextService: deps.contextService,
@@ -94,6 +97,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       configContextLimit: deps.configContextLimit,
       skillService: deps.skillService,
       contextService: deps.contextService,
+      toolRecordStore: deps.toolRecordStore,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .boundary("check-follow-up", { memory: deps.memory, session: deps.session })

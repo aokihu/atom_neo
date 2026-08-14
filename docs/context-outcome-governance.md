@@ -42,6 +42,7 @@ type ToolResult =
         ok: false;
         effect: "none";
         error: string; // 框架诊断字段；失败时序列化为简洁 Tool Result 供 LLM 判断
+        errorSource: "guard" | "runtime" | "tool";
       };
     };
 ```
@@ -72,14 +73,47 @@ ToolResult
 
 - 删除普通 Tool Result 自动生成 `tool-history` Context 的行为。
 - AI SDK 只负责单 step Tool Call 解析，Tool 不向 SDK 提供 `execute`；执行与循环由 Atom 控制。
-- Tool Call 与 Tool Result 必须保持配对；empty/error 只存在于当前 Conversation，不进入
-  Topic/Session Context 或后续 Conversation。
+- Tool Call 与 Tool Result 必须保持配对；完整 empty/error 只存在于当前 Conversation。只有真实
+  Tool 执行会留下有界 ToolRecord，并在后续 Context 中出现摘要。
 - 多 Call step 必须是显式允许的同名批次。批次校验先于任何 executor；非法批次的全部 Call
   返回配对错误，记录 blocked/no-progress，但不计入真实 execution，也不产生部分副作用。
-- 有效 content 也不自动持久化，避免旧证据无限累积；需要跨轮使用时由 Tool 返回
-  `contextInjection`，沿用现有 scope、TTL、pin 与 trust 边界。
+- 有效 content 不自动成为 Prompt Context，避免旧证据无限累积；真实执行的有界详情进入审计型
+  ToolRecord。需要把证据正文跨轮注入 Prompt 时，仍由 Tool 返回 `contextInjection`，沿用现有
+  scope、TTL、pin 与 trust 边界。
 - Session 中的结构化 ToolResult 可用于 TUI、日志和诊断，但 Prediction、Post、Compact 只能读取
   经过筛选的投影，不能把审计记录整段重新注入模型。
+
+### ToolRecord 与框架错误边界
+
+Tool 历史只记录已经真实进入 executor 的调用：成功结果和 Tool 自身返回或抛出的真实错误。
+Guard 拒绝与 executor 缺失、结果协议缺失等 Runtime 错误只返回当前 Tool Loop 并写日志，不进入
+ToolRecord。失败 metadata 使用结构化 `errorSource: "guard" | "runtime" | "tool"`，禁止根据
+错误字符串前缀反推来源；即使不写历史，也必须保留 AI SDK 要求的 Call/Result 配对。
+
+| 结果来源 | Tool 已执行 | 返回当前 LLM step | 写入 ToolRecord |
+|---|---:|---:|---:|
+| Tool 成功 | 是 | 是 | 是 |
+| Tool 真实失败 | 是 | 是 | 是 |
+| Guard 拒绝 | 否 | 是 | 否 |
+| Runtime/协议错误 | 否 | 是 | 否 |
+| `request_tool_record(s)` | 是 | 是 | 否 |
+
+### Conversation ToolsGroup
+
+一次 Conversation 在首次产生可记录结果时懒创建一个 `ToolsGroupID`。同一 Conversation 内所有
+可记录结果共享该 Group，`Step` 从 1 连续递增；新 Conversation 创建新 Group 并重新从 1 开始。
+Guard、Runtime 错误和历史查询 Tool 不占用 Step。记录 ID 固定为
+`{ToolsGroupID}-{Step}`；`modelStep` 与同名批次的 `batchIndex` 单独保存。
+
+### 摘要常驻、详情按需
+
+有界的完整 input/output/error 保存在 ToolRecordStore，超限详情会标记 `truncated`。ContextService 只接收 ToolsGroup 摘要和最近记录的
+`id/tool/status/inputSummary/resultSummary`，使用 `channel="tool"`、`trust="untrusted"`。
+结构化摘要由 Context compiler 统一编码为 TOON，不提前拼接 TOON 字符串。
+
+`request_tool_record` 使用 `{ToolsGroupID}-{Step}` 读取单条详情；`request_tool_records` 按 Group、
+Step 范围、状态或 ID 集合分页读取。两者设置 `recordPolicy="exclude"`，只返回当前 Tool Loop，
+不会生成新历史或摘要。
 
 ## 4. Pipeline 权重调整
 

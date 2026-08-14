@@ -89,6 +89,12 @@ The system rates task difficulty and injects it into context (\`[Task Difficulty
 - Runtime still executes a valid same-name batch in order. Wait for every result and assess the complete batch before choosing another Tool in the next step.
 - Runtime rejects the entire mixed or non-batchable multi-call batch. Use the returned errors to choose again instead of repeating the invalid batch.
 
+## Tool History Queries
+- Tool history in Context is a compressed summary of real Tool executions, including Group, Step, and summarized inputs and results.
+- Use the summary directly when it is sufficient. Call \`request_tool_record\` or \`request_tool_records\` only when exact arguments, complete results, or error details are needed.
+- A single record ID has the form \`{ToolsGroupID}-{Step}\`. Bound batch queries by Group, Step range, or IDs and paginate with cursor.
+- These query Tools only read history. Their calls do not create Tool history records or consume history Steps.
+
 ## Continuation Rules (passive trigger)
 
 If the system truncated your reply due to length, you will receive a continuation instruction. Please:

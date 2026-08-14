@@ -41,6 +41,19 @@ export default function ConversationPage({ content, title, description, category
         </Callout>
       </Section>
 
+      <Section title="Conversation ToolsGroup">
+        <CodeBlock lang="text" code={`first recordable Tool result → create ToolsGroupID
+  → Tool success / real Tool failure: assign Step 1..N
+  → Guard / Runtime / history query Tool: no record, no Step
+  → final Assistant text: seal Group
+  → next Conversation: new Group, Step restarts at 1`} />
+        <Callout type="info" title="TOON 摘要不是完整审计">
+          有界的完整 input/output 保存在 ToolRecordStore，超限会标记 truncated；下一次 Snapshot 只注入 Group 和最近记录摘要。
+          LLM 需要具体步骤时调用 <code>request_tool_record</code> 或 <code>request_tool_records</code>，
+          两个查询 Tool 都不会记录自身。
+        </Callout>
+      </Section>
+
       <Section title="送入 LLM 的三条通道">
         <ComparisonTable
           headers={["通道", "承载内容", "边界"]}
@@ -134,7 +147,7 @@ Conversation LLM → Memory / Skill / MCP / WebFetch / Filesystem
             ["输出预算", <><code>maxOutputTokens</code> 由系统配置，默认 4096；压缩阈值预留这部分空间</>],
             ["完成标记", <><code>&lt;&lt;&lt;COMPLETE&gt;&gt;&gt;</code> 用滑动窗口跨 chunk 识别，标记后文本丢弃</>],
             ["Unicode", <><code>String.toWellFormed()</code> 修复孤立代理；截断统一使用 <code>substringWellFormed</code></>],
-            ["工具结果", "所有已执行 Call + Result 返回当前 Conversation；不自动持久化"],
+            ["工具结果", "所有 Call + Result 返回当前 Conversation；真实执行另存 ToolRecord，Guard/Runtime 不记录"],
             ["无进展", "只提示；不收窄 Tool，不丢弃最终文本"],
           ]}
         />

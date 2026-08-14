@@ -5,6 +5,7 @@ import {
   resolveModelInput,
   resolveMCPToolMetadata,
   resolveTokenMetrics,
+  shouldRecordToolResult,
   summarizeToolEffects,
   wrapMCPAiTools,
 } from "./stream-llm";
@@ -33,6 +34,29 @@ test("uses the TOON Snapshot only as system text", () => {
   });
 });
 
+test("records only real Tool executions and excludes history query Tools", () => {
+  expect(shouldRecordToolResult(undefined, { ok: true, effect: "reference" })).toBe(true);
+  expect(shouldRecordToolResult(undefined, {
+    ok: false,
+    effect: "none",
+    error: "backend unavailable",
+    errorSource: "tool",
+  })).toBe(true);
+  expect(shouldRecordToolResult(undefined, {
+    ok: false,
+    effect: "none",
+    error: "mixed Tool names",
+    errorSource: "guard",
+  })).toBe(false);
+  expect(shouldRecordToolResult(undefined, {
+    ok: false,
+    effect: "none",
+    error: "missing executor metadata",
+    errorSource: "runtime",
+  })).toBe(false);
+  expect(shouldRecordToolResult({ recordPolicy: "exclude" }, { ok: true, effect: "reference" })).toBe(false);
+});
+
 test("wrapMCPAiTools records success and failure for transport completion", async () => {
   const statuses = new Map<string, any[]>();
   const wrapped = wrapMCPAiTools({
@@ -43,19 +67,24 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
   expect(await wrapped.weather.execute({})).toEqual({ temperature: 20 });
   expect(statuses.get("weather")).toEqual([{
     content: "{\"temperature\":20}",
+    rawOutput: { temperature: 20 },
     metadata: { ok: true, effect: "reference" },
+    startedAt: expect.any(Number),
+    durationMs: expect.any(Number),
   }]);
 
   expect(await wrapped.broken.execute({})).toBe("MCP tool error: offline");
   expect(statuses.get("broken")).toEqual([{
     content: "",
-    metadata: { ok: false, effect: "none", error: "offline" },
+    metadata: { ok: false, effect: "none", error: "offline", errorSource: "tool" },
+    startedAt: expect.any(Number),
+    durationMs: expect.any(Number),
   }]);
 });
 
 test("resolveMCPToolMetadata uses MCP structure instead of natural-language guessing", () => {
   expect(resolveMCPToolMetadata({ isError: true, content: [{ type: "text", text: "offline" }] }))
-    .toEqual({ ok: false, effect: "none", error: "MCP tool returned isError" });
+    .toEqual({ ok: false, effect: "none", error: "MCP tool returned isError", errorSource: "tool" });
   expect(resolveMCPToolMetadata({ content: [{ type: "text", text: "   " }] }))
     .toEqual({ ok: true, effect: "none" });
   expect(resolveMCPToolMetadata({ content: [], structuredContent: { count: 1 } }))
@@ -86,7 +115,7 @@ describe("Tool effect summaries", () => {
       { ok: true, effect: "reference" },
       { ok: true, effect: "state_changed" },
       { ok: true, effect: "none" },
-      { ok: false, effect: "none", error: "offline" },
+      { ok: false, effect: "none", error: "offline", errorSource: "tool" },
     ])).toEqual({
       evidence: 1,
       referenceEvidence: 1,

@@ -34,6 +34,9 @@ export interface ToolDefinition {
 
   /** Allow same-name multi-call batches in one model step. */
   allowSameToolBatch?: boolean;
+
+  /** Exclude introspection tools from ToolRecord history. */
+  recordPolicy?: "record" | "exclude";
 }
 
 export type ToolResult = {
@@ -48,6 +51,7 @@ export type ToolResult = {
         ok: false;
         effect: "none";
         error: string;
+        errorSource: "guard" | "runtime" | "tool";
       };
 };
 
@@ -87,6 +91,8 @@ export enum PermissionLevel {
             [<code>recall_memory</code>, "Memory", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 session 召回上下文化记忆"],
             [<code>search_history</code>, "Session History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "搜索当前 Session 已归档的原始消息"],
             [<code>read_history</code>, "Session History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按归档 ID 和消息序号读取原始消息"],
+            [<code>request_tool_record</code>, "Tool History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 ToolsGroupID-Step 读取单条完整记录；不自记录"],
+            [<code>request_tool_records</code>, "Tool History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 Group、Step 范围或 ID 集合分页读取；不自记录"],
             [<code>bash</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行 shell 命令"],
           ]}
         />

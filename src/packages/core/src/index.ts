@@ -31,6 +31,7 @@ export type { PersistedContextBucket, PersistedContextState } from "./context/co
 // Tools
 export { ToolRegistry } from "./tools/registry";
 export { executeTool } from "./tools/executor";
+export { ToolRecordStore, parseToolRecordId } from "./tools/tool-record-store";
 export { filterToolsByPermission } from "./tools/permissions";
 export { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
 export { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck, checkMCPHealth } from "./tools/mcp-manager";
@@ -41,6 +42,7 @@ export {
 } from "./tools/builtin/fs";
 export { createBashTool } from "./tools/builtin/bash";
 export { createHistoryTools } from "./tools/builtin/history";
+export { createToolRecordTools } from "./tools/builtin/tool-records";
 export {
   createSearchMemoryTool, createReadMemoryTool, createSaveMemoryTool,
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,

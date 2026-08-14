@@ -8,6 +8,7 @@ import type {
 import { DEFAULT_CONTEXT_LIMIT } from "../../../constants";
 import type { ContextService } from "../../../context/context-service";
 import type { SkillServiceLike } from "../../../skills/types";
+import type { ToolRecordStore } from "../../../tools/tool-record-store";
 import { appendCurrentUserMessage } from "./types";
 import type { ConversationFlowState } from "./types";
 
@@ -20,6 +21,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
   #getCompiledPrompt: () => string;
   #skillService?: SkillServiceLike;
   #contextService: ContextService;
+  #toolRecordStore?: ToolRecordStore;
 
   constructor(params: {
     name: string;
@@ -33,6 +35,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     taskIntent?: string;
     getCompiledPrompt?: () => string;
     skillService?: SkillServiceLike;
+    toolRecordStore?: ToolRecordStore;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#contextService = params.contextService;
@@ -43,6 +46,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#getCompiledPrompt = params.getCompiledPrompt ?? (() => "");
     this.#skillService = params.skillService;
+    this.#toolRecordStore = params.toolRecordStore;
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -55,6 +59,23 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     const topicOwner = compactOwner({ sessionId, topicId });
     this.#contextService.remove("session", { sessionId }, "tool-history");
     if (topicId) this.#contextService.remove("topic", { sessionId, topicId }, "tool-history");
+    const toolSummary = this.#toolRecordStore?.summarize(sessionId);
+    if (toolSummary) {
+      this.#contextService.put({
+        scope: "session",
+        owner: { sessionId },
+        entry: {
+          key: "tool-record-summary",
+          source: "tool-record-store",
+          channel: "tool",
+          trust: "untrusted",
+          priority: 500,
+          content: toolSummary,
+        },
+      });
+    } else {
+      this.#contextService.remove("session", { sessionId }, "tool-record-summary");
+    }
     const systemPrompt = this.#resolve(PromptKey.BASE_SYSTEM);
     const compiledAgentsPrompt = this.#getCompiledPrompt();
     const skillContext = this.#skillService?.buildContext(sessionId) ?? "";
