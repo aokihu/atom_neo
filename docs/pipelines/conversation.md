@@ -106,8 +106,25 @@ LLM Tool Call
 - Tool schema 与 executor 分离；AI SDK 不自动执行 Tool，也不维护多 step Tool Loop。
 - 每个已执行 Tool 的 Call + Result 都投影到当前 Conversation 后续 step，包括空结果与错误。
 - MCP 成功结果按 `reference` 投影到当前 Conversation，Conversation 结束后丢弃。
-- Tool Result 不自动写入 Topic/Session Context；Conversation 结束后只保留审计记录。
+- Tool Result 不自动把完整内容写入 Topic/Session Context；真实执行结果写入当前 Conversation 的
+  ToolsGroup，下一次 Snapshot 只暴露 TOON 摘要。
 - `read_memory` 只有显式传入 Context projection 参数时才成为 pinned 或 TTL Context。
+
+### ToolsGroup 与 ToolRecord
+
+- Conversation 首次产生可记录的真实结果时创建一个 `ToolsGroupID`。
+- `Step` 是 Conversation 级记录序号，从 1 开始，只对真实 Tool 成功和真实 Tool 失败递增。
+- Guard/Runtime 错误仍返回当前模型 step，但不写记录、不占 Step。
+- `request_tool_record` / `request_tool_records` 返回历史详情，但自身不写记录。
+- 有界的完整 input/output 留在 ToolRecordStore，超限标记 `truncated`；Context 只接收分组摘要和最近记录摘要。
+
+```text
+Tool Result
+  ├─ current modelMessages: 完整 Call/Result 配对
+  ├─ ToolRecordStore: 真实执行的完整详情
+  ├─ ContextService: 结构化摘要，由 compiler 转成 TOON
+  └─ Runtime logs: Guard、Runtime 与真实执行的完整可观测事件
+```
 
 ### 手工 Tool Loop
 

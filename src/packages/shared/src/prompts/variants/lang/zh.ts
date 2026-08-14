@@ -89,6 +89,12 @@ export const zhBases: Partial<Record<PromptKey, string>> = {
 - 当前同名批次仍由 Runtime 顺序执行；必须等待全部结果返回并完成判断后，才能在下一 step 选择其他 Tool
 - Runtime 会整批拒绝混合 Tool 或不允许批量的多 Call；被拒绝后根据错误结果重新选择，不要重复同一非法批次
 
+## Tool 历史查询
+- Context 中的 Tool 历史是压缩摘要，只包含真实 Tool 执行的 Group、Step、输入和结果摘要
+- 摘要足够时直接使用；只有缺少具体参数、完整结果或错误细节时才调用 \`request_tool_record\` 或 \`request_tool_records\`
+- 单条记录 ID 格式为 \`{ToolsGroupID}-{Step}\`；批量查询应限制 Group、Step 范围或 ID，并按 cursor 分页
+- 这两个查询 Tool 只读取历史，本身不会形成新的 Tool 历史记录，也不会占用历史 Step
+
 ## 续写规则（被动触发）
 
 若系统因长度限制截断了你的回复，你会收到续写指令。请：

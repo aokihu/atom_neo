@@ -21,6 +21,7 @@ export type ToolDefinition = {
   execute(args: unknown, opts?: ToolExecuteOptions): Promise<ToolResult>;
   permission?: PermissionLevel;
   allowSameToolBatch?: boolean;
+  recordPolicy?: "record" | "exclude";
   requiresApproval?: boolean;
   silent?: boolean;
 };
@@ -31,6 +32,7 @@ export type ToolContextInjection = {
 };
 
 export type ToolEffect = "none" | "reference" | "evidence" | "state_changed";
+export type ToolErrorSource = "guard" | "runtime" | "tool";
 
 export type ToolResultMetadata =
   | {
@@ -43,10 +45,67 @@ export type ToolResultMetadata =
       ok: false;
       effect: "none";
       error: string;
+      errorSource: ToolErrorSource;
       contextInjection?: never;
     };
 
 export type ToolResult = {
   content?: unknown;
   metadata: ToolResultMetadata;
+};
+
+export type ToolRecordStatus = "success" | "failed";
+
+export type ToolRecord = {
+  id: string;
+  toolsGroupId: string;
+  step: number;
+  modelStep: number;
+  batchIndex: number;
+  toolCallId: string;
+  toolName: string;
+  source: ToolDefinition["source"];
+  startedAt: number;
+  durationMs: number;
+  input: unknown;
+  inputSummary: string;
+  output?: unknown;
+  resultSummary: string;
+  metadata: ToolResultMetadata;
+  truncated?: boolean;
+};
+
+export type ToolsGroupStatus = "active" | "sealed" | "interrupted";
+
+export type ToolsGroup = {
+  id: string;
+  sessionId: string;
+  taskId: string;
+  topic: string;
+  createdAt: number;
+  sealedAt?: number;
+  status: ToolsGroupStatus;
+  records: ToolRecord[];
+  summary: string;
+};
+
+export type ToolRecordSummary = {
+  id: string;
+  step: number;
+  tool: string;
+  status: ToolRecordStatus;
+  input: string;
+  result: string;
+};
+
+export type ToolsGroupSummary = {
+  id: string;
+  topic: string;
+  createdAt: number;
+  status: Exclude<ToolsGroupStatus, "active">;
+  steps: string;
+  tools: string;
+  success: number;
+  failed: number;
+  summary: string;
 };

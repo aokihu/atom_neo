@@ -29,4 +29,20 @@ describe("createToolGuard", () => {
       metadata: { ok: true, effect: "evidence" },
     });
   });
+
+  test("marks framework path rejections as Guard failures", async () => {
+    const guarded = createToolGuard({
+      ...createTool(async () => ({ metadata: { ok: true, effect: "none" } })),
+      name: "read",
+    }, "/tmp/sandbox", []);
+
+    const result = await guarded.execute({ filepath: "/outside/file" }, {});
+
+    expect(result.metadata).toEqual({
+      ok: false,
+      effect: "none",
+      error: "Path is outside sandbox",
+      errorSource: "guard",
+    });
+  });
 });

@@ -159,6 +159,7 @@ describe("webfetch tool adapter", () => {
         ok: false,
         effect: "none",
         error: "WEBFETCH_DOMAIN_COOLDOWN [google.com]: retry after 60s",
+        errorSource: "tool",
       },
     });
   });

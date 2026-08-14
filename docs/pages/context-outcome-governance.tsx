@@ -21,8 +21,8 @@ export default function ContextOutcomeGovernancePage({
         <CodeBlock lang="text" code={`ToolResult
   ├─ conversation step   所有已执行结果均投影
   ├─ ToolCallLedger      消费 metadata，不注入模型
-  ├─ Session audit       供日志和 TUI 诊断
-  └─ ContextService      只有显式 contextInjection`} />
+  ├─ ToolRecordStore     只记录真实执行成功/失败
+  └─ ContextService      显式 Injection + ToolRecord 摘要`} />
         <Callout type="info" title="当前轮完整，跨轮克制">
           失败和 effect:none 的 Call + Result 也会返回当前 Conversation；Conversation 结束后，
           普通 Tool Result 不自动进入 Topic/Session Context。所有 Tool 始终开放，Memory 与 Skill
@@ -45,8 +45,26 @@ export default function ContextOutcomeGovernancePage({
   metadata:
     | { ok: true; effect: "none" | "reference" | "evidence" | "state_changed";
         contextInjection?: ToolContextInjection }
-    | { ok: false; effect: "none"; error: string };
+    | { ok: false; effect: "none"; error: string;
+        errorSource: "guard" | "runtime" | "tool" };
 };`} />
+      </Section>
+
+      <Section title="ToolsGroup：摘要常驻，详情按需">
+        <CodeBlock lang="text" code={`Conversation A → tg-A-1, tg-A-2, tg-A-3
+Conversation B → tg-B-1, tg-B-2
+
+只有真实 Tool 成功/失败分配 Step
+Guard、Runtime、request_tool_record(s) 不记录、不占 Step`} />
+        <ComparisonTable
+          headers={["数据", "保存位置", "进入 Context"]}
+          rows={[
+            ["有界完整 input/output/error", "ToolRecordStore；超限标记 truncated", "否，按需查询"],
+            ["Group + 最近记录摘要", "ContextService tool channel", "由 compiler 编码为 TOON"],
+            ["Guard / Runtime 错误", "Runtime 日志", "否"],
+            ["历史查询结果", "当前 modelMessages", "仅当前 Conversation"],
+          ]}
+        />
       </Section>
 
       <Section title="三条消费链的权重">
@@ -95,6 +113,7 @@ export default function ContextOutcomeGovernancePage({
             ["Assistant 错误结论", "不能覆盖 User 请求或 Tool evidence"],
             ["Compact", "不把失败或 effect:none 结果重新总结成事实"],
             ["显式 Memory/Skill 投影", "保持既有 scope、TTL、pin 与 trust 语义"],
+            ["ToolRecord 历史", "Group/Step 可定位；Context 只含 TOON 摘要；详情查询不自记录"],
           ]}
         />
       </Section>

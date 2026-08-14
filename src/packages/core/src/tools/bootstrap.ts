@@ -14,6 +14,7 @@ import {
 import { createIntentTool } from "./builtin/intent";
 import { createTodoWriteTool } from "./builtin/todowrite";
 import { createHistoryTools } from "./builtin/history";
+import { createToolRecordTools } from "./builtin/tool-records";
 import type { SessionPersistenceService } from "../session/persistence-service";
 import { createToolGuard } from "./guard";
 
@@ -45,6 +46,7 @@ export function createAllTools(
     createWebSearchTool(network),
     createGlobTool(sb), createEditTool(sb),
     ...(persistence ? createHistoryTools(persistence) : []),
+    ...(persistence ? createToolRecordTools(persistence.toolRecords) : []),
   ];
   return raw.map(t => createToolGuard(t, sandbox, whitelist ?? []));
 }

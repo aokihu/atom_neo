@@ -48,9 +48,16 @@ export type {
   ToolDefinition,
   ToolResult,
   ToolEffect,
+  ToolErrorSource,
   ToolResultMetadata,
   ToolExecuteOptions,
   ToolContextInjection,
+  ToolRecordStatus,
+  ToolRecord,
+  ToolsGroupStatus,
+  ToolsGroup,
+  ToolRecordSummary,
+  ToolsGroupSummary,
 } from "./tool";
 
 export { PipelineResultType, PipelineEnqueueTransition } from "./pipeline";

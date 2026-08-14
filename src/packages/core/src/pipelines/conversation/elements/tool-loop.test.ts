@@ -64,7 +64,7 @@ describe("Tool call batches", () => {
       toolName: item.toolName,
       input: item.input,
       content: "",
-      metadata: { ok: false as const, effect: "none" as const, error },
+      metadata: { ok: false as const, effect: "none" as const, error, errorSource: "guard" as const },
     }])));
     const projected = JSON.stringify(messages);
 
@@ -115,7 +115,7 @@ describe("manual tool loop context projection", () => {
         toolName: "webfetch",
         input: calls[0]!.input,
         content: "",
-        metadata: { ok: false, effect: "none", error: "timeout" },
+        metadata: { ok: false, effect: "none", error: "timeout", errorSource: "tool" },
       }],
     ]));
 

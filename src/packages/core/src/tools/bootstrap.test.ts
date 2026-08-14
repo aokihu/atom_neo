@@ -36,6 +36,11 @@ describe("registerBuiltinTools", () => {
 
     expect(names).toContain("search_history");
     expect(names).toContain("read_history");
+    expect(names).toContain("request_tool_record");
+    expect(names).toContain("request_tool_records");
+    const tools = createAllTools({ sandbox, network, whitelist: [], persistence });
+    expect(tools.find(tool => tool.name === "request_tool_record")?.recordPolicy).toBe("exclude");
+    expect(tools.find(tool => tool.name === "request_tool_records")?.recordPolicy).toBe("exclude");
   });
 
   test("opts only side-effect-free query tools into same-name batches", () => {

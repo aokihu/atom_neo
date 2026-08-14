@@ -1,4 +1,4 @@
-import type { ToolContextInjection, ToolEffect, ToolResult } from "@atom-neo/shared";
+import type { ToolContextInjection, ToolEffect, ToolErrorSource, ToolResult } from "@atom-neo/shared";
 
 function success(
   effect: ToolEffect,
@@ -21,7 +21,7 @@ export const toolResult = {
     success("reference", content, contextInjection),
   stateChanged: (content?: unknown) => success("state_changed", content),
   none: () => success("none"),
-  failure: (error: string): ToolResult => ({
-    metadata: { ok: false, effect: "none", error },
+  failure: (error: string, errorSource: ToolErrorSource = "tool"): ToolResult => ({
+    metadata: { ok: false, effect: "none", error, errorSource },
   }),
 };

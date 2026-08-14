@@ -35,6 +35,9 @@ export interface ToolDefinition {
 
   /** Explicitly allow multiple calls with this same tool name in one model step. */
   allowSameToolBatch?: boolean;
+
+  /** Exclude framework/introspection tools from persistent ToolRecord history. */
+  recordPolicy?: "record" | "exclude";
 }
 
 export type ToolResult = {
@@ -49,6 +52,7 @@ export type ToolResult = {
         ok: false;
         effect: "none";
         error: string;
+        errorSource: "guard" | "runtime" | "tool";
       };
 };
 
@@ -60,6 +64,10 @@ export enum PermissionLevel {
 ```
 
 ## 2. Builtin Tool Template
+
+`recordPolicy` 默认是 `record`。`request_tool_record` 与 `request_tool_records` 显式设置为
+`exclude`：它们仍返回标准 Tool Result 供当前模型 step 使用，但不会记录自身，也不会占用当前
+Conversation ToolsGroup 的 Step。是否记录失败由结构化 `errorSource` 决定，不按错误文本匹配。
 
 ```typescript
 /**

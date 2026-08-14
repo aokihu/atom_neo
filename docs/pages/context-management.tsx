@@ -71,6 +71,18 @@ export default function ContextManagementPage({ content, title, description, cat
         </Callout>
       </Section>
 
+      <Section title="ToolRecord 摘要投影">
+        <CodeBlock lang="text" code={`ToolRecordStore (full details)
+  → record-context builds bounded structured summaries
+  → ContextService: channel=tool, trust=untrusted
+  → Context compiler encodes summaries as TOON
+  → request_tool_record(s) fetch details only when needed`} />
+        <Callout type="info" title="避免重复与递归">
+          Snapshot 不复制网页、文件、Memory 正文或大数组。历史查询 Tool 的结果只进入当前
+          modelMessages，并通过 <code>recordPolicy=exclude</code> 排除在 ToolRecord 历史之外。
+        </Callout>
+      </Section>
+
       <Section title="生命周期操作">
         <ComparisonTable
           headers={["操作", "含义", "删除 Memory"]}
@@ -137,7 +149,8 @@ post-conversation 读取回复头尾 + TODO/结束状态`} />
             ["EventBus 生命周期", "Session、Topic、Task、Step 结束通知", <Badge color="green">已完成</Badge>],
             ["Manifest / Replay", "SnapshotState 按 ID 保留编译元数据", <Badge color="green">已完成</Badge>],
             ["Memory 分级持久注入", "pinned 跟随 Session；ttl 跟随 Topic 并自动卸载", <Badge color="green">已完成</Badge>],
-            ["Artifact 引用", "大型 Tool 结果仍待外置", <Badge color="orange">需要开发</Badge>],
+            ["ToolRecord TOON 摘要", "Group 摘要常驻；详情按需查询", <Badge color="green">已完成</Badge>],
+            ["Artifact 引用", "ToolRecord 对详情设有上限，超大结果仍待外置", <Badge color="orange">需要开发</Badge>],
           ]}
         />
         <Callout type="info" title="小步迁移">

@@ -9,7 +9,7 @@ export async function executeTool(
 ): Promise<ToolResult> {
   const required = tool.permission ?? PermissionLevel.READ_ONLY;
   if (level < required) {
-    return toolResult.failure(`Permission denied: ${tool.name} requires level ${required}`);
+    return toolResult.failure(`Permission denied: ${tool.name} requires level ${required}`, "guard");
   }
 
   try {

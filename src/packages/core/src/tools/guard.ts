@@ -55,17 +55,17 @@ function preCheck(
     const p = extractArg(args, key);
     if (!p) continue;
     if (isInsideAtomDir(sandbox, p)) {
-      return toolResult.failure(LIST_TOOLS.has(tool.name) ? "Directory not found" : "File not found");
+      return toolResult.failure(LIST_TOOLS.has(tool.name) ? "Directory not found" : "File not found", "guard");
     }
     if (!isInsideSandbox(sandbox, p) && !isWhitelisted(sandbox, p, resolvedWl)) {
-      return toolResult.failure("Path is outside sandbox");
+      return toolResult.failure("Path is outside sandbox", "guard");
     }
   }
 
   if (tool.name === "bash") {
     const cmd = extractArg(args, "command");
     if (cmd && cmd.includes(".atom")) {
-      return toolResult.failure("Command not allowed");
+      return toolResult.failure("Command not allowed", "guard");
     }
   }
 
