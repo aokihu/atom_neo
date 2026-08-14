@@ -125,6 +125,20 @@ Call，但禁止在一个 step 混合不同 Tool；必须等待当前批次的�
 选择其他 Tool。Runtime 使用 ToolDefinition 的显式 opt-in 做硬校验，因此 Prompt 是行为说明，
 不是唯一防线。
 
+## Tool 历史确认
+
+BASE_SYSTEM 区分“确认上一轮如何执行”和“重新获取当前状态”：前者优先使用 Context 中的
+ToolRecord 摘要，详情不足时只调用 `request_tool_record(s)`，不得为证明历史调用而重新执行
+原始 Tool；只有用户明确要求刷新、重新查询或验证当前状态时，才再次调用原始 Tool。Memory
+保存的是操作经验，不是某次执行事实。
+
+## Prediction 上下文信封
+
+PREDICT_INTENT 保持 `userInput` 原文不变，并额外接收 `currentTopic` 与上一轮有界的
+`previousTurnContext`。历史只用于识别跟进指代和 Topic 连续性，不生成 Tool 参数，也不进入
+Conversation 的 User 消息。`follow_up` / `continuation` 应复用当前 Topic；独立新任务才生成
+新 Topic。
+
 ## PromptKey 枚举
 
 | Key | 用途 | 使用位置 |

@@ -43,6 +43,7 @@ import MemoryServicePage from "./pages/memory-service";
 import NetworkServicePage from "./pages/network-service";
 import NamingConventionsPage from "./pages/naming-conventions";
 import PostConversationPage from "./pages/post-conversation";
+import PredictionPage from "./pages/prediction";
 import ProjectStructurePage from "./pages/project-structure";
 import PromptsPage from "./pages/prompts";
 import ProtocolPage from "./pages/protocol";
@@ -80,6 +81,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   "naming-conventions": NamingConventionsPage,
   "pipeline-dev": EventBusPage,
   "post-conversation": PostConversationPage,
+  prediction: PredictionPage,
   "project-structure": ProjectStructurePage,
   prompts: PromptsPage,
   protocol: ProtocolPage,

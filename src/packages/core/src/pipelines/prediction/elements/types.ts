@@ -4,11 +4,18 @@ import type { SkillServiceLike } from "../../../skills/types";
 
 export type PredictionMode = "initial" | "predicting" | "routing";
 
+export type PreviousTurnContext = {
+  user: string;
+  assistant: string;
+};
+
 export type PredictionFlowState = {
   mode: PredictionMode;
   task: any;
   session: any;
   userMessage: string;
+  currentTopic: string;
+  previousTurnContext?: PreviousTurnContext;
   prediction?: IntentPredictionResult;
   error?: string;
   abortSignal?: AbortSignal;

@@ -25,6 +25,14 @@ export const IntentPredictionSchema = z.object({
   reasoning: z.string(),
 });
 
+export function buildPredictionEnvelope(input: PredictionFlowState): Record<string, unknown> {
+  return {
+    userInput: input.userMessage,
+    currentTopic: input.currentTopic || "",
+    ...(input.previousTurnContext ? { previousTurnContext: input.previousTurnContext } : {}),
+  };
+}
+
 export class PredictIntentElement extends BaseElement<PredictionFlowState, PredictionFlowState> {
   #apiKey: string;
   #model: string;
@@ -67,7 +75,7 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
       const result = await generateText({
         model: provider(this.#model),
         instructions: resolvePrompt(PromptKey.PREDICT_INTENT),
-        prompt: JSON.stringify({ userInput: text }),
+        prompt: JSON.stringify(buildPredictionEnvelope(input)),
         output: Output.object({ schema: IntentPredictionSchema }),
         maxOutputTokens: this.#maxTokens,
         temperature: 0,

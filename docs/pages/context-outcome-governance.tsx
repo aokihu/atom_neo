@@ -71,11 +71,15 @@ Guard、Runtime、request_tool_record(s) 不记录、不占 Step`} />
         <ComparisonTable
           headers={["Pipeline", "主事实", "Assistant 的角色", "防污染动作"]}
           rows={[
-            ["Prediction", "当前 User 原文", "不读取 Assistant", "Output.object 结构化分类"],
+            ["Prediction", "当前 User 原文 + currentTopic", "上一轮有界参考", "Output.object + effectiveTopic 保护"],
             ["Post", "User 请求 + Tool evidence", "待验证 claim", "重试建议保持 untrusted"],
             ["Compact", "User 决策 + verified evidence", "未验证叙述", "无效结果不进入摘要输入"],
           ]}
         />
+        <Callout type="info" title="上一轮参考不是执行证据">
+          Prediction 只用上一轮有界 User/Assistant 文本消解跟进指代；是否真实调用过 Tool 仍以
+          ToolRecord 为准，不能根据 Assistant 自述判断。
+        </Callout>
       </Section>
 
       <Section title="六阶段小步实施">
