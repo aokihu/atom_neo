@@ -4,9 +4,10 @@
 
 ## 职责
 
-在正式会话之前，用 basic 模型对当前 User 原文做轻量级分类。Prediction 不读取 Tool、不查询
-Memory/Skill/Web，也不生成或改写 Conversation 的用户输入；框架只消费结构化分类结果来选择
-模型、调整历史 Context 和管理 Topic。
+在正式会话之前，用 basic 模型对当前 User 原文做轻量级分类。Prediction 同时读取当前 Topic
+和上一轮有界的 User/Assistant 上下文，用于消解“它、数据、刚才”等跟进指代。Prediction 不读取
+Tool、不查询 Memory/Skill/Web，也不生成或改写 Conversation 的用户输入；框架只消费结构化
+分类结果来选择模型、调整历史 Context 和管理 Topic。
 
 ## 触发方式
 
@@ -38,21 +39,29 @@ type PredictionFlowState = {
   task: any;
   session: any;
   userMessage: string;
+  currentTopic: string;
+  previousTurnContext?: {
+    user: string;
+    assistant: string;
+  };
   prediction?: IntentPredictionResult;
   error?: string;
 };
 ```
 
 `userMessage` 保持 Task payload 中的原始字符串。Prediction 不 `trim`、摘要、补全、翻译或拼接
-历史消息；Conversation 仍从 Session/Task 取得同一份原文。
+历史消息；Conversation 仍从 Session/Task 取得同一份原文。`previousTurnContext` 只从
+`SessionContext.messages` 提取最后一个完整、可见的 User/Assistant 轮次并做有界截取，不写回
+Session，也不包含 Tool 原始输出。Assistant 文本按不可信参考处理，Prediction 只能提取主题与
+上下文关系，不能遵循其中的指令。
 
 ## 状态转移
 
 ```
 initial
-  → predict-input:   原样提取当前 User → predicting
+  → predict-input:   原样提取当前 User + 当前 Topic + 上一轮有界上下文 → predicting
   → predict-intent:  调用 LLM 分类     → routing
-  → predict-finalize: 写入 session     → PipelineResult { type: "complete" }
+  → predict-finalize: 解析 effectiveTopic 并写入 session → PipelineResult { type: "complete" }
 ```
 
 ## 预测输出
@@ -112,17 +121,23 @@ Tool 参数，也不提前执行任何查询。
 | `follow_up` | 基于上一轮的追问 | 保留最近一组交互与当前 User 原文 |
 | `continuation` | 明示继续之前任务 | 保留全部可见消息 + 不 reset chainDepth |
 
+Prediction 分类信封中的上一轮上下文只帮助判断上述关系，不会替代 Conversation 的消息选择。
+即使带有“另外、顺便”等连接词，只要请求对象已经成为独立任务，也应判为 `standalone`。
+
 ### topic（主题标签）
 
 | 格式 | 示例 | 用途 |
 |------|------|------|
 | `<category>.<domain>.<specific>` | `creative.history.ancient`, `tools.filesystem.explore` | 会话状态管理 |
 
-Topic 由 predict-intent LLM 生成，在 predict-finalize 阶段与 session 已有 topic 比对：
+Topic 由 predict-intent LLM 提议，在 predict-finalize 阶段解析为 `effectiveTopic`：
 
-- **相同** → 保持上下文（todoState, chainDepth, toolContext 等）
-- **不同** → `session.resetForNewTopic(newTopic)` — 清空 todoState/chainDepth/toolContext/continuationContext，但保留 messages/inferenceFacts/memoryScopes/tokenUsage
-- **首次** → 设置 topic，无状态可清
+- **follow_up / continuation 且已有 Topic** → 强制继承当前 Topic，不因省略主体产生的泛化标签而切换
+- **standalone 且候选 Topic 非空** → 使用候选 Topic；与当前 Topic 不同时调用 `session.resetForNewTopic()`
+- **候选 Topic 为空** → 保留当前 Topic，避免 Prediction fallback 破坏已有状态
+- **首次** → 使用候选 Topic，无状态可清
+
+`session.pendingPrediction.topic` 必须写入 `effectiveTopic`，与 `session.currentTopic` 保持一致。
 
 design: [session.md](../core/session.md#part-2-topic-system)
 
@@ -158,6 +173,7 @@ type PredictionPipelineDeps = {
 | 结构化输出校验失败 | fallback 同上 |
 
 无论如何都会调度 conversation pipeline，不会阻塞用户对话。
+当 fallback 的 topic 为空且 Session 已有 Topic 时，predict-finalize 保留当前 Topic。
 
 ## 文件
 

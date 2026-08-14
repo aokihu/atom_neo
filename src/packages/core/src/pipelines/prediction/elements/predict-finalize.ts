@@ -1,9 +1,17 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
+import type { IntentPredictionResult, PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { PredictionFlowState } from "./types";
 import type { SkillServiceLike } from "../../../skills/types";
+
+export function resolveEffectiveTopic(
+  prediction: Pick<IntentPredictionResult, "contextRelevance" | "topic">,
+  currentTopic: string | null,
+): string {
+  if (currentTopic && prediction.contextRelevance !== "standalone") return currentTopic;
+  return prediction.topic || currentTopic || "";
+}
 
 export class PredictFinalizeElement extends BaseElement<PredictionFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
@@ -33,23 +41,31 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
 
     const session = input.session;
 
-    const newTopic = prediction.topic || "";
-    if (newTopic && newTopic !== session.currentTopic) {
-      this.report(BusEvents.Element.Data, { step: "topic-changed", from: session.currentTopic, to: newTopic });
+    const candidateTopic = prediction.topic || "";
+    const effectiveTopic = resolveEffectiveTopic(prediction, session.currentTopic);
+    const resolvedPrediction = { ...prediction, topic: effectiveTopic };
+    if (candidateTopic !== effectiveTopic) {
+      this.report(BusEvents.Element.Data, {
+        step: "topic-resolved",
+        contextRelevance: prediction.contextRelevance,
+        candidate: candidateTopic,
+        effective: effectiveTopic,
+      });
+    }
+    if (effectiveTopic && effectiveTopic !== session.currentTopic) {
+      this.report(BusEvents.Element.Data, { step: "topic-changed", from: session.currentTopic, to: effectiveTopic });
       this.bus.emit(BusEvents.Context.TopicChanged as any, {
         sessionId: session.sessionId,
         ...(session.currentTopic ? { previousTopicId: session.currentTopic } : {}),
-        topicId: newTopic,
+        topicId: effectiveTopic,
       } as any);
-    }
-    if (!session.currentTopic || (newTopic && newTopic !== session.currentTopic)) {
       this.#skillService?.clearScope?.(session.sessionId);
-      session.resetForNewTopic(newTopic);
+      session.resetForNewTopic(effectiveTopic);
     }
 
-    session.pendingPrediction = prediction;
+    session.pendingPrediction = resolvedPrediction;
 
-    this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: prediction.difficulty, modelProfile: prediction.modelProfile, intent: prediction.intent, contextRelevance: prediction.contextRelevance, topic: prediction.topic });
+    this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: resolvedPrediction.difficulty, modelProfile: resolvedPrediction.modelProfile, intent: resolvedPrediction.intent, contextRelevance: resolvedPrediction.contextRelevance, topic: resolvedPrediction.topic });
 
     this.#orchestrator.scheduleConversation(
       session.sessionId,
@@ -63,7 +79,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     return {
       type: PipelineResultType.Complete,
       task: input.task,
-      output: `prediction: difficulty=${prediction.difficulty}, modelProfile=${prediction.modelProfile}, intent=${prediction.intent}, contextRelevance=${prediction.contextRelevance}, topic=${prediction.topic}, reasoning=${prediction.reasoning}`,
+      output: `prediction: difficulty=${resolvedPrediction.difficulty}, modelProfile=${resolvedPrediction.modelProfile}, intent=${resolvedPrediction.intent}, contextRelevance=${resolvedPrediction.contextRelevance}, topic=${resolvedPrediction.topic}, reasoning=${resolvedPrediction.reasoning}`,
     };
   }
 }

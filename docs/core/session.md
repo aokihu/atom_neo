@@ -269,7 +269,7 @@ SessionStore.get(sessionId)
 
 ## 1. 设计原则
 
-- **系统驱动切换** — topic 由 prediction pipeline 自动检测，LLM 不参与切换决策
+- **系统驱动切换** — predict-intent 提议 topic，predict-finalize 根据上下文关联度确定是否切换
 - **保留历史** — 切换时保留 messages/inferenceFacts/memoryScopes/tokenUsage
 - **重置任务状态** — todoState/chainDepth/toolContext/continuationContext 清空
 
@@ -289,13 +289,17 @@ categories: creative | tools | code | knowledge | chat
 ## 3. 触发流程
 
 ```
-用户输入 → predict-intent → 5字段分类（含 topic）
+用户输入 + currentTopic + previousTurnContext → predict-intent → 5字段分类（含候选 topic）
   → predict-finalize:
-    ├─ newTopic !== session.currentTopic → resetForNewTopic(newTopic)
-    └─ newTopic === session.currentTopic → 保持上下文
+    ├─ follow_up / continuation + currentTopic → 继承 currentTopic
+    ├─ standalone + 非空新 topic → resetForNewTopic(newTopic)
+    └─ 空候选 topic → 保留 currentTopic
   → collect-context: 注入 [主题约束] 到 context
   → stream-llm: 始终向 LLM 提供全部 Tool schema
 ```
+
+Prediction 只读取最后一个完整可见轮次的有界 User/Assistant 文本，不读取 Tool 原始输出。
+`pendingPrediction.topic` 保存解析后的 effectiveTopic，不能与 `currentTopic` 分叉。
 
 ## 4. resetForNewTopic()
 

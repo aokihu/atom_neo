@@ -121,6 +121,21 @@ register() again
           Runtime 会在任何 executor 运行前验证整个批次，因此非法批次不会产生部分副作用。
         </Callout>
       </Section>
+
+      <Section title="历史确认与 Prediction 上下文">
+        <ComparisonTable
+          headers={["用户需求", "优先依据", "Tool 行为"]}
+          rows={[
+            ["确认上一轮是否联网或调用过 Tool", "ToolRecord 摘要", "摘要不足时只查 request_tool_record(s)"],
+            ["明确要求现在刷新或重新验证", "当前 Tool 结果", "允许重新执行原始 Tool"],
+            ["省略主体的跟进问题", "currentTopic + previousTurnContext", "Prediction 只分类，不调用 Tool"],
+          ]}
+        />
+        <Callout type="warn" title="不要用重跑证明历史">
+          BASE_SYSTEM 禁止为了证明上一轮调用过某个 Tool 而重新执行该 Tool。Memory 是操作经验，
+          ToolRecord 才是具体执行事实。
+        </Callout>
+      </Section>
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { registerSharedElements } from "../shared";
 import { resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
-import { IntentPredictionSchema } from "./elements/predict-intent";
+import { buildPredictionEnvelope, IntentPredictionSchema } from "./elements/predict-intent";
+import { resolveEffectiveTopic } from "./elements/predict-finalize";
 
 beforeAll(() => {
   registerPredictionElements();
@@ -28,6 +29,35 @@ describe("prediction pipeline elements", () => {
     expect(prediction).not.toHaveProperty("memoryQuery");
   });
 
+  test("builds a bounded classification envelope without changing user input", () => {
+    const userMessage = "  数据是最新的吗？\n";
+    const envelope = buildPredictionEnvelope({
+      mode: "predicting",
+      task: {},
+      session: null,
+      userMessage,
+      currentTopic: "knowledge.weather.typhoon",
+      previousTurnContext: { user: "最近还有厉害的台风吗", assistant: "浪卡仍然活跃。" },
+    });
+
+    expect(envelope).toEqual({
+      userInput: userMessage,
+      currentTopic: "knowledge.weather.typhoon",
+      previousTurnContext: { user: "最近还有厉害的台风吗", assistant: "浪卡仍然活跃。" },
+    });
+  });
+
+  test("resolves topic candidates according to context relevance", () => {
+    expect(resolveEffectiveTopic({ contextRelevance: "follow_up", topic: "knowledge.data" }, "knowledge.weather.typhoon"))
+      .toBe("knowledge.weather.typhoon");
+    expect(resolveEffectiveTopic({ contextRelevance: "continuation", topic: "knowledge.data" }, "knowledge.weather.typhoon"))
+      .toBe("knowledge.weather.typhoon");
+    expect(resolveEffectiveTopic({ contextRelevance: "standalone", topic: "knowledge.finance.gold" }, "knowledge.weather.typhoon"))
+      .toBe("knowledge.finance.gold");
+    expect(resolveEffectiveTopic({ contextRelevance: "standalone", topic: "" }, "knowledge.weather.typhoon"))
+      .toBe("knowledge.weather.typhoon");
+  });
+
   test("predict-input preserves the exact user message from task payload", async () => {
     const bus = makeBus();
     const Ctor = resolveElement("predict-input");
@@ -44,10 +74,11 @@ describe("prediction pipeline elements", () => {
     expect(result.userMessage).toBe("  hello world\n");
   });
 
-  test("predict-input ignores session history", async () => {
+  test("predict-input adds current topic and the previous completed turn", async () => {
     const bus = makeBus();
     const session = {
       sessionId: "s1",
+      currentTopic: "knowledge.travel.hangzhou",
       messages: [
         { role: "user", content: "能够介绍一下杭州的景点吗，要网络搜索的结果" },
         { role: "assistant", content: "好的，我来搜索一下杭州的景点。" },
@@ -66,8 +97,57 @@ describe("prediction pipeline elements", () => {
 
     const result = await el.process({ mode: "initial", task: { payload: [{ data: "你搜索了吗" }] } });
     expect(result.userMessage).toBe("你搜索了吗");
-    expect(result).not.toHaveProperty("userContextMessages");
-    expect(result).not.toHaveProperty("assistantReference");
+    expect(result.currentTopic).toBe("knowledge.travel.hangzhou");
+    expect(result.previousTurnContext).toEqual({
+      user: "能够介绍一下杭州的景点吗，要网络搜索的结果",
+      assistant: "好的，我来搜索一下杭州的景点。",
+    });
+  });
+
+  test("predict-input bounds long previous replies while preserving head and tail", async () => {
+    const bus = makeBus();
+    const assistant = `${"A".repeat(1100)}END`;
+    const session = {
+      currentTopic: "knowledge.test.long",
+      messages: [
+        { role: "user", content: "long answer" },
+        { role: "assistant", content: assistant },
+      ],
+    };
+    const Ctor = resolveElement("predict-input");
+    const el = new Ctor({ name: "predict-input", kind: "source", bus, session, task: {} });
+
+    const result = await el.process({ mode: "initial", task: { payload: [{ data: "follow up" }] } });
+
+    expect(result.previousTurnContext?.assistant.length).toBeLessThanOrEqual(1000);
+    expect(result.previousTurnContext?.assistant.startsWith("AAAA")).toBe(true);
+    expect(result.previousTurnContext?.assistant).toContain("…");
+    expect(result.previousTurnContext?.assistant.endsWith("END")).toBe(true);
+  });
+
+  test("predict-input ignores hidden and failed Assistant messages", async () => {
+    const bus = makeBus();
+    const session = {
+      currentTopic: "knowledge.weather.typhoon",
+      messages: [
+        { role: "user", content: "台风情况" },
+        { role: "assistant", content: "有效回答" },
+        { role: "user", content: "隐藏轮次" },
+        { role: "assistant", content: "隐藏回答", visible: false },
+        { role: "user", content: "失败轮次" },
+        {
+          role: "assistant",
+          content: "工具失败",
+          metadata: { completeDetected: false, toolEffectSummary: { evidence: 0, stateChanged: 0, none: 1, failed: 0 } },
+        },
+      ],
+    };
+    const Ctor = resolveElement("predict-input");
+    const el = new Ctor({ name: "predict-input", kind: "source", bus, session, task: {} });
+
+    const result = await el.process({ mode: "initial", task: { payload: [{ data: "之前成功了吗" }] } });
+
+    expect(result.previousTurnContext).toEqual({ user: "台风情况", assistant: "有效回答" });
   });
 
   test("predict-input handles empty payload", async () => {
@@ -84,6 +164,8 @@ describe("prediction pipeline elements", () => {
     const result = await el.process({ mode: "initial", task: { payload: [] } });
     expect(result.mode).toBe("predicting");
     expect(result.userMessage).toBe("");
+    expect(result.currentTopic).toBe("");
+    expect(result.previousTurnContext).toBeUndefined();
   });
 
   test("predict-intent falls back when no apiKey", async () => {
@@ -184,6 +266,40 @@ describe("prediction pipeline elements", () => {
 
     expect(session.pendingPrediction.difficulty).toBe("medium");
     expect(capture.enqueued.pipeline).toBe("conversation");
+  });
+
+  test("predict-finalize keeps the current topic for follow-up", async () => {
+    const bus = makeBus();
+    const cleared: string[] = [];
+    const resetTopics: string[] = [];
+    const session = {
+      sessionId: "s1",
+      currentTopic: "knowledge.weather.typhoon",
+      pendingPrediction: undefined as any,
+      resetForNewTopic: (topic: string) => resetTopics.push(topic),
+    };
+    const Ctor = resolveElement("predict-finalize");
+    const el = new Ctor({
+      name: "predict-finalize",
+      kind: "sink",
+      bus,
+      orchestrator: makeMockOrchestrator(null),
+      skillService: { clearScope: (sessionId: string) => cleared.push(sessionId) },
+    });
+
+    const result = await el.process({
+      mode: "routing",
+      task: { id: "t1", chatId: "c1", payload: [] },
+      session,
+      userMessage: "数据是最新的吗？",
+      currentTopic: session.currentTopic,
+      prediction: { difficulty: "easy", modelProfile: "basic", intent: "question", contextRelevance: "follow_up", topic: "knowledge.data", reasoning: "follow-up" },
+    });
+
+    expect(session.pendingPrediction.topic).toBe("knowledge.weather.typhoon");
+    expect(resetTopics).toEqual([]);
+    expect(cleared).toEqual([]);
+    expect(result.output).toContain("topic=knowledge.weather.typhoon");
   });
 
   test("predict-finalize clears topic skill context when the topic changes", async () => {

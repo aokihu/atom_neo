@@ -177,6 +177,19 @@ Independent WS Compact has no ownerTaskId → enqueue immediately`} />
         />
       </Section>
 
+      <Section title="Prediction 与 Topic 连续性">
+        <CodeBlock lang="text" code={`current User + currentTopic + previousTurnContext
+  → predict-intent: candidate topic
+  → predict-finalize
+      ├─ follow_up / continuation → keep currentTopic
+      ├─ standalone + new topic   → resetForNewTopic()
+      └─ empty candidate          → keep currentTopic`} />
+        <Callout type="info" title="Session 是最终状态 Owner">
+          Prediction 的 topic 只是候选值。Finalize 写入解析后的 effectiveTopic，并保证
+          <code>pendingPrediction.topic</code> 与 <code>session.currentTopic</code> 一致。
+        </Callout>
+      </Section>
+
       <Section title="运行时状态、Topic 与界面">
         <ComparisonTable
           headers={["范围", "保留", "切换或结束时处理"]}

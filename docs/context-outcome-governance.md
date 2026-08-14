@@ -19,7 +19,7 @@
 - 所有已执行 Tool 的结果都交给当前 Conversation 的后续模型 step，框架不替 LLM 筛选。
 - 只有明确的 Context Injection 可以进入跨轮 Context；普通结果不再自动沉淀。
 - Tool Governance 根据 `metadata.effect` 判断是否真正前进。
-- Prediction 只读取当前 User 原文，不读取 Assistant。
+- Prediction 保持当前 User 原文不变，只读取上一轮有界 Assistant 文本作为不可信分类参考。
 - Post 使用工具证据和完成元数据校验 Assistant 声明。
 - Compact 只总结有资格的可见消息，并忽略无效工具残留。
 
@@ -119,10 +119,14 @@ Step 范围、状态或 ID 集合分页读取。两者设置 `recordPolicy="excl
 
 ### Prediction
 
-- 只读取当前 User 原文，不读取历史 User、Assistant 或 Tool 内容。
+- 保持当前 User 原文逐字不变，同时读取 `currentTopic` 和上一轮有界的 User/Assistant 上下文，
+  只用于判断 `contextRelevance` 与 Topic 连续性。
+- 不读取 Tool 内容；上一轮上下文不作为 Tool 执行事实，真实调用仍以 ToolRecord 为准。
 - 使用 `Output.object` 返回结构化分类，不从自由文本提取 JSON。
 - 保留 difficulty、modelProfile、intent、contextRelevance、topic 与 reasoning。
 - 不生成 memoryQuery，不调用 Tool，也不修改用户输入。
+- predict-finalize 将 LLM topic 视为候选值：`follow_up` / `continuation` 继承当前 Topic，只有
+  `standalone` 的非空新 Topic 才触发切换。
 
 ### Post
 
@@ -183,7 +187,8 @@ Step 范围、状态或 ID 集合分页读取。两者设置 `recordPolicy="excl
 
 ### Phase 4 — Prediction 与 Post
 
-- Prediction 只读取当前 User 原文，并使用 `Output.object` 返回结构化分类。
+- Prediction 保持当前 User 原文不变，并附带当前 Topic 与上一轮有界上下文，使用
+  `Output.object` 返回结构化分类。
 - `standalone` 只投递当前 User；`follow_up` 只保留最近一组 User/Assistant 交互和当前 User。
 - Prediction 不生成查询词，不修改 User 原文，不调用任何 Tool。
 - Post 收集结构化 effect 统计和 Assistant 完成元数据。
