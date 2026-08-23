@@ -65,14 +65,22 @@ export async function main(): Promise<void> {
   if (Bun.argv.includes("--wizard")) {
     const sandboxIdx = Bun.argv.indexOf("--sandbox");
     const wizardSandbox = sandboxIdx >= 0 ? Bun.argv[sandboxIdx + 1] ?? process.cwd() : process.cwd();
-    const { runWizard } = await import("@atom-neo/setup-wizard");
-    await runWizard(wizardSandbox);
+    const { startWizard } = await import("@atom-neo/config-tui");
+    await startWizard(wizardSandbox, "first-run");
+    return;
+  }
+
+  // --config: standalone config wizard (edit config.json + .env) and exit
+  if (args.config) {
+    const { startWizard } = await import("@atom-neo/config-tui");
+    await startWizard(args.sandbox, "config");
     return;
   }
 
   // Bootstrap
   loadEnv(args.sandbox);
-  let appConfig = loadConfig(args.sandbox);
+  let loaded = loadConfig(args.sandbox);
+  let appConfig = loaded.effective;
   if (!args.logLevelExplicit) args.logLevel = appConfig.log?.level ?? args.logLevel;
   if (!args.logIgnoreExplicit) args.logIgnore = appConfig.log?.ignore ?? args.logIgnore;
   const logger = createLogger(args);
@@ -85,7 +93,8 @@ export async function main(): Promise<void> {
     await runFirstRunWizard(args.sandbox);
     markInstalled(args.sandbox);
     loadEnv(args.sandbox);
-    appConfig = loadConfig(args.sandbox);
+    loaded = loadConfig(args.sandbox);
+    appConfig = loaded.effective;
     if (!args.logLevelExplicit) args.logLevel = appConfig.log?.level ?? args.logLevel;
   }
 
@@ -93,6 +102,8 @@ export async function main(): Promise<void> {
   initAgentsMd(args.sandbox);
 
   const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+  // TUI-only admin token: config endpoints reject any caller without it (gateway/clients never receive it)
+  const adminToken = crypto.randomUUID();
 
   // Runtime
   const runtime = new RuntimeService({
@@ -101,7 +112,7 @@ export async function main(): Promise<void> {
     host: args.host,
     sandbox: args.sandbox,
     apiKey,
-    appConfig,
+    config: loaded,
   });
 
   // Services
@@ -122,12 +133,13 @@ export async function main(): Promise<void> {
 
   // Default (no --mode): core + TUI
   if (!args.mode) {
-    const core = await startCore({ port, host: args.host, logger, sm, runtime });
+    const core = await startCore({ port, host: args.host, logger, sm, runtime, adminToken });
     const { startTui } = await import("@atom-neo/tui");
     const resolved = runtime.getResolvedModel("balanced");
     try {
       await startTui({
         url: `http://${args.host}:${core.port}`,
+        adminToken,
         serverInfo: {
           port: core.port,
           host: args.host,
@@ -158,7 +170,7 @@ export async function main(): Promise<void> {
   // Explicit --mode: core or full
   switch (args.mode) {
     case "core": {
-      const core = await startCore({ port, host: args.host, logger, sm, runtime });
+      const core = await startCore({ port, host: args.host, logger, sm, runtime, adminToken });
       const shutdown = async () => {
         logger.info("shutting down core...");
         try { await core.stop(); } finally { await sm.stopAll(); }
@@ -170,7 +182,7 @@ export async function main(): Promise<void> {
     }
 
     case "full": {
-      const core = await startCore({ port, host: args.host, logger, sm, runtime });
+      const core = await startCore({ port, host: args.host, logger, sm, runtime, adminToken });
       const { startGateway } = await import("@atom-neo/gateway");
       const gateway = await startGateway({
         port: appConfig.gateway?.port ?? 3000,

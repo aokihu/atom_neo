@@ -4,7 +4,7 @@
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
-    "src/packages/setup-wizard",
+    "src/packages/config-tui",
     "src/packages/gateway",
     "src/packages/tui"
   ],
@@ -12,6 +12,7 @@
     "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:gateway":"bun run src/main.ts --mode full --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
+    "config": "bun run src/main.ts --config --sandbox ./sandbox",
     "docs": "bun run --watch docs/server.tsx",
     "docs:dev": "bun run docs/server.tsx",
     "test": "bun test",
@@ -23,9 +24,9 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.12",
     "@ai-sdk/mcp": "^2.0.15",
+    "@atom-neo/config-tui": "workspace:*",
     "@atom-neo/core": "workspace:*",
     "@atom-neo/gateway": "workspace:*",
-    "@atom-neo/setup-wizard": "workspace:*",
     "@atom-neo/shared": "workspace:*",
     "@atom-neo/tui": "workspace:*",
     "@heroui/react": "^3.2.2",

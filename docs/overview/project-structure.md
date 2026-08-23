@@ -25,9 +25,9 @@ atom_neo/
 │   └── packages/
 │       ├── shared/           # Shared types, pipeline core, log system
 │       ├── core/             # Core HTTP + WebSocket server, task engine
-│       ├── setup-wizard/     # First-run Ink installation wizard (subprocess)
+│       ├── config-tui/       # OpenTUI wizard: first-run setup + config editor (subprocess)
 │       ├── gateway/          # Platform client gateway (secret auth + client manager)
-│       └── tui/              # Terminal UI application
+│       └── tui/              # Terminal UI application (chat)
 │
 ├── sandbox/                   # Runtime workspace directory (gitignored)
 │   ├── config.json           # Model/TUI/Gateway config
@@ -164,28 +164,29 @@ src/packages/core/
         └── token-ratio.ts
 ```
 
-## 4. Package: `setup-wizard`
+## 4. Package: `config-tui`
 
 ```text
-src/packages/setup-wizard/
+src/packages/config-tui/
 ├── package.json
 ├── tsconfig.json
 └── src/
-    ├── main.tsx              # Subprocess entry point (Ink render)
-    ├── components/
-    │   ├── SetupWizard.tsx   # Main state machine (step 0-5)
-    │   ├── StepProvider.tsx  # Provider selection
-    │   ├── StepApiKey.tsx    # API key input
-    │   ├── StepModel.tsx     # Model tier selection
-    │   ├── StepTheme.tsx     # TUI theme selection
-    │   ├── StepProject.tsx   # Project description
-    │   └── StepConfirm.tsx   # Summary + commit
-    └── types.ts
+    ├── index.ts              # export { startWizard }
+    ├── app.tsx               # startWizard: OpenTUI renderer lifecycle
+    ├── wizard-logic.ts       # Single-file pure logic (types/pending state machine/commit/load/parsers)
+    ├── wizard-logic.test.ts
+    ├── theme.tsx             # Self-contained theme system (8 palettes + ThemeProvider)
+    ├── modal/                # Self-contained Modal primitives (list nav + action bar + Esc)
+    └── components/           # WizardApp / MenuModal (left menu + right details, 1:1) / Providers
+                              # ApiKey / Models / Profiles / Theme / Gateway / Project / Confirm
 ```
 
-Launched as a subprocess by `src/bootstrap/first-run.ts` via `Bun.spawn`.
-It still participates in the root `bun run --workspaces build` contract, so its
-package scripts include both `typecheck: tsc --noEmit` and `build: tsc`.
+Launched by `src/main.ts` (`--wizard` early-exit branch) and by
+`src/bootstrap/first-run.ts` via `Bun.spawn` for first-run detection.
+It does not import any code from `@atom-neo/tui` — the wizard UI is fully
+self-contained; responsibilities of the two packages stay independent.
+It participates in the root `bun run --workspaces build` contract with
+`typecheck: tsc --noEmit` and `build: tsc`.
 
 ### Workspace Dependency Version Policy
 
@@ -241,7 +242,7 @@ src/packages/tui/
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
-    "src/packages/setup-wizard",
+    "src/packages/config-tui",
     "src/packages/gateway",
     "src/packages/tui"
   ],
@@ -266,9 +267,9 @@ core/
   Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/openai
   Depended on by: (none, loaded by main.ts)
 
-setup-wizard/
-  Dependencies: ink, ink-text-input, ink-select-input, react
-  Depended on by: (none, launched as subprocess by main.ts)
+config-tui/
+  Dependencies: @opentui/core, @opentui/react, react
+  Depended on by: (none, launched as subprocess/early-exit by main.ts)
 
 gateway/
   Dependencies: shared

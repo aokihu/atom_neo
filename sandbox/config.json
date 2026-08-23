@@ -9,7 +9,10 @@
   "providers": {
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
-      "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
+      "models": [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash"
+      ],
       "thinking": "enabled"
     }
   },
@@ -18,15 +21,17 @@
   },
   "gateway": {
     "port": 3000,
-    "clients": [{
-      "id": "telegram-bot",
-      "platform": "telegram",
-      "binary": "./clients/telegram-bot/telegram-bot",
-      "clientArgs": {
-        "bot-token": "8697257882:AAEbJ2EIqwr_XV17qGTZ0011IqJPLOJU-R0",
-        "mode": "longpoll"
+    "clients": [
+      {
+        "id": "telegram-bot",
+        "platform": "telegram",
+        "binary": "./clients/telegram-bot/telegram-bot",
+        "clientArgs": {
+          "bot-token": "8697257882:AAEbJ2EIqwr_XV17qGTZ0011IqJPLOJU-R0",
+          "mode": "longpoll"
+        }
       }
-    }]
+    ]
   },
   "tui": {
     "theme": "edex"

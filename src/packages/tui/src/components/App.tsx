@@ -18,6 +18,7 @@ import { Modal } from "./modal";
 import type { ModalAction } from "./modal";
 import { useInputHistory } from "../stores/inputHistory";
 import { summarizeToolGroups, ToolDetailsContent } from "./ToolMessageBox";
+import { SettingsModal } from "./SettingsModal";
 
 const TELEMETRY_MIN_WIDTH = 100;
 const RUNTIME_MIN_WIDTH = 150;
@@ -36,6 +37,7 @@ type ActiveModal =
   | { kind: "confirm-quit" }
   | { kind: "error"; title: string; message: string }
   | { kind: "tool-details"; groups: ToolGroupMessage[] }
+  | { kind: "settings" }
   | null;
 
 const MODAL_ACTIONS: ModalAction[] = [
@@ -62,6 +64,7 @@ const HELP_TEXT = `Available commands:
   /help     Show this help message
   /clear    Clear chat history
   /compact  Compress session context
+  /settings Adjust runtime settings
 
 Keyboard shortcuts:
   Ctrl+C      Exit (press twice)
@@ -71,7 +74,7 @@ Keyboard shortcuts:
   Esc         Dismiss command menu / press twice to cancel running task
   Shift+Enter New line`;
 
-export function App({ url, serverInfo, onQuit, exitHint }: { url: string; serverInfo: ServerInfo; onQuit?: () => void; exitHint?: string | null }) {
+export function App({ url, adminToken, serverInfo, onServerInfoChange, onQuit, exitHint }: { url: string; adminToken?: string; serverInfo: ServerInfo; onServerInfoChange?: (info: ServerInfo) => void; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const layout = resolveTuiLayout(width);
@@ -104,6 +107,8 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
   const handleClear = useCallback(() => { setActiveModal({ kind: "confirm-clear" }); }, []);
 
   const handleQuit = useCallback(() => { setActiveModal({ kind: "confirm-quit" }); }, []);
+
+  const handleSettings = useCallback(() => { setActiveModal({ kind: "settings" }); }, []);
 
   const handleCompact = useCallback(() => { compact(); }, [compact]);
   const handleOpenToolDetails = useCallback((groups: ToolGroupMessage[]) => {
@@ -140,6 +145,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
               onHelp={handleHelp}
               onClear={handleClear}
               onCompact={handleCompact}
+              onSettings={handleSettings}
               onCancelTask={handleCancelTask}
               onCancelHint={setTaskHint}
               disabled={activeModal !== null}
@@ -148,7 +154,7 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
           {showTelemetry && <Sidebar contextLimit={contextLimit} />}
         </box>
         <StatusLine hint={taskHint ?? exitHint} />
-        {activeModal && (
+        {activeModal && activeModal.kind !== "settings" && (
           <Modal
             open
             title={activeModal.kind === "confirm-clear"
@@ -193,6 +199,14 @@ export function App({ url, serverInfo, onQuit, exitHint }: { url: string; server
               )}
           </Modal>
         )}
+        <SettingsModal
+          open={activeModal?.kind === "settings"}
+          url={url}
+          adminToken={adminToken}
+          serverInfo={serverInfo}
+          onSaved={(info) => onServerInfoChange?.(info)}
+          onClose={closeModal}
+        />
       </box>
     </ThemeContext.Provider>
   );

@@ -26,6 +26,7 @@ function copyToClipboard(text: string) {
 export function startTui(params: {
   url: string;
   sessionId?: string;
+  adminToken?: string;
   serverInfo: ServerInfo;
 }): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -75,10 +76,13 @@ export function startTui(params: {
 
       function AppRoot() {
         const [exitHint, setExitHint] = useState<string | null>(null);
+        const [serverInfo, setServerInfo] = useState<ServerInfo>(params.serverInfo);
         hintSetter.current = setExitHint;
         return React.createElement(App, {
           url: params.url,
-          serverInfo: params.serverInfo,
+          adminToken: params.adminToken,
+          serverInfo,
+          onServerInfoChange: setServerInfo,
           onQuit: handleQuit,
           exitHint,
         });

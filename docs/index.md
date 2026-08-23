@@ -32,10 +32,10 @@
 | [context-outcome-governance.md](./context-outcome-governance.md) | Tool Result、跨轮 Context、Prediction、Post 与 Compact 的防污染治理 | 修改工具结果或上下文消费链 |
 | [memory-service.md](./subsystems/memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
 | [network-service.md](./subsystems/network-service.md) | 同进程网络 Service、WebFetch 子功能与域名调度 | 修改网络能力 |
-| [configuration.md](./subsystems/configuration.md) | 配置加载优先级、格式 | 添加配置项 |
+| [configuration.md](./subsystems/configuration.md) | 配置加载优先级、双层架构（用户配置 + 运行时 overlay）、TUI 专属调整 API | 添加配置项 |
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
-| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行 Ink 安装向导规格 | 实现首次启动流程 |
+| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `--config` 配置编辑器（OpenTUI 窗口化、按 provider 循环、原子回滚） | 实现首次启动流程/配置编辑 |
 | [tui-interface.md](./tui-interface.md) | eDEX 风格 OpenTUI 布局、真实数据映射与响应式约束 | 修改 TUI 界面 |
 | [tui-modal.md](./tui-modal.md) | TUI 通用 Modal 组件 — 标题/内容/ActionBar + 键盘导航 + 定位 | 实现 TUI 浮层/确认框 |
 | [future-features.md](./future-features.md) | 已设计但未实现的功能清单 | 设计时查，避免遗忘 |

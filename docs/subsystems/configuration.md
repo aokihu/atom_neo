@@ -1,10 +1,45 @@
 # Configuration System
 
-> **Purpose**: 配置加载优先级、格式、自动创建和热重载机制。
+> **Purpose**: 配置加载优先级、格式、自动创建和双层运行时调整机制。
 
 ---
 
-## 1. config.json 完整结构
+## 1. 双层配置架构
+
+配置分为两层：**用户配置**（基线）与**运行时配置**（增量覆盖）。
+
+```text
+$SANDBOX/config.json                  用户配置（基线）
+  └─ 由 config-tui 向导 / 手动编辑写入
+  └─ 运行时永不修改此文件
+
+$SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
+  └─ 仅记录运行中被调整过的字段
+  └─ 只能通过 TUI 设置界面修改（admin token 鉴权）
+
+有效配置 = deepMerge(config.json, runtime-config.json)
+  └─ 系统运行全程只读「有效配置」
+  └─ 对象递归合并、数组整体替换、overlay 优先
+```
+
+**设计要点**：
+
+- 用户在 TUI 中切换模型档位、主题等 → 只写入 `runtime-config.json`，`config.json` 保持不变
+- 重启后 overlay 仍然生效（持久化）；删除 overlay 文件或调用 reset 端点即恢复纯用户配置
+- `config.json` 后续手动修改不会失效 —— overlay 只覆盖被改过的字段
+- **禁止运行时覆盖的字段**：`gateway` 子树（端口/客户端需重启才生效）；密钥本就只存于 `.env`（见 §7）
+
+**三个配置修改入口**：
+
+| 入口 | 写入层 | 时机 |
+|------|--------|------|
+| 手动编辑 config.json / .env | 用户配置（基线） | 随时 |
+| `--config` 向导（`@atom-neo/config-tui`，OpenTUI 窗口化） | config.json（按 provider 合并）+ .env | 随时、交互式，详见 [first-run-wizard.md](./first-run-wizard.md) |
+| 运行时 settings（TUI `/settings`） | `.atom/runtime-config.json`（overlay） | 运行中即时生效，见 §8 |
+
+---
+
+## 2. config.json 完整结构
 
 ```jsonc
 {
@@ -49,21 +84,24 @@
 
 **自动创建**: bootstrap 启动时若 `$SANDBOX/config.json` 不存在，自动写入上述最小可用配置。解析失败（格式错误）时只返回默认值，不覆盖文件。
 
+**无效 provider 恢复**: 若 config.json 中某个 `providers[x]` 条目校验失败（如缺 `apiKeyEnv` 或 `models` 为空），`loadConfig` 会丢弃该条目并保留其余配置，而不是整体回退默认值。这保证单个损坏条目不会让 gateway/mcpServers 等配置全部失效。
+
 ---
 
-## 2. 配置优先级
+## 3. 配置优先级
 
 ```text
-CLI args (--port, --host, --sandbox)  >  config.json  >  默认值
+CLI args (--port, --host, --sandbox)  >  runtime-config.json  >  config.json  >  默认值
 ```
 
 - CLI 只覆盖启动参数（port/host/sandbox/mode），不覆盖 config.json 内部字段
+- `runtime-config.json` 覆盖 `config.json` 的同名字段（深合并，见 §1）
 - `.env` 用于存储 `DEEPSEEK_API_KEY` 等密钥，不参与 config 合并
 - `config.json` 不存在时，回退到默认值（deepseek/deepseek-v4-flash）
 
 ---
 
-## 3. Schema 定义
+## 4. Schema 定义
 
 ```typescript
 // src/bootstrap/config.ts
@@ -97,7 +135,7 @@ export type AppConfig = z.infer<typeof ConfigSchema>;
 
 ---
 
-## 4. 模型解析流程
+## 5. 模型解析流程
 
 ```
 config.json
@@ -134,7 +172,7 @@ const providerOptions = {
 
 ---
 
-## 5. 默认 config（config.json 不存在时）
+## 6. 默认 config（config.json 不存在时）
 
 ```typescript
 // 最小可执行默认值
@@ -180,7 +218,7 @@ TUI 的 Runtime / Conversation / Telemetry 响应式布局对所有主题生效�
 
 ---
 
-## 6. 运行时访问
+## 7. 运行时访问与调整
 
 ```typescript
 // RuntimeService (src/services/runtime-service.ts)
@@ -189,16 +227,40 @@ const runtime = sm.get("runtime");
 // 旧式访问（保留兼容）
 runtime.apiKey;       // 全局 apiKey（fallback）
 runtime.maxTokens;    // transport.maxOutputTokens
-runtime.appConfig;    // 完整配置对象
+runtime.appConfig;    // 有效配置对象（userConfig + runtimeOverlay 合并结果）
 
 // 新式访问
 const m = runtime.getResolvedModel("balanced");
 // → { provider: "deepseek", model: "deepseek-v4-flash", apiKey: "sk-xxx" }
+
+// 运行时调整（仅 TUI 经 API 调用，见 §8）
+runtime.updateRuntimeConfig({ providerProfiles: { balanced: "deepseek/deepseek-v4-pro" } });
+runtime.resetRuntimeConfig();
 ```
+
+`getResolvedModel()` 动态读取有效配置 —— 模型档位切换后下一轮任务即生效，无需重启。
 
 ---
 
-## 7. 密钥管理
+## 8. 运行时调整 API（仅 TUI）
+
+**访问控制**：main.ts 启动时生成随机 admin token，仅注入 TUI。请求必须来自 loopback 且携带 `x-atom-admin-token` 头，否则一律 403。Gateway 与外部 client 无 token，天然被拒。
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/config` | GET | 返回有效配置（合并后） |
+| `/api/config/runtime` | PATCH | 校验并合并 patch 到 overlay，持久化，返回有效配置 |
+| `/api/config/runtime` | DELETE | 清空 overlay，恢复纯用户配置 |
+
+**PATCH 校验规则**：
+
+- body 必须通过 `RuntimeConfigSchema`（`ConfigSchema` 的递归 partial）
+- `gateway` 子树被 `strict()` 拒绝 —— 返回 400
+- 数组字段整体替换（如 `mcpServers`、`providers.*.models`）
+
+---
+
+## 9. 密钥管理
 
 ```text
 .sandbox/.env (gitignored):

@@ -110,6 +110,10 @@ src/main.ts (入口)
   ├── 1. Parse CLI arguments (src/bootstrap/cli.ts)
   │     parseArguments(Bun.argv.slice(2)) → BootArguments
   │
+  ├── 1.5 Early exits（不进入正常启动流程）
+  │     ├─ --wizard → runWizard(sandbox) → return（首次运行安装向导）
+  │     └─ --config → runWizard(sandbox, { mode: "config" }) → return（配置模式向导）
+  │
   ├── 2. Load .env from sandbox (src/bootstrap/env.ts)
   │     loadEnv(args.sandbox) → process.env
   │
@@ -330,7 +334,7 @@ src/main.ts                 → 入口：CLI 解析 → config/env 加载 → mo
 │   └── agents.ts          → initAtomDir(), initAgentsMd()
 
 ├── core → src/packages/core/server.ts    → startCore()
-├── setup-wizard → src/packages/setup-wizard/src/main.tsx  → Ink 子进程向导
+├── config-tui → src/packages/config-tui/src/app.tsx → startWizard() (OpenTUI 子进程向导)
 ├── gateway → src/packages/gateway/src/server.ts  → startGateway()
 └── tui → src/packages/tui/src/app.tsx        → startTUI()
 ```

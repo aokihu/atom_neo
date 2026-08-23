@@ -22,6 +22,7 @@ interface InputBarProps {
   onHelp?: () => void;
   onClear?: () => void;
   onCompact?: () => void;
+  onSettings?: () => void;
   onCancelTask?: () => void;
   onCancelHint?: (hint: string | null) => void;
   disabled?: boolean;
@@ -31,7 +32,7 @@ export function isDoubleEscape(lastPressTime: number, now: number, windowMs = 20
   return lastPressTime > 0 && now - lastPressTime < windowMs;
 }
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
+export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onSettings, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
   const taRef = useRef<TextareaRenderable>(null);
@@ -86,11 +87,12 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onCancelT
       case "/help": onHelp?.(); break;
       case "/clear": onClear?.(); break;
       case "/compact": onCompact?.(); break;
+      case "/settings": onSettings?.(); break;
     }
     taRef.current?.setText("");
     setContent("");
     setFilter("");
-  }, [onQuit, onHelp, onClear, onCompact]);
+  }, [onQuit, onHelp, onClear, onCompact, onSettings]);
 
   const handleSubmit = useCallback(() => {
     if (disabled) return;
