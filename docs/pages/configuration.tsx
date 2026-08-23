@@ -19,25 +19,25 @@ export default function DocPage({ content, title, description, category }: DocPa
           </div>
           <div className="prec-arrow">→ overrides →</div>
           <div className="prec-step">
-            <Badge color="orange">2</Badge>
-            <div className="prec-label">Environment variables</div>
-            <code className="prec-example">$CORE_PORT=3100</code>
+            <Badge color="purple">2</Badge>
+            <div className="prec-label">Runtime config (overlay)</div>
+            <code className="prec-example">.atom/runtime-config.json</code>
           </div>
           <div className="prec-arrow">→ overrides →</div>
           <div className="prec-step">
-            <Badge color="purple">3</Badge>
-            <div className="prec-label">Config file</div>
-            <code className="prec-example">core.config.json</code>
+            <Badge color="orange">3</Badge>
+            <div className="prec-label">User config (baseline)</div>
+            <code className="prec-example">config.json</code>
           </div>
           <div className="prec-arrow">→ overrides →</div>
           <div className="prec-step prec-step--lowest">
             <Badge color="blue">4</Badge>
             <div className="prec-label">Default values</div>
-            <code className="prec-example">port: 3000</code>
+            <code className="prec-example">zod .default()</code>
           </div>
         </div>
-        <Callout type="info" title="loadConfig() Flow">
-          1. Read defaults from <code>defaults.ts</code> → 2. Overlay config file (JSON) → 3. Overlay <code>.env</code> via <code>Bun.env</code> → 4. Overlay CLI args via <code>Bun.argv</code> → 5. Validate with Zod schema.
+        <Callout type="info" title="Effective Config">
+          <code>effective = deepMerge(config.json, runtime-config.json)</code> — 对象递归合并、数组整体替换、overlay 优先。系统运行全程只读有效配置；用户运行时调整只写 overlay，基线 config.json 永不被动修改。
         </Callout>
       </Section>
 
@@ -128,11 +128,34 @@ OPENAI_API_KEY=sk-xxx
 data/`} />
       </Section>
 
-      {/* ═══ Section 9: Config Hot Reload ═══ */}
-      <Section title="9. Config Hot Reload (Future)">
-        <Callout type="tip" title="Planned Enhancement">
-          NOT in Phase 1. Some config values can be changed at runtime without restart: <code>logLevel</code>, <code>replayEnabled</code>, <code>transportMaxOutputTokens</code>, <code>taskTimeoutMs</code>.
+      {/* ═══ Section 9: Runtime Adjustment API (TUI only) ═══ */}
+      <Section title="9. Runtime Adjustment API (TUI only)">
+        <Callout type="tip" title="Dual-Layer Overlay">
+          运行时可调字段 = 除 <code>gateway</code> 子树外的全部配置。调整经 admin token 鉴权写入 overlay，<code>config.json</code> 保持不变；<code>getResolvedModel()</code> 动态读取有效配置，切换模型档位后下一轮任务即生效。
         </Callout>
+        <ComparisonTable
+          headers={["Endpoint", "Method", "Description"]}
+          rows={[
+            [<code>/api/config</code>, "GET", "返回有效配置（合并后）"],
+            [<code>/api/config/runtime</code>, "PATCH", <>"校验并合并 patch → 持久化 overlay → 返回有效配置（<code>gateway</code> 被拒 400）"</>],
+            [<code>/api/config/runtime</code>, "DELETE", "清空 overlay，恢复纯用户配置"],
+          ]}
+        />
+        <Callout type="warn" title="Access Control">
+          请求必须来自 loopback（127.0.0.1/::1）且携带 <code>x-atom-admin-token</code> 头。Token 由 main.ts 启动时随机生成、仅注入 TUI —— Gateway 与外部 client 无 token，一律 403。
+        </Callout>
+        <CodeBlock lang="typescript" code={`// TUI 端调整模型档位
+await fetch(url + "/api/config/runtime", {
+  method: "PATCH",
+  headers: { "content-type": "application/json", "x-atom-admin-token": token },
+  body: JSON.stringify({ providerProfiles: { balanced: "deepseek/deepseek-v4-pro" } }),
+});
+
+// 重置为 config.json 基线
+await fetch(url + "/api/config/runtime", {
+  method: "DELETE",
+  headers: { "x-atom-admin-token": token },
+});`} />
       </Section>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useTheme } from "../App";
+import { useTheme } from "../theme";
 import type { ModalAction } from "./types";
 
 interface ModalActionBarProps {

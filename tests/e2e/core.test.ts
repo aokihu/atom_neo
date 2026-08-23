@@ -4,6 +4,7 @@ import { Logger, StdoutSink, LogHub } from "@atom-neo/shared";
 
 let server: { port: number; tools: string[]; stop: () => void };
 const BASE = "http://127.0.0.1:3200";
+const ADMIN_TOKEN = "e2e-admin-token";
 
 const mockRuntime = {
   sandbox: process.cwd() + "/sandbox",
@@ -11,9 +12,11 @@ const mockRuntime = {
   mode: "core",
   port: 3200,
   host: "127.0.0.1",
-  appConfig: null,
+  appConfig: { tui: { theme: "edex" } },
   maxTokens: 4096,
   getResolvedModel: () => ({ provider: "deepseek", model: "deepseek-v4-flash", apiKey: "" }),
+  updateRuntimeConfig: (patch: any) => ({ tui: { theme: patch?.tui?.theme ?? "edex" } }),
+  resetRuntimeConfig: () => ({ tui: { theme: "edex" } }),
 };
 
 const mockSm = {
@@ -37,6 +40,7 @@ beforeAll(async () => {
     logger: logger as any,
     sm: mockSm,
     runtime: mockRuntime,
+    adminToken: ADMIN_TOKEN,
   });
 });
 
@@ -68,6 +72,40 @@ describe("E2E: Core HTTP API", () => {
     const r = await fetch(`${BASE}/api/metrics`);
     const body: any = await r.json();
     expect(body.memory).toBeDefined();
+  });
+
+  test("config endpoints reject callers without the admin token", async () => {
+    const noToken = await fetch(`${BASE}/api/config`);
+    expect(noToken.status).toBe(403);
+    const badToken = await fetch(`${BASE}/api/config`, { headers: { "x-atom-admin-token": "wrong" } });
+    expect(badToken.status).toBe(403);
+    const patchNoToken = await fetch(`${BASE}/api/config/runtime`, { method: "PATCH", body: "{}" });
+    expect(patchNoToken.status).toBe(403);
+  });
+
+  test("GET /api/config with admin token returns the effective config", async () => {
+    const r = await fetch(`${BASE}/api/config`, { headers: { "x-atom-admin-token": ADMIN_TOKEN } });
+    expect(r.status).toBe(200);
+    expect((await r.json() as any).tui.theme).toBe("edex");
+  });
+
+  test("PATCH /api/config/runtime updates via the runtime overlay", async () => {
+    const r = await fetch(`${BASE}/api/config/runtime`, {
+      method: "PATCH",
+      headers: { "x-atom-admin-token": ADMIN_TOKEN, "content-type": "application/json" },
+      body: JSON.stringify({ tui: { theme: "dracula" } }),
+    });
+    expect(r.status).toBe(200);
+    expect((await r.json() as any).tui.theme).toBe("dracula");
+  });
+
+  test("DELETE /api/config/runtime resets to the user config", async () => {
+    const r = await fetch(`${BASE}/api/config/runtime`, {
+      method: "DELETE",
+      headers: { "x-atom-admin-token": ADMIN_TOKEN },
+    });
+    expect(r.status).toBe(200);
+    expect((await r.json() as any).tui.theme).toBe("edex");
   });
 
   test("POST /api/tasks creates task", async () => {

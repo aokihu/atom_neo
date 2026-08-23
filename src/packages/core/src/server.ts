@@ -15,6 +15,7 @@ import { createWsHandlers } from "./ws/handler";
 import { registerTransportBridge } from "./ws/transport-bridge";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
+import { configGetHandler, configPatchHandler, configResetHandler, isAdminRequest } from "./api/config";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
 import { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck } from "./tools/mcp-manager";
@@ -52,6 +53,8 @@ interface RuntimeLike {
   getResolvedModel(level?: string): {
     provider: string; model: string; apiKey: string; baseUrl?: string; thinking?: string;
   };
+  updateRuntimeConfig?(patch: unknown): Record<string, any>;
+  resetRuntimeConfig?(): Record<string, any>;
 }
 
 interface CompilerLike {
@@ -93,11 +96,12 @@ export type CoreDeps = {
   logger: Logger;
   sm: ServiceProvider;
   runtime: RuntimeLike;
+  adminToken?: string;
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
 export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; toolInfos: { name: string; source: string; description: string; online?: boolean }[]; mcpServerInfos: { name: string; online: boolean; toolCount: number }[]; stop: () => Promise<void> }> {
-  const { port, host, logger, sm, runtime } = deps;
+  const { port, host, logger, sm, runtime, adminToken } = deps;
   const sandbox: string = runtime.sandbox ?? "";
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
     provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
@@ -596,6 +600,19 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
       if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
       if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
+
+      if (url.pathname === `${API_PREFIX}config` && method === "GET") {
+        if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+        return configGetHandler(runtime);
+      }
+      if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
+        if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+        return configPatchHandler(runtime, req);
+      }
+      if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
+        if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+        return configResetHandler(runtime);
+      }
 
       if (url.pathname === `${API_PREFIX}tasks` && method === "POST") {
         if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });

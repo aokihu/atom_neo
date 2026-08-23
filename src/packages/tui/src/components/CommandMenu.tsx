@@ -13,6 +13,7 @@ export const CMDS: Command[] = [
   { name: "/help", description: "Show help message" },
   { name: "/clear", description: "Clear chat history" },
   { name: "/compact", description: "Compress session context" },
+  { name: "/settings", description: "Adjust runtime settings" },
 ];
 
 function matchCommands(filter: string): Command[] {

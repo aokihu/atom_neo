@@ -18,7 +18,7 @@ function packagesSection(content: string) {
   return {
     shared: extractBlock(content, "## 2. Package: `shared`"),
     core: extractBlock(content, "## 3. Package: `core`"),
-    setupWizard: extractBlock(content, "## 4. Package: `setup-wizard`"),
+    configTui: extractBlock(content, "## 4. Package: `config-tui`"),
     gateway: extractBlock(content, "## 5. Package: `gateway`"),
     tui: extractBlock(content, "## 6. Package: `tui`"),
   };
@@ -34,7 +34,7 @@ type PackageInfo = {
 const PACKAGES: PackageInfo[] = [
   { name: "shared", label: "shared", color: "blue", description: "Shared types, pipeline core, log system — the foundation of the monorepo. Every other package depends on this." },
   { name: "core", label: "core", color: "green", description: "Core HTTP + WebSocket server, task engine, and tool registry. The central processing unit of the system." },
-  { name: "setupWizard", label: "setup-wizard", color: "purple", description: "First-run Ink configuration wizard. It runs in an isolated subprocess and compiles with the same workspace build contract as every other package." },
+  { name: "configTui", label: "config-tui", color: "purple", description: "Standalone OpenTUI wizard: first-run setup and the --config editor. Runs in an isolated process, fully self-contained (own Modal/theme), and compiles with the same workspace build contract as every other package." },
   { name: "gateway", label: "gateway", color: "orange", description: "Platform client gateway managing subprocess lifecycle, secret-based auth, and message relay between external platforms and Core." },
   { name: "tui", label: "tui", color: "purple", description: "Terminal UI application. Connects to Core via WebSocket for real-time streaming and tool execution display." },
 ];
@@ -42,7 +42,7 @@ const PACKAGES: PackageInfo[] = [
 export default function ProjectStructurePage({ content, title, description, category }: DocPageProps) {
   const sections = packagesSection(content);
   const topLevelTree = extractBlock(content, "## 1. Top-Level Layout");
-  const rootPkgJson = extractBlock(content, "## 6. Workspace Root");
+  const rootPkgJson = extractBlock(content, "## 7. Workspace Root");
 
   return (
     <div className="doc-page">
@@ -80,8 +80,8 @@ export default function ProjectStructurePage({ content, title, description, cate
         <CodeBlock lang="json" code={rootPkgJson} />
         <Callout type="info" title="Workspace build contract">
           The root <code>bun run build</code> dispatches <code>build</code> to every workspace.
-          Core, Shared, TUI, Gateway, and setup-wizard therefore each provide a build script;
-          setup-wizard uses <code>tsc</code> with its existing <code>dist</code> output directory.
+          Core, Shared, TUI, Gateway, and config-tui therefore each provide a build script;
+          config-tui uses <code>tsc</code> with its existing <code>dist</code> output directory.
         </Callout>
       </Section>
 
@@ -101,9 +101,9 @@ export default function ProjectStructurePage({ content, title, description, cate
               <span className="muted">standalone HTTP service</span>,
             ],
             [
-              <span className="pkg-dep-name"><Badge color="purple">setup-wizard</Badge></span>,
-              <><code>ink</code>, <code>react</code></>,
-              <span className="muted">first-run subprocess</span>,
+              <span className="pkg-dep-name"><Badge color="purple">config-tui</Badge></span>,
+              <><code>@opentui/core</code>, <code>@opentui/react</code>, <code>react</code></>,
+              <span className="muted">wizard subprocess</span>,
             ],
             [
               <span className="pkg-dep-name"><Badge color="orange">gateway</Badge></span>,
@@ -119,8 +119,8 @@ export default function ProjectStructurePage({ content, title, description, cate
         />
         <Callout type="info" title="Dependency Flow">
           <code>core</code>, <code>gateway</code>, and <code>tui</code> share protocol types through
-          <code>shared</code>. The <code>setup-wizard</code> stays independent because it only owns
-          the first-run Ink interface and configuration files.
+          <code>shared</code>. The <code>config-tui</code> stays independent because it only owns
+          the wizard UI and configuration file editing, with no imports from <code>tui</code>.
         </Callout>
         <Callout type="info" title="Shared dependency baseline">
           Root and workspace manifests use one compatible dependency line: <code>ai</code> 7.0.31
