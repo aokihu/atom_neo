@@ -11,7 +11,7 @@
 | [architecture.md](./overview/architecture.md) | 系统架构总览 | 开始前必读 |
 | [project-structure.md](./overview/project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
 | [bootstrap.md](./overview/bootstrap.md) | 启动序列、初始化顺序 | 理解启动流程 |
-| [development-setup.md](./overview/development-setup.md) | 开发环境搭建 — clone → 安装 → 启动 → 验证 | 第一天 |
+| [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 
 ## 开发规范（编码时必查）
 

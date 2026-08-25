@@ -243,6 +243,22 @@ jobs:
       - run: bun test
 ```
 
+---
+
+## 13. Dependency Upgrade Baseline
+
+- Workspace 共享依赖必须在根目录和各 package 中保持一致，OpenTUI 的
+  `@opentui/core`、`@opentui/react` 与根目录 `overrides` 必须使用同一精确版本。
+- 当前 OpenTUI 基线为 `0.5.8`，运行时要求 `bun >= 1.3.0`。
+- `opentui-spinner` 仅兼容 OpenTUI `0.3.x` 与 TypeScript `5.x`，不再使用；加载状态复用
+  `@atom-neo/tui` 自有的 `BounceBarSpinner`。
+- TypeScript `7.x` 不再支持 `baseUrl`；路径别名直接通过 `paths` 解析。
+- `@types/bun` 跟随实际验证的 Bun runtime；当前保持 `1.3.14`，不提前使用 `1.4.x` API 类型。
+- 升级顺序固定为：更新文档 → 修改 manifest → `bun install` → `bun run typecheck`
+  → `bun test` → `bun run build`。
+- `bun outdated --recursive` 用于复核所有 workspace；仍需保留旧主版本的依赖必须在
+  升级结果中明确记录原因。
+
 ## 相关文档
 
 | 文档 | 说明 |

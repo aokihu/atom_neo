@@ -1,6 +1,6 @@
 import React from "react";
 import type { DocPageProps } from "./shared";
-import { PageHeader, Section, CodeBlock, Callout, Badge, parseInline } from "./shared";
+import { PageHeader, Section, CodeBlock, Callout, Badge, ComparisonTable, parseInline } from "./shared";
 
 export default function DocPage({ content, title, description, category }: DocPageProps) {
   const blocks = extractCodeBlocks(content);
@@ -301,6 +301,24 @@ git commit -m "feat(core): description"`} />
       {/* ═══ Section 12: CI Setup ═══ */}
       <Section title="12. CI Setup (GitHub Actions)">
         <CodeBlock lang="yaml" code={blocks.yaml ? blocks.yaml[0] : ""} />
+      </Section>
+
+      <Section title="13. Dependency Upgrade Baseline">
+        <ComparisonTable
+          headers={["Dependency", "Baseline", "Constraint"]}
+          rows={[
+            ["@opentui/core + @opentui/react", <Badge color="green">0.5.8</Badge>, "Root, TUI, config TUI, and overrides stay on one exact version"],
+            ["Bun", <Badge color="blue">>= 1.3.0</Badge>, "Required by OpenTUI 0.5.x"],
+            ["TypeScript", <Badge color="purple">7.x</Badge>, "Use paths directly; baseUrl is no longer supported"],
+            ["@types/bun", <Badge color="blue">1.3.14</Badge>, "Matches the validated Bun runtime instead of exposing 1.4.x APIs early"],
+            ["opentui-spinner", <Badge color="red">Removed</Badge>, "Its peer range stops at OpenTUI 0.3.x and TypeScript 5.x"],
+          ]}
+        />
+        <Callout type="info" title="Upgrade order">
+          Update documentation, align every workspace manifest, install once from the root, then run
+          <code> typecheck</code>, <code>test</code>, and <code>build</code>. Use
+          <code> bun outdated --recursive</code> for the final workspace-wide review.
+        </Callout>
       </Section>
     </div>
   );

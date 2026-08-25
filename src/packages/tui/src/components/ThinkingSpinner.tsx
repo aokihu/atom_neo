@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { BounceBarSpinner } from "./BounceBarSpinner";
 import { useTheme } from "./App";
 
 export const ThinkingSpinner = memo(function ThinkingSpinner() {
@@ -6,7 +7,7 @@ export const ThinkingSpinner = memo(function ThinkingSpinner() {
 
   return (
     <box paddingLeft={2} flexDirection="row" alignItems="center">
-      <spinner name="dots" color={colors.accent.brand} />
+      <BounceBarSpinner />
       <text marginLeft={1} fg={colors.text.muted}>preparing...</text>
     </box>
   );

@@ -240,9 +240,9 @@ addModel / removeModelAt / parseContextLimit / parsePort / collectModelIds
   "types": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit", "build": "tsc" },
   "dependencies": {
-    "@opentui/core": "0.4.3",
-    "@opentui/react": "0.4.3",
-    "react": "^19.2.6"
+    "@opentui/core": "0.5.8",
+    "@opentui/react": "0.5.8",
+    "react": "^19.2.8"
   }
 }
 ```
