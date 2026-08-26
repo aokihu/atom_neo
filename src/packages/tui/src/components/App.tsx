@@ -1,6 +1,5 @@
 import { createContext, useContext, useMemo, useEffect, useCallback, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
-import "opentui-spinner/react";
 import { useChat } from "../hooks/useChat";
 import type { ChatClientError } from "../hooks/useChat";
 import { useChatStore } from "../stores/chat";

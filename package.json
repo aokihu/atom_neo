@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
-    "dev:gateway":"bun run src/main.ts --mode full --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
+    "dev:gateway": "bun run src/main.ts --mode full --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
     "config": "bun run src/main.ts --config --sandbox ./sandbox",
     "docs": "bun run --watch docs/server.tsx",
@@ -22,30 +22,29 @@
     "prepare": "bash scripts/setup-git-hooks.sh"
   },
   "dependencies": {
-    "@ai-sdk/deepseek": "^3.0.12",
-    "@ai-sdk/mcp": "^2.0.15",
+    "@ai-sdk/deepseek": "^3.0.32",
+    "@ai-sdk/mcp": "^2.0.37",
     "@atom-neo/config-tui": "workspace:*",
     "@atom-neo/core": "workspace:*",
     "@atom-neo/gateway": "workspace:*",
     "@atom-neo/shared": "workspace:*",
     "@atom-neo/tui": "workspace:*",
-    "@heroui/react": "^3.2.2",
-    "@heroui/styles": "^3.2.2",
-    "@opentui/core": "^0.4.3",
-    "@opentui/react": "^0.4.3",
-    "ai": "^7.0.31",
-    "highlight.js": "^11.11.1",
-    "opentui-spinner": "^0.0.7",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "zustand": "^5.0.14"
+    "@heroui/react": "^3.2.4",
+    "@heroui/styles": "^3.2.4",
+    "@opentui/core": "0.5.8",
+    "@opentui/react": "0.5.8",
+    "ai": "^7.0.79",
+    "highlight.js": "^11.12.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "zod": "^4.4.3"
   },
   "overrides": {
-    "@opentui/core": "0.4.3",
-    "@opentui/react": "0.4.3"
+    "@opentui/core": "0.5.8",
+    "@opentui/react": "0.5.8"
   }
 }

@@ -74,7 +74,7 @@ const PAGE_REGISTRY: Record<string, PageComponent> = {
   "context-outcome-governance": ContextOutcomeGovernancePage,
   "dependency-injection": DependencyInjectionPage,
   "element-design": ElementDesignPage,
-  "environment-setup": EnvironmentSetupPage,
+  "development-setup": EnvironmentSetupPage,
   "error-handling": ErrorHandlingPage,
   "memory-service": MemoryServicePage,
   "network-service": NetworkServicePage,

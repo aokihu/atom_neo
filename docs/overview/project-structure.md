@@ -191,8 +191,8 @@ It participates in the root `bun run --workspaces build` contract with
 ### Workspace Dependency Version Policy
 
 Dependencies shared by the root application and workspace packages must stay on
-one compatible version line. The current baseline is `ai` 7.0.31 with
-`@ai-sdk/deepseek` 3.0.12 and `@ai-sdk/mcp` 2.0.15, plus OpenTUI 0.4.3.
+one compatible version line. The current baseline is `ai` 7.0.79 with
+`@ai-sdk/deepseek` 3.0.32 and `@ai-sdk/mcp` 2.0.37, plus OpenTUI 0.5.8.
 Workspace manifests may declare these dependencies directly, but must not
 introduce a second major or minor line.
 
