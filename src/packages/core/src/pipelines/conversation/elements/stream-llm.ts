@@ -121,6 +121,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #sameToolBatchNames: ReadonlySet<string>;
   #toolRecordStore?: ToolRecordStore;
   #toolDefinitions: ReadonlyMap<string, ToolDefinition>;
+  #task?: { id?: string; chatId?: string };
 
   constructor(params: {
     name: string;
@@ -140,6 +141,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     skillService?: SkillServiceLike;
     contextService: ContextService;
     toolRecordStore?: ToolRecordStore;
+    task?: { id?: string; chatId?: string };
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -154,12 +156,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#skillService = params.skillService;
     this.#contextService = params.contextService;
     this.#toolRecordStore = params.toolRecordStore;
+    this.#task = params.task;
     this.#toolDefinitions = new Map(params.tools.map(definition => [definition.name, definition]));
     this.#sameToolBatchNames = new Set(
       params.tools.filter(tool => tool.allowSameToolBatch === true).map(tool => tool.name),
     );
     this.#toolGovernance = { current: new ToolCallLedger({ maxExecutions: this.#maxSteps }) };
-    this.#builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance, this.#session);
+    this.#builtinTools = buildAllAiTools(params.tools, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance, this.#session, this.#task);
     const mcpCurrent = params.mcpToolsRef?.current ?? {};
     const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
     this.#mcpToolsRef = params.mcpToolsRef;
@@ -879,6 +882,7 @@ function buildAllAiTools(
   toolResults: Map<string, ToolExecutionStatus[]>,
   governance: { current: ToolCallLedger },
   session?: any,
+  task?: { id?: string; chatId?: string },
 ): Record<string, any> {
   const result: Record<string, any> = {};
   for (const t of tools) {
@@ -904,6 +908,8 @@ function buildAllAiTools(
               const r = await t.execute(args, {
                 abortSignal: opts?.abortSignal,
                 sessionId: session?.sessionId,
+                taskId: task?.id,
+                chatId: task?.chatId,
                 evidenceQuery: [...(session?.messages ?? [])].reverse().find((message: any) => message.role === "user")?.content
                   || "",
               });

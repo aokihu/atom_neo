@@ -61,7 +61,7 @@ export enum PermissionLevel {
   FULL = 2,
 }`} />
         <Callout type="info" title="设计理念">
-          Tool 是统一接口：文件系统、Memory、Bash、MCP 操作都通过同一 <code>execute(args) → ToolResult</code> 模式。
+          Tool 是统一接口：文件系统、Memory、Shell、MCP 操作都通过同一 <code>execute(args) → ToolResult</code> 模式。
           <code>content</code> 是唯一面向 LLM 的结果；<code>metadata</code> 只保存运行框架实际消费的
           <code>ok/effect/error/contextInjection</code>。只有 reference、evidence 或 state_changed
           才投影到当前手工循环，跨轮 Context 必须显式使用 contextInjection。
@@ -93,7 +93,8 @@ export enum PermissionLevel {
             [<code>read_history</code>, "Session History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按归档 ID 和消息序号读取原始消息"],
             [<code>request_tool_record</code>, "Tool History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 ToolsGroupID-Step 读取单条完整记录；不自记录"],
             [<code>request_tool_records</code>, "Tool History", <Badge color="blue">{`READ_ONLY (0)`}</Badge>, "按 Group、Step 范围或 ID 集合分页读取；不自记录"],
-            [<code>bash</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行 shell 命令"],
+            [<code>shell</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "在沙箱中执行并等待 shell 命令"],
+            [<code>background_shell</code>, <><Badge color="red">Shell</Badge> <Badge color="red">需确认</Badge></>, <Badge color="red">{`FULL (2)`}</Badge>, "后台执行长期命令，完成后创建 Task 通知 Agent"],
           ]}
         />
         <Callout type="info" title="Tool 自主选择">
@@ -327,8 +328,8 @@ export function filterToolsByPermission(
     if (level < required) {
       return false;
     }
-    // Bash requires explicit approval at FULL level
-    if (tool.name === "bash" && tool.requiresApproval
+    // Shell tools require explicit approval at FULL level
+    if (["shell", "background_shell"].includes(tool.name) && tool.requiresApproval
         && level >= PermissionLevel.FULL) {
       return true;  // Still included but flagged for approval
     }
@@ -337,13 +338,14 @@ export function filterToolsByPermission(
 }`} />
       </Section>
 
-      {/* ── Bash Tool ── */}
-      <Section title="Bash 工具（特殊处理）">
-        <Callout type="warn" title="Bash 需要用户审批">
-          Bash 是唯一需要显式用户审批的工具。在 <code>PermissionLevel.FULL</code> 下，先检查 <code>context.approved</code> 标志。
+      {/* ── Shell Tools ── */}
+      <Section title="Shell 工具（特殊处理）">
+        <Callout type="warn" title="Shell 需要用户审批">
+          <code>shell</code> 与 <code>background_shell</code> 都要求 <code>PermissionLevel.FULL</code>
+          和显式用户审批，并复用同一套 Bun 进程与有界输出收集能力。
         </Callout>
-        <CodeBlock lang="typescript" code={`export const bashTool: ToolDefinition = {
-  name: "bash",
+        <CodeBlock lang="typescript" code={`export const shellTool: ToolDefinition = {
+  name: "shell",
   description:
     "Execute a shell command. Runs in sandboxed workspace directory.",
   source: "builtin",
@@ -351,20 +353,25 @@ export function filterToolsByPermission(
     command: z.string().describe("The shell command to execute"),
     timeout: z.number().optional().default(30000).describe("Timeout in ms"),
   }),
-  execute: async (args, context?: { approved?: boolean }) => {
-    if (!context?.approved) {
-      return {
-        ok: false,
-        output: "",
-        error: "Bash command requires user approval",
-        metadata: { requiresApproval: true },
-      };
-    }
-    // Execute command...
-  },
+  execute: async (args, context) => executeForegroundShell(args, context),
+  permission: PermissionLevel.FULL,
+  requiresApproval: true,
+};
+
+export const backgroundShellTool: ToolDefinition = {
+  name: "background_shell",
+  description: "Start a long-running shell command and notify the agent when it exits.",
+  source: "builtin",
+  inputSchema: z.object({ command: z.string() }),
+  execute: async (args, context) => backgroundShell.start(args, context),
   permission: PermissionLevel.FULL,
   requiresApproval: true,
 };`} />
+        <Callout type="info" title="Bun 原生后台进程">
+          <code>background_shell</code> 使用 <code>Bun.spawn</code> 后立即返回 jobId 和 pid，后台等待
+          <code>Subprocess.exited</code>。它不调用 <code>unref()</code>，由 Core 在关闭时统一终止；
+          命令成功或失败都会复用现有 InternalTaskOrchestrator 创建独立通知 Task。
+        </Callout>
       </Section>
 
       {/* ── Tool Registration Flow ── */}

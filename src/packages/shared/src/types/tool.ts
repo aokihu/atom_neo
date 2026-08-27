@@ -10,6 +10,8 @@ export enum PermissionLevel {
 export type ToolExecuteOptions = {
   abortSignal?: AbortSignal;
   sessionId?: string;
+  taskId?: string;
+  chatId?: string;
   evidenceQuery?: string;
 };
 

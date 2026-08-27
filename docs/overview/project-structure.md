@@ -121,7 +121,7 @@ src/packages/core/
 │   ├── bootstrap.ts
 │   └── builtin/
 │       ├── fs.ts
-│       ├── bash.ts
+│       ├── shell.ts
 │       └── memory.ts
 │
 ├── replay/

@@ -199,7 +199,7 @@ if (intents.some(i => i.request === IntentRequestType.FOLLOW_UP)) {
 **两条路径分工：**
 | 机制 | 工具 | 用户感知 | 时机 |
 |------|------|----------|------|
-| `streamText` tool calling | read, write, bash, search_memory 等 | ✅ 可见，正常反馈 | 流式输出中 |
+| `streamText` tool calling | read, write, shell, background_shell, search_memory 等 | ✅ 可见，正常反馈 | 流式输出中 |
 | IntentRequest 解析 | 仅 `follow_up` | ❌ 无感，隐蔽调度 | 流结束后 |
 
 **优势：** 流式逐字输出 + 工具调用不打断阅读 + follow_up 隐蔽执行，用户无感知。
@@ -263,7 +263,7 @@ export interface ToolResult {
 // 内置 tools
 const builtinTools: ToolDefinition[] = [
   readTool, writeTool, lsTool, grepTool, treeTool, cpTool, mvTool,
-  bashTool,        // 需确认
+  shellTool, backgroundShellTool, // 需确认
   searchMemoryTool, saveMemoryTool, traverseMemoryTool, linkMemoryTool, forgetMemoryTool,
 ];
 ```
@@ -362,7 +362,7 @@ GET    /api/metrics            → 运行时指标
 enum PermissionLevel {
   READ_ONLY = 0,   // read, ls, grep, tree, search_memory, read_memory, traverse_memory
   FILE_WRITE = 1,  // + write, cp, mv, save_memory, link_memory, forget_memory
-  FULL = 2,        // + bash (需确认)
+  FULL = 2,        // + shell / background_shell (需确认)
 }
 
 // TUI 直连 Core → PermissionLevel.FULL

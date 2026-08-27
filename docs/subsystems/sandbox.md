@@ -22,12 +22,13 @@
 | 阶段 | 检查内容 | 覆盖工具 |
 |------|---------|---------|
 | PRE (执行前) | 路径黑名单（.atom）+ 白名单 | read, write, ls, tree, grep, cp, mv |
-| PRE (执行前) | bash 命令含 `.atom` 字串 | bash |
+| PRE (执行前) | Shell 命令含 `.atom` 字串 | shell、background_shell |
 | POST (执行后) | 输出结果中移除 `.atom` 条目 | ls, tree, grep |
 
 ToolGuard 只执行安全边界检查，不参与 Memory、Skill、WebFetch 的调用决策或结果筛选。
 
-**bash 工具**额外受 `.atom` 命令字串检查限制，但对沙箱外路径不做白名单拦截（shell 命令解析复杂，后续增强）。
+`shell` 与 `background_shell` 额外受 `.atom` 命令字串检查限制，但对沙箱外路径不做白名单拦截
+（Shell 命令解析复杂，后续增强）。两者都以 Sandbox 根目录作为工作目录。
 
 ## 2. 目录结构
 
@@ -155,7 +156,7 @@ export function createToolGuard(
     get(target, prop) {
       if (prop !== "execute") return Reflect.get(target, prop);
       return async (args: unknown) => {
-        // PRE: 黑名单/白名单/bash命令检查
+        // PRE: 黑名单/白名单/Shell 命令检查
         const blocked = preCheck(target, args, sandbox, whitelist);
         if (blocked) return blocked;
         // EXEC: 原始工具执行
@@ -179,8 +180,9 @@ export function createToolGuard(
 | `ls .` (沙箱根目录) | POST 过滤 | 结果中不含 `.atom` |
 | `tree .` (沙箱根目录) | POST 过滤 | 树中不含 `.atom` 分支 |
 | `grep "text" .` (沙箱根目录) | PRE 通过 + POST 过滤 | `.atom/` 内文件不参与搜索 |
-| `bash "cat .atom/x"` | PRE bash 检查 | `"Command not allowed"` |
-| `bash "cat /etc/passwd"` | PRE 通过 | 执行（后续增强） |
+| `shell "cat .atom/x"` | PRE Shell 检查 | `"Command not allowed"` |
+| `background_shell "cat .atom/x"` | PRE Shell 检查 | `"Command not allowed"` |
+| `shell "cat /etc/passwd"` | PRE 通过 | 执行（后续增强） |
 | `search_memory` / `save_memory` | 无路径参数，透传 | 正常执行 |
 
 ### 配置

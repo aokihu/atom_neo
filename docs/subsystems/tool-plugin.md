@@ -1,7 +1,7 @@
 # Tool Plugin Specification
 
 > **Purpose**: How to create, register, and execute Tool plugins.
-> Tools are the unified interface for File System, Memory, Bash, and MCP operations.
+> Tools are the unified interface for File System, Memory, Shell, and MCP operations.
 > **所有 Tool 操作默认限定在 SANDBOX 目录内**，路径越界将被拒绝。
 > 详见 [sandbox.md](./sandbox.md)。
 
@@ -62,6 +62,10 @@ export enum PermissionLevel {
   FULL = 2,
 }
 ```
+
+`ToolExecuteOptions` 由运行时注入当前 `abortSignal`、`sessionId`、`taskId` 与 `chatId`。
+`shell` 使用取消信号绑定当前 Task；`background_shell` 只使用 Task 身份创建完成通知，后台进程
+不继承当前 Task 的取消信号。
 
 ## 2. Builtin Tool Template
 
@@ -268,7 +272,7 @@ read_history({
 - 普通 Tool Result 只写结构化 Session 审计；跨轮 Context 仅接受显式 `contextInjection`。
 - `search_history` 和 `read_history` 对所有 intent 可见，不参与 Memory/Skill/Web 门控。
 
-通用 `read` / `bash` 仍不用于读取 `.atom` 内部状态；History Tool 通过
+通用 `read` / `shell` 仍不用于读取 `.atom` 内部状态；History Tool 通过
 `SessionPersistenceService` 的受限接口访问当前 Session。
 
 ## 6. Tool Registry
@@ -632,8 +636,9 @@ export function filterToolsByPermission(
     if (level < required) {
       return false;
     }
-    // Bash requires explicit approval at FULL level
-    if (tool.name === "bash" && tool.requiresApproval && level >= PermissionLevel.FULL) {
+    // Shell tools require explicit approval at FULL level
+    if (["shell", "background_shell"].includes(tool.name)
+        && tool.requiresApproval && level >= PermissionLevel.FULL) {
       return true;  // Still included but flagged for approval
     }
     return true;
@@ -653,34 +658,38 @@ export function filterToolsByPermission(
 
 ---
 
-## Appendix: Bash Tool (Special Case)
+## Appendix: Shell Tools (Special Case)
 
 ```typescript
-// Bash is special because it requires user approval and runs in a shell.
-export const bashTool: ToolDefinition = {
-  name: "bash",
+export const shellTool: ToolDefinition = {
+  name: "shell",
   description: "Execute a shell command. The command is run in a sandboxed workspace directory.",
   source: "builtin",
   inputSchema: z.object({
     command: z.string().describe("The shell command to execute"),
     timeout: z.number().optional().default(30000).describe("Timeout in ms"),
   }),
-  execute: async (args, context?: { approved?: boolean }) => {
-    if (!context?.approved) {
-      return {
-        metadata: {
-          ok: false,
-          effect: "none",
-          error: "Bash command requires user approval",
-        },
-      };
-    }
-    // Execute command...
-  },
+  execute: async (args, context) => executeForegroundShell(args, context),
   permission: PermissionLevel.FULL,
-  requiresApproval: true,  // flagged in UI
+  requiresApproval: true,
+};
+
+export const backgroundShellTool: ToolDefinition = {
+  name: "background_shell",
+  description: "Start a long-running shell command and notify the agent when it exits.",
+  source: "builtin",
+  inputSchema: z.object({ command: z.string() }),
+  execute: async (args, context) => backgroundShell.start(args, context),
+  permission: PermissionLevel.FULL,
+  requiresApproval: true,
 };
 ```
+
+两者复用同一套 `Bun.spawn(["sh", "-c", command])` 与有界输出收集。`shell` 等待完成并继承
+当前 Task 的 `AbortSignal`；`background_shell` 立即返回 `jobId` 和 `pid`，使用
+`Subprocess.exited` 在后台等待。命令成功或失败后均通过现有
+`InternalTaskOrchestrator.scheduleConversation()` 创建独立的内部 Task。后台 Job 不调用
+`unref()`，Core 关闭时由 Service 统一终止，因此不会产生无法回传完成状态的孤儿进程。
 
 ## 相关文档
 

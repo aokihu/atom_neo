@@ -98,6 +98,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       skillService: deps.skillService,
       contextService: deps.contextService,
       toolRecordStore: deps.toolRecordStore,
+      task: deps.task,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .boundary("check-follow-up", { memory: deps.memory, session: deps.session })

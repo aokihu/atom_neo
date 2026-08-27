@@ -18,6 +18,7 @@ import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/t
 import { configGetHandler, configPatchHandler, configResetHandler, isAdminRequest } from "./api/config";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
+import { BackgroundShellService, formatBackgroundShellCompletion } from "./tools/builtin/shell";
 import { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck } from "./tools/mcp-manager";
 import type { MCPServerConfig } from "./tools/mcp-manager";
 import { ScheduleService } from "./tools/schedule-service";
@@ -130,16 +131,28 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
+  const taskQueue = new TaskQueue();
+  const orchestrator = new InternalTaskOrchestrator(taskQueue, bus);
   const contextService = new ContextService(bus);
   contextService.start();
   const persistence = new SessionPersistenceService(sandbox, contextService);
   const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx), undefined, persistence);
+  const backgroundShell = new BackgroundShellService({
+    sandbox,
+    onComplete: result => orchestrator.scheduleConversation(
+      result.sessionId,
+      result.chatId,
+      result.parentTaskId,
+      [{ type: "text", data: formatBackgroundShellCompletion(result) }],
+    ),
+  });
 
   const toolDependencies = {
     sandbox,
     network,
     whitelist: runtime?.appConfig?.permission?.whitelist ?? [],
     persistence,
+    backgroundShell,
   };
   const allTools = createAllTools({ ...toolDependencies, memory });
   if (skillService) {
@@ -469,9 +482,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     else logger.debug(msg, data);
   });
 
-  const taskQueue = new TaskQueue();
-  const orchestrator = new InternalTaskOrchestrator(taskQueue, bus);
-
   const schedulePersistPath = `${sandbox}/${runtime?.appConfig?.schedule?.persistPath ?? "schedule-tasks.json"}`;
   const scheduleService = new ScheduleService(taskQueue, schedulePersistPath, logger);
 
@@ -664,6 +674,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       server.stop(false);
       hookManager.stop();
       scheduleService.stop();
+      await backgroundShell.stop();
       while (!await taskEngine.drain({ timeoutMs: 30_000 })) {
         logger.warn("waiting for queued and active tasks before shutdown");
       }

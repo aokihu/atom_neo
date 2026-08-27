@@ -149,7 +149,7 @@ ctx.setInferenceFacts(facts);`} />
         <ComparisonTable
           headers={["机制", "工具", "用户感知", "时机"]}
           rows={[
-            [<><Badge color="green">streamText</Badge> tool calling</>, "read, write, bash, search_memory", "✅ 可见，正常反馈", "流式输出中"],
+            [<><Badge color="green">streamText</Badge> tool calling</>, "read, write, shell, background_shell, search_memory", "✅ 可见，正常反馈", "流式输出中"],
             [<><Badge color="orange">IntentRequest</Badge> 解析</>, "仅 follow_up", "❌ 无感，隐蔽执行", "流结束后"],
           ]}
         />
@@ -176,7 +176,8 @@ ctx.setInferenceFacts(facts);`} />
             [<code>read / write</code>, "Filesystem", "READ_ONLY / FILE_WRITE"],
             [<code>ls / grep / tree</code>, "Filesystem", "READ_ONLY"],
             [<code>cp / mv</code>, "Filesystem", "FILE_WRITE"],
-            [<code>bash</code>, "Shell", "FULL (需确认)"],
+            [<code>shell</code>, "前台 Shell", "FULL (需确认)"],
+            [<code>background_shell</code>, "后台 Shell + 完成通知 Task", "FULL (需确认)"],
             [<code>search_memory</code>, "Memory", "READ_ONLY"],
             [<code>read_memory</code>, "Memory", "READ_ONLY"],
             [<code>save_memory</code>, "Memory", "FILE_WRITE"],
@@ -251,7 +252,7 @@ type ServerEvent =
           rows={[
             [<><Badge color="blue">P1</Badge> 基础设施</>, "shared/ 类型 + Pipeline 核心 + 日志系统", "1 周"],
             [<><Badge color="blue">P2</Badge> Core 引擎</>, "事件驱动调度器 + Per-Session 上下文 + Tool Registry", "1.5 周"],
-            [<><Badge color="blue">P3</Badge> Tool 插件</>, "文件系统 tools + Memory tools + Bash tool", "1 周"],
+            [<><Badge color="blue">P3</Badge> Tool 插件</>, "文件系统 tools + Memory tools + Shell tools", "1 周"],
             [<><Badge color="blue">P4</Badge> Pipeline Builder</>, "Builder DSL + Element 注册表 + 3 条 pipeline", "1.5 周"],
             [<><Badge color="orange">P5</Badge> Core HTTP + WS</>, "服务器 + WebSocket 事件协议 + Replay 系统", "1 周"],
             [<><Badge color="orange">P6</Badge> Gateway</>, "Auth + 权限 + 速率限制 + 代理", "0.5 周"],

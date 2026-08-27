@@ -40,7 +40,13 @@ export {
   createReadTool, createWriteTool, createLsTool,
   createTreeTool, createGrepTool, createCpTool, createMvTool,
 } from "./tools/builtin/fs";
-export { createBashTool } from "./tools/builtin/bash";
+export {
+  BackgroundShellService,
+  createBackgroundShellTool,
+  createShellTool,
+  formatBackgroundShellCompletion,
+} from "./tools/builtin/shell";
+export type { BackgroundShellCompletion } from "./tools/builtin/shell";
 export { createHistoryTools } from "./tools/builtin/history";
 export { createToolRecordTools } from "./tools/builtin/tool-records";
 export {
