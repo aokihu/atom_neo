@@ -29,6 +29,10 @@ export default function SandboxPage({ content, title, description, category }: D
           ToolGuard 只检查 Sandbox、白名单与隐藏目录等安全边界，不参与 Memory、Skill 或 WebFetch
           的业务调用顺序。
         </Callout>
+        <Callout type="info" title="Shell 工作目录">
+          <code>shell</code> 与 <code>background_shell</code> 都以 Sandbox 根目录作为工作目录，并拒绝
+          命令文本中出现 <code>.atom</code>。后台工具只脱离当前 Task 的取消信号，不脱离 Core 生命周期。
+        </Callout>
       </Section>
 
       {/* ── Directory Structure ── */}

@@ -45,4 +45,26 @@ describe("createToolGuard", () => {
       errorSource: "guard",
     });
   });
+
+  test("blocks hidden runtime paths for both Shell tools", async () => {
+    for (const name of ["shell", "background_shell"]) {
+      let executed = false;
+      const guarded = createToolGuard({
+        ...createTool(async () => {
+          executed = true;
+          return { metadata: { ok: true, effect: "none" } };
+        }),
+        name,
+      }, "/tmp/sandbox", []);
+
+      const result = await guarded.execute({ command: "cat .atom/session" }, {});
+      expect(executed).toBe(false);
+      expect(result.metadata).toEqual({
+        ok: false,
+        effect: "none",
+        error: "Command not allowed",
+        errorSource: "guard",
+      });
+    }
+  });
 });

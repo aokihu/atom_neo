@@ -82,7 +82,8 @@
 - `tree` — 递归显示目录树
 - `glob` — 通配符匹配文件路径
 - `webfetch` — HTTP GET/POST 获取网页或 API 内容
-- `bash` — 在沙箱中执行 shell 命令
+- `shell` — 在沙箱中执行并等待 shell 命令
+- `background_shell` — 在后台执行长期 shell 命令，完成后创建 Task 通知 Agent
 - `cp` — 复制文件或目录
 - `mv` — 移动或重命名文件
 - `search_memory` — 搜索长期记忆，结果包含可供后续操作使用的短 ID

@@ -1,6 +1,6 @@
 # Builtin Tools
 
-- `fs.ts` / `bash.ts`：Sandbox 文件与命令执行。
+- `fs.ts` / `shell.ts`：Sandbox 文件、前台 Shell 与后台 Shell Job 执行。
 - `memory.ts`：Memory 搜索、读取、保存、关系与删除。
 - `skill.ts`：Skill 发现与分段加载。
 - `webfetch.ts`：将 Schema 输入转交同进程 NetworkService 的薄适配器；ToolGuard 只保留安全检查。

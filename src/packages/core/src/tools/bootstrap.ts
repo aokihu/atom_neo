@@ -4,7 +4,8 @@ import {
   createReadTool, createWriteTool, createLsTool, createTreeTool,
   createGrepTool, createCpTool, createMvTool, createGlobTool, createEditTool, createSandbox,
 } from "./builtin/fs";
-import { createBashTool } from "./builtin/bash";
+import { createBackgroundShellTool, createShellTool } from "./builtin/shell";
+import type { BackgroundShellService } from "./builtin/shell";
 import { createWebFetchTool } from "./builtin/webfetch";
 import { createWebSearchTool } from "./builtin/websearch";
 import {
@@ -18,7 +19,7 @@ import { createToolRecordTools } from "./builtin/tool-records";
 import type { SessionPersistenceService } from "../session/persistence-service";
 import { createToolGuard } from "./guard";
 
-/** Create all builtin tool definitions (fs, bash, memory) for a sandbox. */
+/** Create all builtin tool definitions (fs, shell, memory) for a sandbox. */
 export function createAllTools(
   params: {
     sandbox: string;
@@ -26,14 +27,16 @@ export function createAllTools(
     memory?: any;
     whitelist?: string[];
     persistence?: SessionPersistenceService;
+    backgroundShell: BackgroundShellService;
   },
 ): ToolDefinition[] {
-  const { sandbox, network, memory, whitelist, persistence } = params;
+  const { sandbox, network, memory, whitelist, persistence, backgroundShell } = params;
   const sb = createSandbox(sandbox);
   const raw: ToolDefinition[] = [
     createReadTool(sb), createWriteTool(sb), createLsTool(sb),
     createTreeTool(sb), createGrepTool(sb), createCpTool(sb), createMvTool(sb),
-    createBashTool(sandbox),
+    createShellTool(sandbox),
+    createBackgroundShellTool(backgroundShell),
     createSearchMemoryTool(memory as any),
     createReadMemoryTool(memory as any),
     createSaveMemoryTool(memory as any),
@@ -58,6 +61,7 @@ export function registerBuiltinTools(
     network: NetworkServiceLike;
     whitelist?: string[];
     persistence?: SessionPersistenceService;
+    backgroundShell: BackgroundShellService;
   },
 ): void {
   for (const t of createAllTools(params)) {

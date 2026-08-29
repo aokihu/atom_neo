@@ -62,7 +62,7 @@ function preCheck(
     }
   }
 
-  if (tool.name === "bash") {
+  if (tool.name === "shell" || tool.name === "background_shell") {
     const cmd = extractArg(args, "command");
     if (cmd && cmd.includes(".atom")) {
       return toolResult.failure("Command not allowed", "guard");

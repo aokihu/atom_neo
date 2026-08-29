@@ -101,8 +101,13 @@ TUI 第一次 ESC
 ```
 
 `TaskEngine` 在每个 Element 执行前后检查取消信号，并将同一信号传给 LLM 与 Tool。
-因此 Bash、WebFetch 和支持 AbortSignal 的 MCP/模型调用可以立即停止；不支持信号的同步
+因此 `shell`、WebFetch 和支持 AbortSignal 的 MCP/模型调用可以立即停止；不支持信号的同步
 Element 最迟在当前 Element 返回后停止，不会继续执行后续 Element。
+
+`background_shell` 是明确的例外：它启动后立即返回 `jobId`，后台进程不继承当前 Task 的
+`AbortSignal`，因此原 Task 完成或取消都不会中止该 Job。命令退出后，运行时使用原始
+Session/Chat 与 parentTaskId 创建一个新的独立 Conversation Task；不设置 ownerTaskId，避免
+通知被暂存到已经结束的原 Task Chain。Core 关闭时统一终止仍在运行的后台 Job，不创建通知 Task。
 
 取消以 Task Chain 为边界，而不是只处理客户端传入的单个 Task ID。意图预测、
 Conversation、follow-up、context-compress 和 post-conversation 只要共享同一
