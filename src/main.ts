@@ -63,10 +63,8 @@ export async function main(): Promise<void> {
 
   // --wizard subprocess: run setup wizard and exit
   if (Bun.argv.includes("--wizard")) {
-    const sandboxIdx = Bun.argv.indexOf("--sandbox");
-    const wizardSandbox = sandboxIdx >= 0 ? Bun.argv[sandboxIdx + 1] ?? process.cwd() : process.cwd();
     const { startWizard } = await import("@atom-neo/config-tui");
-    await startWizard(wizardSandbox, "first-run");
+    await startWizard(args.sandbox, "first-run");
     return;
   }
 

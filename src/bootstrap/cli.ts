@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+import { homedir } from "node:os";
 export type { LogLevel } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
 
@@ -25,6 +26,7 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
   const { values, tokens } = parseArgs({
     args: rawArgs,
     options: {
+      wizard: { type: "boolean" },
       help: { type: "boolean", short: "h", default: false },
       mode: { type: "string", short: "m" },
       port: { type: "string", default: "0" },
@@ -38,15 +40,18 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
       "log-pipepath": { type: "string" },
     },
     tokens: true,
-    allowPositionals: true,
-    strict: false,
+    allowPositionals: false,
+    strict: true,
   });
 
   if (values.help) return "help";
 
-  const sandbox = values.sandbox
-    ? resolve(values.sandbox as string)
-    : process.cwd();
+  const sandboxPath = values.sandbox;
+  if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
+  const sandbox = sandboxPath === undefined ? process.cwd()
+    : sandboxPath === "~" ? homedir()
+    : sandboxPath.startsWith("~/") ? resolve(homedir(), sandboxPath.slice(2))
+    : resolve(sandboxPath);
 
   const modeExplicit = tokens?.some((t: any) =>
     t.kind === "option" && (t.name === "mode" || t.name === "m"),
