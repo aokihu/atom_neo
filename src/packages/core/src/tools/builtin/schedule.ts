@@ -11,7 +11,7 @@ const createInput = z.object({
   delayMs: z.number().int().positive().optional().describe("Delay in milliseconds before firing once (for type=delay). e.g. 300000 for 5 minutes"),
   intervalMs: z.number().int().positive().optional().describe("Interval in milliseconds between repeated firings (for type=interval). e.g. 60000 for every minute"),
   prompt: z.string().describe("Text prompt to send when the schedule fires"),
-  scope: z.enum(["session", "global"]).default("session").describe("session=binds to current session (auto-cancelled on close), global=survives sessions"),
+  scope: z.enum(["session", "global"]).default("session").describe("session=cancelled on session close and not restored; global=definition survives Core restart. Both run only while Core runs, in the saved session. Missed executions are skipped."),
 });
 
 const listInput = z.object({

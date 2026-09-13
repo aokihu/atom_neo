@@ -10,19 +10,14 @@ export function markInstalled(sandboxPath: string): void {
   Bun.write(installedPath, "");
 }
 
-function spawnWizard(sandboxPath: string): Bun.Subprocess {
-  const isDev = existsSync(import.meta.path);
+export function buildWizardCommand(sandboxPath: string): string[] {
+  // Compiled entrypoints live in Bun's virtual filesystem, where existsSync is also true.
+  const compiled = Bun.main.startsWith("/$bunfs/");
+  return [process.execPath, ...(compiled ? [] : ["run", Bun.main]), "--wizard", "--sandbox", sandboxPath];
+}
 
-  if (isDev) {
-    return Bun.spawn(
-      [process.execPath, "run", import.meta.path, "--wizard", "--sandbox", sandboxPath],
-      { stdio: ["inherit", "inherit", "inherit"] },
-    );
-  }
-  return Bun.spawn(
-    [process.execPath, "--wizard", "--sandbox", sandboxPath],
-    { stdio: ["inherit", "inherit", "inherit"] },
-  );
+function spawnWizard(sandboxPath: string): Bun.Subprocess {
+  return Bun.spawn(buildWizardCommand(sandboxPath), { stdio: ["inherit", "inherit", "inherit"] });
 }
 
 export async function runFirstRunWizard(sandboxPath: string): Promise<void> {

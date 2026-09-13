@@ -1,3 +1,4 @@
+import type { SessionInitiator } from "@atom-neo/shared";
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
 import type { ToolEffectSummary } from "./pipelines/conversation/elements/types";
@@ -65,6 +66,8 @@ interface CompilerLike {
 interface TaskRequestBody {
   sessionId?: string;
   chatId?: string;
+  initiator?: SessionInitiator;
+  platform?: string;
   data?: { text?: string };
 }
 
@@ -97,6 +100,7 @@ export type CoreDeps = {
   logger: Logger;
   sm: ServiceProvider;
   runtime: RuntimeLike;
+  version?: string;
   adminToken?: string;
 };
 
@@ -592,88 +596,17 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   let stopping = false;
-  const server = Bun.serve({
-    port: port || 3100,
-    hostname: host,
-    async fetch(req, srv) {
-      const url = new URL(req.url);
-
-      // WebSocket upgrade for /ws/:sessionId
-      if (url.pathname.startsWith("/ws/")) {
-        const sid = decodePathParam(url.pathname, "/ws/");
-        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-        srv.upgrade(req, { data: { sessionId: sid } });
-        return; // handled by websocket handlers
-      }
-
-      const method = req.method;
-
-      if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
-      if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
-
-      if (url.pathname === `${API_PREFIX}config` && method === "GET") {
-        if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
-        return configGetHandler(runtime);
-      }
-      if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
-        if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
-        return configPatchHandler(runtime, req);
-      }
-      if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
-        if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
-        return configResetHandler(runtime);
-      }
-
-      if (url.pathname === `${API_PREFIX}tasks` && method === "POST") {
-        if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
-        const body = await req.json().catch(() => ({})) as TaskRequestBody;
-        const normalized = {
-          ...body,
-          sessionId: body.sessionId ?? "default",
-          chatId: body.chatId ?? "default",
-        };
-        if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text)) {
-          return Response.json({ error: "Failed to persist session message" }, { status: 500 });
-        }
-        return createTaskHandler(taskQueue, normalized, bus);
-      }
-      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
-        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
-        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-        const session = sessionStore.load(sid);
-        return session
-          ? Response.json(session.messages)
-          : Response.json({ error: "Session not found" }, { status: 404 });
-      }
-      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
-        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
-        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-        if (!sessionStore.delete(sid)) {
-          return Response.json({ error: "Session is active" }, { status: 409 });
-        }
-        return Response.json({ ok: true, sessionId: sid });
-      }
-      if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
-        const taskId = url.pathname.split("/").pop()!;
-        return taskCancelHandler(taskEngine, req, taskId);
-      }
-      if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
-        return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
-      }
-      return new Response("Not Found", { status: 404 });
-    },
-    websocket: wsHandlers,
-  });
-
+  let server: Bun.Server<unknown> | undefined;
   let stopPromise: Promise<void> | null = null;
   const stop = (): Promise<void> => {
     if (stopPromise) return stopPromise;
     stopPromise = (async () => {
       stopping = true;
       clearInterval(sessionSweepTimer);
-      server.stop(false);
+      server?.stop(false);
       hookManager.stop();
       scheduleService.stop();
+      for (const task of taskQueue.getHookTasks()) taskEngine.cancel(task.id, task.sessionId);
       await backgroundShell.stop();
       while (!await taskEngine.drain({ timeoutMs: 30_000 })) {
         logger.warn("waiting for queued and active tasks before shutdown");
@@ -688,13 +621,119 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       bus.emit(BusEvents.Context.CoreStopped, {});
       contextService.stop();
       await closeMCPClients(mcpClients);
-      await server.stop(true);
+      await server?.stop(true);
     })().catch(error => {
       stopPromise = null;
       throw error;
     });
     return stopPromise;
   };
+
+
+  try {
+    server = Bun.serve<unknown>({
+      port,
+      hostname: host,
+      async fetch(req, srv) {
+        const url = new URL(req.url);
+
+        // WebSocket upgrade for /ws/:sessionId
+        if (url.pathname.startsWith("/ws/")) {
+          const sid = decodePathParam(url.pathname, "/ws/");
+          if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
+          srv.upgrade(req, { data: { sessionId: sid } });
+          return; // handled by websocket handlers
+        }
+
+        const method = req.method;
+
+        if (url.pathname === `${API_PREFIX}tui/attach` && method === "POST") {
+          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
+          const session = sessionStore.attachTui();
+          const model = runtime.getResolvedModel?.("balanced") ?? resolved;
+          return Response.json({ sessionId: session.sessionId, serverInfo: {
+            port: srv.port, host, sandbox, version: deps.version ?? "unknown", model: model.model,
+            tools: allTools.map(t => t.name), toolInfos, mcpServerInfos,
+            theme: runtime.appConfig?.tui?.theme ?? "edex", thinking: model.thinking,
+            contextLimit: resolveContextLimit(`${model.provider}/${model.model}`, runtime.appConfig?.providers?.[model.provider]?.contextLimit),
+          } });
+        }
+        if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
+        if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
+
+        if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
+          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
+          return Response.json(hookManager.list().filter(h => h.trigger.type.startsWith("time:")).map(({ prompt, ...summary }) => summary));
+        }
+
+        if (url.pathname === `${API_PREFIX}config` && method === "GET") {
+          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          return configGetHandler(runtime);
+        }
+        if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
+          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          return configPatchHandler(runtime, req);
+        }
+        if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
+          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          return configResetHandler(runtime);
+        }
+
+        if (url.pathname === `${API_PREFIX}tasks` && method === "POST") {
+          if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
+          const body = await req.json().catch(() => ({})) as TaskRequestBody;
+          const normalized = {
+            ...body,
+            sessionId: body.sessionId ?? "default",
+            chatId: body.chatId ?? "default",
+          };
+          const origin = body.initiator;
+          if (origin !== undefined && (!origin || typeof origin !== "object")) return Response.json({ error: "Invalid initiator" }, { status: 400 });
+          if (origin && (origin.type !== "tui" && origin.type !== "gateway" && origin.type !== "internal" && origin.type !== "unknown")) return Response.json({ error: "Invalid initiator" }, { status: 400 });
+          if (origin?.type === "gateway" && (typeof origin.clientId !== "string" || !origin.clientId.trim() || typeof origin.platform !== "string" || !origin.platform.trim())) return Response.json({ error: "Invalid gateway initiator" }, { status: 400 });
+          const session = sessionStore.get(normalized.sessionId, origin ?? { type: "unknown" });
+          if (origin?.type === "gateway" && session.initiator.type !== "unknown" && (session.initiator.type !== "gateway" || session.initiator.clientId !== origin.clientId || session.initiator.platform !== origin.platform)) return Response.json({ error: "Session initiator conflict" }, { status: 409 });
+          if (body.platform === "tui" && session.initiator.type === "tui") session.lastTuiUsedAt = Date.now();
+          if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text)) {
+            return Response.json({ error: "Failed to persist session message" }, { status: 500 });
+          }
+          return createTaskHandler(taskQueue, normalized, bus);
+        }
+        if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
+          const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+          if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
+          const session = sessionStore.load(sid);
+          return session
+            ? Response.json(session.messages)
+            : Response.json({ error: "Session not found" }, { status: 404 });
+        }
+        if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
+          const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+          if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
+          if (!sessionStore.delete(sid)) {
+            return Response.json({ error: "Session is active" }, { status: 409 });
+          }
+          return Response.json({ ok: true, sessionId: sid });
+        }
+        if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
+          const taskId = url.pathname.split("/").pop()!;
+          return taskCancelHandler(taskEngine, req, taskId);
+        }
+        if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
+          return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
+        }
+        return new Response("Not Found", { status: 404 });
+      },
+      websocket: wsHandlers,
+    });
+
+
+  } catch (error) {
+    await stop();
+    throw error;
+  }
 
   logger.info("core ready", { port: server.port, address: host });
   return {

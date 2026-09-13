@@ -43,6 +43,7 @@ export class ScheduleService {
     chatId: string;
     prompt: string;
     enabled?: boolean;
+    nextFireAt?: number;
     onFire?: (task: ScheduledTask) => void;
   }): ScheduledTask {
     const now = Date.now();
@@ -50,7 +51,7 @@ export class ScheduleService {
     const schedule = task.schedule ?? "";
     const delayMs = task.delayMs ?? 0;
     const intervalMs = task.intervalMs ?? 0;
-    const nextFireAt = type === "delay" ? now + delayMs : type === "interval" ? now + intervalMs : Bun.cron.parse(schedule)?.getTime();
+    const nextFireAt = task.nextFireAt ?? (type === "delay" ? now + delayMs : type === "interval" ? now + intervalMs : Bun.cron.parse(schedule)?.getTime());
 
     const record: ScheduledTask = {
       id: generateId(),
@@ -135,8 +136,9 @@ export class ScheduleService {
       const data: ScheduledTask[] = JSON.parse(raw);
       for (const t of data) {
         this.#tasks.set(t.id, t);
-        if (t.enabled) this.#startJob(t);
+        if (t.enabled && !this.#stopped) this.#startJob(t);
       }
+      this.#persist();
       this.#logger.info("schedule tasks restored", { count: data.length });
     } catch (err) {
       this.#logger.warn("failed to restore schedule tasks", { error: String(err) });
@@ -151,6 +153,23 @@ export class ScheduleService {
   }
 
   #startJob(task: ScheduledTask): void {
+    if (this.#stopped) return;
+    const now = Date.now();
+    if (task.type === "delay") {
+      task.nextFireAt ??= task.updatedAt + task.delayMs;
+      if (task.lastFiredAt || task.nextFireAt <= now) {
+        task.enabled = false;
+        return;
+      }
+    } else if (task.type === "interval") {
+      if (!(task.intervalMs > 0)) { task.enabled = false; return; }
+      task.nextFireAt ??= (task.lastFiredAt ?? task.updatedAt) + task.intervalMs;
+      if (task.nextFireAt <= now) {
+        task.nextFireAt += (Math.floor((now - task.nextFireAt) / task.intervalMs) + 1) * task.intervalMs;
+      }
+    } else {
+      task.nextFireAt = Bun.cron.parse(task.schedule)?.getTime();
+    }
     if (task.type === "delay") {
       this.#startDelay(task);
     } else if (task.type === "interval") {
@@ -177,20 +196,23 @@ export class ScheduleService {
       this.#tasks.delete(task.id);
       this.#timers.delete(task.id);
       this.#persist();
-    }, task.delayMs);
+    }, Math.max(0, task.nextFireAt! - Date.now()));
     this.#timers.set(task.id, timer);
   }
 
   #startInterval(task: ScheduledTask): void {
-    const timer = setInterval(() => {
+    const timer = setTimeout(() => {
+      this.#timers.delete(task.id);
+      const now = Date.now();
+      task.nextFireAt = task.nextFireAt! + (Math.floor(Math.max(0, now - task.nextFireAt!) / task.intervalMs) + 1) * task.intervalMs;
       this.#fire(task);
-      task.nextFireAt = Date.now() + task.intervalMs;
-    }, task.intervalMs);
+      if (!this.#stopped && task.enabled && this.#tasks.has(task.id)) this.#startInterval(task);
+    }, Math.max(0, task.nextFireAt! - Date.now()));
     this.#timers.set(task.id, timer);
   }
 
   #fire(task: ScheduledTask): void {
-    if (this.#stopped) return;
+    if (this.#stopped || !task.enabled || !this.#tasks.has(task.id)) return;
     task.lastFiredAt = Date.now();
     if (task.type === "cron") {
       task.nextFireAt = Bun.cron.parse(task.schedule)?.getTime();

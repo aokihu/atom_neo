@@ -1,3 +1,4 @@
+import { isAdminRequest } from "@atom-neo/shared";
 import { loadGatewayConfig } from "./config";
 import type { GatewayConfig } from "./config";
 import { SECRET_HEADER } from "./auth/secret";
@@ -23,9 +24,10 @@ type InboundEvent = {
   status: "connected" | "disconnected";
 };
 
-export async function startGateway(configOverrides?: Partial<GatewayConfig>): Promise<{ stop: () => void }> {
+export async function startGateway(configOverrides?: Partial<GatewayConfig> & { adminToken?: string }): Promise<{ port: number; stop: () => Promise<void> }> {
   const config = loadGatewayConfig(configOverrides);
   const cm = new ClientManager(config, logger);
+  let stopping = false;
 
   // Per-client rate limiting: max 1 request per 200ms per client
   const rateLimiters = new Map<string, number>();
@@ -44,17 +46,19 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
       }
 
       logger.info("inbound message", { client: client.id, platform: msg.platform, user: msg.platformUserId, text: text.slice(0, 50) });
-      const sessionId = `${msg.platform}:${msg.platformUserId}`;
+      const sessionId = `${client.platform}:${msg.platformUserId}`;
 
       const taskRes = await fetch(`${config.coreUrl}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId, chatId: sessionId, pipeline: "conversation",
-          platform: msg.platform,
+          platform: client.platform,
+          initiator: { type: "gateway", clientId: client.id, platform: client.platform },
           data: { text },
         }),
       });
+      if (!taskRes.ok) throw new Error(`Core rejected task (${taskRes.status})`);
       const taskData = await taskRes.json() as { taskId: string };
       logger.debug("task submitted", { taskId: taskData.taskId });
 
@@ -98,10 +102,26 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
   const server = Bun.serve({
     port: config.port,
     hostname: config.host,
-    async fetch(req) {
+    async fetch(req, srv) {
       const url = new URL(req.url);
 
+      if (url.pathname === "/admin/clients" && req.method === "POST") {
+        if (!isAdminRequest(req, srv, configOverrides?.adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+        if (stopping) return Response.json({ error: "Gateway stopping" }, { status: 503 });
+        const body = await req.json().catch(() => null) as { action?: string; clientId?: string } | null;
+        if (!body || !["start", "stop"].includes(body.action ?? "") || (body.clientId !== undefined && (typeof body.clientId !== "string" || !body.clientId.trim()))) return Response.json({ error: "Expected action start|stop and optional clientId" }, { status: 400 });
+        const ids = body.clientId === undefined ? config.clients.map(c => c.id) : [body.clientId];
+        const results = [];
+        for (const id of ids) {
+          try {
+            if (body.action === "start") await cm.start(id); else await cm.stop(id);
+            results.push({ id, ok: true });
+          } catch (error) { results.push({ id, ok: false, error: String(error) }); }
+        }
+        return Response.json({ results, clients: cm.list() }, { status: results.every(r => r.ok) ? 200 : 400 });
+      }
       if (url.pathname.startsWith("/gateway/")) {
+        if (stopping) return Response.json({ error: "Gateway stopping" }, { status: 503 });
         const secret = req.headers.get(SECRET_HEADER);
         const client = secret ? cm.getBySecret(secret) : null;
 
@@ -141,10 +161,16 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig>): Pr
     },
   });
 
-  await cm.startAll();
+  config.port = server.port!;
+  try { await cm.startAll(); } catch (error) { try { await cm.stopAll(); } finally { server.stop(true); } throw error; }
   logger.info("gateway ready", { port: server.port });
 
-  return { stop: () => { server.stop(); cm.stopAll(); } };
+  let stopPromise: Promise<void> | undefined;
+  return { port: server.port!, stop: () => stopPromise ??= (async () => {
+    stopping = true;
+    server.stop(false);
+    try { await cm.stopAll(); } finally { server.stop(true); }
+  })() };
 }
 
 function sleep(ms: number): Promise<void> {

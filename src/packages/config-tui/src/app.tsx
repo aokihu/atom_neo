@@ -8,14 +8,21 @@ import type { WizardMode } from "./wizard-logic";
 
 /** Launch the standalone OpenTUI wizard (first-run setup or config editor). */
 export function startWizard(sandboxPath: string, mode: WizardMode): Promise<void> {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     let settled = false;
-    const finish = () => { if (!settled) { settled = true; resolve(); } };
-    const abort = () => {
+    let completed = false;
+    let renderer: Awaited<ReturnType<typeof createCliRenderer>> | undefined;
+    const finish = () => {
       if (settled) return;
       settled = true;
-      if (mode === "first-run") process.exit(1);
+      process.stdin.off("end", abort);
+      if (!completed && mode === "first-run") reject(new Error("Configuration cancelled"));
       else resolve();
+    };
+    const abort = () => {
+      if (settled) return;
+      if (renderer) renderer.destroy();
+      else finish();
     };
 
     // EOF (redirected stdin) must not leave the wizard hanging forever
@@ -26,10 +33,11 @@ export function startWizard(sandboxPath: string, mode: WizardMode): Promise<void
       screenMode: "alternate-screen",
       backgroundColor: "#05090c",
       onDestroy: () => finish(),
-    }).then(renderer => {
+    }).then(createdRenderer => {
+      renderer = createdRenderer;
+      if (settled) { renderer.destroy(); return; }
       renderer.keyInput.on("keypress", (key: KeyEvent) => {
         if (key.ctrl && (key.name === "c" || key.name === "d")) {
-          renderer.destroy();
           abort();
         }
       });
@@ -37,12 +45,13 @@ export function startWizard(sandboxPath: string, mode: WizardMode): Promise<void
       createRoot(renderer).render(React.createElement(WizardApp, {
         sandboxPath,
         mode,
-        onComplete: () => renderer.destroy(),
-        onAbort: () => {
-          renderer.destroy();
-          abort();
-        },
+        onComplete: () => { completed = true; createdRenderer.destroy(); },
+        onAbort: abort,
       }));
+    }).catch(error => {
+      process.stdin.off("end", abort);
+      settled = true;
+      reject(error);
     });
   });
 }

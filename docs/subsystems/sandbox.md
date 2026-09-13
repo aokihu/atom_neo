@@ -218,3 +218,7 @@ whitelist 路径可以是绝对路径或相对路径（相对路径相对于沙�
 | [configuration.md](./configuration.md) | 配置加载 |
 | [tool-plugin.md](./tool-plugin.md) | Tool 插件（沙箱路径校验） |
 | [project-structure.md](../overview/project-structure.md) | 项目目录结构 |
+
+## CLI 路径解析（2026-09-12）
+
+--sandbox 的空格与等号写法使用同一个解析入口。程序主动将开头的 ~ 或 ~/ 展开为当前用户主目录，因此 --sandbox=~/warehouse 不再落到当前目录下的 ~/warehouse。绝对路径保持绝对路径，相对路径按启动目录解析，省略参数使用启动目录；显式空字符串报错。包含空格的路径需加引号。仅展开当前用户的 ~，不执行 shell 表达式或展开环境变量字符串。配置向导复用解析后的绝对路径。

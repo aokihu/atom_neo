@@ -1,3 +1,4 @@
+export type { SessionInitiator } from "./session";
 export type { UUID, ISOTimeString } from "./primitive";
 
 export { TaskPriority, TaskSource, TaskState } from "./task";

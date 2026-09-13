@@ -1,3 +1,4 @@
+import type { SessionInitiator } from "@atom-neo/shared";
 import { SessionContext } from "./context";
 import type { SessionPersistenceService } from "./persistence-service";
 import type { SessionCheckpointReason } from "./types";
@@ -28,11 +29,11 @@ export class SessionStore {
     this.#persistence = persistence;
   }
 
-  get(sessionId: string): SessionContext {
+  get(sessionId: string, initiator: SessionInitiator = { type: "internal" }): SessionContext {
     const loaded = this.load(sessionId);
     if (loaded) return loaded;
 
-    const session = new SessionContext(sessionId);
+    const session = new SessionContext(sessionId, Date.now(), initiator);
     this.#sessions.set(sessionId, session);
     this.#recordAccess(sessionId);
     this.#log?.("session-store get", { sid: sessionId, op: "MISS", size: this.#sessions.size });
@@ -57,6 +58,18 @@ export class SessionStore {
     this.#log?.("session-store get", { sid: sessionId, op: "RESTORE", size: this.#sessions.size });
     this.#evictOverflow(sessionId);
     return restoredSession;
+  }
+
+  attachTui(): SessionContext {
+    const candidates = new Map((this.#persistence?.listTuiSessions() ?? []).map(s => [s.sessionId, s]));
+    for (const session of this.#sessions.values()) {
+      if (session.initiator.type === "tui") candidates.set(session.sessionId, session);
+    }
+    const latest = [...candidates.values()].sort((a, b) => b.lastTuiUsedAt - a.lastTuiUsedAt || a.sessionId.localeCompare(b.sessionId))[0];
+    const session = latest ? this.get(latest.sessionId) : this.get(`tui-${crypto.randomUUID()}`, { type: "tui" });
+    session.lastTuiUsedAt = Date.now();
+    if (!this.save(session.sessionId, "restore")) throw new Error("Failed to persist TUI session");
+    return session;
   }
 
   has(sessionId: string): boolean {

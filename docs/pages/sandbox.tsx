@@ -7,6 +7,10 @@ export default function SandboxPage({ content, title, description, category }: D
     <div className="doc-page">
       <PageHeader title={title} description={description} category={category} readTime={4} />
 
+      <Section title="CLI 路径解析">
+        <ComparisonTable headers={["输入", "解析结果"]} rows={[["~/warehouse（空格或等号参数）", "当前用户主目录/warehouse"], ["~", "当前用户主目录"], ["./warehouse", "启动目录/warehouse"], ["绝对路径", "对应绝对路径"], ["省略参数", "启动目录"], ["显式空字符串", "参数错误"]]} />
+        <p>包含空格的路径需加引号；仅展开当前用户的 ~，不执行 shell 表达式或展开环境变量字符串。配置向导复用已解析的绝对路径。</p>
+      </Section>
       {/* ── Isolation Rules ── */}
       <Section title="隔离规则">
         <Callout type="warn" title="安全边界">

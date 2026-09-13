@@ -11,7 +11,7 @@ const ClientConfigSchema = z.object({
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
 const GatewayConfigSchema = z.object({
-  port: z.number().int().default(3000),
+  port: z.number().int().min(0).max(65535).default(3000),
   host: z.string().default("127.0.0.1"),
   coreUrl: z.string().default("http://localhost:3100"),
   clients: z.array(ClientConfigSchema).default([]),
@@ -28,5 +28,8 @@ export function loadGatewayConfig(overrides?: Partial<GatewayConfig>): GatewayCo
   }
   if (Bun.env.CORE_URL) env.coreUrl = Bun.env.CORE_URL;
 
-  return GatewayConfigSchema.parse({ ...env, ...overrides });
+  const config = GatewayConfigSchema.parse({ ...env, ...overrides });
+  if (new Set(config.clients.map(c => c.id)).size !== config.clients.length) throw new Error("Gateway client IDs must be unique");
+  if (config.clientPortRangeStart < 1 || config.clientPortRangeStart + config.clients.length > 65536) throw new Error("Invalid client port range");
+  return config;
 }

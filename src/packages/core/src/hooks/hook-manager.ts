@@ -44,6 +44,7 @@ export class HookManager {
     prompt: string;
     enabled?: boolean;
   }): Hook {
+    if (this.#stopped) throw new Error("Core scheduler is stopped");
     const now = Date.now();
     const hook: Hook = {
       id: generateId(),
@@ -80,6 +81,7 @@ export class HookManager {
   }
 
   update(id: string, changes: Partial<Pick<Hook, "trigger" | "prompt" | "enabled" | "scope">>): Hook {
+    if (this.#stopped) throw new Error("Core scheduler is stopped");
     const hook = this.#hooks.get(id);
     if (!hook) throw new Error(`Hook "${id}" not found`);
 
@@ -93,8 +95,11 @@ export class HookManager {
     hook.updatedAt = Date.now();
 
     if (wasEnabled !== hook.enabled || triggerChanged) {
+      this.#cancelScheduleTask(hook.id);
+      hook.nextFireAt = undefined;
+      hook.expiredAt = undefined;
+      if (triggerChanged || hook.enabled) hook.lastFiredAt = undefined;
       if (hook.trigger.type.startsWith("time:")) {
-        this.#cancelScheduleTask(hook.id);
         if (hook.enabled) this.#scheduleTimeTrigger(hook);
       }
     }
@@ -117,17 +122,20 @@ export class HookManager {
   }
 
   restore(): void {
+    if (this.#stopped) return;
     try {
       if (!existsSync(this.#persistPath)) return;
       const raw = readFileSync(this.#persistPath, "utf-8");
       const data: Hook[] = JSON.parse(raw);
       for (const h of data) {
         if (h.scope === "session") continue;
+        if (this.#hooks.has(h.id)) continue;
         this.#hooks.set(h.id, h);
         if (h.enabled && h.trigger.type.startsWith("time:")) {
           this.#scheduleTimeTrigger(h);
         }
       }
+      this.#persist();
       this.#logger.info("hooks restored", { count: data.length });
     } catch (err) {
       this.#logger.warn("failed to restore hooks", { error: String(err) });
@@ -147,7 +155,17 @@ export class HookManager {
   #scheduleIdMap = new Map<string, string>();
 
   #scheduleTimeTrigger(hook: Hook): void {
+    if (this.#stopped) return;
     const trigger = hook.trigger as Extract<HookTrigger, { type: "time:cron" } | { type: "time:delay" } | { type: "time:interval" }>;
+    if (trigger.type === "time:delay" && hook.lastFiredAt) {
+      hook.enabled = false;
+      hook.nextFireAt = undefined;
+      return;
+    }
+    if (!hook.sessionId && hook.scope === "global") hook.sessionId = `schedule-${hook.id}`;
+    const nextFireAt = hook.nextFireAt ?? (trigger.type === "time:delay"
+      ? hook.updatedAt + trigger.delayMs
+      : trigger.type === "time:interval" ? (hook.lastFiredAt ?? hook.updatedAt) + trigger.intervalMs : undefined);
     const scheduleTask = this.#scheduleService.create({
       name: hook.name,
       type: trigger.type === "time:cron" ? "cron" : trigger.type === "time:delay" ? "delay" : "interval",
@@ -158,8 +176,18 @@ export class HookManager {
       chatId: "default",
       prompt: hook.prompt,
       enabled: true,
-      onFire: () => this.#fire(hook),
+      nextFireAt,
+      onFire: task => {
+        if (this.#stopped || !hook.enabled || !this.#hooks.has(hook.id)) return;
+        hook.nextFireAt = trigger.type === "time:delay" ? undefined : task.nextFireAt;
+        this.#fire(hook);
+        if (trigger.type === "time:delay") hook.enabled = false;
+        this.#persist();
+      },
     });
+    hook.nextFireAt = scheduleTask.nextFireAt;
+    hook.enabled = scheduleTask.enabled;
+    if (!hook.enabled && trigger.type === "time:delay") hook.expiredAt = Date.now();
     this.#scheduleIdMap.set(hook.id, scheduleTask.id);
   }
 
@@ -172,7 +200,8 @@ export class HookManager {
   }
 
   #fire(hook: Hook): void {
-    const sessionId = hook.scope === "session" ? hook.sessionId : this.#lastActiveSessionId;
+    if (this.#stopped || !hook.enabled || !this.#hooks.has(hook.id)) return;
+    const sessionId = hook.scope === "session" || hook.trigger.type.startsWith("time:") ? hook.sessionId : this.#lastActiveSessionId;
     if (!sessionId) {
       this.#logger.warn("hook skipped: no active session", { id: hook.id, name: hook.name, scope: hook.scope });
       return;
@@ -188,6 +217,7 @@ export class HookManager {
     this.#queue.enqueue(taskItem);
     this.#bus.emit(BusEvents.Task.Enqueued as any, { task: taskItem });
     hook.lastFiredAt = Date.now();
+    this.#persist();
     this.#logger.info("hook fired", { id: hook.id, name: hook.name, trigger: hook.trigger.type, sessionId, taskItemId: taskItem.id });
   }
 

@@ -73,7 +73,7 @@ Keyboard shortcuts:
   Esc         Dismiss command menu / press twice to cancel running task
   Shift+Enter New line`;
 
-export function App({ url, adminToken, serverInfo, onServerInfoChange, onQuit, exitHint }: { url: string; adminToken?: string; serverInfo: ServerInfo; onServerInfoChange?: (info: ServerInfo) => void; onQuit?: () => void; exitHint?: string | null }) {
+export function App({ url, sessionId, adminToken, serverInfo, onServerInfoChange, onQuit, exitHint }: { url: string; sessionId?: string; adminToken?: string; serverInfo: ServerInfo; onServerInfoChange?: (info: ServerInfo) => void; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const layout = resolveTuiLayout(width);
@@ -89,7 +89,7 @@ export function App({ url, adminToken, serverInfo, onServerInfoChange, onQuit, e
   }, []);
   const { send, clearMessages, addMessage, compact, cancel } = useChat(
     url,
-    undefined,
+    sessionId,
     serverInfo.toolInfos,
     serverInfo.mcpServerInfos,
     handleClientError,
@@ -150,7 +150,7 @@ export function App({ url, adminToken, serverInfo, onServerInfoChange, onQuit, e
               disabled={activeModal !== null}
             />
           </box>
-          {showTelemetry && <Sidebar contextLimit={contextLimit} />}
+          {showTelemetry && <Sidebar contextLimit={contextLimit} url={url} adminToken={adminToken} />}
         </box>
         <StatusLine hint={taskHint ?? exitHint} />
         {activeModal && activeModal.kind !== "settings" && (

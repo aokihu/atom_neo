@@ -1,4 +1,5 @@
 import type {
+  SessionInitiator,
   SessionMessage,
   ToolResultEntry,
   InferenceFact,
@@ -40,6 +41,8 @@ export const decideTodoContinuation = (
 export class SessionContext {
   readonly sessionId: string;
   readonly createdAt: number;
+  readonly initiator: SessionInitiator;
+  lastTuiUsedAt = 0;
 
   #pendingPrediction?: any;
 
@@ -71,9 +74,10 @@ export class SessionContext {
   #currentTopic: string | null = null;
   #postCheckFingerprints: string[] = [];
 
-  constructor(sessionId: string, createdAt = Date.now()) {
+  constructor(sessionId: string, createdAt = Date.now(), initiator: SessionInitiator = { type: "unknown" }) {
     this.sessionId = sessionId;
     this.createdAt = createdAt;
+    this.initiator = Object.freeze({ ...initiator });
   }
 
   #lastSafeMsgCount: number = 0;
@@ -221,6 +225,8 @@ export class SessionContext {
     const closed = params.status !== "active";
     const ended = params.status === "completed" || params.status === "failed";
     return {
+      initiator: this.initiator,
+      lastTuiUsedAt: this.lastTuiUsedAt,
       schemaVersion: 1,
       checkpointRevision: params.checkpointRevision,
       sessionId: this.sessionId,
@@ -243,7 +249,8 @@ export class SessionContext {
   }
 
   static restore(state: PersistedSessionState, messages: readonly SessionMessage[]): SessionContext {
-    const session = new SessionContext(state.sessionId, state.createdAt);
+    const session = new SessionContext(state.sessionId, state.createdAt, state.initiator ?? { type: "unknown" });
+    session.lastTuiUsedAt = state.lastTuiUsedAt ?? 0;
     for (const message of messages) session.addMessage(message);
     session.#nextMessageSeq = Math.max(
       state.nextMessageSeq,

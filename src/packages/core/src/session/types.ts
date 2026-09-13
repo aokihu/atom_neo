@@ -1,4 +1,4 @@
-import type { ContinuationContext, InferenceFact, SessionMessage } from "@atom-neo/shared";
+import type { SessionInitiator, ContinuationContext, InferenceFact, SessionMessage } from "@atom-neo/shared";
 import type { TodoItem } from "./context";
 
 export type PersistedSessionStatus = "active" | "suspended" | "interrupted" | "completed" | "failed";
@@ -21,6 +21,8 @@ export type SessionArchiveState = {
 };
 
 export type PersistedSessionState = {
+  initiator?: SessionInitiator;
+  lastTuiUsedAt?: number;
   schemaVersion: 1;
   checkpointRevision: number;
   sessionId: string;

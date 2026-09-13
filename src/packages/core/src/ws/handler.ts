@@ -30,7 +30,7 @@ export function createWsHandlers(ctx: ServerContext) {
       const sid = (ws as any).data?.sessionId;
       if (sid) {
         ctx.broadcaster.add(ws, sid);
-        send(ws, WsMessages.Server.SessionReady, { sessionId: sid });
+        send(ws, WsMessages.Server.SessionReady, { sessionId: sid, messages: ctx.sessionStore?.load(sid)?.messages ?? [], contextTokens: ctx.sessionStore?.load(sid)?.contextTokens ?? 0, activeTaskIds: ctx.taskQueue.getSessionTasks(sid) });
       }
     },
     message(ws: ServerWebSocket<unknown>, msg: string | Buffer) {
@@ -48,6 +48,7 @@ export function createWsHandlers(ctx: ServerContext) {
           (ws as any).data.chatId = payload.chatId ?? "default";
 
           const text = payload.data?.text ?? "";
+          ctx.sessionStore?.get(sid, { type: "unknown" });
           if (text && ctx.sessionStore && !ctx.sessionStore.checkpointUserMessage(sid, text)) {
             send(ws, WsMessages.Control.Error, { message: "Failed to persist session message" });
             return;
