@@ -1,3 +1,4 @@
+import { localUrl, publishRuntimeFile, readRuntimeFile } from "./bootstrap/runtime-file";
 import { statSync } from "node:fs";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
@@ -14,7 +15,6 @@ import { AgentsCompilerService } from "./services/agents-compiler";
 import { MemoryService } from "./services/memory-service";
 import { SkillService } from "./services/skill-service";
 import { NetworkService } from "./services/network/network-service";
-import { resolveContextLimit } from "./packages/core/src/constants";
 
 declare global {
   var AI_SDK_LOG_WARNINGS: boolean;
@@ -34,7 +34,7 @@ function createLogger(args: BootArguments) {
   for (const mode of args.logModes) {
     switch (mode) {
       case "console":
-        if (args.mode === "core") hub.addSink(new StdoutSink());
+        if (args.mode && args.mode !== "tui") hub.addSink(new StdoutSink());
         break;
       case "pipe":
         if (args.logPipePath && isFifo(args.logPipePath)) {
@@ -75,6 +75,26 @@ export async function main(): Promise<void> {
     return;
   }
 
+  if (args.mode === "tui") {
+    const host = args.coreServer!;
+    if (!["localhost", "127.0.0.1", "::1"].includes(host)) throw new Error("TUI admin attach currently requires a local Core server");
+    const runtimeFile = readRuntimeFile(args.sandbox, "core");
+    await attachTui(localUrl(host, args.corePort!), runtimeFile.token);
+    return;
+  }
+  if (args.mode === "gateway") {
+    const runtimeFile = readRuntimeFile(args.sandbox, "gateway");
+    const response = await fetch(`${runtimeFile.url}/admin/clients`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-atom-admin-token": runtimeFile.token },
+      body: JSON.stringify({ action: args.action, clientId: args.clients }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    const result = await response.json();
+    console.log(JSON.stringify(result, null, 2));
+    if (!response.ok) process.exitCode = 1;
+    return;
+  }
+
   // Bootstrap
   loadEnv(args.sandbox);
   let loaded = loadConfig(args.sandbox);
@@ -86,7 +106,8 @@ export async function main(): Promise<void> {
   logger.debug("log level active", { level: args.logLevel, ignore: args.logIgnore });
 
   // First-Run Detection
-  if (isFirstRun(args.sandbox)) {
+  if (args.mode && Object.keys(appConfig.providers ?? {}).length === 0) throw new Error("Core requires provider configuration. Run --config with this sandbox first.");
+  if (!args.mode && isFirstRun(args.sandbox)) {
     logger.info("first run detected, launching setup wizard");
     await runFirstRunWizard(args.sandbox);
     markInstalled(args.sandbox);
@@ -122,85 +143,56 @@ export async function main(): Promise<void> {
   }));
   sm.register("skill", new SkillService({ sandbox: args.sandbox }));
   sm.register("network", new NetworkService());
-  await sm.startAll();
-
-  // Lazy import to ensure AI_SDK_LOG_WARNINGS is set before AI SDK loads
-  const { startCore } = await import("@atom-neo/core");
-
-  const port = args.port || 3100;
-
-  // Default (no --mode): core + TUI
-  if (!args.mode) {
-    const core = await startCore({ port, host: args.host, logger, sm, runtime, adminToken });
-    const { startTui } = await import("@atom-neo/tui");
-    const resolved = runtime.getResolvedModel("balanced");
+  let core: Awaited<ReturnType<typeof import("@atom-neo/core").startCore>> | undefined;
+  let gateway: Awaited<ReturnType<typeof import("@atom-neo/gateway").startGateway>> | undefined;
+  const cleanupFiles: (() => void)[] = [];
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = () => shutdownPromise ??= (async () => {
     try {
-      await startTui({
-        url: `http://${args.host}:${core.port}`,
-        adminToken,
-        serverInfo: {
-          port: core.port,
-          host: args.host,
-          model: resolved.model,
-          sandbox: args.sandbox,
-          version: VERSION,
-          tools: core.tools,
-          toolInfos: core.toolInfos,
-          mcpServerInfos: core.mcpServerInfos,
-          theme: appConfig.tui?.theme ?? "edex",
-          contextLimit: resolveContextLimit(
-            `${resolved.provider}/${resolved.model}`,
-            appConfig?.providers?.[resolved.provider]?.contextLimit,
-          ),
-          thinking: resolved.thinking,
-        },
-      });
+      if (gateway) await gateway.stop();
     } finally {
-      try {
-        await core.stop();
-      } finally {
-        await sm.stopAll();
+      try { if (core) await core.stop(); }
+      finally {
+        try { await sm.stopAll(); }
+        finally { for (const cleanup of cleanupFiles.reverse()) cleanup(); }
       }
     }
-    return;
-  }
-
-  // Explicit --mode: core or full
-  switch (args.mode) {
-    case "core": {
-      const core = await startCore({ port, host: args.host, logger, sm, runtime, adminToken });
-      const shutdown = async () => {
-        logger.info("shutting down core...");
-        try { await core.stop(); } finally { await sm.stopAll(); }
-        process.exit(0);
-      };
-      process.once("SIGINT", shutdown);
-      process.once("SIGTERM", shutdown);
-      break;
-    }
-
-    case "full": {
-      const core = await startCore({ port, host: args.host, logger, sm, runtime, adminToken });
+  })();
+  try {
+    await sm.startAll();
+    const { startCore } = await import("@atom-neo/core");
+    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, version: VERSION });
+    const url = localUrl(args.host, core.port);
+    cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
+    if (args.mode === "core-gateway" || args.mode === "full") {
       const { startGateway } = await import("@atom-neo/gateway");
-      const gateway = await startGateway({
-        port: appConfig.gateway?.port ?? 3000,
-        coreUrl: `http://${args.host}:${core.port}`,
-        clients: appConfig.gateway?.clients,
-      });
-      logger.info("gateway started alongside core", { corePort: core.port, gatewayPort: appConfig.gateway?.port ?? 3000 });
-      const shutdown = async () => {
-        logger.info("shutting down gateway and core...");
-        gateway.stop();
-        try { await core.stop(); } finally { await sm.stopAll(); }
-        process.exit(0);
-      };
-      process.once("SIGINT", shutdown);
-      process.once("SIGTERM", shutdown);
-      break;
+      const gatewayToken = crypto.randomUUID();
+      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken });
+      cleanupFiles.push(publishRuntimeFile(args.sandbox, "gateway", { url: localUrl("127.0.0.1", gateway.port), token: gatewayToken, instanceId: crypto.randomUUID() }));
     }
+    const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };
+    process.once("SIGTERM", onSignal);
+    if (args.mode) process.once("SIGINT", onSignal);
+    if (!args.mode) {
+      try { await attachTui(url, adminToken); }
+      finally { process.removeListener("SIGTERM", onSignal); await shutdown(); }
+    }
+  } catch (error) {
+    await shutdown();
+    throw error;
   }
 }
 
+async function attachTui(url: string, adminToken: string): Promise<void> {
+  const response = await fetch(`${url}/api/tui/attach`, {
+    method: "POST", headers: { "x-atom-admin-token": adminToken }, signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Cannot attach Core (${response.status}); check sandbox and running instance`);
+  const data = await response.json() as { sessionId: string; serverInfo: import("@atom-neo/tui").ServerInfo };
+  const { startTui } = await import("@atom-neo/tui");
+  await startTui({ url, adminToken, ...data });
+}
+
 if (import.meta.main) {
-  main();
+  main().catch(error => { console.error(error instanceof Error ? error.message : error); process.exit(1); });
 }

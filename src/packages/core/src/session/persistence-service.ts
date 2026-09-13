@@ -111,6 +111,17 @@ export class SessionPersistenceService {
     mkdirSync(this.#sessionsDir, { recursive: true, mode: 0o700 });
   }
 
+  listTuiSessions(): { sessionId: string; lastTuiUsedAt: number }[] {
+    const result: { sessionId: string; lastTuiUsedAt: number }[] = [];
+    for (const dir of readdirSync(this.#sessionsDir, { withFileTypes: true })) {
+      if (!dir.isDirectory()) continue;
+      const sessionDir = resolve(this.#sessionsDir, dir.name);
+      const state = this.#readSessionState(this.#resolveCurrentGeneration(sessionDir) ?? sessionDir);
+      if (state?.initiator?.type === "tui") result.push({ sessionId: state.sessionId, lastTuiUsedAt: state.lastTuiUsedAt ?? 0 });
+    }
+    return result;
+  }
+
   checkpoint(
     session: SessionContext,
     reason: SessionCheckpointReason,

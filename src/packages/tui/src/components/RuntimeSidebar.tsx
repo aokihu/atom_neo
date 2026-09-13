@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Message, ToolPhase } from "../types";
 import { useChatStore } from "../stores/chat";
 import { useTheme } from "./App";
+import { EmptyState } from "./EmptyState";
 import {
   buildNormalizedStreamActivity,
   estimateReceivedTokens,
@@ -113,7 +114,7 @@ export function RuntimeSidebar() {
         </box>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={colors.text.muted}>QUEUE</text>
-          <text fg={colors.text.muted}>{busy ? "1 ACTIVE" : "EMPTY"}</text>
+          {busy ? <text fg={colors.text.muted}>1 ACTIVE</text> : <EmptyState />}
         </box>
       </box>
 

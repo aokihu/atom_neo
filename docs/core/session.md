@@ -4,6 +4,25 @@
 
 ---
 
+## Session 发起者与默认 TUI attach（已实现，待验收）
+
+2026-09-12：本节已实现，验收等待用户指令。详见 [启动模式计划](../overview/startup-modes-plan.md)。
+
+| initiator.type | 附加字段 | 含义 |
+|------|------|------|
+| tui | 无 | TUI 创建会话 |
+| gateway | clientId、platform | 指定平台 Client 发起 |
+| internal | 无 | 内部任务独立创建 |
+| unknown | 无 | 历史或未声明来源，禁止猜测 ID |
+
+initiator 创建时确定、随 checkpoint 持久化；attach、内部续写和沿用会话的定时任务均不得修改。Task.platform 表示单次任务平台，Task.source 表示内部/外部，均不能替代 Session 发起者。Gateway 从认证后的 Client 配置提供身份，冲突输入不能覆盖既有 Session。
+
+默认 TUI attach 只筛选 tui 会话，持久化 lastTuiUsedAt，在成功 attach 或 TUI 用户输入时更新；后台任务和普通缓存访问不更新。查找包括磁盘 checkpoint，不只包含内存；同时间戳按稳定 ID 排序，无候选由 Core 原子创建。WebSocket 订阅与历史/活动任务快照需协调去重。
+
+旧数据缺 initiator 恢复为 unknown，不解析 session ID；下次正常 checkpoint 写入，不批量重写旧目录。已有 Gateway session ID 仍可能由同平台同用户共享，本轮不隐式迁移 ID；不同 clientId 冲突须明确返回错误，后续若需隔离再单独设计迁移。
+
+TUI 退出只断开其连接，Core 的任务与调度继续；默认同进程入口拥有 Core 时，由入口负责完整关闭。
+
 ## Part 1: SessionContext
 
 ## 1. Data Model

@@ -4,6 +4,10 @@
 
 ## 1. 设计目标
 
+定时任务栏显示当前 Core 的全部时间任务（跨 session），使用 /api/schedules 每 2 秒读取真实摘要：总数、启用数、名称、session/global 范围、等待/完成/过期/停用状态、下次执行时间。栏位位于右侧 Telemetry 栏，随右侧栏显示；内容可滚动，无任务显示空态，断连显示不可用，不保留看似实时的旧数据。独立 attach 与默认 TUI 行为一致，不显示任务 prompt。
+
+定时任务 widget 位于右侧 Telemetry 栏的 CONTEXT 下方，复用其他模块的标题颜色、背景、对齐与间距，不添加独立背景或边框。左侧 SCHEDULES，右侧任务总数；下方保留 3 行内容空间，零任务只显示 EMPTY。中间区域只保留对话和输入。Compact 模式随右侧栏一起隐藏，不移回对话区。
+
 - Conversation 始终是唯一的高对比主区域，视觉装饰不能挤压消息阅读空间。
 - 使用等宽文字、字符单元背景色、细 Box Drawing 边框、Block Gauge 和 Braille/Sparkline 字符表达状态。
 - 不使用渐变、阴影、透明层、图像、复杂曲线、微型字体或仅支持鼠标的交互。
@@ -11,6 +15,8 @@
 - 虚拟键盘不属于 Atom Neo；底部空间保留给消息输入和状态提示。
 
 ## 2. 视觉层级
+
+所有 widget 的 EMPTY 使用统一空状态组件，文字颜色为当前主题 muted 文字与侧栏背景的 60% / 40% 混合，比模块标题更低对比度。覆盖 SCHEDULES、MCP、TODO 与 Runtime QUEUE；正常数据及错误状态保持原样。
 
 1. 当前 Conversation、Tool execution 和 Command input。
 2. 当前 Assistant response 与本轮历史消息。

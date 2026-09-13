@@ -1,3 +1,5 @@
+export { isAdminRequest } from "./utils/admin-auth";
+
 // ── Types ──
 export {
   TaskSource,
@@ -11,6 +13,7 @@ export {
   MEMORY_KIND_VALUES,
 } from "./types";
 export type {
+  SessionInitiator,
   UUID,
   ISOTimeString,
   TaskItem,

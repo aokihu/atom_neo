@@ -1,5 +1,11 @@
 import type { ToolResultMetadata } from "./tool";
 
+export type SessionInitiator =
+  | { type: "tui" }
+  | { type: "gateway"; clientId: string; platform: string }
+  | { type: "internal" }
+  | { type: "unknown" };
+
 export type SessionMessage = {
   seq?: number;
   role: "user" | "assistant" | "system";

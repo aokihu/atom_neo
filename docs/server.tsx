@@ -28,6 +28,9 @@ import {
 // Static page imports (custom per-document pages)
 import ArchitecturePage from "./pages/architecture";
 import BootstrapPage from "./pages/bootstrap";
+import StartupValidationPage from "./pages/startup-validation";
+import StartupModesPlanPage from "./pages/startup-modes-plan";
+import GatewayPage from "./pages/gateway";
 import CodingConventionsPage from "./pages/coding-conventions";
 import ConfigurationPage from "./pages/configuration";
 import ConversationPage from "./pages/conversation";
@@ -66,6 +69,9 @@ type PageComponent = React.ComponentType<{
 const PAGE_REGISTRY: Record<string, PageComponent> = {
   architecture: ArchitecturePage,
   bootstrap: BootstrapPage,
+  "startup-validation": StartupValidationPage,
+  "startup-modes-plan": StartupModesPlanPage,
+  gateway: GatewayPage,
   "coding-conventions": CodingConventionsPage,
   configuration: ConfigurationPage,
   conversation: ConversationPage,

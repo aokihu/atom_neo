@@ -29,7 +29,7 @@ export function startTui(params: {
   adminToken?: string;
   serverInfo: ServerInfo;
 }): Promise<void> {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     createCliRenderer({
       exitOnCtrlC: false,
       screenMode: "alternate-screen",
@@ -46,8 +46,9 @@ export function startTui(params: {
       });
 
       const handleQuit = () => {
+        if (pressTimer) clearTimeout(pressTimer);
+        root.unmount();
         renderer.destroy();
-        process.exit(0);
       };
 
       let lastPressTime = 0;
@@ -80,6 +81,7 @@ export function startTui(params: {
         hintSetter.current = setExitHint;
         return React.createElement(App, {
           url: params.url,
+          sessionId: params.sessionId,
           adminToken: params.adminToken,
           serverInfo,
           onServerInfoChange: setServerInfo,
@@ -88,7 +90,8 @@ export function startTui(params: {
         });
       }
 
-      createRoot(renderer).render(React.createElement(AppRoot));
-    });
+      const root = createRoot(renderer);
+      root.render(React.createElement(AppRoot));
+    }).catch(reject);
   });
 }

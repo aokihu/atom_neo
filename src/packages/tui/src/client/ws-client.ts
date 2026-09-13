@@ -34,6 +34,8 @@ export class TuiClient {
   #chatId: string;
   #ws: WebSocket | null = null;
   #ready = false;
+  #onSnapshot?: (messages: { role: string; content: string; timestamp: number; seq?: number; visible?: boolean }[]) => void;
+  #onDisconnect?: () => void;
   #onDelta?: DeltaCallback;
   #onReason?: ReasonCallback;
   #onTool?: ToolCallback;
@@ -58,6 +60,10 @@ export class TuiClient {
     return new Promise((resolve, reject) => {
       this.#ws = new WebSocket(`${this.#url}/ws/${encodeURIComponent(this.#sessionId)}`);
 
+      const timer = setTimeout(() => {
+        reject(new Error("Core handshake timed out"));
+        this.#ws?.close();
+      }, 10_000);
       this.#ws.onopen = () => {};
 
       this.#ws.onmessage = (event) => {
@@ -72,7 +78,12 @@ export class TuiClient {
       };
 
       const handlers: Record<string, (p: Record<string, any>) => void> = {
-        [WsMessages.Server.SessionReady]: () => {
+        [WsMessages.Server.SessionReady]: (p) => {
+          this.#activeTaskIds = new Set(p.activeTaskIds ?? []);
+          this.#onSnapshot?.(p.messages ?? []);
+          this.#onBusyChange?.(this.#activeTaskIds.size > 0);
+          clearTimeout(timer);
+          if (typeof p.contextTokens === "number") this.#onContextTokens?.(p.contextTokens);
           this.#ready = true;
           resolve();
         },
@@ -139,8 +150,17 @@ export class TuiClient {
         },
       };
 
-      this.#ws.onerror = () => reject(new Error("WebSocket connection failed"));
-      this.#ws.onclose = () => { this.#ready = false; };
+      this.#ws.onerror = () => { clearTimeout(timer); reject(new Error("WebSocket connection failed")); };
+      this.#ws.onclose = () => {
+        clearTimeout(timer);
+        this.#ready = false;
+        reject(new Error("Connection closed before ready"));
+        for (const pending of this.#pending) pending.reject(new Error("Core disconnected; task may still be running"));
+        this.#pending = [];
+        this.#activeTaskIds.clear();
+        this.#onBusyChange?.(false);
+        this.#onDisconnect?.();
+      };
     });
   }
 
@@ -152,7 +172,7 @@ export class TuiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        sessionId: this.#sessionId, chatId: this.#chatId, platform: "tui", data: { text },
+        sessionId: this.#sessionId, chatId: this.#chatId, platform: "tui", initiator: { type: "tui" }, data: { text },
       }),
     });
     const response = await res.json().catch(() => ({})) as { taskId?: unknown; error?: unknown };
@@ -166,6 +186,9 @@ export class TuiClient {
       this.#pending.push({ resolve, reject, text: "", rootTaskId: taskId });
     });
   }
+
+  onSnapshot(cb: (messages: { role: string; content: string; timestamp: number; seq?: number; visible?: boolean }[]) => void): void { this.#onSnapshot = cb; }
+  onDisconnect(cb: () => void): void { this.#onDisconnect = cb; }
 
   onDelta(cb: DeltaCallback): void { this.#onDelta = cb; }
   onReason(cb: ReasonCallback): void { this.#onReason = cb; }
@@ -181,6 +204,7 @@ export class TuiClient {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));
     this.#pending = [];
     this.#activeTaskIds.clear();
+    this.#onDisconnect = undefined;
     this.#ws?.close();
     this.#ready = false;
   }

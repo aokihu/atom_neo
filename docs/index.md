@@ -9,7 +9,9 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [architecture.md](./overview/architecture.md) | 系统架构总览 | 开始前必读 |
+| [startup-validation.md](./overview/startup-validation.md) | 启动模式验收：常规 1036 通过，进程 8 通过/2 失败 | 修复验收失败与回归验证 |
 | [project-structure.md](./overview/project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
+| [startup-modes-plan.md](./overview/startup-modes-plan.md) | 启动模式、TUI attach、Client 控制与 Session 发起者（已实现，待验收） | 开发前确认与分阶段验收 |
 | [bootstrap.md](./overview/bootstrap.md) | 启动序列、初始化顺序 | 理解启动流程 |
 | [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 

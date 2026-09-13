@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useChatStore } from "../stores/chat";
 import { useTheme } from "./App";
+import { ScheduleBar } from "./ScheduleBar";
+import { EmptyState } from "./EmptyState";
 
 export const SIDEBAR_WIDTH = 30;
 export const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - 3;
@@ -22,7 +24,7 @@ const TODO_ICON: Record<string, string> = {
   cancelled: "✕",
 };
 
-function TelemetrySection({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
+export function TelemetrySection({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
   const { colors } = useTheme();
   return (
     <box
@@ -39,7 +41,7 @@ function TelemetrySection({ title, meta, children }: { title: string; meta?: str
     </box>
   );
 }
-export function Sidebar({ contextLimit }: { contextLimit: number }) {
+export function Sidebar({ contextLimit, url, adminToken }: { contextLimit: number; url: string; adminToken?: string }) {
   const { colors } = useTheme();
   const contextTokens = useChatStore(state => state.contextTokens);
   const todoItems = useChatStore(state => state.todoItems);
@@ -77,6 +79,8 @@ export function Sidebar({ contextLimit }: { contextLimit: number }) {
         <text fg={colors.text.secondary}>{`${contextTokens.toLocaleString()} / ${contextLimit.toLocaleString()}`}</text>
       </TelemetrySection>
 
+      <ScheduleBar url={url} adminToken={adminToken} />
+
       <TelemetrySection title="TOOLS" meta={`${runningTools} RUN`}>
         {entries.length === 0
           ? (
@@ -107,7 +111,7 @@ export function Sidebar({ contextLimit }: { contextLimit: number }) {
 
       <TelemetrySection title="MCP" meta={`${mcpOnline}/${mcpServers.length}`}>
         {mcpServers.length === 0
-          ? <text fg={colors.text.muted}>EMPTY</text>
+          ? <EmptyState />
           : mcpServers.slice(0, 4).map(server => (
             <box key={server.name} flexDirection="row" justifyContent="space-between">
               <text fg={colors.text.muted}>{server.name}</text>
@@ -120,7 +124,7 @@ export function Sidebar({ contextLimit }: { contextLimit: number }) {
 
       <TelemetrySection title="TODO" meta={String(todoItems.length)}>
         {todoItems.length === 0
-          ? <text fg={colors.text.muted}>EMPTY</text>
+          ? <EmptyState />
           : todoItems.slice(0, 5).map((item, index) => {
             const iconColor = item.status === "in_progress" ? colors.status.warning
               : item.status === "completed" ? colors.status.success

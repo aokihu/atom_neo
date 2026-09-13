@@ -4,7 +4,8 @@
 DSML 或 `toolEffectSummary`。
 
 - `context.ts`：内存中的 Session 状态、消息序号、TODO 与 Continuation。
-- `store.ts`：Session 缓存、恢复、挂起与淘汰。
+- `store.ts`：Session 缓存、恢复、挂起、淘汰与默认 TUI 会话选择。
+- `initiator` 与 `lastTuiUsedAt` 随 checkpoint 保存；历史缺字段保留 unknown，不解析 ID。
 - `persistence-service.ts`：目录 checkpoint、JSONL 分段、恢复和历史查询。
 - `types.ts`：持久化状态、归档 receipt 与查询结果类型。
 - `context.test.ts`：Session 状态、消息序号和 TODO 续跑规则测试。

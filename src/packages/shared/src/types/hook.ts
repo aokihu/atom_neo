@@ -17,4 +17,6 @@ export type Hook = {
   readonly createdAt: number;
   updatedAt: number;
   lastFiredAt?: number;
+  nextFireAt?: number;
+  expiredAt?: number;
 };

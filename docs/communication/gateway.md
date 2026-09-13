@@ -2,6 +2,26 @@
 
 > **Purpose**: Gateway 是 Atom Neo 的平台 Client 中转层。通过管理平台 Client 子进程，将微信、Telegram 等外部平台的消息标准化后路由到 Core 引擎。
 
+## Gateway Client 控制模式（已实现，待验收）
+
+2026-09-12：本节代码已实现；测试和进程级验收等待用户指令。详见 [启动模式计划](../overview/startup-modes-plan.md)。
+
+| 入口 | 职责 |
+|------|------|
+| --mode core-gateway | 启动 Core 与 Gateway Server，不启动 TUI |
+| --mode gateway --clients <client_name> | 控制已配置的指定 Client |
+| --mode gateway（省略 clients） | 控制全部配置 Clients |
+
+clients 使用配置 ID，空值不是全部。动作参数为必填 --action start|stop。控制命令为短时进程，Gateway 不在线则报错，不自动启动 Server。已运行 start、已停止 stop 幂等，全部操作报告逐项结果及失败退出码。
+
+新增 POST /admin/clients 本机管理接口，与 /gateway/* 平台消息接口分开认证；平台 Client secret 没有管理权限。建议受限权限运行描述供控制命令发现 Gateway 地址及管理凭据；实例校验和清理归属遵循启动计划。
+
+ClientManager 复用 spawn/stop，增加公开按 ID 操作、期望状态、可取消重启计时器与进程实例检查。手动停止不被重启回调复活；旧 secret 在退出/重启时撤销；退避失败次数不在每次 spawn 清零。Gateway.stop 必须等待 stopAll，失败启动回滚资源。启动就绪应检查健康，不把 spawn 成功等同 ready。
+
+Gateway 向 Core 提交创建信息 initiator={type:gateway,clientId,platform}，身份取认证后的配置。现有 ID 规则暂不迁移；不同 Client 对已有会话的发起者冲突必须拒绝覆盖。
+
+停止 Client 不取消 Core 已接受任务；投递失败沿用现有错误处理，不新增补投递队列。定时任务主动向平台发送结果不属于此项控制改造。
+
 ## 1. 架构
 
 ```
@@ -23,7 +43,7 @@
 
 ## 2. 路由
 
-Gateway 仅暴露一类路由，仅供 Client 子进程使用：
+当前实现仅暴露一类路由，仅供 Client 子进程使用；新增管理接口见上节：
 
 | 路由前缀 | 验证方式 | 用户 | 用途 |
 |---------|---------|------|------|
@@ -96,7 +116,7 @@ Gateway 仅暴露一类路由，仅供 Client 子进程使用：
 | 通讯 | Client 每次 HTTP 调用都带 `X-Gateway-Secret` Header |
 | 崩溃重启 | Gateway 自动生成新 secret，旧 secret 立即失效 |
 
-Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。Secret 与 Client 进程生命周期绑定，进程死则 Secret 死。
+Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。设计要求 Secret 与 Client 进程生命周期绑定；异常退出/重启路径现已撤销旧 Secret，等待验收。
 
 ## 5. Client Manager
 

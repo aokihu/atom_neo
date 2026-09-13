@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 export type { LogLevel } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
 
-export type Mode = "core" | "tui" | "full";
+export type Mode = "core" | "tui" | "core-gateway" | "gateway" | "full";
 export type LogMode = "console" | "pipe" | "file";
 
 export type BootArguments = {
@@ -19,6 +19,10 @@ export type BootArguments = {
   logModes: LogMode[];
   logFile?: string;
   logPipePath?: string;
+  coreServer?: string;
+  corePort?: number;
+  clients?: string;
+  action?: "start" | "stop";
   config: boolean;
 };
 
@@ -29,9 +33,13 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
       wizard: { type: "boolean" },
       help: { type: "boolean", short: "h", default: false },
       mode: { type: "string", short: "m" },
-      port: { type: "string", default: "0" },
+      port: { type: "string", default: "3100" },
       host: { type: "string", default: "127.0.0.1" },
       sandbox: { type: "string" },
+      "core-server": { type: "string" },
+      "core-port": { type: "string" },
+      clients: { type: "string" },
+      action: { type: "string" },
       config: { type: "boolean", default: false },
       log: { type: "string", multiple: true, default: [] },
       "log-level": { type: "string", default: "debug" },
@@ -63,9 +71,20 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
     t.kind === "option" && t.name === "log-ignore",
   ) ?? false;
 
+  const mode = modeExplicit ? validateMode(values.mode as string) : undefined;
+  if (mode === "tui" && (!values["core-server"] || !values["core-port"])) throw new Error("TUI requires --core-server and --core-port");
+  if (mode === "gateway" && !values.action) throw new Error("Gateway control requires --action start|stop");
+  if (mode !== "tui" && (values["core-server"] !== undefined || values["core-port"] !== undefined)) throw new Error("Core connection options require --mode tui");
+  if (mode !== "gateway" && (values.clients !== undefined || values.action !== undefined)) throw new Error("Client control options require --mode gateway");
+  if (values.clients !== undefined && !(values.clients as string).trim()) throw new Error("--clients cannot be empty");
+  if ((mode === "tui" || mode === "gateway") && tokens?.some(t => t.kind === "option" && ["host", "port"].includes(t.name))) throw new Error("--host/--port are server listening options");
   return {
-    mode: modeExplicit ? validateMode(values.mode as string) : undefined,
-    port: parseInt(values.port as string) || 0,
+    coreServer: values["core-server"] as string | undefined,
+    corePort: values["core-port"] === undefined ? undefined : parsePort(values["core-port"] as string, false),
+    clients: values.clients as string | undefined,
+    action: values.action === undefined ? undefined : validateEnum(values.action as string, ["start", "stop"] as const, "action"),
+    mode,
+    port: parsePort(values.port as string, true),
     host: values.host as string,
     sandbox,
     logLevel: validateLogLevel(values["log-level"] as string),
@@ -89,9 +108,13 @@ USAGE
   ${binName} [OPTIONS]
 
 OPTIONS
-  -m, --mode <mode>      运行模式: core | full (默认: core + TUI 交互模式)
-  --port <port>           监听端口 (默认: 0, 随机)
+  -m, --mode <mode>      运行模式: core | core-gateway | tui | gateway (默认: core + TUI)
+  --port <port>           监听端口 (默认: 3100；0 为随机)
   --host <host>           绑定地址 (默认: 127.0.0.1)
+  --core-server <host>    TUI attach 的 Core 主机（必填）
+  --core-port <port>      TUI attach 的 Core 端口（必填）
+  --action <start|stop>   Gateway Client 控制动作（必填）
+  --clients <id>         指定 Client；省略则操作全部
   --sandbox <path>        沙箱目录 (默认: 当前目录)
   --config                启动配置向导 (API Key / 模型 / Provider / 主题)
   --log <mode>            日志输出模式: console | pipe | file (可叠加使用)
@@ -104,13 +127,13 @@ OPTIONS
 EXAMPLES
   ${binName} --sandbox ./sandbox
   ${binName} --mode core --port 3100 --log=console
-  ${binName} --mode full --port 3100 --log=console
+  ${binName} --mode core-gateway --port 3100 --log=console
   ${binName} --config --sandbox ./sandbox
 `);
 }
 
 function validateMode(v: string): Mode {
-  return validateEnum(v, ["core", "tui", "full"] as const, "mode");
+  return validateEnum(v, ["core", "tui", "core-gateway", "gateway", "full"] as const, "mode");
 }
 
 function validateLogLevel(v: string): LogLevel {
@@ -124,4 +147,10 @@ function validateLogMode(v: string): LogMode {
 function validateEnum<T extends string>(v: string, valid: readonly T[], label: string): T {
   if (valid.includes(v as T)) return v as T;
   throw new Error(`Invalid ${label}: ${v}. Expected ${valid.join(" | ")}`);
+}
+
+function parsePort(value: string, allowZero: boolean): number {
+  const port = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isInteger(port) || port < (allowZero ? 0 : 1) || port > 65535) throw new Error(`Invalid port: ${value}`);
+  return port;
 }

@@ -89,6 +89,14 @@ export class TaskQueue {
     return this.#processing.has(taskId);
   }
 
+  getSessionTasks(sessionId: string): string[] {
+    return [...this.#waitingQueue, ...this.#activeQueue, ...this.#processing.values()].filter(t => t.sessionId === sessionId).map(t => t.id);
+  }
+
+  getHookTasks(): TaskItem[] {
+    return [...this.#waitingQueue, ...this.#activeQueue, ...this.#processing.values()].filter(t => t.origin?.type === "hook");
+  }
+
   get waiting(): number {
     return this.#waitingQueue.length;
   }
