@@ -15,7 +15,7 @@ import type {
   PipelineEventBus,
   SnapshotRecordRef,
 } from "@atom-neo/shared";
-import { compileContextSnapshot } from "./compiler";
+import { compileContextSnapshot, validateContextFormat } from "./compiler";
 
 type MutableBucket = {
   id: string;
@@ -147,6 +147,7 @@ export class ContextService {
   }
 
   put(request: ContextPutRequest): Readonly<ContextEntry> {
+    validateContextFormat(request.entry);
     if (request.entry.channel === "instructions" && request.entry.trust === "untrusted") {
       throw new Error(`Untrusted context cannot use the instructions channel: ${request.entry.key}`);
     }
@@ -230,6 +231,7 @@ export class ContextService {
           source: entry.source,
           scope: bucket.scope,
           channel: entry.channel,
+          format: entry.format,
           retention: entry.pinned
             ? "pinned" as const
             : entry.consumeOnCommit

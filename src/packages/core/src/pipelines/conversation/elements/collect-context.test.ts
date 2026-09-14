@@ -1,7 +1,6 @@
+import { contextRows as rows } from "../../../context/test-helpers";
 import { describe, expect, test } from "bun:test";
-import { decode } from "@toon-format/toon";
 import { BusEvents } from "@atom-neo/shared";
-import type { ContextSnapshot } from "@atom-neo/shared";
 import { ContextService } from "../../../context/context-service";
 import { SessionContext } from "../../../session/context";
 import { ToolRecordStore } from "../../../tools/tool-record-store";
@@ -22,11 +21,6 @@ function makeSession() {
     tokenUsage: { total: 0 },
     currentTopic: "knowledge.weather.typhoon",
   };
-}
-
-function rows(snapshot?: ContextSnapshot): Array<Record<string, unknown>> {
-  if (!snapshot) return [];
-  return (decode(snapshot.content) as { context: Array<Record<string, unknown>> }).context;
 }
 
 async function buildSnapshot(params: {
@@ -153,7 +147,7 @@ describe("conversation context pipeline", () => {
       task: { id: "conversation-current" },
     });
     const row = rows(result.contextSnapshot).find(item => item.source === "tool-record-store");
-    const content = String(row?.content);
+    const content = JSON.stringify(row?.content);
 
     expect(row?.channel).toBe("tool");
     expect(content).toContain(group.id);
@@ -177,8 +171,8 @@ describe("conversation context pipeline", () => {
 
     expect(result.mode).toBe("formatted");
     const contextRows = rows(result.contextSnapshot);
-    expect(contextRows.some(row => row.content === "workspace rules")).toBe(true);
-    expect(contextRows.some(row => row.content === "topic skill")).toBe(true);
+    expect(result.contextSnapshot?.content).toContain("workspace rules");
+    expect(result.contextSnapshot?.content).toContain("topic skill");
     expect(contextRows.some(row => row.content === "previous answer")).toBe(false);
     expect(contextRows.some(row => row.content === "current request")).toBe(false);
     expect(result.userMessages?.map(message => message.content)).toEqual([

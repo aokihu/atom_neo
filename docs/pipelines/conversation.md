@@ -20,7 +20,7 @@ collect-prompts (source)
 | 1 | `collect-prompts` | 按 Prediction 分类从 Session 选择历史，始终保留当前 User 原文 | `initial → streaming` |
 | 2 | `record-context` | 将 System、AGENTS、Skill、环境与 TODO 记录到 ContextService，同时生成去重后的 messages | `streaming → context_recorded` |
 | 3 | `apply-source-context` | 应用显式 Source Context，不读取 Tool 审计历史 | mode 不变 |
-| 4 | `collect-context` | 从 ContextService 创建不可变 TOON Snapshot | `context_recorded → formatted` |
+| 4 | `collect-context` | 从 ContextService 创建不可变静态文本 + 动态 TOON Snapshot | `context_recorded → formatted` |
 | 5 | `stream-llm` | 调用单 step AI SDK，手工执行 Tool Loop，更新治理 metadata 和 Context 投影 | `formatted → executing` |
 | 6 | `token-ratio` | 基于输入上限和输出保留预算计算占用比 | mode 不变 |
 | 7 | `check-follow-up` | 区分无计划续写和 TODO 续跑 | `executing → ready_to_finalize` |
@@ -42,7 +42,7 @@ ContextService entries
   ├── durable Memory projections
   └── conversation summary / archive index
           ↓ collect-context
-      TOON Context Snapshot
+      混合 Context Snapshot
           ↓
 AI SDK
   system: snapshot.content

@@ -16,6 +16,8 @@
 
 ## 2. 视觉层级
 
+左右侧栏内部模块统一无边框，使用相同的左右 1 列内边距和模块间 1 行留白。左侧 SESSION、PIPELINE、STREAM、STATS 不增加左侧装饰线，仅保留侧栏与对话区之间的外侧分隔线。
+
 所有 widget 的 EMPTY 使用统一空状态组件，文字颜色为当前主题 muted 文字与侧栏背景的 60% / 40% 混合，比模块标题更低对比度。覆盖 SCHEDULES、MCP、TODO 与 Runtime QUEUE；正常数据及错误状态保持原样。
 
 1. 当前 Conversation、Tool execution 和 Command input。
@@ -25,8 +27,8 @@
 
 Wide 模式使用背景 Block 和暗色空列形成区域分割，不使用贯穿全屏的高亮线框。
 Runtime 与 Telemetry 的正文亮度约为 Conversation 的 `45% - 55%`；只有当前运行阶段、
-Context 阈值、Tool error 和未完成 TODO 使用语义色。侧栏标题左侧与 Tool execution
-仅允许一个字符单元宽的细边框。
+Context 阈值、Tool error 和未完成 TODO 使用语义色。侧栏内部模块不使用边框；Tool execution
+可使用一个字符单元宽的细边框。
 
 ## 3. 响应式布局
 

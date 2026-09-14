@@ -39,7 +39,7 @@ export function formatToolBatchBlock(decision: Extract<ToolBatchDecision, { allo
 }
 
 export function toSchemaOnlyTools(tools: Record<string, any>): Record<string, any> {
-  return Object.fromEntries(Object.entries(tools).map(([name, value]) => {
+  return Object.fromEntries(Object.entries(tools).sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => {
     if (!value || typeof value !== "object") return [name, value];
     const { execute: _execute, ...definition } = value;
     return [name, definition];

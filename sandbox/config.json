@@ -3,15 +3,15 @@
   "theme": "dark",
   "providerProfiles": {
     "advanced": "deepseek/deepseek-v4-pro",
-    "balanced": "deepseek/deepseek-v4-flash",
-    "basic": "deepseek/deepseek-v4-flash"
+    "balanced": "deepseek/deepseek-flash",
+    "basic": "deepseek/deepseek-flash"
   },
   "providers": {
     "deepseek": {
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": [
         "deepseek-v4-pro",
-        "deepseek-v4-flash"
+        "deepseek-flash"
       ],
       "thinking": "enabled"
     }

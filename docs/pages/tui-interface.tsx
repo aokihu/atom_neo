@@ -13,6 +13,7 @@ export default function TuiInterfacePage({ content, title, description, category
       />
 
       <Section title="设计边界">
+        <p>左右侧栏内部模块统一无边框，左右内边距为 1 列，模块间留白为 1 行。左侧 SESSION、PIPELINE、STREAM、STATS 与右侧一致，仅保留侧栏和对话区之间的外侧分隔线。</p>
         <p>所有 widget 的 EMPTY 统一使用比标题更淡的颜色：当前主题 muted 文字与背景按 60% / 40% 混合，适用于定时任务、MCP、TODO 和 Runtime 队列；正常数据与异常提示不变。</p>
         <Callout type="info" title="Core 定时任务栏">右侧 Telemetry 栏的 CONTEXT 下方显示当前 Core 的全部时间任务，Compact 模式随右侧栏隐藏，中间只保留对话和输入。每 2 秒同步数量、名称、范围、状态和下次执行时间；支持滚动，空列表与断连分别显示。独立 attach 使用同一受认证接口，不展示任务 prompt。</Callout>
         <p>定时任务复用右侧其他模块的背景、标题颜色、对齐与间距，无独立背景或边框。标题左侧 SCHEDULES，右侧任务总数；下方固定保留 3 行，零任务仅显示 EMPTY。</p>
