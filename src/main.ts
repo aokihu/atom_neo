@@ -79,7 +79,7 @@ export async function main(): Promise<void> {
     const host = args.coreServer!;
     if (!["localhost", "127.0.0.1", "::1"].includes(host)) throw new Error("TUI admin attach currently requires a local Core server");
     const runtimeFile = readRuntimeFile(args.sandbox, "core");
-    await attachTui(localUrl(host, args.corePort!), runtimeFile.token);
+    await attachTui(localUrl(host, args.corePort!), runtimeFile.token, args.continueSession);
     return;
   }
   if (args.mode === "gateway") {
@@ -174,7 +174,7 @@ export async function main(): Promise<void> {
     process.once("SIGTERM", onSignal);
     if (args.mode) process.once("SIGINT", onSignal);
     if (!args.mode) {
-      try { await attachTui(url, adminToken); }
+      try { await attachTui(url, adminToken, args.continueSession); }
       finally { process.removeListener("SIGTERM", onSignal); await shutdown(); }
     }
   } catch (error) {
@@ -183,9 +183,10 @@ export async function main(): Promise<void> {
   }
 }
 
-async function attachTui(url: string, adminToken: string): Promise<void> {
+async function attachTui(url: string, adminToken: string, continueSession: boolean): Promise<void> {
   const response = await fetch(`${url}/api/tui/attach`, {
-    method: "POST", headers: { "x-atom-admin-token": adminToken }, signal: AbortSignal.timeout(10_000),
+    method: "POST", headers: { "x-atom-admin-token": adminToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ continue: continueSession }), signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Cannot attach Core (${response.status}); check sandbox and running instance`);
   const data = await response.json() as { sessionId: string; serverInfo: import("@atom-neo/tui").ServerInfo };

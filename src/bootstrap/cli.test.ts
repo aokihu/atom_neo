@@ -39,3 +39,13 @@ describe("parseArguments sandbox paths", () => {
     expect(() => parseArguments(["--sandbox="])).toThrow("--sandbox cannot be empty");
   });
 });
+
+
+describe("parseArguments session continuation", () => {
+  test.each([{ args: [], expected: false }, { args: ["-c"], expected: true }, { args: ["--continue"], expected: true },
+    { args: ["--mode", "tui", "--core-server", "localhost", "--core-port", "3100", "-c"], expected: true }])("parses $args", ({ args, expected }) => {
+    const parsed = parseArguments(args);
+    if (parsed === "help") throw new Error("Unexpected help");
+    expect(parsed.continueSession).toBe(expected);
+  });
+});

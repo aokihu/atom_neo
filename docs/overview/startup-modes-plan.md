@@ -2,6 +2,16 @@
 
 > **Purpose**: 明确 Core 常驻、独立 TUI attach、Gateway Client 控制和 Session 发起者的分阶段实施契约。
 
+## 2026-09-17：显式继续上次会话
+
+默认启动及独立 `--mode tui` attach 每次新建 TUI Session。只有 `-c` / `--continue`
+才恢复当前 sandbox 中 `initiator.type=tui` 且 lastTuiUsedAt 最近的会话（包括磁盘 checkpoint）。
+没有候选时新建；旧会话和 Gateway/internal 会话不删除、不覆盖。纯 Core/Gateway 无 TUI 入口不创建会话。
+`POST /api/tui/attach` 接受可选 JSON `{ "continue": true }`；空请求或省略该字段默认新建，
+非法 JSON/非布尔值返回 400。并发普通 attach 各自新建；并发 continue 沿用已有同步选择逻辑。
+WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧版本描述中的“默认恢复”已由本节替代。
+
+
 ## 开发进度（2026-09-12）
 
 2026-09-14：纳入 v1.15.0。五种启动模式、Session 明确发起者、sandbox 参数和首次向导取消修复已完成；定时任务仅随 Core 运行，恢复不补跑过期任务。TUI 定时信息位于右侧栏，所有 widget 的 EMPTY 使用统一低对比度样式。此前两项验收失败均已修复，最新结果见验证报告；下文保留开发阶段历史。
