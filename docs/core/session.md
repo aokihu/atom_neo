@@ -4,6 +4,8 @@
 
 ## 2026-09-17：显式继续上次会话
 
+该行为随 `v1.15.2` 发布：默认启动新建 TUI Session，只有 `-c` / `--continue` 才恢复上次会话。
+
 默认启动及独立 `--mode tui` attach 每次新建 TUI Session。只有 `-c` / `--continue`
 才恢复当前 sandbox 中 `initiator.type=tui` 且 lastTuiUsedAt 最近的会话（包括磁盘 checkpoint）。
 没有候选时新建；旧会话和 Gateway/internal 会话不删除、不覆盖。纯 Core/Gateway 无 TUI 入口不创建会话。
