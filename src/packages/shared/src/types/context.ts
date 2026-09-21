@@ -44,6 +44,7 @@ export type ContextEntry = {
   key: string;
   source: string;
   channel: ContextChannel;
+  format?: "text" | "toon";
   trust: ContextTrust;
   priority: number;
   revision: number;
@@ -80,6 +81,7 @@ export type ContextFragment = {
   source: string;
   scope: ContextScope;
   channel: ContextChannel;
+  format?: "text" | "toon";
   retention: ContextRetention;
   priority: number;
   revision: number;
@@ -101,6 +103,7 @@ export type ContextManifestEntry = {
   source: string;
   scope: ContextScope;
   channel: ContextChannel;
+  format?: "text" | "toon";
   retention: ContextRetention;
   revision: number;
   estimatedTokens: number;

@@ -27,10 +27,12 @@ export class ApplySourceContextElement extends BaseElement<ConversationFlowState
 
     this.#contextService.put({
       scope: "task",
+      owner: input.contextOwner,
       entry: {
         key: "source-style",
         source: "prompt-registry",
         channel: "instructions",
+        format: "text",
         trust: "trusted",
         priority: 800,
         pinned: false,

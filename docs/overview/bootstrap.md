@@ -2,6 +2,16 @@
 
 > **Purpose**: 当前启动行为与待实施的五模式启动、TUI attach 和资源关闭契约。
 
+## 2026-09-17：显式继续上次会话
+
+默认启动及独立 `--mode tui` attach 每次新建 TUI Session。只有 `-c` / `--continue`
+才恢复当前 sandbox 中 `initiator.type=tui` 且 lastTuiUsedAt 最近的会话（包括磁盘 checkpoint）。
+没有候选时新建；旧会话和 Gateway/internal 会话不删除、不覆盖。纯 Core/Gateway 无 TUI 入口不创建会话。
+`POST /api/tui/attach` 接受可选 JSON `{ "continue": true }`；空请求或省略该字段默认新建，
+非法 JSON/非布尔值返回 400。并发普通 attach 各自新建；并发 continue 沿用已有同步选择逻辑。
+WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧版本描述中的“默认恢复”已由本节替代。
+
+
 ## 开发进度（2026-09-12）
 
 代码已实现，等待用户指令验收。已完成五模式分流、本机 TUI attach、Session initiator/lastTuiUsedAt 持久化、默认 TUI 会话恢复、Gateway 单个/全部 Client 启停与异步关闭。

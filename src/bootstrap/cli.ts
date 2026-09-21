@@ -24,6 +24,7 @@ export type BootArguments = {
   clients?: string;
   action?: "start" | "stop";
   config: boolean;
+  continueSession: boolean;
 };
 
 export function parseArguments(rawArgs: string[]): BootArguments | "help" {
@@ -31,6 +32,7 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
     args: rawArgs,
     options: {
       wizard: { type: "boolean" },
+      continue: { type: "boolean", short: "c", default: false },
       help: { type: "boolean", short: "h", default: false },
       mode: { type: "string", short: "m" },
       port: { type: "string", default: "3100" },
@@ -95,6 +97,7 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
     logFile: values["log-file"] as string | undefined,
     logPipePath: values["log-pipepath"] as string | undefined,
     config: values.config as boolean,
+    continueSession: values.continue as boolean,
   };
 }
 
@@ -116,6 +119,7 @@ OPTIONS
   --action <start|stop>   Gateway Client 控制动作（必填）
   --clients <id>         指定 Client；省略则操作全部
   --sandbox <path>        沙箱目录 (默认: 当前目录)
+  -c, --continue         继续上次 TUI Session（默认新建；无历史时新建）
   --config                启动配置向导 (API Key / 模型 / Provider / 主题)
   --log <mode>            日志输出模式: console | pipe | file (可叠加使用)
   --log-level <level>     日志级别: debug | info | warn | error (默认: debug)
@@ -126,6 +130,7 @@ OPTIONS
 
 EXAMPLES
   ${binName} --sandbox ./sandbox
+  ${binName} --continue --sandbox ./sandbox
   ${binName} --mode core --port 3100 --log=console
   ${binName} --mode core-gateway --port 3100 --log=console
   ${binName} --config --sandbox ./sandbox

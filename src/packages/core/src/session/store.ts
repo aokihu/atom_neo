@@ -60,10 +60,10 @@ export class SessionStore {
     return restoredSession;
   }
 
-  attachTui(): SessionContext {
-    const candidates = new Map((this.#persistence?.listTuiSessions() ?? []).map(s => [s.sessionId, s]));
+  attachTui(continueSession = false): SessionContext {
+    const candidates = new Map((continueSession ? this.#persistence?.listTuiSessions() ?? [] : []).map(s => [s.sessionId, s]));
     for (const session of this.#sessions.values()) {
-      if (session.initiator.type === "tui") candidates.set(session.sessionId, session);
+      if (continueSession && session.initiator.type === "tui") candidates.set(session.sessionId, session);
     }
     const latest = [...candidates.values()].sort((a, b) => b.lastTuiUsedAt - a.lastTuiUsedAt || a.sessionId.localeCompare(b.sessionId))[0];
     const session = latest ? this.get(latest.sessionId) : this.get(`tui-${crypto.randomUUID()}`, { type: "tui" });

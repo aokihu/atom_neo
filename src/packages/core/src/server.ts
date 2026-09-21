@@ -650,7 +650,18 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         if (url.pathname === `${API_PREFIX}tui/attach` && method === "POST") {
           if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
           if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
-          const session = sessionStore.attachTui();
+          let options: unknown;
+          try {
+            const body = await req.text();
+            options = body.trim() ? JSON.parse(body) : {};
+          } catch {
+            return Response.json({ error: "Invalid attach JSON" }, { status: 400 });
+          }
+          if (!options || typeof options !== "object" || Array.isArray(options)
+            || ("continue" in options && typeof options.continue !== "boolean")) {
+            return Response.json({ error: "continue must be a boolean" }, { status: 400 });
+          }
+          const session = sessionStore.attachTui("continue" in options && options.continue === true);
           const model = runtime.getResolvedModel?.("balanced") ?? resolved;
           return Response.json({ sessionId: session.sessionId, serverInfo: {
             port: srv.port, host, sandbox, version: deps.version ?? "unknown", model: model.model,

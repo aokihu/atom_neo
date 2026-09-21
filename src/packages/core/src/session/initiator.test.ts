@@ -38,7 +38,7 @@ test("legacy TUI-looking ID restores as unknown and is not selected for attach",
   writeFileSync(file, JSON.stringify(state));
   const second = setup(first.root);
   expect(second.store.get("tui-legacy").initiator).toEqual({ type: "unknown" });
-  expect(second.store.attachTui().sessionId).not.toBe("tui-legacy");
+  expect(second.store.attachTui(true).sessionId).not.toBe("tui-legacy");
 });
 
 test("latest explicit TUI metadata wins over IDs, internal access and Gateway activity", () => {
@@ -50,6 +50,27 @@ test("latest explicit TUI metadata wins over IDs, internal access and Gateway ac
   first.store.save(gateway.sessionId, "message");
   const second = setup(first.root);
   second.store.get("a"); second.store.get("tui-fake");
-  expect(second.store.attachTui().sessionId).toBe("z");
-  expect(second.store.attachTui().sessionId).toBe("z");
+  expect(second.store.attachTui(true).sessionId).toBe("z");
+  expect(second.store.attachTui(true).sessionId).toBe("z");
+});
+
+
+test("ordinary attach creates distinct empty sessions without deleting persisted history", () => {
+  const first = setup();
+  const previous = first.store.attachTui();
+  previous.addMessage({ role: "user", content: "previous question", timestamp: Date.now() });
+  first.store.save(previous.sessionId, "message");
+  const second = setup(first.root);
+  const fresh = second.store.attachTui();
+  expect(fresh.sessionId).not.toBe(previous.sessionId);
+  expect(fresh.messages).toHaveLength(0);
+  expect(second.store.attachTui().sessionId).not.toBe(fresh.sessionId);
+  expect(second.store.load(previous.sessionId)?.messages[0]?.content).toBe("previous question");
+});
+
+test("continue without history creates a TUI session which can subsequently resume", () => {
+  const { store } = setup();
+  const fresh = store.attachTui(true);
+  expect(fresh.initiator).toEqual({ type: "tui" });
+  expect(store.attachTui(true).sessionId).toBe(fresh.sessionId);
 });

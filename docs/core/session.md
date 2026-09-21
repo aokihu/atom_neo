@@ -2,6 +2,20 @@
 
 > **Purpose**: Per-session context model, topic tracking, and TUI lifecycle — how sessions are isolated, managed, and reflected in the UI.
 
+## 2026-09-17：显式继续上次会话
+
+该行为随 `v1.15.2` 发布：默认启动新建 TUI Session，只有 `-c` / `--continue` 才恢复上次会话。
+
+默认启动及独立 `--mode tui` attach 每次新建 TUI Session。只有 `-c` / `--continue`
+才恢复当前 sandbox 中 `initiator.type=tui` 且 lastTuiUsedAt 最近的会话（包括磁盘 checkpoint）。
+没有候选时新建；旧会话和 Gateway/internal 会话不删除、不覆盖。纯 Core/Gateway 无 TUI 入口不创建会话。
+`POST /api/tui/attach` 接受可选 JSON `{ "continue": true }`；空请求或省略该字段默认新建，
+非法 JSON/非布尔值返回 400。并发普通 attach 各自新建；并发 continue 沿用已有同步选择逻辑。
+WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧版本描述中的“默认恢复”已由本节替代。
+
+验证：1086 个本地测试通过、13 个跳过；源码与编译后二进制的隔离进程测试通过，覆盖默认新建、显式跨重启恢复、并发 attach、空请求和非法请求。类型检查通过，未调用真实模型。
+
+
 ---
 
 ## Session 发起者与默认 TUI attach（已实现，待验收）

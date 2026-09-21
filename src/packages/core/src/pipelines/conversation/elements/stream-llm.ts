@@ -1,18 +1,20 @@
+import { createHash } from "node:crypto";
 import { BaseElement, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { streamText, tool, zodSchema } from "ai";
+import { streamText, tool, zodSchema, asSchema } from "ai";
 import type { ModelMessage } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolContextInjection, ToolDefinition, ToolEffect, ToolResultMetadata, ToolsGroup } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
-import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
+import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT, CONTEXT_RESERVE } from "../../../constants";
 import { IntentInputSchema } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState, ToolEffectSummary } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
 import type { SkillServiceLike } from "../../../skills/types";
+import { CONTEXT_DATA_HEADER } from "../../../context/compiler";
 import type { ContextService } from "../../../context/context-service";
 import type { ToolRecordStore } from "../../../tools/tool-record-store";
 import {
@@ -37,6 +39,18 @@ export function resolveModelInput(input: Pick<
   return {
     systemText: input.contextSnapshot?.content ?? input.systemText ?? "",
     userMessages: input.userMessages ?? [],
+  };
+}
+
+export function resolveCacheMetrics(usage?: {
+  inputTokens?: number; outputTokens?: number;
+  inputTokenDetails?: { cacheReadTokens?: number; noCacheTokens?: number };
+}) {
+  return {
+    inputTokens: usage?.inputTokens ?? null,
+    cacheReadTokens: usage?.inputTokenDetails?.cacheReadTokens ?? null,
+    noCacheTokens: usage?.inputTokenDetails?.noCacheTokens ?? null,
+    outputTokens: usage?.outputTokens ?? null,
   };
 }
 
@@ -222,6 +236,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     let stepInstruction = "";
     let forceFinalText = false;
     let currentSystemText = systemText;
+    let currentSnapshot = input.contextSnapshot;
+    let contextDirty = false;
+    let todoState = JSON.stringify(this.#session?.todoState ?? []);
+    const snapshotBudget = (currentSnapshot && this.#contextService.inspectSnapshot(currentSnapshot.id)?.inputBudget)
+      ?? Math.max(1, this.#configContextLimit - this.#maxTokens - CONTEXT_RESERVE);
     let reportedGovernanceStop = "";
     let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
     let modelMessages = [...userMessages] as ModelMessage[];
@@ -246,22 +265,29 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       } as any);
     };
 
-    const refreshSkillContext = () => {
+    const refreshStepContext = () => {
       const nextRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
-      if (nextRevision === skillRevision) return;
+      const nextTodos = JSON.stringify(this.#session?.todoState ?? []);
+      const skillChanged = nextRevision !== skillRevision;
+      const todosChanged = nextTodos !== todoState;
+      if (!skillChanged && !todosChanged && !contextDirty) return;
+      const refreshReason = { skillChanged, todosChanged, contextChanged: contextDirty };
+      todoState = nextTodos;
+      contextDirty = false;
       skillRevision = nextRevision;
-      const skillContext = this.#skillService?.buildContext(this.#session?.sessionId) ?? "";
+      const skillContext = skillChanged ? this.#skillService?.buildContext(this.#session?.sessionId) ?? "" : "";
       const owner = {
         sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
         ...(this.#session?.currentTopic ? { topicId: this.#session.currentTopic } : {}),
       };
       const scope = this.#session?.currentTopic ? "topic" as const : "session" as const;
-      if (skillContext) {
+      if (skillChanged && skillContext) {
         this.#contextService.put({
           scope,
           owner,
           entry: {
             key: "topic-skills",
+            format: "text",
             source: "skill-service",
             channel: "instructions",
             trust: "trusted",
@@ -269,27 +295,45 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             content: skillContext,
           },
         });
-      } else {
+      } else if (skillChanged) {
         this.#contextService.remove(scope, owner, "topic-skills");
+      }
+      if (todosChanged) {
+        const taskOwner = { ...owner, taskId: input.task?.id ?? "task" };
+        const state = this.#contextService.get("task", taskOwner, "task-state");
+        if (state) {
+          const { revision: _revision, ...entry } = state;
+          this.#contextService.put({ scope: "task", owner: taskOwner,
+          entry: { ...entry, content: { ...(state.content as Record<string, unknown>),
+            todos: this.#session?.todoState ?? [] } } });
+        }
       }
       const stepSnapshot = this.#contextService.createSnapshot({
         ...input.contextOwner,
         stepId: String(modelStep),
+        inputBudget: snapshotBudget,
       });
       currentSystemText = stepSnapshot.content;
-      this.bus.emit(BusEvents.Context.SnapshotRelease as any, { snapshotId: stepSnapshot.id } as any);
+      if (currentSnapshot) this.#contextService.releaseSnapshot(currentSnapshot.id);
+      currentSnapshot = stepSnapshot;
       this.report(BusEvents.Element.Data, {
         step: "step-snapshot-created",
         stepNumber: modelStep,
         snapshotId: stepSnapshot.id,
         revision: nextRevision,
         skillContextLength: skillContext.length,
+        refreshReason,
+        inputBudget: snapshotBudget,
       });
     };
 
     try {
+      const schemaDescriptions = await Promise.all(Object.entries(modelTools).map(async ([name, definition]) => ({
+        name, description: definition.description, inputSchema: await asSchema(definition.inputSchema).jsonSchema,
+      })));
+      const toolDefinitionsHash = createHash("sha256").update(JSON.stringify(schemaDescriptions)).digest("hex").slice(0, 16);
       while (!timedOut && modelStep <= this.#maxSteps + 1) {
-        refreshSkillContext();
+        refreshStepContext();
         const governance = this.#toolGovernance.current.snapshot();
         if (governance.stopReason && governance.stopReason !== reportedGovernanceStop) {
           reportedGovernanceStop = governance.stopReason;
@@ -347,18 +391,33 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
         }
 
+        let usageTimer: ReturnType<typeof setTimeout> | undefined;
         try {
           lastUsage = await Promise.race([
             streamResult.usage,
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("streamResult usage timeout")), 30_000)
+              usageTimer = setTimeout(() => reject(new Error("streamResult usage timeout")), 30_000)
             ),
           ]);
           cumulativeUsage += lastUsage?.totalTokens ?? 0;
+          const staticText = currentSystemText.split(CONTEXT_DATA_HEADER)[0] ?? "";
+          this.report(BusEvents.Element.Data, {
+            step: "model-step-usage", stepNumber: modelStep, model: this.#model,
+            snapshotId: currentSnapshot?.id ?? "",
+            ...resolveCacheMetrics(lastUsage),
+            toolDefinitionsHash: forceText ? null : toolDefinitionsHash,
+            staticPrefixHash: createHash("sha256").update(staticText).digest("hex").slice(0, 16),
+            staticChars: staticText.length, dynamicChars: currentSystemText.length - staticText.length,
+          });
+          if (currentSnapshot && !streamFailed && !timedOut && !streamSignal.aborted) {
+            if (this.#contextService.commitSnapshot(currentSnapshot.id) > 0) contextDirty = true;
+          }
         } catch (err: any) {
           streamFailed = true;
           finishReason ||= "error";
           this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
+        } finally {
+          clearTimeout(usageTimer);
         }
 
         this.report(BusEvents.Element.Data, {
@@ -544,13 +603,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           });
           const contextInjection = status.metadata.ok ? status.metadata.contextInjection : undefined;
           if (contextInjection) {
+            contextDirty = true;
             const scope = injectToolContext({
               contextService: this.#contextService,
               injection: contextInjection,
               sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
               topicId: this.#session?.currentTopic || undefined,
               contextOwner: input.contextOwner,
-              stepId: String(modelStep),
+              stepId: String(modelStep + 1),
             });
             this.report(BusEvents.Element.Data, {
               step: "tool-context-injected",
@@ -630,6 +690,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       this.report(BusEvents.Element.Data, { step: "error", level: "warn", error: err?.message ?? String(err) });
     } finally {
       clearTimeout(timeoutTimer);
+      if (currentSnapshot) this.#contextService.releaseSnapshot(currentSnapshot.id);
     }
 
     if (toolsGroup && this.#toolRecordStore) {

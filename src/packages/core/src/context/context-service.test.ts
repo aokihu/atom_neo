@@ -1,12 +1,8 @@
+import { contextRows as rows } from "./test-helpers";
 import { describe, expect, test } from "bun:test";
-import { decode } from "@toon-format/toon";
 import { BusEvents, PipelineEventBus } from "@atom-neo/shared";
-import type { ContextPutRequest, ContextSnapshot, FullEventMap } from "@atom-neo/shared";
+import type { ContextPutRequest, FullEventMap } from "@atom-neo/shared";
 import { ContextService } from "./context-service";
-
-function rows(snapshot: ContextSnapshot): Array<Record<string, unknown>> {
-  return (decode(snapshot.content) as { context: Array<Record<string, unknown>> }).context;
-}
 
 function createService(options: ConstructorParameters<typeof ContextService>[1] = {}) {
   const bus = new PipelineEventBus<FullEventMap>();
@@ -32,6 +28,19 @@ function putRequest(overrides: Partial<ContextPutRequest> = {}): ContextPutReque
 }
 
 describe("ContextService", () => {
+  test("validates text format and preserves it through durable restore", () => {
+    const { service } = createService();
+    const request = putRequest();
+    expect(() => service.put({ ...request, entry: { ...request.entry, format: "text" } })).toThrow();
+    service.put({ ...request, entry: { ...request.entry, trust: "trusted",
+      channel: "instructions", format: "text", content: "Persistent\nskill rules" } });
+    const snapshot = service.createSnapshot({ sessionId: "session-1" });
+    expect(snapshot.content).toContain("Persistent\nskill rules");
+    const persisted = service.exportSessionState("session-1");
+    service.restoreSessionState(persisted);
+    expect(service.createSnapshot({ sessionId: "session-1" }).content).toBe(snapshot.content);
+    service.stop();
+  });
   test("stores shared metadata once per bucket and only increments changed entries", () => {
     const { service } = createService();
     const first = service.put(putRequest());

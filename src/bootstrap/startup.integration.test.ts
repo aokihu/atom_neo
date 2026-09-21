@@ -61,8 +61,8 @@ async function start(path: string, mode = "core", source = false, port = "0") {
   if (mode === "core-gateway") await waitFor(() => existsSync(join(path, ".atom/gateway-runtime.json")), "Gateway ready");
   return { proc, ...instance(path) };
 }
-async function attach(core: Instance) {
-  const response = await fetch(`${core.url}/api/tui/attach`, { method: "POST", headers: { "x-atom-admin-token": core.token } });
+async function attach(core: Instance, continueSession = false) {
+  const response = await fetch(`${core.url}/api/tui/attach`, { method: "POST", headers: { "x-atom-admin-token": core.token, "Content-Type": "application/json" }, body: JSON.stringify({ continue: continueSession }) });
   expect(response.status).toBe(200);
   return await response.json() as { sessionId: string; serverInfo: { sandbox: string } };
 }
@@ -112,14 +112,26 @@ integration("CLI errors cause no sandbox initialization", async () => {
   }
 });
 
-integration("source and binary Core attach preserve default TUI session across restart", async () => {
+integration("source and binary Core create new sessions by default and explicitly continue across restart", async () => {
   for (const source of [true, false]) {
     const path = sandbox(source ? "source" : "binary");
     let core = await start(path, "core", source);
     expect(statSync(join(path, ".atom/core-runtime.json")).mode & 0o777).toBe(0o600);
     const forbidden = await fetch(`${core.url}/api/tui/attach`, { method: "POST" });
     expect(forbidden.status).toBe(403);
-    const selections = await Promise.all([attach(core), attach(core)]);
+    for (const body of ['{"continue":"true"}', '{', 'null']) {
+      const invalid = await fetch(`${core.url}/api/tui/attach`, { method: "POST",
+        headers: { "x-atom-admin-token": core.token }, body });
+      expect(invalid.status).toBe(400);
+    }
+    const empty = await fetch(`${core.url}/api/tui/attach`, { method: "POST",
+      headers: { "x-atom-admin-token": core.token } });
+    expect(empty.status).toBe(200);
+    const emptySession = await empty.json() as { sessionId: string };
+    const fresh = await Promise.all([attach(core), attach(core)]);
+    expect(fresh[0].sessionId).not.toBe(emptySession.sessionId);
+    expect(fresh[0].sessionId).not.toBe(fresh[1].sessionId);
+    const selections = await Promise.all([attach(core, true), attach(core, true)]);
     expect(selections[0].sessionId).toBe(selections[1].sessionId);
     expect(selections[0].serverInfo.sandbox).toBe(path);
     const sessionId = selections[0].sessionId;
@@ -136,7 +148,8 @@ integration("source and binary Core attach preserve default TUI session across r
     await finish(core.proc);
     expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
     core = await start(path, "core", source);
-    expect((await attach(core)).sessionId).toBe(sessionId);
+    expect((await attach(core, true)).sessionId).toBe(sessionId);
+    expect((await attach(core)).sessionId).not.toBe(sessionId);
     await finish(core.proc, "SIGINT");
   }
 }, 30000);
@@ -289,7 +302,7 @@ integration("Gateway origin conflicts cannot replace session metadata or default
     const task = { sessionId: "local:user", platform: "local", pipeline: "conversation", data: { text: "gateway-message" }, initiator: { type: "gateway", clientId: "a", platform: "local" } };
     expect((await submit(core, task)).status).toBe(201);
     expect((await submit(core, { ...task, initiator: { ...task.initiator, clientId: "b" } })).status).toBe(409);
-    expect((await attach(core)).sessionId).toBe(tui.sessionId);
+    expect((await attach(core, true)).sessionId).toBe(tui.sessionId);
   } finally { await finish(core.proc); }
 });
 

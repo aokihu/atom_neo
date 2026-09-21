@@ -89,6 +89,15 @@ describe("SkillService", () => {
     expect(svc.getRevision()).toBe(revision);
   });
 
+  test("renders identical section sets independently of activation order", async () => {
+    await svc.start();
+    svc.loadSection("test-skill", "ssh", "first");
+    svc.loadSection("test-skill", "firewall", "first");
+    svc.loadSection("test-skill", "firewall", "second");
+    svc.loadSection("test-skill", "ssh", "second");
+    expect(svc.buildContext("first")).toBe(svc.buildContext("second"));
+  });
+
   test("loadSection() activates a single section", async () => {
     await svc.start();
     svc.load("test-skill");

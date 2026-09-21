@@ -1,3 +1,4 @@
+import { contextRows } from "../context/test-helpers";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   cpSync,
@@ -12,7 +13,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
-import { decode } from "@toon-format/toon";
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import { ContextService } from "../context/context-service";
@@ -91,8 +91,8 @@ describe("SessionPersistenceService", () => {
     expect(second.persistence.toolRecords.exportSession(session.sessionId)[0]?.status).toBe("interrupted");
 
     const snapshot = second.contextService.createSnapshot({ sessionId: session.sessionId });
-    const rows = (decode(snapshot.content) as { context: Array<{ content: string }> }).context;
-    expect(rows.some(row => row.content.includes("summary"))).toBe(true);
+    const rows = contextRows(snapshot);
+    expect(rows.some(row => String(row.content).includes("summary"))).toBe(true);
     const restoredState = JSON.parse(readFileSync(resolve(dir, "session.json"), "utf8"));
     expect(restoredState.status).toBe("interrupted");
   });

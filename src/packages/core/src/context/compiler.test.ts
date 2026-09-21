@@ -1,7 +1,6 @@
+import { contextRows as rows } from "./test-helpers";
 import { describe, expect, test } from "bun:test";
-import { decode } from "@toon-format/toon";
 import type { ContextFragment } from "@atom-neo/shared";
-import type { ContextSnapshot } from "@atom-neo/shared";
 import { compileContextSnapshot } from "./compiler";
 
 function fragment(overrides: Partial<ContextFragment>): ContextFragment {
@@ -18,12 +17,8 @@ function fragment(overrides: Partial<ContextFragment>): ContextFragment {
   };
 }
 
-function rows(snapshot: ContextSnapshot): Array<Record<string, unknown>> {
-  return (decode(snapshot.content) as { context: Array<Record<string, unknown>> }).context;
-}
-
 describe("compileContextSnapshot", () => {
-  test("orders instructions by scope and priority", () => {
+  test("orders legacy TOON entries deterministically by scope and key", () => {
     const { snapshot } = compileContextSnapshot([
       fragment({ key: "task", scope: "task", content: "task" }),
       fragment({ key: "system-low", scope: "system", priority: 1, content: "system-low" }),
@@ -100,7 +95,7 @@ describe("compileContextSnapshot", () => {
     expect(Object.isFrozen(compilation.manifest)).toBe(true);
     expect(rows(compilation.snapshot).map(row => row.content)).toEqual([
       "hello",
-      "nested:\n  value: 1",
+      { nested: { value: 1 } },
     ]);
     expect(Object.isFrozen(runtime.nested)).toBe(false);
   });
@@ -132,7 +127,7 @@ describe("compileContextSnapshot", () => {
 
     expect(snapshot.content.isWellFormed()).toBe(true);
     expect(text?.content).toBe("broken � text");
-    expect(decode(String(runtime?.content))).toEqual({ nested: "broken � text" });
+    expect(runtime?.content).toEqual({ nested: "broken � text" });
   });
 
   test("preserves literal escapes and paths", () => {

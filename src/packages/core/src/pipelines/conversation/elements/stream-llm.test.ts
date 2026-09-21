@@ -1,10 +1,11 @@
+import { contextRows } from "../../../context/test-helpers";
 import { describe, expect, test } from "bun:test";
-import { decode } from "@toon-format/toon";
 import {
   injectToolContext,
   resolveModelInput,
   resolveMCPToolMetadata,
   resolveTokenMetrics,
+  resolveCacheMetrics,
   shouldRecordToolResult,
   summarizeToolEffects,
   wrapMCPAiTools,
@@ -13,6 +14,15 @@ import {
 import { ContextService } from "../../../context/context-service";
 import { makeBus } from "../../test-helpers";
 import { ToolCallLedger } from "../../../tools/governance";
+
+test("distinguishes unknown cache usage from a measured zero hit", () => {
+  expect(resolveCacheMetrics()).toEqual({ inputTokens: null, cacheReadTokens: null,
+    noCacheTokens: null, outputTokens: null });
+  expect(resolveCacheMetrics({ inputTokens: 100, outputTokens: 5,
+    inputTokenDetails: { cacheReadTokens: 0, noCacheTokens: 100 } })).toEqual({
+    inputTokens: 100, cacheReadTokens: 0, noCacheTokens: 100, outputTokens: 5,
+  });
+});
 
 test("keeps cumulative model usage separate from the current context window", () => {
   expect(resolveTokenMetrics(
@@ -153,7 +163,7 @@ describe("persistent tool context", () => {
 
     const snapshot = contextService.createSnapshot({ sessionId: "s1", topicId: "topic-a" });
     contextService.commitSnapshot(snapshot.id);
-    const data = decode(snapshot.content) as { context: Array<Record<string, unknown>> };
+    const data = { context: contextRows(snapshot) };
     expect(data.context[0]?.content).toBe("persistent memory");
     expect(contextService.get(
       "topic",

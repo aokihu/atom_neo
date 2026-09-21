@@ -119,7 +119,7 @@ export class SkillService extends BaseService {
   buildContext(sessionId = "default"): string {
     const blocks: string[] = [];
 
-    for (const [skillName, activeSet] of this.#activeSections.get(sessionId) ?? []) {
+    for (const [skillName, activeSet] of [...(this.#activeSections.get(sessionId) ?? [])].sort(([a], [b]) => a.localeCompare(b))) {
       if (activeSet.size === 0) continue;
       const def = this.#skillDefs.get(skillName);
       if (!def) continue;
@@ -128,7 +128,7 @@ export class SkillService extends BaseService {
       const lines = content.split("\n");
       const sectionBlocks: string[] = [];
 
-      for (const sectionName of activeSet) {
+      for (const sectionName of [...activeSet].sort()) {
         const meta = def.sections.get(sectionName);
         if (!meta) continue;
         const snippet = lines.slice(meta.offset - 1, meta.offset - 1 + meta.length).join("\n");

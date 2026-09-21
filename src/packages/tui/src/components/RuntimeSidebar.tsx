@@ -97,12 +97,9 @@ export function RuntimeSidebar() {
 
       <box
         flexDirection="column"
-        marginLeft={1}
-        marginRight={1}
         marginBottom={1}
         paddingLeft={1}
-        border={["left"]}
-        borderColor={colors.decoration.subtle}
+        paddingRight={1}
       >
         <box flexDirection="row" justifyContent="space-between">
           <text fg={colors.text.muted}>SESSION</text>
@@ -120,12 +117,9 @@ export function RuntimeSidebar() {
 
       <box
         flexDirection="column"
-        marginLeft={1}
-        marginRight={1}
         marginBottom={1}
         paddingLeft={1}
-        border={["left"]}
-        borderColor={colors.decoration.subtle}
+        paddingRight={1}
       >
         <text fg={colors.text.muted}>PIPELINE</text>
         {steps.map((step, index) => (
@@ -143,12 +137,9 @@ export function RuntimeSidebar() {
 
       <box
         flexDirection="column"
-        marginLeft={1}
-        marginRight={1}
         marginBottom={1}
         paddingLeft={1}
-        border={["left"]}
-        borderColor={colors.decoration.subtle}
+        paddingRight={1}
       >
         <text fg={colors.text.muted}>STREAM</text>
         <text fg={streamChunkCount > 0 ? colors.text.secondary : colors.text.muted}>
@@ -162,11 +153,9 @@ export function RuntimeSidebar() {
 
       <box
         flexDirection="column"
-        marginLeft={1}
-        marginRight={1}
+        marginBottom={1}
         paddingLeft={1}
-        border={["left"]}
-        borderColor={colors.decoration.subtle}
+        paddingRight={1}
       >
         <text fg={colors.text.muted}>STATS</text>
         <box flexDirection="row" justifyContent="space-between">
