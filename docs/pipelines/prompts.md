@@ -146,6 +146,7 @@ Conversation 的 User 消息。`follow_up` / `continuation` 应复用当前 Topi
 | `BASE_SYSTEM` | 主 AI 助手系统提示词 | LoadSystemPromptElement |
 | `PREDICT_INTENT` | 意图分类器 | predict-intent.ts |
 | `ANALYZE_RESULT` | 会话质量评估 | analyze-result.ts (post-conversation) |
+| `SIMULATE_JEV` | 无 Jev 凭据时，指导 LLM 按固定选项模拟结构化决策 | jev-element.ts (prediction / post-conversation) |
 | `EVALUATOR_ANALYZE` | 对话健康监控 | evaluator-analyze.ts (follow-up-evaluator) |
 | `COMPRESS_SUMMARIZE` | 历史摘要提示词 | compress-summarize.ts |
 | `GUIDANCE_RETRY` | 重试引导注入 | finalize.ts (post-conversation) |

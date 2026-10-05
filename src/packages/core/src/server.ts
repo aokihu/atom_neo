@@ -53,7 +53,7 @@ interface RuntimeLike {
   appConfig: Record<string, any>;
   maxTokens: number;
   getResolvedModel(level?: string): {
-    provider: string; model: string; apiKey: string; baseUrl?: string; thinking?: string;
+    provider: string; model: string; type?: "llm" | "jev"; apiKey: string; baseUrl?: string; thinking?: string;
   };
   updateRuntimeConfig?(patch: unknown): Record<string, any>;
   resetRuntimeConfig?(): Record<string, any>;
@@ -112,6 +112,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
   };
   const compressResolved = runtime?.getResolvedModel?.("basic") ?? resolved;
+  const decisionDeps = (purpose: "prediction" | "postConversation") => {
+    const selected = runtime.getResolvedModel("fast");
+    const fallback = runtime.getResolvedModel("basic");
+    return {
+      decisionMode: runtime.appConfig?.decisionMode?.[purpose],
+      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl },
+      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl },
+    };
+  };
   const apiKey: string = resolved.apiKey;
   const model: string = resolved.model;
   const baseUrl: string | undefined = resolved.baseUrl;
@@ -212,6 +221,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
+        ...decisionDeps("prediction"),
         orchestrator,
         configContextLimit: resolvedContextLimit,
         skillService,
@@ -305,6 +315,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
+        ...decisionDeps("postConversation"),
         configContextLimit: resolvedContextLimit,
         contextService,
       }).build(bus);

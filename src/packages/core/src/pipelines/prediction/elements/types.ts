@@ -27,6 +27,9 @@ export type PredictionPipelineDeps = {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  decisionMode?: "legacy" | "jev";
+  decisionModel?: { type: "llm" | "jev"; apiKey: string; model: string; baseUrl?: string };
+  fallbackModel?: { apiKey: string; model: string; baseUrl?: string };
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
   configContextLimit?: number;

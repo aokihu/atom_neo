@@ -310,7 +310,7 @@ export function commit(sandboxPath: string, state: WizardState): void {
   const prevProviders = (existing.providers ?? {}) as Record<string, Record<string, any>>;
 
   const merged: Record<string, any> = { ...existing };
-  merged.providerProfiles = state.profiles;
+  merged.providerProfiles = { ...(existing.providerProfiles ?? {}), ...state.profiles };
   merged.providers = { ...prevProviders };
   for (const [id, edit] of Object.entries(state.editedProviders)) {
     if (edit.models.length === 0) continue;

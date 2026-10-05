@@ -18,14 +18,17 @@ POST /api/tasks → createTaskHandler → taskQueue.enqueue(pipeline="prediction
 
 ## Element 链
 
+`decisionMode.prediction` 缺省为 `legacy`。设置为 `jev` 时，仅将 transform 替换为独立 `JevElement`；原 `predict-intent` 保留，可随时切回。
+
 ```
-predict-input (source) → predict-intent (transform) → token-ratio (boundary) → predict-finalize (sink)
+predict-input (source) → predict-intent 或 jev-decision (transform) → token-ratio (boundary) → predict-finalize (sink)
 ```
 
 | 顺序 | Element | Kind | 职责 |
 |------|---------|------|------|
 | 1 | `predict-input` | source | 原样提取当前用户请求 |
 | 2 | `predict-intent` | transform | 调用 `generateText + Output.object`（非流式、无 Tool），输出 `IntentPredictionResult` |
+| 2 | `jev-decision`（可选） | transform | 直接调用 Jev Decisions API；无 Jev 凭据时由 LLM 模拟限定选择，组合注册表 Topic |
 | 3 | `token-ratio` | boundary | 检查 token 使用比例 |
 | 4 | `predict-finalize` | sink | 写入 `session.pendingPrediction`，调度 conversation 任务 |
 

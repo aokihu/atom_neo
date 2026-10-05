@@ -479,6 +479,20 @@ describe("buildInitialState", () => {
   });
 });
 
+test("config wizard preserves manually configured Jev profile, type, and decision mode", () => {
+  const sandbox = makeSandbox();
+  Bun.write(`${sandbox}/config.json`, JSON.stringify({
+    providerProfiles: { advanced: "deepseek/a", balanced: "deepseek/a", basic: "deepseek/a", fast: "decisions/typesafe/jev-1.13" },
+    providers: { decisions: { type: "jev", apiKeyEnv: "OPENROUTER_API_KEY", models: ["typesafe/jev-1.13"], baseUrl: "https://openrouter.ai/api/alpha/decisions" } },
+    decisionMode: { prediction: "jev", postConversation: "jev" },
+  }));
+  commit(sandbox, buildInitialState("config", sandbox));
+  const saved = JSON.parse(readFileSync(`${sandbox}/config.json`, "utf-8"));
+  expect(saved.providerProfiles.fast).toBe("decisions/typesafe/jev-1.13");
+  expect(saved.providers.decisions.type).toBe("jev");
+  expect(saved.decisionMode).toEqual({ prediction: "jev", postConversation: "jev" });
+});
+
 // ─── parsers ──────────────────────────────────────────────────────────────
 
 describe("addModel", () => {

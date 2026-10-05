@@ -16,12 +16,9 @@ export function registerPredictionElements(): void {
 export function predictionPipeline(deps: PredictionPipelineDeps) {
   return pipeline("prediction")
     .source("predict-input", { session: deps.session, task: deps.task })
-    .transform("predict-intent", {
-      apiKey: deps.apiKey,
-      model: deps.model,
-      baseUrl: deps.baseUrl,
-      maxTokens: deps.maxTokens,
-    })
+    .transform(deps.decisionMode === "jev" ? "jev-decision" : "predict-intent", deps.decisionMode === "jev"
+      ? { purpose: "prediction", model: deps.decisionModel, fallback: deps.fallbackModel, maxTokens: deps.maxTokens }
+      : { apiKey: deps.apiKey, model: deps.model, baseUrl: deps.baseUrl, maxTokens: deps.maxTokens })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .sink("predict-finalize", { orchestrator: deps.orchestrator, skillService: deps.skillService });
 }
