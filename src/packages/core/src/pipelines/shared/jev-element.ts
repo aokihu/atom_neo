@@ -110,8 +110,17 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
       ? { ...input, mode: "routing" } as PredictionFlowState
       : { ...input, mode: "acting" } as PostConversationFlowState;
 
+    const source = this.#model.type === "jev" && this.#model.apiKey && this.#model.baseUrl ? "jev" : "llm";
+    const decision = {
+      sessionId: input.task.sessionId,
+      taskId: input.task.id,
+      rootTaskId: input.task.chainId,
+      purpose: this.#purpose,
+      source,
+    };
+    this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "run" });
     try {
-      const choices = await this.#choose(state, questions, input.abortSignal);
+      const choices = await this.#choose(state, questions, source === "jev", input.abortSignal);
       if (isPrediction) {
         const prediction: IntentPredictionResult = {
           difficulty: choices.difficulty.choice as IntentPredictionResult["difficulty"],
@@ -122,6 +131,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
           reasoning: "classified by typed decision",
         };
         this.report(BusEvents.Element.Data, { step: "decided", purpose: this.#purpose, ...prediction });
+        this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "ok", intent: prediction.intent, modelProfile: prediction.modelProfile, topic: prediction.topic });
         return { ...input, mode: "routing", prediction } as PredictionFlowState;
       }
 
@@ -131,9 +141,11 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
         fingerprint: choices.behavior.choice,
       };
       this.report(BusEvents.Element.Data, { step: "decided", purpose: this.#purpose, status: analysis.status, behavior: choices.behavior.choice });
+      this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "ok", analysisStatus: analysis.status });
       return { ...input, mode: "acting", analysis } as PostConversationFlowState;
     } catch (error) {
       this.report(BusEvents.Element.Data, { step: "decision failed", purpose: this.#purpose, error: substringWellFormed(String(error), 0, 200) });
+      this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "err" });
       return isPrediction
         ? { ...input, mode: "routing" } as PredictionFlowState
         : { ...input, mode: "acting" } as PostConversationFlowState;
@@ -165,8 +177,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     };
   }
 
-  async #choose(state: Record<string, unknown>, questions: ChoiceQuestions, abortSignal?: AbortSignal): Promise<DecisionChoices> {
-    const useJev = this.#model.type === "jev" && !!this.#model.apiKey && !!this.#model.baseUrl;
+  async #choose(state: Record<string, unknown>, questions: ChoiceQuestions, useJev: boolean, abortSignal?: AbortSignal): Promise<DecisionChoices> {
     const model = useJev || (this.#model.type === "llm" && this.#model.apiKey) ? this.#model : this.#fallback;
     if (!model.apiKey) throw new Error("no decision model API key");
 

@@ -11,7 +11,7 @@
 - **Gateway Side**: Message relay for platform Client subprocesses. Validates Client Secret for `/gateway/*` routes, forwards inbound messages to Core, polls task results, and pushes results back to Clients. WebSocket connections bypass Gateway and connect directly to Core.
 - **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
 - **Message Format**: JSON, one message per frame
-- **Session Routing**: Task-scoped `event.transport.*` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
+- **Session Routing**: Task-scoped `event.transport.*` and `event.decision.updated` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
 - **Session Path Encoding**: Clients must encode `sessionId` with `encodeURIComponent()` before placing it in `/ws/:sessionId` or `/api/sessions/:sessionId`. Core treats it as one URL path segment and applies `decodeURIComponent()` exactly once before Session lookup. Empty IDs, malformed percent escapes, and unencoded extra path segments are rejected with `400`.
 
 ```typescript
@@ -165,7 +165,33 @@ Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation
 }
 ```
 
-### 4.5 `transport.delta`
+### 4.5 `decision.updated`
+
+Core 仅在启用 `JevElement` 的 Prediction 或 Post-Conversation 中发送此事件，按 Session 定向广播。
+`source` 是实际调用方式：Jev 原生接口为 `jev`，LLM 模拟为 `llm`。客户端只接受当前提交的
+`rootTaskId`；提交 HTTP 响应到达前可暂存同 Session 的事件并在确认 taskId 后筛选。
+
+```typescript
+{
+  type: "event.decision.updated",
+  payload: {
+    sessionId: string;
+    taskId: string;
+    rootTaskId: string;
+    purpose: "prediction" | "post-conversation";
+    source: "jev" | "llm";
+    state: "run" | "ok" | "err";
+    intent?: string;          // Prediction 成功后
+    modelProfile?: string;    // Prediction 成功后
+    topic?: string;           // Prediction 成功后
+    analysisStatus?: string;  // Post-Conversation 成功后
+  }
+}
+```
+
+事件只携带上述显示字段；不发送用户输入、提示词、概率、密钥或错误原文。没有判定输入时不发送事件。
+
+### 4.6 `transport.delta`
 
 ```typescript
 {
@@ -190,7 +216,7 @@ content = content.substring(0, offset) + textDelta;
 
 这确保即使消息乱序到达或 server 端 buffer 切片产生边界重叠，TUI 也能正确拼接完整文本。
 
-### 4.6 `transport.tool.started`
+### 4.7 `transport.tool.started`
 
 ```typescript
 {
@@ -207,7 +233,7 @@ content = content.substring(0, offset) + textDelta;
 }
 ```
 
-### 4.7 `transport.tool.finished`
+### 4.8 `transport.tool.finished`
 
 ```typescript
 {
@@ -233,7 +259,7 @@ ToolFinished WebSocket payload 中重复发送。Builtin 与 MCP Tool 必须使�
 `event.transport.tool.group-complete` 遵循相同的归属规则：payload 必须包含产生事件的
 `sessionId` 与 `taskId`，并且只能发送到对应 Session 的 WebSocket 客户端。
 
-### 4.8 `task.completed`
+### 4.9 `task.completed`
 
 ```typescript
 {
@@ -268,7 +294,7 @@ ToolFinished WebSocket payload 中重复发送。Builtin 与 MCP Tool 必须使�
 Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客户端必须用它刷新 Context
 占用率。
 
-### 4.9 `task.failed`
+### 4.10 `task.failed`
 
 ```typescript
 {
@@ -291,7 +317,7 @@ Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客�
 `API_KEY_INVALID` 失败终态。TUI 必须显示阻塞式错误 Modal，提示用户更新 API Key；不得把它当作
 空的 `task.completed` 静默结束，也不得自动重试无效凭据。其他 `task.failed` 继续使用普通消息错误展示。
 
-### 4.10 `pong`
+### 4.11 `pong`
 
 ```typescript
 {

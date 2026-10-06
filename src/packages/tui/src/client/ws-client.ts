@@ -9,6 +9,7 @@ type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: s
 type MCPConnectedCallback = (data: { servers: { name: string; online: boolean; toolCount: number }[]; toolInfos: { name: string; source: string; description: string; online: boolean }[] }) => void;
 
 import { TaskFailureCodes, WsMessages } from "@atom-neo/shared";
+import type { DecisionUpdatePayload } from "@atom-neo/shared";
 
 type PendingRequest = {
   resolve: (text: string) => void;
@@ -45,6 +46,9 @@ export class TuiClient {
   #onBusyChange?: BusyChangeCallback;
   #onMCPStatus?: MCPStatusCallback;
   #onMCPConnected?: MCPConnectedCallback;
+  #onDecisionUpdate?: (update: DecisionUpdatePayload) => void;
+  #currentRootTaskId: string | null = null;
+  #earlyDecisions: DecisionUpdatePayload[] = [];
   #activeTaskIds: Set<string> = new Set();
   #pending: PendingRequest[] = [];
 
@@ -79,6 +83,8 @@ export class TuiClient {
 
       const handlers: Record<string, (p: Record<string, any>) => void> = {
         [WsMessages.Server.SessionReady]: (p) => {
+          this.#currentRootTaskId = null;
+          this.#earlyDecisions = [];
           this.#activeTaskIds = new Set(p.activeTaskIds ?? []);
           this.#onSnapshot?.(p.messages ?? []);
           this.#onBusyChange?.(this.#activeTaskIds.size > 0);
@@ -148,6 +154,16 @@ export class TuiClient {
         [WsMessages.Server.MCPConnected]: (p) => {
           this.#onMCPConnected?.({ servers: p.servers ?? [], toolInfos: p.toolInfos ?? [] });
         },
+        [WsMessages.Server.DecisionUpdated]: (p) => {
+          if (p.sessionId !== this.#sessionId || typeof p.rootTaskId !== "string") return;
+          const update = p as DecisionUpdatePayload;
+          if (this.#currentRootTaskId === null) {
+            this.#earlyDecisions.push(update);
+            this.#earlyDecisions = this.#earlyDecisions.slice(-8);
+          } else if (update.rootTaskId === this.#currentRootTaskId) {
+            this.#onDecisionUpdate?.(update);
+          }
+        },
       };
 
       this.#ws.onerror = () => { clearTimeout(timer); reject(new Error("WebSocket connection failed")); };
@@ -166,6 +182,8 @@ export class TuiClient {
 
   async send(text: string): Promise<string> {
     if (!this.#ws || !this.#ready) throw new Error("Not connected");
+    this.#currentRootTaskId = null;
+    this.#earlyDecisions = [];
 
     const httpUrl = this.#url.replace(/^ws/, "http");
     const res = await fetch(`${httpUrl}/api/tasks`, {
@@ -181,6 +199,11 @@ export class TuiClient {
       throw new Error("Invalid task submission response");
     }
     const taskId = response.taskId;
+    this.#currentRootTaskId = taskId;
+    for (const update of this.#earlyDecisions) {
+      if (update.rootTaskId === taskId) this.#onDecisionUpdate?.(update);
+    }
+    this.#earlyDecisions = [];
 
     return new Promise<string>((resolve, reject) => {
       this.#pending.push({ resolve, reject, text: "", rootTaskId: taskId });
@@ -199,11 +222,14 @@ export class TuiClient {
   onBusyChange(cb: BusyChangeCallback): void { this.#onBusyChange = cb; }
   onMCPStatus(cb: MCPStatusCallback): void { this.#onMCPStatus = cb; }
   onMCPConnected(cb: MCPConnectedCallback): void { this.#onMCPConnected = cb; }
+  onDecisionUpdate(cb: (update: DecisionUpdatePayload) => void): void { this.#onDecisionUpdate = cb; }
 
   close(): void {
     for (const p of this.#pending) p.reject(new Error("Connection closed"));
     this.#pending = [];
     this.#activeTaskIds.clear();
+    this.#currentRootTaskId = null;
+    this.#earlyDecisions = [];
     this.#onDisconnect = undefined;
     this.#ws?.close();
     this.#ready = false;

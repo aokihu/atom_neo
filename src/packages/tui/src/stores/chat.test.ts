@@ -12,6 +12,8 @@ describe("chat store task completion", () => {
       streamReceivedChars: 0,
       streamChunkCount: 0,
       streamTokenBatches: [],
+      predictionDecision: null,
+      postDecision: null,
     });
   });
 
@@ -67,5 +69,17 @@ describe("chat store task completion", () => {
       streamChunkCount: 0,
       streamTokenBatches: [],
     });
+  });
+
+  test("keeps both decision purposes and clears them for the next turn", () => {
+    const identity = { sessionId: "s", taskId: "t", rootTaskId: "r", source: "llm" as const };
+    useChatStore.getState().setDecisionUpdate({ ...identity, purpose: "prediction", state: "ok", intent: "instruction" });
+    useChatStore.getState().setDecisionUpdate({ ...identity, purpose: "post-conversation", state: "err" });
+    expect(useChatStore.getState().predictionDecision?.intent).toBe("instruction");
+    expect(useChatStore.getState().postDecision?.state).toBe("err");
+
+    useChatStore.getState().prepareForSend();
+    expect(useChatStore.getState().predictionDecision).toBeNull();
+    expect(useChatStore.getState().postDecision).toBeNull();
   });
 });

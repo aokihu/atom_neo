@@ -74,6 +74,7 @@ export const WsMessages = {
     MCPToolStatus: "event.mcp.tool.status",
     PipelineElementStarted: "event.pipeline.element.started",
     PipelineElementFinished: "event.pipeline.element.finished",
+    DecisionUpdated: "event.decision.updated",
     ReplayStart: "event.pipeline.replay-start",
     ReplayEnd: "event.pipeline.replay-end",
   },

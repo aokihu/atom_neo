@@ -5,6 +5,7 @@ import { getRegisteredNames } from "../../pipeline/registry";
 import { predictionPipeline, registerPredictionElements } from "../prediction";
 import { postConversationPipeline, registerPostConversationElements } from "../post-conversation";
 import { registerSharedElements } from ".";
+import { BusEvents } from "@atom-neo/shared";
 
 const choose = (questions: Record<string, { criteria: Record<string, unknown> }>, selected: Record<string, string>) =>
   Object.fromEntries(Object.entries(questions).map(([id, question]) => [id, {
@@ -48,8 +49,11 @@ describe("JevElement", () => {
 
   test("uses direct Jev response for prediction without the AI SDK", async () => {
     let sent: any;
+    const bus = makeBus();
+    const updates: Record<string, unknown>[] = [];
+    bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "prediction",
+      name: "jev-decision", kind: "transform", bus, purpose: "prediction",
       model: { type: "jev", apiKey: "test-key", model: "typesafe/jev-1.13", baseUrl: "https://decisions.example.test/v1" },
       fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
       fetchImpl: async (url, init) => {
@@ -62,29 +66,40 @@ describe("JevElement", () => {
       },
     });
     const result = await element.doProcess({
-      mode: "predicting", task: {}, session: {}, userMessage: "修复这个问题", currentTopic: "",
+      mode: "predicting", task: { id: "task-1", chainId: "root-1", sessionId: "session-1" }, session: {}, userMessage: "修复这个问题", currentTopic: "",
     });
     expect(sent.state.userInput).toBe("修复这个问题");
     expect(result.mode).toBe("routing");
     expect((result as any).prediction).toMatchObject({ intent: "instruction", topic: "code.debugging.issue" });
+    expect(updates).toMatchObject([
+      { state: "run", source: "jev", rootTaskId: "root-1" },
+      { state: "ok", source: "jev", topic: "code.debugging.issue" },
+    ]);
   });
 
   test("uses LLM simulation when Jev credentials are missing", async () => {
     let simulated = false;
+    const bus = makeBus();
+    const updates: Record<string, unknown>[] = [];
+    bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "post-conversation",
+      name: "jev-decision", kind: "transform", bus, purpose: "post-conversation",
       model: { type: "jev", apiKey: "", model: "typesafe/jev-1.13" },
       fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
       simulate: async (_state, _questions, _signal, model) => { simulated = true; expect(model?.model).toBe("deepseek-v4-flash"); return { status: "blocked", behavior: "intent_only" }; },
     });
     const result = await element.doProcess({
-      mode: "analyzing", task: {}, session: {}, userMessage: "查天气", assistantResponse: "我来查", predictedTaskIntent: "instruction",
+      mode: "analyzing", task: { id: "post-1", chainId: "root-1", sessionId: "session-1" }, session: {}, userMessage: "查天气", assistantResponse: "我来查", predictedTaskIntent: "instruction",
       stepCount: 1, assistantParts: 1, assistantLength: 3, activeTodoCount: 0, finishReason: "stop",
       completeDetected: false, toolEffectSummary: { evidence: 0, referenceEvidence: 0, stateChanged: 0, none: 0, failed: 0 },
     });
     expect(simulated).toBe(true);
     expect(result.mode).toBe("acting");
     expect((result as any).analysis).toMatchObject({ status: "blocked", fingerprint: "intent_only" });
+    expect(updates).toMatchObject([
+      { state: "run", source: "llm", rootTaskId: "root-1" },
+      { state: "ok", source: "llm", analysisStatus: "blocked" },
+    ]);
   });
 
   test("does not send Jev requests when the provider has no endpoint", async () => {
@@ -120,5 +135,24 @@ describe("JevElement", () => {
       completeDetected: true, toolEffectSummary: { evidence: 0, referenceEvidence: 0, stateChanged: 0, none: 0, failed: 0 },
     });
     expect((result as any).analysis.status).toBe("satisfactory");
+  });
+
+  test("reports a failed decision without exposing the provider error to the sidebar event", async () => {
+    const bus = makeBus();
+    const updates: Record<string, unknown>[] = [];
+    bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
+    const element = new JevElement({
+      name: "jev-decision", kind: "transform", bus, purpose: "prediction",
+      model: { type: "jev", apiKey: "", model: "typesafe/jev-1.13" },
+      fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
+      simulate: async () => { throw new Error("private provider detail"); },
+    });
+    const result = await element.doProcess({
+      mode: "predicting", task: { id: "task-1", chainId: "root-1", sessionId: "session-1" },
+      session: {}, userMessage: "问题", currentTopic: "",
+    });
+    expect(result.mode).toBe("routing");
+    expect(updates.map(update => update.state)).toEqual(["run", "err"]);
+    expect(updates[1]).not.toHaveProperty("error");
   });
 });

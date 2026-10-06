@@ -14,6 +14,7 @@ import { SessionStore } from "./session/store";
 import { Broadcaster } from "./ws/broadcaster";
 import { createWsHandlers } from "./ws/handler";
 import { registerTransportBridge } from "./ws/transport-bridge";
+import { registerDecisionBridge } from "./ws/decision-bridge";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
 import { configGetHandler, configPatchHandler, configResetHandler, isAdminRequest } from "./api/config";
@@ -595,6 +596,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
   const broadcaster = new Broadcaster();
   registerTransportBridge(bus, broadcaster);
+  registerDecisionBridge(bus, broadcaster);
   const wsHandlers = createWsHandlers({
     broadcaster,
     taskQueue,

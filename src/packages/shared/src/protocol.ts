@@ -31,6 +31,10 @@ export type ServerEvent =
       payload: ElementFinishedPayload;
     }
   | {
+      type: "event.decision.updated";
+      payload: DecisionUpdatePayload;
+    }
+  | {
       type: "event.transport.reason";
       payload: TransportReasonPayload;
     }
@@ -86,6 +90,19 @@ export type ElementFinishedPayload = {
   elementName: string;
   elementKind: string;
   durationMs: number;
+};
+
+export type DecisionUpdatePayload = {
+  sessionId: string;
+  taskId: string;
+  rootTaskId: string;
+  purpose: "prediction" | "post-conversation";
+  source: "jev" | "llm";
+  state: "run" | "ok" | "err";
+  intent?: string;
+  modelProfile?: string;
+  topic?: string;
+  analysisStatus?: string;
 };
 
 export type TransportReasonPayload = TransportEventIdentity & {

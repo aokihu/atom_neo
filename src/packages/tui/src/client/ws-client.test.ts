@@ -35,6 +35,42 @@ afterEach(() => {
 });
 
 describe("TuiClient task correlation", () => {
+  test("shows only the current turn decision, including events before task submission returns", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    let releaseResponse: (() => void) | undefined;
+    globalThis.fetch = (async () => {
+      await new Promise<void>(resolve => { releaseResponse = resolve; });
+      return Response.json({ taskId: "root-new" });
+    }) as unknown as typeof fetch;
+
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId: "session-a" });
+    const updates: string[] = [];
+    client.onDecisionUpdate(update => updates.push(`${update.purpose}:${update.source}:${update.state}`));
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    socket.emit(WsMessages.Server.SessionReady, { sessionId: "session-a" });
+    await connected;
+
+    const request = client.send("new turn");
+    await nextTurn();
+    const emit = (sessionId: string, rootTaskId: string, purpose: string, source: string, state: string) =>
+      socket.emit(WsMessages.Server.DecisionUpdated, { sessionId, rootTaskId, taskId: rootTaskId, purpose, source, state });
+    emit("session-b", "root-new", "prediction", "jev", "run");
+    emit("session-a", "root-old", "post-conversation", "llm", "ok");
+    emit("session-a", "root-new", "prediction", "jev", "run");
+    expect(updates).toEqual([]);
+    releaseResponse?.();
+    await nextTurn();
+    expect(updates).toEqual(["prediction:jev:run"]);
+    emit("session-a", "root-old", "post-conversation", "llm", "ok");
+    emit("session-a", "root-new", "post-conversation", "llm", "ok");
+    expect(updates).toEqual(["prediction:jev:run", "post-conversation:llm:ok"]);
+
+    socket.emit(WsMessages.Server.TaskCompleted, { taskId: "root-new", rootTaskId: "root-new", terminal: true });
+    await request;
+    client.close();
+  });
+
   test("uses one encoded WebSocket path segment while preserving the original session ID", async () => {
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     let submittedSessionId: string | undefined;

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Message, TodoItem, ToolInfo, MCPServerInfo } from "../types";
 import { estimateReceivedTokens } from "../components/format";
+import type { DecisionUpdatePayload } from "@atom-neo/shared";
 
 let _counter = 0;
 function now() { return Date.now(); }
@@ -26,6 +27,8 @@ type ChatState = {
   todoItems: TodoItem[];
   toolInfos: ToolInfo[];
   mcpServers: MCPServerInfo[];
+  predictionDecision: DecisionUpdatePayload | null;
+  postDecision: DecisionUpdatePayload | null;
 
   generateId: () => string;
   addMessage: (msg: Message) => void;
@@ -49,6 +52,7 @@ type ChatState = {
     toolInfos: { name: string; source: string; description: string; online: boolean }[];
   }) => void;
   updateMCPStatus: (servers: { name: string; online: boolean; toolNames: string[] }[]) => void;
+  setDecisionUpdate: (update: DecisionUpdatePayload) => void;
 
   prepareForSend: () => void;
   setShowPreparing: (v: boolean) => void;
@@ -67,6 +71,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   todoItems: [],
   toolInfos: [],
   mcpServers: [],
+  predictionDecision: null,
+  postDecision: null,
 
   generateId: () => `msg-${Date.now()}-${++_counter}`,
 
@@ -92,6 +98,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     streamReceivedChars: 0,
     streamChunkCount: 0,
     streamTokenBatches: [],
+    predictionDecision: null,
+    postDecision: null,
   }),
 
   handleDelta(delta: string, offset: number, reasoning?: string, thinkingDuration?: number) {
@@ -267,6 +275,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  setDecisionUpdate(update) {
+    set(update.purpose === "prediction" ? { predictionDecision: update } : { postDecision: update });
+  },
+
   prepareForSend() {
     set({
       toolGroupId: null,
@@ -276,6 +288,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamReceivedChars: 0,
       streamChunkCount: 0,
       streamTokenBatches: [],
+      predictionDecision: null,
+      postDecision: null,
     });
   },
 
