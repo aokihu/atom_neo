@@ -15,11 +15,14 @@ conversation pipeline → finalize 返回 shouldPostCheck
 
 链式续写仍在进行时不触发 post-conversation。只有当前 Assistant 输出已经持久化、且没有 follow-up / 非恢复错误时才进入质量检查。
 
-## Element 链（3 个元素）
+## Element 链
+
+`decisionMode.postConversation` 缺省为 `legacy`。设置为 `jev` 时，仅替换分析 transform；原 `post-analyze-result` 保留，可随时切回。
 
 ```
 post-collect-input (source)
-  → post-analyze-result (transform)
+  → post-analyze-result 或 jev-decision (transform)
+  → token-ratio (boundary)
   → post-finalize (sink)
 ```
 
@@ -27,7 +30,9 @@ post-collect-input (source)
 |------|---------|------|------|
 | 1 | `post-collect-input` | source | 提取最后一轮用户消息和助手回复 |
 | 2 | `post-analyze-result` | transform | 调用 LLM 分析回复质量 + 生成行为指纹 |
-| 3 | `post-finalize` | sink | 三态决策：satisfactory → 结束 / needs_user_input → 结束 / blocked → 指纹停滞检测 → retry 或 stall |
+| 2 | `jev-decision`（可选） | transform | 直接调用 Jev Decisions API；无 Jev 凭据时由 LLM 模拟限定选择，行为类别映射到现有 fingerprint |
+| 3 | `token-ratio` | boundary | 检查 token 使用比例 |
+| 4 | `post-finalize` | sink | 三态决策：satisfactory → 结束 / needs_user_input → 结束 / blocked → 指纹停滞检测 → retry 或 stall |
 
 ## FlowState
 

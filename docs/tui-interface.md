@@ -16,7 +16,7 @@
 
 ## 2. 视觉层级
 
-左右侧栏内部模块统一无边框，使用相同的左右 1 列内边距和模块间 1 行留白。左侧 SESSION、PIPELINE、STREAM、STATS 不增加左侧装饰线，仅保留侧栏与对话区之间的外侧分隔线。
+左右侧栏内部模块统一无边框，使用相同的左右 1 列内边距和模块间 1 行留白。左侧 SESSION、PIPELINE、DECISION、STREAM、STATS 不增加左侧装饰线，仅保留侧栏与对话区之间的外侧分隔线。
 
 所有 widget 的 EMPTY 使用统一空状态组件，文字颜色为当前主题 muted 文字与侧栏背景的 60% / 40% 混合，比模块标题更低对比度。覆盖 SCHEDULES、MCP、TODO 与 Runtime QUEUE；正常数据及错误状态保持原样。
 
@@ -59,6 +59,7 @@ Wide
 - `SESSION`：由 `busy` 显示 `ACTIVE` 或 `IDLE`。
 - `UPTIME`：TUI 本地运行时长。
 - `PIPELINE`：根据 preparing、Tool execution、Assistant streaming 推导当前可见阶段。
+- `DECISION`：显示当前用户回合的 Prediction 与 Post-Conversation 判定。每项显示实际执行来源 `JEV` 或 `LLM`，以及 `RUN`、`OK`、`ERR` 状态；成功后分别显示 intent / modelProfile / topic 和分析状态。尚无事件时显示空状态。新用户回合清空旧结果，按 rootTaskId 忽略上一回合迟到事件。只显示预定字段，topic 在侧栏宽度内截断；不显示提示词、概率、密钥或错误原文。随 Runtime 侧栏一同在窄布局隐藏；重新连接后等待新事件，不回放历史判定。
 - `STREAM`：统计 TUI 实际收到的 Reason / Text Delta 批次。最近 8 批按当前窗口
   最大估算 Token 数归一化为 8 级柱高；累计值使用 `≈` 标记，不能冒充 Provider
   最终返回的精确 Token usage。

@@ -38,6 +38,7 @@
 | [memory-service.md](./subsystems/memory-service.md) | 记忆图 Schema、API、遍历算法 | 实现 Memory |
 | [network-service.md](./subsystems/network-service.md) | 同进程网络 Service、WebFetch 子功能与域名调度 | 修改网络能力 |
 | [configuration.md](./subsystems/configuration.md) | 配置加载优先级、双层架构（用户配置 + 运行时 overlay）、TUI 专属调整 API | 添加配置项 |
+| [jev-decisions.md](./subsystems/jev-decisions.md) | Jev 独立调用模块、配置、回退与验收 | 接入结构化决策模型 |
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
 | [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `--config` 配置编辑器（OpenTUI 窗口化、按 provider 循环、原子回滚） | 实现首次启动流程/配置编辑 |

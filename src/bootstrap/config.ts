@@ -5,9 +5,11 @@ const ProviderProfilesSchema = z.object({
   advanced: z.string().default("deepseek/deepseek-v4-flash"),
   balanced: z.string().default("deepseek/deepseek-v4-flash"),
   basic: z.string().default("deepseek/deepseek-v4-flash"),
+  fast: z.string().optional(),
 });
 
 const ProviderDefinitionSchema = z.object({
+  type: z.enum(["llm", "jev"]).default("llm"),
   apiKeyEnv: z.string(),
   models: z.array(z.string()).min(1),
   baseUrl: z.string().optional(),
@@ -25,6 +27,10 @@ const ConfigSchema = z.object({
     basic: "deepseek/deepseek-v4-flash",
   }),
   providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
+  decisionMode: z.object({
+    prediction: z.enum(["legacy", "jev"]).default("legacy"),
+    postConversation: z.enum(["legacy", "jev"]).default("legacy"),
+  }).default({ prediction: "legacy", postConversation: "legacy" }),
   transport: z.object({
     maxOutputTokens: z.number().int().default(4096),
   }).default({ maxOutputTokens: 4096 }),

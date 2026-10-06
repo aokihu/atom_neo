@@ -59,6 +59,8 @@ export function RuntimeSidebar() {
   const messages = useChatStore(state => state.messages);
   const busy = useChatStore(state => state.busy);
   const preparing = useChatStore(state => state.showPreparing);
+  const predictionDecision = useChatStore(state => state.predictionDecision);
+  const postDecision = useChatStore(state => state.postDecision);
   const streamReceivedChars = useChatStore(state => state.streamReceivedChars);
   const streamChunkCount = useChatStore(state => state.streamChunkCount);
   const streamTokenBatches = useChatStore(state => state.streamTokenBatches);
@@ -131,6 +133,36 @@ export function RuntimeSidebar() {
               {step.label}
             </text>
             <text fg={step.state === "OK" ? colors.text.muted : stateColor(step.state)}>{step.state}</text>
+          </box>
+        ))}
+      </box>
+
+      <box
+        flexDirection="column"
+        marginBottom={1}
+        paddingLeft={1}
+        paddingRight={1}
+      >
+        <text fg={colors.text.muted}>DECISION</text>
+        {([
+          { label: "PREDICT", update: predictionDecision },
+          { label: "POST CHECK", update: postDecision },
+        ] as const).map(({ label, update }) => (
+          <box key={label} flexDirection="column">
+            <box flexDirection="row" justifyContent="space-between">
+              <text fg={colors.text.muted}>{label}</text>
+              <text fg={update ? stateColor(update.state.toUpperCase() as PipelineState) : colors.text.muted}>
+                {update ? `${update.source.toUpperCase()} ${update.state.toUpperCase()}` : "—"}
+              </text>
+            </box>
+            {update?.state === "ok" && update.purpose === "prediction" && <>
+              <text fg={colors.text.secondary}>{`INTENT ${update.intent ?? "—"}`}</text>
+              <text fg={colors.text.secondary}>{`MODEL  ${update.modelProfile ?? "—"}`}</text>
+              <text fg={colors.text.secondary}>{`TOPIC  ${(update.topic ?? "—").slice(0, 16)}`}</text>
+            </>}
+            {update?.state === "ok" && update.purpose === "post-conversation" && (
+              <text fg={colors.text.secondary}>{`STATUS ${update.analysisStatus ?? "—"}`}</text>
+            )}
           </box>
         ))}
       </box>

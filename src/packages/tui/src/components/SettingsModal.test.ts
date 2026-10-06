@@ -27,6 +27,11 @@ const baseConfig = {
 };
 
 describe("modelOptions", () => {
+  test("keeps Jev models in fast choices only", () => {
+    const config = { ...baseConfig, providers: { ...baseConfig.providers, decisions: { type: "jev", models: ["typesafe/jev-1.13"] } } };
+    expect(modelOptions(config)).not.toContain("decisions/typesafe/jev-1.13");
+    expect(modelOptions(config, true)).toContain("decisions/typesafe/jev-1.13");
+  });
   test("flattens provider models into provider/model ids", () => {
     expect(modelOptions(baseConfig)).toEqual([
       "deepseek/deepseek-v4-flash",
@@ -65,6 +70,7 @@ describe("buildRuntimePatch", () => {
     advanced: "deepseek/deepseek-v4-pro",
     balanced: "deepseek/deepseek-v4-flash",
     basic: "deepseek/deepseek-v4-flash",
+    fast: "deepseek/deepseek-v4-flash",
     theme: "edex",
     thinking: "disabled",
     maxTokens: "4096",
@@ -72,6 +78,11 @@ describe("buildRuntimePatch", () => {
 
   test("returns an empty patch when nothing changed", () => {
     expect(buildRuntimePatch(unchangedValues, baseConfig)).toEqual({});
+  });
+
+  test("patches fast without changing LLM profiles", () => {
+    expect(buildRuntimePatch({ ...unchangedValues, fast: "decisions/typesafe/jev-1.13" }, baseConfig))
+      .toEqual({ providerProfiles: { fast: "decisions/typesafe/jev-1.13" } });
   });
 
   test("collects only changed top-level fields", () => {

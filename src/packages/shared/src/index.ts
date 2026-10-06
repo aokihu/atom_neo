@@ -116,6 +116,7 @@ export type {
   TaskSubmitPayload,
   ElementStartedPayload,
   ElementFinishedPayload,
+  DecisionUpdatePayload,
   TransportReasonPayload,
   TransportDeltaPayload,
   ToolStartedPayload,

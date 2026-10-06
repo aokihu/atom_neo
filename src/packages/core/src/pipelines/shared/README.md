@@ -7,7 +7,8 @@
 | 文件 | 说明 |
 |------|------|
 | `token-ratio.ts` | TokenRatioElement（kind: boundary）— 计算 token 占用比并上报 |
-| `index.ts` | `registerSharedElements()` 统一注册（token-ratio） |
+| `jev-element.ts` | 可选 JevElement（kind: transform）— Prediction/Post-Conversation 限定选择 |
+| `index.ts` | `registerSharedElements()` 统一注册 |
 
 ## Token Ratio
 

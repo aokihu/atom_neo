@@ -4,11 +4,12 @@ import {
 } from "../bootstrap/config";
 import type { AppConfig, LoadedConfig, RuntimeConfig } from "../bootstrap/config";
 
-export type ProfileLevel = "advanced" | "balanced" | "basic";
+export type ProfileLevel = "advanced" | "balanced" | "basic" | "fast";
 
 export type ResolvedModel = {
   provider: string;
   model: string;
+  type: "llm" | "jev";
   apiKey: string;
   baseUrl?: string;
   thinking?: "enabled" | "disabled" | "adaptive";
@@ -82,7 +83,7 @@ export class RuntimeService {
 
   getResolvedModel(level: ProfileLevel = "balanced"): ResolvedModel {
     const profiles = this.#effective.providerProfiles ?? {};
-    const profileId: string = profiles[level] ?? "deepseek/deepseek-v4-flash";
+    const profileId: string = profiles[level] ?? profiles.basic ?? "deepseek/deepseek-v4-flash";
 
     const sepIndex = profileId.indexOf("/");
     const provider = sepIndex >= 0 ? profileId.slice(0, sepIndex) : "deepseek";
@@ -90,8 +91,9 @@ export class RuntimeService {
 
     const providerConfig = this.#effective.providers?.[provider];
     const apiKeyEnv = providerConfig?.apiKeyEnv;
-    const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? this.#apiKey;
+    const type = providerConfig?.type ?? "llm";
+    const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "llm" ? this.#apiKey : "");
 
-    return { provider, model, apiKey, baseUrl: providerConfig?.baseUrl, thinking: providerConfig?.thinking };
+    return { provider, model, type, apiKey, baseUrl: providerConfig?.baseUrl, thinking: providerConfig?.thinking };
   }
 }

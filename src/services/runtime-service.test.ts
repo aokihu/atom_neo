@@ -25,6 +25,18 @@ function makeRuntime(sandbox: string): RuntimeService {
 }
 
 describe("RuntimeService runtime config", () => {
+  test("resolves fast Jev provider separately from LLM credentials", () => {
+    const runtime = makeRuntime(makeSandbox());
+    runtime.updateRuntimeConfig({
+      providerProfiles: { fast: "openrouter-jev/typesafe/jev-1.13" },
+      providers: { "openrouter-jev": { type: "jev", apiKeyEnv: "ATOM_TEST_MISSING_JEV_KEY", models: ["typesafe/jev-1.13"], baseUrl: "https://openrouter.ai/api/alpha/decisions" } },
+      decisionMode: { prediction: "jev", postConversation: "jev" },
+    });
+    expect(runtime.getResolvedModel("fast")).toMatchObject({ provider: "openrouter-jev", model: "typesafe/jev-1.13", type: "jev", apiKey: "" });
+    expect(runtime.getResolvedModel("basic")).toMatchObject({ type: "llm", apiKey: "sk-test" });
+    expect(runtime.appConfig.decisionMode).toEqual({ prediction: "jev", postConversation: "jev" });
+  });
+
   test("updateRuntimeConfig merges into effective config and persists overlay", () => {
     const sandbox = makeSandbox();
     const runtime = makeRuntime(sandbox);

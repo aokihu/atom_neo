@@ -46,23 +46,33 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
   "version": 2,
   "theme": "dark",
 
-  // 模型档位：advanced/balanced/basic，格式 "provider/model"
+  // 模型档位：advanced/balanced/basic 为对话模型；fast 用于可选决策模型
   "providerProfiles": {
     "advanced": "deepseek/deepseek-v4-flash",
     "balanced": "deepseek/deepseek-v4-flash",
-    "basic": "deepseek/deepseek-v4-pro"
+    "basic": "deepseek/deepseek-v4-pro",
+    "fast": "openrouter-jev/typesafe/jev-1.13"
   },
 
   // LLM 供应商配置
   "providers": {
     "deepseek": {
+      "type": "llm",
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
       "baseUrl": "https://api.deepseek.com/v1",
       "thinking": "disabled",
       "contextLimit": 131072
+    },
+    "openrouter-jev": {
+      "type": "jev",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "models": ["typesafe/jev-1.13"],
+      "baseUrl": "https://openrouter.ai/api/alpha/decisions"
     }
   },
+
+  "decisionMode": { "prediction": "jev", "postConversation": "jev" },
 
   "transport": {
     "maxOutputTokens": 4096
@@ -85,6 +95,8 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 **自动创建**: bootstrap 启动时若 `$SANDBOX/config.json` 不存在，自动写入上述最小可用配置。解析失败（格式错误）时只返回默认值，不覆盖文件。
 
 **无效 provider 恢复**: 若 config.json 中某个 `providers[x]` 条目校验失败（如缺 `apiKeyEnv` 或 `models` 为空），`loadConfig` 会丢弃该条目并保留其余配置，而不是整体回退默认值。这保证单个损坏条目不会让 gateway/mcpServers 等配置全部失效。
+
+**Jev 设置**: `type` 缺省为 `llm`；`fast` 缺省回退到 `basic`。Jev 的 `baseUrl` 填完整 Decisions 端点，代码不提供默认请求地址；缺少地址时由 basic LLM 模拟。Key 放在 `.env`。两条管道的 `decisionMode` 可独立设为 `legacy` 或 `jev`，缺省 `legacy`；详见 [jev-decisions.md](./jev-decisions.md)。
 
 ---
 

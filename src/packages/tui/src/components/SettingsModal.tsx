@@ -5,7 +5,7 @@ import type { ModalAction } from "./modal";
 import { useTheme } from "./App";
 import type { ServerInfo, ThemeName } from "../types";
 
-const PROFILE_LEVELS = ["advanced", "balanced", "basic"] as const;
+const PROFILE_LEVELS = ["advanced", "balanced", "basic", "fast"] as const;
 const THEMES: ThemeName[] = [
   "edex", "github-dark", "github-light", "dracula", "nord",
   "tokyo-night", "solarized-dark", "monokai",
@@ -19,7 +19,7 @@ const SETTINGS_ACTIONS: ModalAction[] = [
   { key: "save", label: "Save", role: "confirm", variant: "primary" },
 ];
 
-type RowKey = "advanced" | "balanced" | "basic" | "theme" | "thinking" | "maxTokens";
+type RowKey = "advanced" | "balanced" | "basic" | "fast" | "theme" | "thinking" | "maxTokens";
 
 type SettingsRow = { key: RowKey; label: string; options: string[] };
 
@@ -27,9 +27,10 @@ function headers(token?: string): Record<string, string> {
   return token ? { "x-atom-admin-token": token } : {};
 }
 
-export function modelOptions(config: Record<string, any>): string[] {
+export function modelOptions(config: Record<string, any>, includeJev = false): string[] {
   const options: string[] = [];
   for (const [provider, def] of Object.entries(config.providers ?? {})) {
+    if (!includeJev && (def as any)?.type === "jev") continue;
     for (const model of (def as any)?.models ?? []) options.push(`${provider}/${model}`);
   }
   if (options.length === 0) {
@@ -61,7 +62,8 @@ export function buildRuntimePatch(
 
   const profiles: Record<string, string> = {};
   for (const level of PROFILE_LEVELS) {
-    if (values[level] && values[level] !== config.providerProfiles?.[level]) profiles[level] = values[level];
+    const previous = config.providerProfiles?.[level] ?? (level === "fast" ? config.providerProfiles?.basic : undefined);
+    if (values[level] && values[level] !== previous) profiles[level] = values[level];
   }
   if (Object.keys(profiles).length > 0) body.providerProfiles = profiles;
   if (values.theme !== config.tui?.theme) body.tui = { theme: values.theme };
@@ -97,7 +99,7 @@ export function SettingsModal({ open, url, adminToken, serverInfo, onSaved, onCl
       ...PROFILE_LEVELS.map(level => ({
         key: level as RowKey,
         label: `MODEL (${level})`,
-        options,
+        options: level === "fast" ? modelOptions(config, true) : options,
       })),
       { key: "theme" as RowKey, label: "TUI THEME", options: [...THEMES] },
       { key: "thinking" as RowKey, label: "THINKING", options: THINKING_OPTIONS },
@@ -118,6 +120,7 @@ export function SettingsModal({ open, url, adminToken, serverInfo, onSaved, onCl
         advanced: cfg.providerProfiles?.advanced ?? balanced,
         balanced,
         basic: cfg.providerProfiles?.basic ?? balanced,
+        fast: cfg.providerProfiles?.fast ?? cfg.providerProfiles?.basic ?? balanced,
         theme: cfg.tui?.theme ?? "edex",
         thinking: cfg.providers?.[provider]?.thinking ?? "disabled",
         maxTokens: String(cfg.transport?.maxOutputTokens ?? 4096),
