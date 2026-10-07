@@ -38,7 +38,12 @@ export function resolveModelInput(input: Pick<
 >) {
   return {
     systemText: input.contextSnapshot?.content ?? input.systemText ?? "",
-    userMessages: input.userMessages ?? [],
+    userMessages: (input.userMessages ?? []).map(message => message.role === "assistant" && message.reasoning_content
+      ? { role: "assistant" as const, content: [
+          { type: "reasoning" as const, text: message.reasoning_content },
+          { type: "text" as const, text: message.content },
+        ] }
+      : { role: message.role, content: message.content }) as ModelMessage[],
   };
 }
 
@@ -243,7 +248,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       ?? Math.max(1, this.#configContextLimit - this.#maxTokens - CONTEXT_RESERVE);
     let reportedGovernanceStop = "";
     let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
-    let modelMessages = [...userMessages] as ModelMessage[];
+    let modelMessages = [...userMessages];
     const allToolCalls: { toolName: string; metadata: ToolResultMetadata }[] = [];
     let toolsGroup: ToolsGroup | undefined;
     const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -428,20 +433,24 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           textLength: stepText.length,
         });
 
+        reasoningText += stepReasoning;
         if (stepCalls.length === 0) {
-          reasoningText = stepReasoning;
           const markerIndex = stepText.indexOf("<<<COMPLETE>>>");
           if (markerIndex >= 0) {
             stepText = stepText.slice(0, markerIndex);
             completeDetected = true;
             this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
           }
-          const finalStepText = stripToolCallMarkup(stepText);
-          if (finalStepText) {
-            const offset = fullText.length;
-            fullText += finalStepText;
-            reportTransport(BusEvents.Transport.Delta, { textDelta: finalStepText, offset });
-          }
+        }
+        const visibleStepText = stripToolCallMarkup(stepText);
+        if (visibleStepText) {
+          const offset = fullText.length;
+          const textDelta = (fullText ? "\n\n" : "") + visibleStepText;
+          fullText += textDelta;
+          reportTransport(BusEvents.Transport.Delta, { textDelta, offset });
+        }
+
+        if (stepCalls.length === 0) {
           completeStep(modelStep);
           break;
         }
@@ -490,7 +499,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               error,
             });
           }
-          modelMessages = [...modelMessages, ...projectToolMessages(stepCalls, stepRecords)];
+          modelMessages = [...modelMessages, ...projectToolMessages(stepCalls, stepRecords, visibleStepText, stepReasoning)];
           stepInstruction = error;
           reportTransport(BusEvents.Transport.ToolStepFinished, {
             stepNumber: modelStep,
@@ -662,7 +671,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
         }
 
-        const projectedMessages = projectToolMessages(stepCalls, stepRecords);
+        const projectedMessages = projectToolMessages(stepCalls, stepRecords, visibleStepText, stepReasoning);
         if (projectedMessages.length > 0) {
           modelMessages = [...modelMessages, ...projectedMessages];
         }

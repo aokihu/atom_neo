@@ -27,13 +27,14 @@ test.each([false, true])("refreshes bounded snapshots and settles the actual ste
     requests.push(await request.json());
     if (requests.length > 1 && fail) return Response.json({ error: { message: "test failure" } }, { status: 400 });
     const delta = requests.length === 1 ? {
-      role: "assistant", tool_calls: [{ index: 0, id: "call-1", type: "function",
+      role: "assistant", reasoning_content: "tool reasoning", content: "第一段。",
+      tool_calls: [{ index: 0, id: "call-1", type: "function",
         function: { name: "update", arguments: "{}" } }],
-    } : { role: "assistant", content: "Done <<<COMPLETE>>>" };
+    } : { role: "assistant", reasoning_content: "final reasoning", content: "第二段。" };
     const chunk = { id: "test", object: "chat.completion.chunk", created: 1, model: "cache-test",
       choices: [{ index: 0, delta, finish_reason: null }] };
     const end = { ...chunk, choices: [{ index: 0, delta: {},
-      finish_reason: requests.length === 1 ? "tool_calls" : "stop" }],
+      finish_reason: requests.length === 1 ? "tool_calls" : "length" }],
       usage: { prompt_tokens: 100, completion_tokens: 5, total_tokens: 105,
         prompt_cache_hit_tokens: 60, prompt_cache_miss_tokens: 40 } };
     return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(end)}\n\ndata: [DONE]\n\n`,
@@ -58,9 +59,14 @@ test.each([false, true])("refreshes bounded snapshots and settles the actual ste
           return { content: "updated", metadata: { ok: true, effect: "state_changed" } };
         } }],
     });
-    await element.doProcess({ mode: "formatted", task: { id: owner.taskId, sessionId: owner.sessionId },
+    const result = await element.doProcess({ mode: "formatted", task: { id: owner.taskId, sessionId: owner.sessionId },
       contextOwner: owner, contextSnapshot: initial, userMessages: [{ role: "user", content: "Run test" }] });
     expect(requests).toHaveLength(2);
+    expect(requests[1].messages[2]).toMatchObject({ role: "assistant", content: "第一段。",
+      reasoning_content: "tool reasoning", tool_calls: [{ id: "call-1" }] });
+    expect(result.responseText).toBe(fail ? "第一段。" : "第一段。\n\n第二段。");
+    expect(result.reasoningContent).toBe(fail ? "tool reasoning" : "tool reasoningfinal reasoning");
+    expect(result.chainAction).toBe(fail ? undefined : "follow_up");
     expect(requests[1].messages[0].content).toContain("Skill\nInspect evidence.");
     expect(requests[1].messages[0].content).toContain("in_progress");
     expect(requests[1].messages[0].content).not.toContain("large large");

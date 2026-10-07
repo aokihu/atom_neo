@@ -194,4 +194,20 @@ describe("conversation context pipeline", () => {
 
     expect(result.userMessages?.map(message => message.content)).toEqual(["current request"]);
   });
+
+  test("keeps historical Assistant reasoning for a continuation", async () => {
+    const { result } = await buildSnapshot({ session: makeSession() }, {
+      mode: "streaming",
+      task: { id: "t1" },
+      prompts: [
+        { role: "user", content: "写世界文明史" },
+        { role: "assistant", content: "第一段", reasoning_content: "thinking" },
+      ],
+    });
+
+    expect(result.userMessages).toEqual([
+      { role: "user", content: "写世界文明史" },
+      { role: "assistant", content: "第一段", reasoning_content: "thinking" },
+    ]);
+  });
 });

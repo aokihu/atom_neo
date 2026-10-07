@@ -99,7 +99,8 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
 
     const userMessages = (input.prompts ?? [])
       .filter(prompt => prompt.role !== "tool")
-      .map(prompt => ({ role: prompt.role, content: prompt.content }));
+      .map(prompt => ({ role: prompt.role, content: prompt.content,
+        ...(prompt.reasoning_content ? { reasoning_content: prompt.reasoning_content } : {}) }));
     appendCurrentUserMessage(userMessages, input.task?.payload?.[0]?.data);
     this.report(BusEvents.Element.Data, {
       step: "done",

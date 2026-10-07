@@ -37,7 +37,9 @@ export function createTodoWriteTool(): ToolDefinition {
     source: "builtin",
     inputSchema: TodoWriteInputSchema,
     execute: async (args) => {
-      const todos = (args as TodoWriteInput).todos;
+      const parsed = TodoWriteInputSchema.safeParse(args);
+      if (!parsed.success) return toolResult.failure("Invalid todowrite input: pass a complete todos array.");
+      const todos = parsed.data.todos;
       const inProgressCount = todos.filter(t => t.status === "in_progress").length;
       if (inProgressCount > 1) {
         const errMsg = `一次只能有一个任务处于进行中(in_progress)状态，当前有 ${inProgressCount} 个。请只保留一个 in_progress，其余置为 pending。`;
