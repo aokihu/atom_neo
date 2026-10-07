@@ -46,7 +46,7 @@ ContextService entries
           ↓
 AI SDK
   system: snapshot.content
-  messages: visible user / assistant messages
+  messages: visible user / assistant messages；Assistant reasoning 使用 AI SDK reasoning part
   tools: schema-only tools（不向 AI SDK 提供 execute）
 ```
 
@@ -105,6 +105,7 @@ LLM Tool Call
 
 - Tool schema 与 executor 分离；AI SDK 不自动执行 Tool，也不维护多 step Tool Loop。
 - 每个已执行 Tool 的 Call + Result 都投影到当前 Conversation 后续 step，包括空结果与错误。
+- 产生 Tool Call 的 Assistant step 同时投影该 step 的 reasoning、可见文本和 Tool Call；文本也进入流式输出与最终 Session 消息。
 - MCP 成功结果按 `reference` 投影到当前 Conversation，Conversation 结束后丢弃。
 - Tool Result 不自动把完整内容写入 Topic/Session Context；真实执行结果写入当前 Conversation 的
   ToolsGroup，下一次 Snapshot 只暴露 TOON 摘要。
@@ -130,20 +131,26 @@ Tool Result
 
 ```text
 streamText（单 step，schema-only tools）
-  → 收集 Tool Calls
+  → 收集 reasoning、可见文本和 Tool Calls
+  → 提交每个 step 的可见文本，按输出顺序累积
   → 同名批次预检；非法批次整批拒绝
   → Ledger 预检 / 去重 / 预算
   → Atom ToolRunner 按 Call 顺序执行
-  → 返回 Tool Call + Tool Result 给下一模型 step
+  → 返回 Assistant reasoning / 文本 / Tool Call + Tool Result 给下一模型 step
   → metadata.effect 只更新 Ledger 计数
   → 连续无进展只追加判断提示；Tool schema 保持开放
   → 无 Tool Call或框架停止
-  → 只提交最终 Assistant 文本
+  → 提交全部可见 Assistant 文本，并保存本轮 reasoning 供续写使用
 ```
 
 下一 step 的模型消息由 Atom 重新构建，不使用 AI SDK 自动累积的 `responseMessages`。Atom 保持
-Tool Call/Result 配对，但不筛选正常结果，也不丢弃模型最终文本。完全重复的 Tool Call 与执行总上限
+Tool Call/Result 配对，保留 Tool step 的 Assistant 内容，不筛选正常结果。历史 Assistant 的
+`reasoningContent` 经 `record-context` 保留，并在 `stream-llm` 转成 AI SDK reasoning part，供 DeepSeek 的 thinking mode
+续写请求序列化为 `reasoning_content`；日志不记录 reasoning 原文。完全重复的 Tool Call 与执行总上限
 是仅有的强制循环边界。
+
+`todowrite` 在执行前按已有的 `TodoWriteInputSchema` 校验参数。缺少 `todos` 等无效输入
+返回 Tool 失败结果，不更新 Session 的 TODO 状态；模型可依据该失败结果修正下一次调用。
 
 ## 5. 输出预算与压缩阈值
 
@@ -157,6 +164,8 @@ ratio = contextTokens / effectiveLimit
 
 系统在输入空间接近阈值时启动压缩，不等到输出 token 完全耗尽。`tokenOverflow` 时 Finalize 计算
 `compressRatio`，并通过 orchestrator 暂存 `context-compress` Task。
+`finishReason=length` 表示单次输出预算已用尽；已生成的可见文本必须先进入 Session，再由
+`follow_up` 接着输出。输入占用比低不能排除单次输出预算耗尽。
 
 | compressRatio | 保留最近消息 | Summary 上限 |
 |---------------|--------------|--------------|
