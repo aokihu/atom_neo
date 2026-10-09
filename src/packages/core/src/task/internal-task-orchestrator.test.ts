@@ -4,8 +4,9 @@ import { InternalTaskOrchestrator } from "./internal-task-orchestrator";
 const createOrchestrator = () => {
   const tasks: any[] = [];
   const queue = { enqueue: (task: any) => tasks.push(task) };
-  const bus = { emit: () => {} };
-  return { orchestrator: new InternalTaskOrchestrator(queue as any, bus as any), tasks };
+  const events: any[] = [];
+  const bus = { emit: (name: string, event: any) => events.push({ name, ...event }) };
+  return { orchestrator: new InternalTaskOrchestrator(queue as any, bus as any), tasks, events };
 };
 
 describe("InternalTaskOrchestrator continuations", () => {
@@ -115,4 +116,35 @@ describe("InternalTaskOrchestrator continuations", () => {
       .toThrow("Task owner is not active:");
     expect(tasks).toHaveLength(0);
   });
+});
+
+test("diagnostics link staged checkpoint and reconciliation tasks to their immediate requesting task", () => {
+  const { orchestrator, tasks, events } = createOrchestrator();
+  const continuation = { kind: "reconcile_progress" as const, reason: "stale", source: "jev" as const,
+    target: { index: 0, content: "文明起源" } };
+  orchestrator.beginTask({ id: "conversation-owner", chainId: "root", sessionId: "s" } as any);
+  orchestrator.scheduleContinuation("s", "c", "prediction-anchor", "conversation-owner", continuation);
+  orchestrator.scheduleCompress("s", "c", "prediction-anchor", { trigger: "token-overflow", resumeConversation: true, continuation }, "conversation-owner");
+  const staged = events.filter(event => event.name === "orchestrator").map(event => event.payload);
+  expect(staged).toHaveLength(2);
+  for (const event of staged) expect(event).toMatchObject({ step: "task-staged", requestedByTaskId: "conversation-owner",
+    parentTaskId: "prediction-anchor", rootTaskId: "root", continuation });
+  expect(tasks).toHaveLength(0);
+  orchestrator.commitTask("conversation-owner");
+  expect(tasks.map(task => task.id)).toEqual(staged.map(event => event.taskId));
+});
+
+test("continuation parameters survive staging, checkpoints and compression requests", () => {
+  const { orchestrator, tasks } = createOrchestrator();
+  const continuation = { kind: "resume_current" as const, reason: "truncated", source: "rules" as const,
+    target: { index: 0, content: "文明起源" }, followUp: { summary: "前半完成", nextPrompt: "继续当前项", avoidRepeat: "前半" } };
+  orchestrator.beginTask({ id: "parent", chainId: "root" } as any);
+  orchestrator.scheduleFollowUp("s", "c", "parent", "parent", continuation);
+  expect(tasks).toHaveLength(0);
+  orchestrator.commitTask("parent");
+  expect(tasks[0].payload[1]).toEqual({ type: "continuation_request", data: continuation });
+  orchestrator.scheduleEvaluator("s", "c", "parent", undefined, continuation);
+  expect(tasks[1].payload[0].data).toEqual(continuation);
+  orchestrator.scheduleCompress("s", "c", "parent", { trigger: "context-pressure", resumeConversation: true, continuation });
+  expect(tasks[2].payload[0].data.continuation).toEqual(continuation);
 });

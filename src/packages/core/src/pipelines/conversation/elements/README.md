@@ -10,9 +10,9 @@
 | `record-context.ts` | 将 Prompt、Workspace、Topic、Task 与 Memory 投影写入 ContextService；Conversation Messages 保持独立 |
 | `apply-source-context.ts` | 应用显式 Source Context，不读取 Session Tool 审计结果 |
 | `collect-context.ts` | 仅向 ContextService 请求精简 Snapshot |
-| `stream-llm.ts` | 将 TOON Snapshot 作为 System Message 单步调用模型，手工执行 Tool Loop，并记录 Outcome、Guard 与 Skill 变化 |
+| `stream-llm.ts` | 将 TOON Snapshot 作为 System Message 单步调用模型，手工执行 Tool Loop，并记录 Outcome、Guard、Skill 变化及循环退出/进度调试事实 |
 | `tool-loop.ts` | schema-only Tool、progress Context 投影、最小 step instruction 与 Tool Call 文本清理 |
-| `check-follow-up.ts` | 区分无计划 `follow_up` 与有计划 `continue_todo` |
+| `check-follow-up.ts` | 统一仲裁恢复、TODO 交接、进度核对与结束；规则优先，歧义调用 Jev；记录实际判断输入与核对交接依据 |
 | `finalize.ts` | 发布 Snapshot commit/release，并把 Chain/Post-check 决策交给 Task.Completed |
 | `types.ts` | Conversation FlowState |
 

@@ -108,6 +108,23 @@ describe("manual tool loop context projection", () => {
     expect(JSON.stringify(messages)).toContain("empty-1");
   });
 
+  test("keeps Assistant reasoning and visible text with its Tool call", () => {
+    const calls = [call("todo-1", "todowrite", { todos: [] })];
+    const messages = projectToolMessages(calls, new Map([["todo-1", {
+      toolName: "todowrite", input: calls[0]!.input, content: "updated",
+      metadata: { ok: true, effect: "state_changed" },
+    }]]), "已完成第一段。", "planning");
+
+    expect(messages[0]).toMatchObject({ role: "assistant", content: [
+      { type: "reasoning", text: "planning" },
+      { type: "text", text: "已完成第一段。" },
+      { type: "tool-call", toolCallId: "todo-1" },
+    ] });
+    expect(messages[1]).toMatchObject({ role: "tool", content: [
+      { type: "tool-result", toolCallId: "todo-1" },
+    ] });
+  });
+
   test("projects framework errors to the model", () => {
     const calls = [{ toolCallId: "error-1", toolName: "webfetch", input: { url: "https://example.com" } }];
     const messages = projectToolMessages(calls, new Map([

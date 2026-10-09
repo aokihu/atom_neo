@@ -1,6 +1,6 @@
 import type { SessionInitiator } from "@atom-neo/shared";
 import { PipelineEventBus } from "@atom-neo/shared";
-import type { ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
+import type { ContinuationDecision, ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
 import type { ToolEffectSummary } from "./pipelines/conversation/elements/types";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
@@ -12,7 +12,7 @@ import { TaskQueue } from "./task-queue";
 import { TaskEngine } from "./task-engine";
 import { SessionStore } from "./session/store";
 import { Broadcaster } from "./ws/broadcaster";
-import { createWsHandlers } from "./ws/handler";
+import { buildSessionTelemetry, createWsHandlers } from "./ws/handler";
 import { registerTransportBridge } from "./ws/transport-bridge";
 import { registerDecisionBridge } from "./ws/decision-bridge";
 import { healthHandler, metricsHandler } from "./api/health";
@@ -40,7 +40,8 @@ import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
 import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
 import { ContextService } from "./context/context-service";
-import { decideTodoContinuation } from "./session/context";
+import { hasActiveTodos } from "./session/context";
+import { prepareBudgetRelease, resumeExecutionBudget } from "./session/execution-budget";
 import { SessionPersistenceService } from "./session/persistence-service";
 import { decodePathParam } from "./url-path";
 
@@ -54,7 +55,7 @@ interface RuntimeLike {
   appConfig: Record<string, any>;
   maxTokens: number;
   getResolvedModel(level?: string): {
-    provider: string; model: string; type?: "llm" | "jev"; apiKey: string; baseUrl?: string; thinking?: string;
+    provider: string; model: string; type?: "llm" | "jev"; apiKey: string; baseUrl?: string; thinking?: string; beforeCall?: (signal?: AbortSignal) => Promise<void>;
   };
   updateRuntimeConfig?(patch: unknown): Record<string, any>;
   resetRuntimeConfig?(): Record<string, any>;
@@ -73,11 +74,15 @@ interface TaskRequestBody {
 }
 
 type CompletedResult = PipelineResult & {
+  budgetPauseText?: string;
+  budgetBefore?: import("./session/types").ExecutionBudget;
   output?: string;
   responseText?: string;
   reasoningContent?: string;
   tokenUsage?: { total: number };
   chainAction?: ConversationContinuationAction;
+  continuationDecision?: ContinuationDecision;
+  progressTrace?: import("./pipelines/shared/progress-evidence").ProgressTrace;
   shouldPostCheck?: boolean;
   finishReason?: string;
   completeDetected?: boolean;
@@ -113,13 +118,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
   };
   const compressResolved = runtime?.getResolvedModel?.("basic") ?? resolved;
-  const decisionDeps = (purpose: "prediction" | "postConversation") => {
+  const decisionDeps = (purpose: "prediction" | "postConversation" | "continuation") => {
     const selected = runtime.getResolvedModel("fast");
     const fallback = runtime.getResolvedModel("basic");
     return {
       decisionMode: runtime.appConfig?.decisionMode?.[purpose],
-      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl },
-      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl },
+      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, beforeCall: selected.beforeCall },
+      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl, beforeCall: fallback.beforeCall },
     };
   };
   const apiKey: string = resolved.apiKey;
@@ -133,7 +138,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const resolvedContextLimit = resolveContextLimit(providerModel, configContextLimit);
   const maxTokens: number = runtime?.maxTokens ?? DEFAULT_MAX_TOKENS;
   const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 50;
-  const maxChainDepth: number = runtime?.appConfig?.conversation?.maxChainDepth ?? 5;
+  const budgetLimits = () => ({
+    maxGlobalRounds: runtime.appConfig?.conversation?.maxGlobalRounds
+      ?? (runtime.appConfig?.conversation?.maxChainDepth === undefined ? 100 : runtime.appConfig.conversation.maxChainDepth + 1),
+    maxLocalRounds: runtime.appConfig?.conversation?.maxLocalRounds ?? 5,
+  });
   const memory = sm.get("memory");
   const skillService = sm.get<SkillServiceLike>("skill");
   const network = sm.get<NetworkServiceLike>("network");
@@ -151,6 +160,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   contextService.start();
   const persistence = new SessionPersistenceService(sandbox, contextService);
   const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx), undefined, persistence);
+  orchestrator.setReleaseGuard(task => prepareBudgetRelease({
+    session: sessionStore.get(task.sessionId), task, limits: budgetLimits(),
+    save: () => sessionStore.save(task.sessionId, "task_completed"),
+    report: (step, data) => logger.debug(`execution budget: ${step}`, data),
+    notify: text => bus.emit(BusEvents.Transport.Delta as any, { name: "execution-budget", payload: {
+      sessionId: task.sessionId, taskId: task.parentTaskId ?? task.id, textDelta: `\n\n${text}`, offset: 0,
+    } }),
+  }));
   const backgroundShell = new BackgroundShellService({
     sandbox,
     onComplete: result => orchestrator.scheduleConversation(
@@ -219,6 +236,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     prediction: (task: any) => {
       const session = sessionStore.get(task.sessionId);
       return predictionPipeline({
+        maxGlobalRounds: budgetLimits().maxGlobalRounds,
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
@@ -255,11 +273,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         : { provider: "deepseek", model: "deepseek-v4-flash", apiKey, baseUrl, thinking: "disabled" as const };
 
       return conversationPipeline({
+        ...decisionDeps("continuation"),
         session,
         task,
         apiKey: resolvedModel.apiKey,
         model: resolvedModel.model,
         baseUrl: resolvedModel.baseUrl,
+        beforeCall: resolvedModel.beforeCall,
         providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
         configContextLimit: resolvedContextLimit,
         providerOptions: {
@@ -284,6 +304,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     "follow-up-evaluator": (task: any) => {
       const session = sessionStore.get(task.sessionId);
       return followUpEvaluatorPipeline({
+        ...decisionDeps("continuation"),
+        toolRecordStore: persistence.toolRecords,
         session,
         task,
         apiKey, model, baseUrl, maxTokens,
@@ -371,6 +393,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         metadata: {
           finishReason: result.finishReason ?? "",
           completeDetected: result.completeDetected ?? false,
+          ...(result.progressTrace ? { progress: result.progressTrace } : {}),
           ...(result.toolEffectSummary ? { toolEffectSummary: result.toolEffectSummary } : {}),
         },
         ...(reasoningContent ? { reasoningContent } : {}),
@@ -384,12 +407,28 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     if (sid && result.tokenUsage) {
       sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
     }
+    const completedBudget = sid ? sessionStore.get(sid).executionBudget : undefined;
+    const releasedReceipt = completedBudget?.lastReleasedTask;
+    const previouslyCompleted = completedBudget?.completed;
+    if (p.task.pipeline === "post-conversation" && result.type === "complete" && result.completedGoalId === completedBudget?.goalId
+      && completedBudget && !completedBudget.pause && !completedBudget.pendingTask && !completedBudget.lastReleasedTask
+      && !sessionStore.get(sid).todoState.some(todo => todo.status === "pending" || todo.status === "in_progress")) {
+      completedBudget.completed = true;
+    }
+    if (p.task.pipeline === "conversation" && releasedReceipt?.id === p.task.id) completedBudget!.lastReleasedTask = undefined;
     const checkpointed = !sid || sessionStore.save(sid, "task_completed");
     if (!checkpointed) {
+      if (completedBudget) completedBudget.completed = previouslyCompleted;
+      if (completedBudget && releasedReceipt) completedBudget.lastReleasedTask = releasedReceipt;
+      if (sid && result.budgetBefore) {
+        sessionStore.get(sid).executionBudget = result.budgetBefore;
+        result.budgetBefore.pause = "unknown"; result.budgetBefore.resuming = false;
+      }
       const error = "Session checkpoint failed after task completion";
       p.task.state = TaskState.FAILED;
       taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error });
-      logger.warn("session checkpoint failed after task completion", { sessionId: sid, taskId: p.task.id });
+      logger.warn("session checkpoint failed after task completion", { sessionId: sid, taskId: p.task.id,
+        rootTaskId: p.task.chainId, continuation: result.continuationDecision });
       orchestrator.discardTask(p.task.id);
       broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
         taskId: p.task.id,
@@ -402,9 +441,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       });
       return;
     }
+    if (sid && result.budgetPauseText) bus.emit(BusEvents.Transport.Delta as any, { name: "execution-budget", payload: {
+      sessionId: sid, taskId: p.task.id, textDelta: `\n\n${result.budgetPauseText}`, offset: 0,
+    } });
     taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.COMPLETED, result });
     bus.emit(BusEvents.Task.Committed, { task: p.task, result: p.result });
-    if (sid && p.task.pipeline === "conversation") {
+    if (sid && (p.task.pipeline === "conversation" || result.chainAction)) {
       const payload = {
         sessionId: sid,
         chatId: p.task.chatId,
@@ -412,12 +454,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         ownerTaskId: p.task.id,
       };
       if (result.chainAction) {
-        logger.debug("conversation completed: scheduling chain after persistence", { action: result.chainAction, sessionId: sid });
+        logger.debug("conversation completed: scheduling chain after persistence", { action: result.chainAction, sessionId: sid,
+          taskId: p.task.id, parentTaskId: p.task.parentTaskId, rootTaskId: p.task.chainId, continuation: result.continuationDecision });
         bus.emit(BusEvents.Conversation.Chain as any, {
           name: "task-completed",
-          payload: { ...payload, action: result.chainAction },
+          payload: { ...payload, action: result.chainAction, continuation: result.continuationDecision },
         } as any);
-      } else if (result.shouldPostCheck) {
+      } else if (p.task.pipeline === "conversation" && result.shouldPostCheck) {
         logger.debug("conversation completed: scheduling post-conversation after persistence", { sessionId: sid });
         bus.emit(BusEvents.Conversation.Idle as any, {
           name: "task-completed",
@@ -448,6 +491,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   bus.on(BusEvents.Task.Failed, (p) => {
     orchestrator.discardTask(p.task.id);
     const cancelled = p.task.state === TaskState.CANCELLED;
+    const budget = sessionStore.get(p.task.sessionId).executionBudget;
+    if (cancelled && budget && (budget.releasedTaskIds.includes(p.task.id) || budget.goalId === p.task.chainId || p.task.pipeline === "follow-up-evaluator")) {
+      budget.pause = "cancelled"; budget.resuming = false;
+    } else if (budget?.pause === "health_check" && p.task.pipeline === "follow-up-evaluator") {
+      budget.pause = "unknown"; budget.resuming = false;
+    }
     taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: p.task.state, error: String(p.error) });
     const failureCode = resolveTaskFailureCode(p.error, cancelled);
     const logContext = {
@@ -499,10 +548,10 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   });
 
   const schedulePersistPath = `${sandbox}/${runtime?.appConfig?.schedule?.persistPath ?? "schedule-tasks.json"}`;
-  const scheduleService = new ScheduleService(taskQueue, schedulePersistPath, logger);
+  const scheduleService = new ScheduleService(taskQueue, schedulePersistPath, logger, task => orchestrator.releaseTask(task));
 
   const hookPersistPath = `${sandbox}/hooks.json`;
-  const hookManager = new HookManager(scheduleService, bus, taskQueue, hookPersistPath, logger);
+  const hookManager = new HookManager(scheduleService, bus, taskQueue, hookPersistPath, logger, task => orchestrator.releaseTask(task));
   hookManagerRef.current = hookManager;
   hookManager.restore();
 
@@ -523,61 +572,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const sessionSweepTimer = setInterval(() => sessionStore.sweepIdle(), 60_000);
   sessionSweepTimer.unref?.();
 
-  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string; action: ConversationChainAction } }) => {
+  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string; action: ConversationChainAction; continuation?: ContinuationDecision } }) => {
     const p = e.payload;
     const session = sessionStore.get(p.sessionId);
-    logger.debug("conversation chain: handler entered", { action: p.action, sessionMsgCount: session.messages.length, chainDepth: session.chainDepth });
-
-    if (p.action === "post_check_retry") {
-      const depth = session.chainDepth;
-      if (depth >= maxChainDepth) {
-        logger.debug("conversation chain: post_check_retry depth exceeded, ending chain", { depth, maxChainDepth });
-        return;
-      }
-      if (session.pendingPrediction) {
-        session.pendingPrediction.contextRelevance = "continuation";
-      }
-      session.incrementChainDepth();
-      orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
-      return;
-    }
-
-    const depth = session.chainDepth;
-
-    if (p.action === "continue_todo") {
-      const decision = decideTodoContinuation(session.todoState, depth, maxChainDepth);
-      if (decision === "complete") {
-        logger.debug("conversation chain: TODO continuation completed, ending chain", { todoCount: session.todoState.length });
-        return;
-      }
-      if (decision === "limit_reached") {
-        logger.debug("conversation chain: TODO continuation depth exceeded, ending chain", { depth, maxChainDepth });
-        return;
-      }
-      if (session.pendingPrediction) {
-        session.pendingPrediction.contextRelevance = "continuation";
-      }
-      session.incrementChainDepth();
-      orchestrator.scheduleTodoContinuation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
-      return;
-    }
-
-    if (session.pendingPrediction) {
-      session.pendingPrediction.contextRelevance = "continuation";
-    }
-
-    if (depth >= maxChainDepth) {
-      logger.debug("conversation chain: depth exceeded, scheduling evaluator", { depth, action: p.action });
-      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
-      return;
-    }
-    if (depth >= 3 && depth % 3 === 0) {
-      logger.debug("conversation chain: periodic evaluator", { depth, action: p.action });
-      orchestrator.scheduleEvaluator(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
-      return;
-    }
-    session.incrementChainDepth();
-    orchestrator.scheduleFollowUp(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
+    logger.debug("conversation chain: handler entered", { sessionId: p.sessionId, action: p.action,
+      taskId: p.ownerTaskId, continuation: p.continuation, budget: session.executionBudget });
+    if (p.action === "continue_todo" && !hasActiveTodos(session.todoState)) return;
+    if (session.pendingPrediction) session.pendingPrediction.contextRelevance = "continuation";
+    orchestrator.scheduleContinuation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId, p.continuation,
+      p.action === "continue_todo" ? "请继续执行当前 TODO；完成后更新 TODO 状态。" : undefined);
   });
 
   bus.on(BusEvents.Conversation.Idle as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string } }) => {
@@ -595,9 +598,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   taskEngine.start();
 
   const broadcaster = new Broadcaster();
+  sessionStore.onSaved(session => broadcaster.broadcastToSession(session.sessionId,
+    WsMessages.Server.SessionTelemetry, buildSessionTelemetry(session, budgetLimits().maxLocalRounds)));
   registerTransportBridge(bus, broadcaster);
   registerDecisionBridge(bus, broadcaster);
   const wsHandlers = createWsHandlers({
+    getLocalRoundLimit: () => budgetLimits().maxLocalRounds,
     broadcaster,
     taskQueue,
     bus,
@@ -720,10 +726,26 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
           const session = sessionStore.get(normalized.sessionId, origin ?? { type: "unknown" });
           if (origin?.type === "gateway" && session.initiator.type !== "unknown" && (session.initiator.type !== "gateway" || session.initiator.clientId !== origin.clientId || session.initiator.platform !== origin.platform)) return Response.json({ error: "Session initiator conflict" }, { status: 409 });
           if (body.platform === "tui" && session.initiator.type === "tui") session.lastTuiUsedAt = Date.now();
-          if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text)) {
+          if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text,
+            /^(继续|continue)$/i.test(body.data.text) && session.executionBudget ? { controlRequest: "resume_budget" } : undefined)) {
             return Response.json({ error: "Failed to persist session message" }, { status: 500 });
           }
-          return createTaskHandler(taskQueue, normalized, bus);
+          if (/^(继续|continue)$/i.test(body.data?.text ?? "") && session.executionBudget && (session.executionBudget.pause || sessionStore.isActive(session.sessionId))) {
+            if (!session.executionBudget.pause) return Response.json({
+              taskId: session.executionBudget.releasedTaskIds.at(-1), state: "processing", reason: "already_running",
+            });
+            const before = structuredClone(session.executionBudget);
+            const task = resumeExecutionBudget(session, budgetLimits().maxGlobalRounds);
+            if (!task) return Response.json({ taskId: before.pendingTask?.id, state: "suspended", reason: before.pause });
+            if (!sessionStore.save(session.sessionId, "message")) {
+              session.executionBudget = before;
+              return Response.json({ error: "Failed to persist budget authorization" }, { status: 500 });
+            }
+            logger.debug("execution budget: resume-authorized", { sessionId: session.sessionId, before, after: structuredClone(session.executionBudget) });
+            orchestrator.releaseTask(task);
+            return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
+          }
+          return createTaskHandler(taskQueue, normalized, bus, undefined, task => orchestrator.releaseTask(task));
         }
         if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
           const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);

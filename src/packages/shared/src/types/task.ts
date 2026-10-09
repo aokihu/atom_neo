@@ -25,9 +25,20 @@ export enum TaskState {
 
 export type TaskOrigin = { type: "hook"; hookId: string };
 
+export type TodoTarget = { index: number; content: string };
+export type ContinuationDecision = {
+  kind: "resume_current" | "advance_todo" | "reconcile_progress" | "finish";
+  reason: string;
+  source: "rules" | "jev" | "llm" | "fallback";
+  target?: TodoTarget;
+  followUp?: { summary: string; nextPrompt: string; avoidRepeat: string };
+};
+
 export type ContextCompressRequest = {
   trigger: "manual" | "token-overflow" | "context-pressure";
   resumeConversation: boolean;
+  continuation?: ContinuationDecision;
+  resumeTask?: TaskItem;
 };
 
 export type TaskItem = {
@@ -53,7 +64,9 @@ export type TaskPayload =
   | { type: "audio"; data: string }
   | { type: "tool_report"; data: TaskToolReport }
   | { type: "memory_search_request"; data: MemorySearchRequest }
-  | { type: "context_compress_request"; data: ContextCompressRequest };
+  | { type: "context_compress_request"; data: ContextCompressRequest }
+  | { type: "continuation_request"; data: ContinuationDecision }
+  | { type: "budget_check"; data: { goalId: string; windowId: number } };
 
 export type TaskToolCall = {
   toolName: string;

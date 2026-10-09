@@ -42,7 +42,7 @@
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
 | [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `--config` 配置编辑器（OpenTUI 窗口化、按 provider 循环、原子回滚） | 实现首次启动流程/配置编辑 |
-| [tui-interface.md](./tui-interface.md) | eDEX 风格 OpenTUI 布局、真实数据映射与响应式约束 | 修改 TUI 界面 |
+| [tui-interface.md](./tui-interface.md) | eDEX 风格 OpenTUI 布局、ROUNDS 预算、TODO 滚动跟随与响应式约束 | 修改 TUI 界面 |
 | [tui-modal.md](./tui-modal.md) | TUI 通用 Modal 组件 — 标题/内容/ActionBar + 键盘导航 + 定位 | 实现 TUI 浮层/确认框 |
 | [future-features.md](./future-features.md) | 已设计但未实现的功能清单 | 设计时查，避免遗忘 |
 
@@ -51,6 +51,8 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [pipelines/conversation.md](./pipelines/conversation.md) | 核心对话管线 — 8-Element 链、手工 Tool Loop、流式生成、链式续写、TODO 顺序执行、Unicode 净化 | 理解核心流程 |
+| [pipelines/continuation-validation.md](./pipelines/continuation-validation.md) | 统一续写仲裁的实现验收、真实会话证据与已知限制 | 检查续写修改 |
+| [pipelines/progress-evidence-experiment.md](./pipelines/progress-evidence-experiment.md) | 跟踪参数的完整方案、参数消融对照及最终选择 | 验证判断参数 |
 | [pipelines/prediction.md](./pipelines/prediction.md) | 意图预测管线 — 输入分类、难度评估、主题检测 | 理解意图分析 |
 | [pipelines/follow-up-evaluator.md](./pipelines/follow-up-evaluator.md) | 跟进评估管线 — 长会话质量保障、循环检测 | 理解质量守护 |
 | [pipelines/follow-up.md](./pipelines/follow-up.md) | 链式续写管线 — 轻量 source/sink 转换、continuation payload 注入 | 理解链式续写 |
@@ -75,3 +77,5 @@
 | [agents-compiler.md](./subsystems/agents-compiler.md) | AGENTS.md 安全编译器 — LLM 无害化过滤 + SHA-256 缓存 | 理解安全过滤机制 |
 | [skill-system-plan.md](./subsystems/skill-system-plan.md) | Skill 系统开发计划 — 8 阶段，33 测试用例 | 开始编码前 |
 | [skill-system.md](./subsystems/skill-system.md) | 可插拔 AI Agent 技能系统 — 三层加载、分段注入、自主卸载 | 实现 skill 功能 |
+
+双层执行预算：[窗口健康检查](pipelines/follow-up-evaluator.md)、[验收记录](pipelines/continuation-validation.md)。

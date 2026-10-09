@@ -35,13 +35,21 @@ export function useChat(
     if (initialMCPServers) useChatStore.setState({ mcpServers: initialMCPServers });
 
     const client = new TuiClient({ url, sessionId });
+    useChatStore.setState({ rounds: null, todoItems: [], telemetryOnline: false });
     clientRef.current = client;
     client.onSnapshot(messages => {
       useChatStore.setState({ predictionDecision: null, postDecision: null, messages: messages.filter(m => m.visible !== false && (m.role === "user" || m.role === "assistant")).map(m => ({
         id: `${client.sessionId}-${m.seq ?? m.timestamp}`, role: m.role as "user" | "assistant", content: m.content, timestamp: m.timestamp, streaming: false,
       })) });
     });
-    client.onDisconnect(() => useChatStore.getState().addMessage({ id: useChatStore.getState().generateId(), role: "error", content: "Core disconnected. Attach again to resume this session.", timestamp: Date.now() }));
+    client.onTelemetry(telemetry => {
+      if (clientRef.current === client) useChatStore.setState({ rounds: telemetry.rounds, todoItems: telemetry.todos, telemetryOnline: true });
+    });
+    client.onDisconnect(() => {
+      if (clientRef.current !== client) return;
+      useChatStore.setState({ rounds: null, todoItems: [], telemetryOnline: false });
+      useChatStore.getState().addMessage({ id: useChatStore.getState().generateId(), role: "error", content: "Core disconnected. Attach again to resume this session.", timestamp: Date.now() });
+    });
 
     client.onContextTokens((total) => {
       useChatStore.getState().setContextTokens(total);

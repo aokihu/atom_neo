@@ -6,6 +6,8 @@ export type AnalysisResult = {
   status: "satisfactory" | "blocked" | "needs_user_input";
   reason: string;
   fingerprint?: string;
+  assessment?: Record<string, string>;
+  confirmed?: boolean;
 };
 
 export const FALLBACK_ANALYSIS: AnalysisResult = { status: "satisfactory", reason: "analysis skipped, continuing" };
@@ -26,6 +28,8 @@ export type PostConversationFlowState = {
   finishReason: string;
   completeDetected: boolean;
   toolEffectSummary: ToolEffectSummary;
+  progressEvidence?: import("../../shared/progress-evidence").ProgressEvidence;
   analysis?: AnalysisResult;
   abortSignal?: AbortSignal;
+  executionGoalId?: string;
 };

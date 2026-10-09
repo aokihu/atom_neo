@@ -15,6 +15,7 @@ export class SessionStore {
   #log: LogFn | null;
   #onCreated?: (sessionId: string) => void;
   #onClosed?: (sessionId: string) => void;
+  #onSaved?: (session: SessionContext) => void;
   #persistence?: SessionPersistenceService;
 
   constructor(
@@ -88,27 +89,26 @@ export class SessionStore {
 
   save(sessionId: string, reason: SessionCheckpointReason): boolean {
     const session = this.#sessions.get(sessionId);
-    if (!session || !this.#persistence) return Boolean(session);
+    if (!session) return false;
     try {
-      this.#persistence.checkpoint(session, reason);
-      return true;
+      this.#persistence?.checkpoint(session, reason);
     } catch (error) {
       this.#log?.("session-store save failed", { sid: sessionId, reason, error: String(error) });
       return false;
     }
+    try { this.#onSaved?.(session); }
+    catch (error) { this.#log?.("session saved observer failed", { sid: sessionId, error: String(error) }); }
+    return true;
   }
 
-  checkpointUserMessage(sessionId: string, content: string): boolean {
+  checkpointUserMessage(sessionId: string, content: string, metadata?: Record<string, unknown>): boolean {
     const session = this.get(sessionId);
-    const previousChainDepth = session.chainDepth;
     const previousSource = session.originalSource;
-    session.addMessage({ role: "user", content, timestamp: Date.now() });
+    session.addMessage({ role: "user", content, timestamp: Date.now(), ...(metadata ? { metadata } : {}) });
     const seq = session.messages.at(-1)?.seq;
-    session.resetChainDepth();
     session.originalSource = "external";
     if (this.save(sessionId, "message")) return true;
     if (seq !== undefined) session.removeMessages([seq]);
-    session.setChainDepth(previousChainDepth);
     session.originalSource = previousSource;
     return false;
   }
@@ -171,6 +171,10 @@ export class SessionStore {
 
   onCreated(handler: (sessionId: string) => void): void {
     this.#onCreated = handler;
+  }
+
+  onSaved(handler: (session: SessionContext) => void): void {
+    this.#onSaved = handler;
   }
 
   onClosed(handler: (sessionId: string) => void): void {

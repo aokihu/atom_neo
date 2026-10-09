@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useKeyboard } from "@opentui/react";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import { useChatStore } from "../stores/chat";
 import { useTheme } from "./App";
 import { ScheduleBar } from "./ScheduleBar";
@@ -41,10 +43,83 @@ export function TelemetrySection({ title, meta, children }: { title: string; met
     </box>
   );
 }
+
+export function RoundsSection() {
+  const { colors } = useTheme();
+  const rounds = useChatStore(state => state.rounds);
+  const online = useChatStore(state => state.telemetryOnline);
+  const globalUsed = rounds?.completed ? 0 : rounds?.globalUsed ?? 0;
+  const localUsed = rounds?.completed ? 0 : rounds?.localUsed ?? 0;
+  const status = rounds?.pause === "health_check" ? "CHECKING"
+    : rounds?.pause === "global_limit" ? "PAUSED · LIMIT"
+      : rounds?.pause === "cancelled" ? "CANCELLED"
+        : rounds?.pause === "interrupted" ? "PAUSED · INTERRUPTED"
+          : rounds?.pause ? "PAUSED · REVIEW" : undefined;
+  return <TelemetrySection title="ROUNDS" meta={online && rounds ? `${globalUsed} / ${rounds.globalAllowance}` : undefined}>
+    {!online ? <text fg={colors.text.muted}>OFFLINE</text> : !rounds ? <EmptyState /> : <>
+      <text fg={globalUsed / Math.max(rounds.globalAllowance, 1) >= 0.8 ? colors.status.warning : colors.status.success}>
+        {buildGauge(globalUsed, rounds.globalAllowance, SIDEBAR_CONTENT_WIDTH)}
+      </text>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={colors.text.muted}>WINDOW</text>
+        <text fg={localUsed >= rounds.localLimit ? colors.status.warning : colors.text.secondary}>{`${localUsed} / ${rounds.localLimit}`}</text>
+      </box>
+      {status && <text fg={colors.status.warning}>{status}</text>}
+      {rounds.pause === "global_limit" && <text fg={colors.text.secondary}>输入“继续”追加额度</text>}
+    </>}
+  </TelemetrySection>;
+}
+
+export function TodoSection() {
+  const { colors } = useTheme();
+  const items = useChatStore(state => state.todoItems);
+  const online = useChatStore(state => state.telemetryOnline);
+  const scrollRef = useRef<ScrollBoxRenderable>(null);
+  const active = items.findIndex(item => item.status === "in_progress");
+  const activeKey = active < 0 ? undefined : `${active}:${items[active].content}`;
+  const followPending = useRef(false);
+  const scrolling = items.length > 5;
+  useEffect(() => {
+    followPending.current = true;
+    scrollRef.current?.requestRender();
+  }, [activeKey, scrolling]);
+  useKeyboard(key => {
+    if (!(key.meta || key.option) || key.ctrl || !scrolling) return;
+    if (key.name === "up" || key.name === "down") scrollRef.current?.scrollBy(key.name === "up" ? -3 : 3);
+  });
+  const rows = items.map((item, index) => {
+    const iconColor = item.status === "in_progress" ? colors.status.warning
+      : item.status === "completed" ? colors.status.success
+        : item.status === "cancelled" ? colors.status.error : colors.text.muted;
+    return <box key={index} id={`todo-row-${index}`} flexDirection="row" gap={1} flexShrink={0}>
+      <text fg={iconColor} flexShrink={0}>{TODO_ICON[item.status] ?? "?"}</text>
+      <text flexGrow={1} flexShrink={1} fg={item.status === "in_progress" ? colors.text.secondary : colors.text.muted}>{item.content}</text>
+    </box>;
+  });
+  return <TelemetrySection title="TODO" meta={active >= 0 ? `▶ ${active + 1} / ${items.length}` : `≡ ${items.length}`}>
+    {!online ? <text fg={colors.text.muted}>OFFLINE</text> : items.length === 0 ? <EmptyState /> : <>
+      <box flexDirection="row" gap={1}>
+        <text fg={colors.status.success}>{`✅${items.filter(item => item.status === "completed").length}`}</text>
+        <text fg={colors.text.muted}>{`⌛${items.filter(item => item.status === "pending").length}`}</text>
+        <text fg={colors.status.warning}>{`▶${items.filter(item => item.status === "in_progress").length}`}</text>
+        <text fg={colors.text.muted}>{`✕${items.filter(item => item.status === "cancelled").length}`}</text>
+      </box>
+      {scrolling ? <scrollbox id="todo-scroll" ref={scrollRef} height={15} flexShrink={0} scrollX={false}
+        onSizeChange={() => { followPending.current = true; }}
+        renderAfter={() => {
+          if (!followPending.current) return;
+          followPending.current = false;
+          if (active >= 0) scrollRef.current?.scrollChildIntoView(`todo-row-${active}`);
+        }}>
+        {rows}
+      </scrollbox> : rows}
+    </>}
+  </TelemetrySection>;
+}
+
 export function Sidebar({ contextLimit, url, adminToken }: { contextLimit: number; url: string; adminToken?: string }) {
   const { colors } = useTheme();
   const contextTokens = useChatStore(state => state.contextTokens);
-  const todoItems = useChatStore(state => state.todoItems);
   const toolInfos = useChatStore(state => state.toolInfos);
   const mcpServers = useChatStore(state => state.mcpServers);
   const messages = useChatStore(state => state.messages);
@@ -79,6 +154,7 @@ export function Sidebar({ contextLimit, url, adminToken }: { contextLimit: numbe
         <text fg={colors.text.secondary}>{`${contextTokens.toLocaleString()} / ${contextLimit.toLocaleString()}`}</text>
       </TelemetrySection>
 
+      <RoundsSection />
       <ScheduleBar url={url} adminToken={adminToken} />
 
       <TelemetrySection title="TOOLS" meta={`${runningTools} RUN`}>
@@ -122,24 +198,7 @@ export function Sidebar({ contextLimit, url, adminToken }: { contextLimit: numbe
           ))}
       </TelemetrySection>
 
-      <TelemetrySection title="TODO" meta={String(todoItems.length)}>
-        {todoItems.length === 0
-          ? <EmptyState />
-          : todoItems.slice(0, 5).map((item, index) => {
-            const iconColor = item.status === "in_progress" ? colors.status.warning
-              : item.status === "completed" ? colors.status.success
-                : item.status === "cancelled" ? colors.status.error
-                  : colors.text.muted;
-            return (
-              <box key={`${item.content}-${index}`} flexDirection="row" gap={1}>
-                <text fg={iconColor}>{TODO_ICON[item.status] ?? "?"}</text>
-                <text fg={item.status === "in_progress" ? colors.text.secondary : colors.text.muted}>
-                  {item.content}
-                </text>
-              </box>
-            );
-          })}
-      </TelemetrySection>
+      <TodoSection />
 
       <TelemetrySection title="NETWORK" meta="SESSION">
         <box flexDirection="row" justifyContent="space-between">

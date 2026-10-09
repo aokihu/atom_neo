@@ -7,6 +7,8 @@ export type {
   TaskOrigin,
   TaskPayload,
   ContextCompressRequest,
+  ContinuationDecision,
+  TodoTarget,
   TaskToolCall,
   TaskToolReport,
   ToolReportFact,
@@ -84,6 +86,7 @@ export type {
 
 export type {
   SessionMessage,
+  SessionTelemetry,
   InferenceFact,
   ToolContext,
   ToolResultEntry,

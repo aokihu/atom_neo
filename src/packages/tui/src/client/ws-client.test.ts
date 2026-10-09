@@ -35,6 +35,22 @@ afterEach(() => {
 });
 
 describe("TuiClient task correlation", () => {
+  test("restores telemetry on attach and accepts updates only for this session", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    const client = new TuiClient({ sessionId: "s1" });
+    const updates: any[] = [];
+    client.onTelemetry(update => updates.push(update));
+    const connecting = client.connect();
+    const initial = { sessionId: "s1", rounds: null, todos: [{ content: "restored", status: "pending", priority: "medium" }] };
+    FakeWebSocket.current!.emit(WsMessages.Server.SessionReady, { sessionId: "s1", telemetry: initial });
+    await connecting;
+    FakeWebSocket.current!.emit(WsMessages.Server.SessionTelemetry, { sessionId: "other", rounds: null, todos: [] });
+    FakeWebSocket.current!.emit(WsMessages.Server.SessionTelemetry, { sessionId: "s1", rounds: { goalId: "g", globalUsed: 15, globalAllowance: 100, localUsed: 0, localLimit: 5 }, todos: [] });
+    expect(updates).toHaveLength(2);
+    expect(updates[0]).toEqual(initial);
+    expect(updates[1].rounds.globalUsed).toBe(15);
+    client.close();
+  });
   test("shows only the current turn decision, including events before task submission returns", async () => {
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     let releaseResponse: (() => void) | undefined;

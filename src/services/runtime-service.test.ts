@@ -34,7 +34,7 @@ describe("RuntimeService runtime config", () => {
     });
     expect(runtime.getResolvedModel("fast")).toMatchObject({ provider: "openrouter-jev", model: "typesafe/jev-1.13", type: "jev", apiKey: "" });
     expect(runtime.getResolvedModel("basic")).toMatchObject({ type: "llm", apiKey: "sk-test" });
-    expect(runtime.appConfig.decisionMode).toEqual({ prediction: "jev", postConversation: "jev" });
+    expect(runtime.appConfig.decisionMode).toEqual({ prediction: "jev", postConversation: "jev", continuation: "jev" });
   });
 
   test("updateRuntimeConfig merges into effective config and persists overlay", () => {

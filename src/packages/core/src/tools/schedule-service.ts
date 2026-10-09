@@ -1,6 +1,6 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { TaskSource } from "@atom-neo/shared";
-import type { ScheduledTask, Logger } from "@atom-neo/shared";
+import type { ScheduledTask, Logger, TaskItem } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
 import { createTaskItem } from "../task-factory";
 
@@ -20,6 +20,7 @@ function generateId(): string {
 
 export class ScheduleService {
   #queue: TaskQueue;
+  #releaseTask?: (task: TaskItem) => boolean;
   #persistPath: string;
   #logger: Logger;
   #tasks = new Map<string, ScheduledTask>();
@@ -27,8 +28,9 @@ export class ScheduleService {
   #timers = new Map<string, TimerHandle>();
   #stopped = false;
 
-  constructor(queue: TaskQueue, persistPath: string, logger: Logger) {
+  constructor(queue: TaskQueue, persistPath: string, logger: Logger, releaseTask?: (task: TaskItem) => boolean) {
     this.#queue = queue;
+    this.#releaseTask = releaseTask;
     this.#persistPath = persistPath;
     this.#logger = logger;
   }
@@ -232,8 +234,8 @@ export class ScheduleService {
       source: TaskSource.INTERNAL,
       payload: [{ type: "text", data: task.prompt }],
     });
-    this.#queue.enqueue(taskItem);
-    this.#logger.info("schedule task enqueued", { id: task.id, taskItemId: taskItem.id });
+    const released = this.#releaseTask ? this.#releaseTask(taskItem) : (this.#queue.enqueue(taskItem), true);
+    this.#logger.info(released ? "schedule task enqueued" : "schedule task withheld", { id: task.id, taskItemId: taskItem.id });
   }
 
   #stopJob(id: string): void {

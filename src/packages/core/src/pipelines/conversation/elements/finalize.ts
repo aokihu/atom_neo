@@ -62,7 +62,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
         this.report(BusEvents.Element.Data, { step: "skip post-check, non-recoverable error", errorStatusCode: input.errorStatusCode });
         return this.#complete(input);
       }
-      return this.#complete(input, true);
+      return this.#complete(input, !input.suppressPostCheck);
     }
 
     this.report(BusEvents.Element.Data, { step: "defer chain until task completed", chainAction: input.chainAction });
@@ -94,7 +94,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       input.task.sessionId,
       input.task.chatId,
       input.task.parentTaskId ?? input.task.id,
-      { trigger: "token-overflow", resumeConversation: true },
+      { trigger: "token-overflow", resumeConversation: true, continuation: input.continuationDecision },
       input.task.id,
     );
     return this.#complete({ ...input, chainAction: undefined });
@@ -108,6 +108,8 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
       reasoningContent: input.reasoningContent,
       tokenUsage: input.tokenUsage,
       chainAction: input.chainAction,
+      continuationDecision: input.continuationDecision,
+      progressTrace: input.progressTrace,
       shouldPostCheck,
       finishReason: input.finishReason,
       completeDetected: input.completeDetected,

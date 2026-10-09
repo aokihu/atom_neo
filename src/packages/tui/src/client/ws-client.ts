@@ -9,7 +9,7 @@ type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: s
 type MCPConnectedCallback = (data: { servers: { name: string; online: boolean; toolCount: number }[]; toolInfos: { name: string; source: string; description: string; online: boolean }[] }) => void;
 
 import { TaskFailureCodes, WsMessages } from "@atom-neo/shared";
-import type { DecisionUpdatePayload } from "@atom-neo/shared";
+import type { DecisionUpdatePayload, SessionTelemetry } from "@atom-neo/shared";
 
 type PendingRequest = {
   resolve: (text: string) => void;
@@ -43,6 +43,7 @@ export class TuiClient {
   #onToolStep?: ToolStepCallback;
   #onToolGroupComplete?: ToolGroupCompleteCallback;
   #onContextTokens?: ContextTokensCallback;
+  #onTelemetry?: (telemetry: SessionTelemetry) => void;
   #onBusyChange?: BusyChangeCallback;
   #onMCPStatus?: MCPStatusCallback;
   #onMCPConnected?: MCPConnectedCallback;
@@ -87,11 +88,15 @@ export class TuiClient {
           this.#earlyDecisions = [];
           this.#activeTaskIds = new Set(p.activeTaskIds ?? []);
           this.#onSnapshot?.(p.messages ?? []);
+          this.#onTelemetry?.(p.telemetry ?? { sessionId: this.#sessionId, rounds: null, todos: [] });
           this.#onBusyChange?.(this.#activeTaskIds.size > 0);
           clearTimeout(timer);
           if (typeof p.contextTokens === "number") this.#onContextTokens?.(p.contextTokens);
           this.#ready = true;
           resolve();
+        },
+        [WsMessages.Server.SessionTelemetry]: (p) => {
+          if (p.sessionId === this.#sessionId) this.#onTelemetry?.(p as SessionTelemetry);
         },
         [WsMessages.Server.TransportDelta]: (p) => {
           const delta = p.textDelta ?? "";
@@ -219,6 +224,7 @@ export class TuiClient {
   onToolStepFinish(cb: ToolStepCallback): void { this.#onToolStep = cb; }
   onToolGroupComplete(cb: ToolGroupCompleteCallback): void { this.#onToolGroupComplete = cb; }
   onContextTokens(cb: ContextTokensCallback): void { this.#onContextTokens = cb; }
+  onTelemetry(cb: (telemetry: SessionTelemetry) => void): void { this.#onTelemetry = cb; }
   onBusyChange(cb: BusyChangeCallback): void { this.#onBusyChange = cb; }
   onMCPStatus(cb: MCPStatusCallback): void { this.#onMCPStatus = cb; }
   onMCPConnected(cb: MCPConnectedCallback): void { this.#onMCPConnected = cb; }

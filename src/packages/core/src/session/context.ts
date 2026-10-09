@@ -1,3 +1,4 @@
+import { createContinuationTask } from "../task-factory";
 import type {
   SessionInitiator,
   SessionMessage,
@@ -10,6 +11,7 @@ import type {
 } from "@atom-neo/shared";
 import type {
   PersistedSessionState,
+  ExecutionBudget,
   PersistedSessionStatus,
   SessionArchiveState,
   SessionCheckpointReason,
@@ -22,6 +24,17 @@ export type TodoItem = {
   status: "pending" | "in_progress" | "completed" | "cancelled";
   priority: "high" | "medium" | "low";
 };
+
+export function selectCurrentTodo(todos: readonly TodoItem[]): import("@atom-neo/shared").TodoTarget | undefined {
+  const index = todos.findIndex(todo => todo.status === "in_progress");
+  return index < 0 ? undefined : { index, content: todos[index]!.content };
+}
+
+export function findTodoTarget(todos: readonly TodoItem[], target?: import("@atom-neo/shared").TodoTarget) {
+  if (!target) return undefined;
+  const matches = todos.map((todo, index) => ({ todo, index })).filter(item => item.todo.content === target.content);
+  return matches.length === 1 ? matches[0] : undefined;
+}
 
 export function hasActiveTodos(todos?: readonly TodoItem[]): boolean {
   return todos?.some(todo => todo.status === "pending" || todo.status === "in_progress") ?? false;
@@ -69,6 +82,8 @@ export class SessionContext {
   #tokenUsage: TokenUsage = { total: 0 };
   #contextTokens: number = 0;
   #chainDepth: number = 0;
+  executionBudget?: ExecutionBudget;
+  legacyBudgetDepth?: number;
   #originalSource?: string;
   #todoState: TodoItem[] = [];
   #currentTopic: string | null = null;
@@ -238,6 +253,7 @@ export class SessionContext {
       ...(params.reason ? { closeReason: params.reason } : {}),
       currentTopic: this.#currentTopic,
       chainDepth: this.#chainDepth,
+      ...(this.executionBudget ? { executionBudget: structuredClone(this.executionBudget) } : {}),
       todoState: structuredClone(this.#todoState),
       continuationContext: this.#continuationContext ? { ...this.#continuationContext } : null,
       inferenceFacts: structuredClone(this.#inferenceFacts),
@@ -261,6 +277,19 @@ export class SessionContext {
     session.#tokenUsage = { ...state.tokenUsage };
     session.#contextTokens = state.contextTokens ?? 0;
     session.#chainDepth = state.chainDepth ?? 0;
+    session.executionBudget = state.executionBudget ? structuredClone(state.executionBudget) : undefined;
+    if (session.executionBudget?.lastReleasedTask && !session.executionBudget.pendingTask
+      && session.executionBudget.pause !== "cancelled") {
+      const previous = session.executionBudget.lastReleasedTask;
+      session.executionBudget.pendingTask = createContinuationTask({ parentTask: previous, pipeline: "conversation", payload: previous.payload });
+      session.executionBudget.pause = "interrupted";
+    }
+    if (session.executionBudget?.pendingTask) {
+      session.executionBudget.resuming = false;
+      if (session.executionBudget.pause === "health_check") session.executionBudget.pause = "unknown";
+      else if (!session.executionBudget.pause) session.executionBudget.pause = "interrupted";
+    }
+    if (!state.executionBudget && ((state.chainDepth ?? 0) > 0 || messages.some(message => message.pipeline === "conversation"))) session.legacyBudgetDepth = state.chainDepth ?? 0;
     session.#todoState = structuredClone(state.todoState ?? []);
     session.#currentTopic = state.currentTopic ?? null;
     session.#lastSafeMsgCount = session.#messages.length;
@@ -271,6 +300,7 @@ export class SessionContext {
     return {
       sessionId: this.sessionId,
       messageCount: this.#messages.length,
+      executionBudget: this.executionBudget,
       inferenceFactCount: this.#inferenceFacts.length,
       toolMode: this.#toolContext.mode,
       memoryScopes: this.#memoryScopes,

@@ -1,133 +1,33 @@
-# Follow-Up Evaluator Pipeline
+# 局部执行窗口健康检查
 
-> **Purpose**: 链式续写检查点 — 每 3 轮或深度超限时评估对话健康度，分类为 healthy/looping/stuck/degrading，必要时干预。
+复用现有 follow-up-evaluator，不新增 element。conversation 释放入队统一扣减全局与局部预算；Prediction、Post、健康检查和压缩不计执行轮次。
 
-## 职责
+## 触发和职责
 
-在链式续写的检查点（每 3 轮或达到深度上限）评估对话健康度，分类为 healthy/looping/stuck/degrading，干预不健康的对话。
+默认 maxGlobalRounds=100、maxLocalRounds=5（局部允许5～10）。全局已用次数达到获准总额度时先暂停；局部窗口满时保存完整待执行 TaskItem，再检查。只暂存任务不计数，入队后失败或取消不退款。正文及进度检查点成功后，保存预算扣减才释放业务任务。
 
-## 触发方式
+检查输入限定于原始目标和当前窗口：两类预算、窗口前后 TODO、正文引用首尾摘录、真实 ToolRecord 摘要。缺失/裁剪明确标记；TODO completed、正文变长或 Agent 声明不能单独证明推进。Runtime 只校验选项、目标/窗口、取消和额度，不计算业务完成度。
 
-```
-BusEvents.Conversation.Chain handler in server.ts
-  ├── depth >= conversation.maxChainDepth (默认 5)
-  ├── depth >= 3 && depth % 3 === 0
-  └── → orchestrator.scheduleEvaluator() → TaskEngine
-      → pipelineBuilders["follow-up-evaluator"] → followUpEvaluatorPipeline().build(bus)
-```
+## 决策
 
-## Element 链
+| 结果 | 行为 |
+|---|---|
+| healthy | 仅重置局部次数、建立新窗口，恢复完整待执行请求 |
+| looping / stuck / degrading | 保留 TODO 与请求，温和暂停 |
+| unknown | 证据不足或调用失败，暂停等待用户 |
 
-```
-evaluator-input (source) → evaluator-analyze (transform) → evaluate-finalize (sink)
-```
+fast 模型优先；原生 JEV 失败后只执行一次现有 LLM 模拟。没有可用 JEV 时直接模拟一次；每次调用限时10秒、模拟512 tokens、SDK重试0。取消不回退，两次失败不默认 healthy。诊断保存输入、原始选项/概率、来源、回退原因和预算前后值，不保存凭据。
 
-| 顺序 | Element | Kind | 职责 |
-|------|---------|------|------|
-| 1 | `evaluator-input` | source | 从最近 10 条消息提取 User Goal 与低预算 Assistant Unverified Reference |
-| 2 | `evaluator-analyze` | transform | 调用 LLM 分类对话健康度 |
-| 3 | `evaluate-finalize` | sink | 根据评估结果干预或继续 |
+## 恢复
 
-## FlowState
+精确“继续”或不区分大小写的 continue 是暂停控制指令，记录用户消息并跳过 Prediction。全局暂停追加当前配置额度、累计不归零；其他暂停重新检查同一窗口。局部仍满必须检查；检查中的重复指令不重复授权。过期判断不得修改新目标。
 
-```typescript
-type EvaluatorMode = "initial" | "analyzing" | "intervening";
+状态随 Session 检查点持久化。旧 chainDepth 转为含首次正文的已用次数；窗口证据不足先检查。压缩不清空预算，保留续写约束。达到限制明确未完成，不输出整体完成标记。
 
-type EvaluatorResult = {
-  health: "healthy" | "looping" | "stuck" | "degrading";
-  suggestion: string;
-  upgradeModel: boolean;
-  reason: string;
-};
+相关：[对话](conversation.md)、[配置](../subsystems/configuration.md)、[JEV](../subsystems/jev-decisions.md)、[验收](continuation-validation.md)。
 
-type EvaluatorFlowState = {
-  mode: EvaluatorMode;
-  task: any;
-  session: any;
-  recentSummary: string;
-  evaluation?: EvaluatorResult;
-};
-```
+### 真实测试后的判断口径澄清
 
-## 状态转移
+健康检查判断窗口是否有推进，不判断整项交付是否已经验收完成。摘录裁剪只能限制可判断范围；现有摘录已显示不同阶段的具体内容与对应工具交接时，不能单因裁剪或仍有最终校验项而判 unknown。最终长度/格式仍由 Agent 自查及现有 Post 检查；Runtime 不新增业务字数计算。任务规则强调交接前检查本项约束，表格不能代替正文长度。
 
-```
-initial
-  → evaluator-input:  提取消息摘要                    → analyzing
-  → evaluator-analyze:  LLM 分类健康度                    → intervening
-  → evaluate-finalize: 干预决策                        → PipelineResult
-```
-
-## 健康状态 → 行为映射
-
-| health | 行为 |
-|--------|------|
-| `healthy` | 不做干预，继续调度 conversation |
-| `looping` | 写 `session.evaluatorSuggestion`，升级 model 检查 |
-| `stuck` | 添加终止消息到 session，停止链式续写 |
-| `degrading` | 写 `session.evaluatorSuggestion`，设置 `session.upgradeModel = true` |
-
-### Token 用量双重检查
-
-```
-contextTokens > effectiveLimit * 80% && health !== "stuck"
-  → orchestrator.scheduleCompress()
-```
-
-即使评估为 healthy/degrading，如果 token 用量超过 80% 阈值，也会触发 context-compress 管道。
-
-### upgradeModel 效果
-
-下一轮 conversation 的模型选择：
-```
-session.upgradeModel === true
-  → getResolvedModel("advanced")  // 强制升级模型
-  → session.upgradeModel = delete  // 用完即删
-```
-
-## Deps
-
-```typescript
-{
-  session: any;              // → evaluator-input
-  task: any;
-  apiKey: string;            // → evaluator-analyze
-  model: string;             // → evaluator-analyze
-  baseUrl?: string;          // → evaluator-analyze
-  maxTokens?: number;        // → evaluator-analyze
-  orchestrator;              // → evaluate-finalize
-  configContextLimit?: number; // → evaluate-finalize
-}
-```
-
-## 错误处理
-
-| 场景 | 行为 |
-|------|------|
-| 空消息摘要 | fallback `health: "healthy"` |
-| 无 apiKey | fallback `health: "healthy"` |
-| LLM 调用失败 | fallback `health: "healthy"` |
-| LLM 无 JSON 响应 | fallback `health: "healthy"`，`level: "warn"` |
-
-fallback 策略偏向"不过度干预"——宁可错放也不误杀。
-
-## 文件
-
-```
-src/packages/core/src/pipelines/follow-up-evaluator/
-  index.ts                          pipeline 定义
-  elements/
-    types.ts                        EvaluatorFlowState, EvaluatorResult
-    index.ts                        barrel export
-    evaluator-input.ts
-    evaluator-analyze.ts
-    evaluate-finalize.ts
-```
-
-## 相关文档
-
-| 文档 | 说明 |
-|------|------|
-| [conversation.md](./conversation.md) | evaluator 如何在 chainAction 链中触发 |
-| [context-compress.md](./context-compress.md) | evaluator 触发压缩的阈值条件 |
-| [prompts.md](./prompts.md) | evaluator-analyze 使用的提示词 |
+释放记录保留最近获准任务的完整载荷直到正文检查点提交，以覆盖预算保存与实际执行之间的进程退出。恢复时保留已扣次数，用户继续授权一轮新的恢复尝试；旧任务 ID 重放不再扣费或执行。

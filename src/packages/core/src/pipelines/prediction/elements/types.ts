@@ -32,6 +32,7 @@ export type PredictionPipelineDeps = {
   fallbackModel?: { apiKey: string; model: string; baseUrl?: string };
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
+  maxGlobalRounds?: number;
   configContextLimit?: number;
   skillService?: SkillServiceLike;
 };

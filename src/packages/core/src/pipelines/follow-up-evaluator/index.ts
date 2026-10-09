@@ -1,3 +1,5 @@
+import type { DecisionModel } from "../../decision/choose";
+import type { ToolRecordStore } from "../../tools/tool-record-store";
 import { pipeline } from "../../pipeline/builder";
 import { registerElement } from "../../pipeline/registry";
 import {
@@ -15,6 +17,9 @@ export function registerFollowUpEvaluatorElements(): void {
 }
 
 export function followUpEvaluatorPipeline(deps: {
+  decisionModel?: DecisionModel;
+  fallbackModel?: DecisionModel;
+  toolRecordStore?: ToolRecordStore;
   session: any;
   task: any;
   apiKey: string;
@@ -26,8 +31,9 @@ export function followUpEvaluatorPipeline(deps: {
   contextService: ContextService;
 }) {
   return pipeline("follow-up-evaluator")
-    .source("evaluator-input", { session: deps.session })
+    .source("evaluator-input", { session: deps.session, toolRecordStore: deps.toolRecordStore })
     .transform("evaluator-analyze", {
+      decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel,
       apiKey: deps.apiKey,
       model: deps.model,
       baseUrl: deps.baseUrl,

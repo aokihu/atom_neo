@@ -1,13 +1,13 @@
+import { getProgressFacts } from "./progress-evidence";
 /** Optional typed-decision transform for Prediction and Post-Conversation. */
-import { generateText, Output } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { BaseElement, BusEvents, PromptKey, resolvePrompt, substringWellFormed } from "@atom-neo/shared";
+import { BaseElement, BusEvents, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, IntentPredictionResult } from "@atom-neo/shared";
-import { z } from "zod";
-import { callJev } from "../../decision/jev-client";
+import type { SimulateDecision } from "../../decision/choose";
+import { chooseDecision } from "../../decision/choose";
 import type { JevQuestion } from "../../decision/jev-client";
 import type { PredictionFlowState } from "../prediction/elements/types";
 import type { PostConversationFlowState, AnalysisResult } from "../post-conversation/elements/types";
+import { buildProgressQuestions, readProgressAssessment } from "./progress-questions";
 
 export const TOPIC_CHOICES = {
   "code.implementation.feature": "Implement or extend application code",
@@ -54,8 +54,6 @@ const POST_QUESTIONS = {
   } },
 } as const satisfies Record<string, JevQuestion>;
 
-const SimulationSchema = z.object({ answers: z.record(z.string(), z.string()) });
-type ChoiceQuestions = typeof PREDICTION_QUESTIONS | typeof POST_QUESTIONS;
 type DecisionChoices = Record<string, { choice: string; probabilities: Record<string, number> }>;
 
 /** Only registered combinations are legal; probability mass ranks those combinations. */
@@ -75,7 +73,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
   #fallback: { apiKey: string; model: string; baseUrl?: string };
   #maxTokens: number;
   #fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
-  #simulate?: (state: Record<string, unknown>, questions: ChoiceQuestions, abortSignal?: AbortSignal, model?: { apiKey: string; model: string; baseUrl?: string }) => Promise<Record<string, string>>;
+  #simulate?: SimulateDecision;
 
   constructor(params: {
     name: string;
@@ -86,7 +84,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     fallback: { apiKey: string; model: string; baseUrl?: string };
     maxTokens?: number;
     fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
-    simulate?: (state: Record<string, unknown>, questions: ChoiceQuestions, abortSignal?: AbortSignal, model?: { apiKey: string; model: string; baseUrl?: string }) => Promise<Record<string, string>>;
+    simulate?: SimulateDecision;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#purpose = params.purpose;
@@ -102,7 +100,8 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     if (this.#purpose === "post-conversation" && input.mode !== "analyzing") return input;
 
     const isPrediction = this.#purpose === "prediction";
-    const questions = isPrediction ? PREDICTION_QUESTIONS : POST_QUESTIONS;
+    const progressEvidence = !isPrediction ? (input as PostConversationFlowState).progressEvidence : undefined;
+    const questions = isPrediction ? PREDICTION_QUESTIONS : { ...POST_QUESTIONS, ...(progressEvidence ? buildProgressQuestions(progressEvidence) : {}) };
     const state = isPrediction
       ? this.#predictionState(input as PredictionFlowState)
       : this.#postState(input as PostConversationFlowState);
@@ -114,13 +113,16 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     const decision = {
       sessionId: input.task.sessionId,
       taskId: input.task.id,
+      parentTaskId: input.task.parentTaskId,
       rootTaskId: input.task.chainId,
       purpose: this.#purpose,
       source,
     };
     this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "run" });
     try {
-      const choices = await this.#choose(state, questions, source === "jev", input.abortSignal);
+      const { choices } = await chooseDecision({ state, questions, model: this.#model, fallback: this.#fallback,
+        maxTokens: this.#maxTokens, abortSignal: input.abortSignal, fetchImpl: this.#fetchImpl, simulate: this.#simulate,
+        onRequest: request => this.report(BusEvents.Element.Data, { step: "decision-request", ...decision, ...request }) });
       if (isPrediction) {
         const prediction: IntentPredictionResult = {
           difficulty: choices.difficulty.choice as IntentPredictionResult["difficulty"],
@@ -130,21 +132,29 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
           topic: composeTopic(choices),
           reasoning: "classified by typed decision",
         };
-        this.report(BusEvents.Element.Data, { step: "decided", purpose: this.#purpose, ...prediction });
+        this.report(BusEvents.Element.Data, { step: "decided", ...decision, ...prediction, choices });
         this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "ok", intent: prediction.intent, modelProfile: prediction.modelProfile, topic: prediction.topic });
         return { ...input, mode: "routing", prediction } as PredictionFlowState;
       }
 
+      const assessment = progressEvidence ? readProgressAssessment(choices) : undefined;
+      const invalidSuccess = choices.status.choice === "satisfactory" && assessment
+        && ((input as PostConversationFlowState).activeTodoCount > 0 || assessment.contentState !== "complete"
+          || choices.behavior.choice === "partial_work" || choices.behavior.choice === "no_output" || assessment.evidenceRef === "none");
       const analysis: AnalysisResult = {
+        confirmed: true,
         status: choices.status.choice as AnalysisResult["status"],
-        reason: `typed decision: ${choices.behavior.choice}`,
+        reason: assessment ? `${invalidSuccess ? "inconsistent_success: " : ""}${assessment.reasonCode}` : `typed decision: ${choices.behavior.choice}`,
         fingerprint: choices.behavior.choice,
+        ...(assessment ? { assessment } : {}),
       };
-      this.report(BusEvents.Element.Data, { step: "decided", purpose: this.#purpose, status: analysis.status, behavior: choices.behavior.choice });
+      if (invalidSuccess) analysis.status = "blocked";
+      this.report(BusEvents.Element.Data, { step: "decided", ...decision, status: analysis.status, behavior: choices.behavior.choice,
+        ...(assessment ? { assessment, choices, rawStatus: choices.status.choice, invalidSuccess } : {}) });
       this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "ok", analysisStatus: analysis.status });
       return { ...input, mode: "acting", analysis } as PostConversationFlowState;
     } catch (error) {
-      this.report(BusEvents.Element.Data, { step: "decision failed", purpose: this.#purpose, error: substringWellFormed(String(error), 0, 200) });
+      this.report(BusEvents.Element.Data, { step: "decision failed", ...decision, error: substringWellFormed(String(error), 0, 200) });
       this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "err" });
       return isPrediction
         ? { ...input, mode: "routing" } as PredictionFlowState
@@ -166,7 +176,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     if (!input.userMessage || !input.assistantResponse) return null;
     return {
       userMessage: substringWellFormed(input.userMessage, 0, 500),
-      assistantResponse: substringWellFormed(input.assistantResponse, 0, 3000),
+      assistantResponse: input.progressEvidence ? input.assistantResponse : substringWellFormed(input.assistantResponse, 0, 3000),
       taskIntent: input.predictedTaskIntent,
       assistantParts: input.assistantParts,
       assistantLength: input.assistantLength,
@@ -174,44 +184,8 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
       finishReason: input.finishReason,
       completeDetected: input.completeDetected,
       toolEffectSummary: input.toolEffectSummary,
+      ...(input.progressEvidence ? { progressEvidence: getProgressFacts(input.progressEvidence) } : {}),
     };
   }
 
-  async #choose(state: Record<string, unknown>, questions: ChoiceQuestions, useJev: boolean, abortSignal?: AbortSignal): Promise<DecisionChoices> {
-    const model = useJev || (this.#model.type === "llm" && this.#model.apiKey) ? this.#model : this.#fallback;
-    if (!model.apiKey) throw new Error("no decision model API key");
-
-    let choices: DecisionChoices = {};
-    if (useJev) {
-      const response = await callJev({
-        apiKey: model.apiKey,
-        model: model.model,
-        endpoint: this.#model.baseUrl!,
-        state,
-        questions,
-        abortSignal,
-        fetchImpl: this.#fetchImpl,
-      });
-      choices = Object.fromEntries(Object.entries(response.answers).map(([id, answer]) => [id, answer.type === "choice" ? answer : { choice: "", probabilities: {} }]));
-    } else {
-      const answers = this.#simulate
-        ? await this.#simulate(state, questions, abortSignal, model)
-        : (await generateText({
-          model: createDeepSeek({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.model),
-          instructions: resolvePrompt(PromptKey.SIMULATE_JEV),
-          prompt: JSON.stringify({ state, questions }),
-          output: Output.object({ schema: SimulationSchema }),
-          maxOutputTokens: this.#maxTokens,
-          temperature: 0,
-          abortSignal,
-        })).output.answers;
-      choices = Object.fromEntries(Object.entries(answers).map(([id, choice]) => [id, {
-        choice, probabilities: Object.fromEntries(Object.keys((questions as Record<string, { criteria: Record<string, unknown> }>)[id]?.criteria ?? {}).map(option => [option, option === choice ? 1 : 0])),
-      }]));
-    }
-    for (const [id, question] of Object.entries(questions)) {
-      if (!Object.hasOwn(question.criteria, choices[id]?.choice)) throw new Error(`invalid decision choice: ${id}`);
-    }
-    return choices;
-  }
 }

@@ -20,5 +20,5 @@ export function predictionPipeline(deps: PredictionPipelineDeps) {
       ? { purpose: "prediction", model: deps.decisionModel, fallback: deps.fallbackModel, maxTokens: deps.maxTokens }
       : { apiKey: deps.apiKey, model: deps.model, baseUrl: deps.baseUrl, maxTokens: deps.maxTokens })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .sink("predict-finalize", { orchestrator: deps.orchestrator, skillService: deps.skillService });
+    .sink("predict-finalize", { orchestrator: deps.orchestrator, maxGlobalRounds: deps.maxGlobalRounds, skillService: deps.skillService });
 }

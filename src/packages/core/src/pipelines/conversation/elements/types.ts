@@ -1,4 +1,4 @@
-import type { ContextOwner, ContextSnapshot, ConversationContinuationAction, IntentRequest } from "@atom-neo/shared";
+import type { ContinuationDecision, TodoTarget, ContextOwner, ContextSnapshot, ConversationContinuationAction, IntentRequest } from "@atom-neo/shared";
 import type { TokenUsage } from "../../../session/context";
 
 export type ConversationMode =
@@ -49,6 +49,15 @@ export type ConversationFlowState = {
     avoidRepeat: string;
   };
   chainAction?: ConversationContinuationAction;
+  continuationDecision?: ContinuationDecision;
+  progressTrace?: import("../../shared/progress-evidence").ProgressTrace;
+  todoBefore?: import("../../../session/context").TodoItem[];
+  currentTodo?: TodoTarget;
+  todoHandoff?: boolean;
+  toolStopReason?: string;
+  streamInterrupted?: boolean;
+  cancelled?: boolean;
+  suppressPostCheck?: boolean;
   intents?: IntentRequest[];
   tokenUsage?: TokenUsage;
   tokenOverflow?: boolean;

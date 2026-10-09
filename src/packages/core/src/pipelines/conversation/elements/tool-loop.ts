@@ -49,6 +49,8 @@ export function toSchemaOnlyTools(tools: Record<string, any>): Record<string, an
 export function projectToolMessages(
   calls: readonly ManualToolCall[],
   records: ReadonlyMap<string, ToolStepRecord>,
+  assistantText = "",
+  assistantReasoning = "",
 ): ModelMessage[] {
   const projected = calls.flatMap(call => {
     const record = records.get(call.toolCallId);
@@ -58,12 +60,16 @@ export function projectToolMessages(
   return [
     {
       role: "assistant",
-      content: projected.map(({ call }) => ({
-        type: "tool-call" as const,
-        toolCallId: call.toolCallId,
-        toolName: call.toolName,
-        input: call.input,
-      })),
+      content: [
+        ...(assistantReasoning ? [{ type: "reasoning" as const, text: assistantReasoning }] : []),
+        ...(assistantText ? [{ type: "text" as const, text: assistantText }] : []),
+        ...projected.map(({ call }) => ({
+          type: "tool-call" as const,
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+          input: call.input,
+        })),
+      ],
     },
     {
       role: "tool",

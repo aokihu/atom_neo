@@ -14,6 +14,9 @@ import {
 import { ContextService } from "../../../context/context-service";
 import { makeBus } from "../../test-helpers";
 import { ToolCallLedger } from "../../../tools/governance";
+import type { Message } from "./types";
+import { createDeepSeek } from "@ai-sdk/deepseek";
+import { streamText } from "ai";
 
 test("distinguishes unknown cache usage from a measured zero hit", () => {
   expect(resolveCacheMetrics()).toEqual({ inputTokens: null, cacheReadTokens: null,
@@ -32,15 +35,50 @@ test("keeps cumulative model usage separate from the current context window", ()
 });
 
 test("uses the TOON Snapshot only as system text", () => {
-  const userMessages = [{ role: "user", content: "current request" }];
+  const userMessages: Message[] = [{ role: "user", content: "current request" }];
 
-  expect(resolveModelInput({
+  const result = resolveModelInput({
     contextSnapshot: { id: "snapshot-1", content: "context[1]{content}:\n  workspace rules" },
     systemText: "legacy system",
     userMessages,
-  })).toEqual({
-    systemText: "context[1]{content}:\n  workspace rules",
-    userMessages,
+  });
+  expect(result.systemText).toBe("context[1]{content}:\n  workspace rules");
+  expect(result.userMessages).toEqual([{ role: "user", content: "current request" }]);
+});
+
+test("converts historical Assistant reasoning into AI SDK message parts", () => {
+  expect(resolveModelInput({ userMessages: [
+    { role: "user", content: "写世界文明史" },
+    { role: "assistant", content: "第一段", reasoning_content: "thinking" },
+  ] }).userMessages).toEqual([
+    { role: "user", content: "写世界文明史" },
+    { role: "assistant", content: [
+      { type: "reasoning", text: "thinking" },
+      { type: "text", text: "第一段" },
+    ] },
+  ]);
+});
+
+test("DeepSeek receives historical reasoning_content in a continuation request", async () => {
+  let request: any;
+  const testFetch = async (_url: URL | RequestInfo, init?: RequestInit) => {
+    request = JSON.parse(String(init?.body));
+    const chunk = { id: "test", object: "chat.completion.chunk", created: 1,
+      model: "deepseek-flash", choices: [{ index: 0,
+        delta: { role: "assistant", content: "继续" }, finish_reason: "stop" }] };
+    return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`,
+      { headers: { "Content-Type": "text/event-stream" } });
+  };
+  const provider = createDeepSeek({ apiKey: "local-test-only", fetch: testFetch as typeof fetch });
+  const result = streamText({ model: provider("deepseek-flash"),
+    messages: resolveModelInput({ userMessages: [
+      { role: "user", content: "写世界文明史" },
+      { role: "assistant", content: "第一段", reasoning_content: "thinking" },
+    ] }).userMessages });
+
+  expect(await result.text).toBe("继续");
+  expect(request.messages.at(-1)).toMatchObject({
+    role: "assistant", content: "第一段", reasoning_content: "thinking",
   });
 });
 

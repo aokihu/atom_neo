@@ -72,7 +72,7 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
     }
   },
 
-  "decisionMode": { "prediction": "jev", "postConversation": "jev" },
+  "decisionMode": { "prediction": "jev", "postConversation": "jev", "continuation": "jev" },
 
   "transport": {
     "maxOutputTokens": 4096
@@ -289,3 +289,15 @@ OPENAI_API_KEY=sk-xxx
 | [bootstrap.md](../overview/bootstrap.md) | 配置自动创建流程 |
 | [sandbox.md](./sandbox.md) | 沙箱目录中的 config.json 位置 |
 | [architecture.md](../overview/architecture.md) | 配置在系统架构中的角色 |
+
+**续写仲裁**：`decisionMode.continuation` 缺省 `jev`，仅冲突时调用 `fast`；设置 `rules` 关闭模型仲裁，仍使用统一规则和进度核对。复用 `basic` 模拟回退；不修改输出 token 上限。
+
+## 双层执行预算（2026-10-09）
+
+conversation.maxGlobalRounds 默认100（正整数）；maxLocalRounds 默认5，允许5～10。显式旧 maxChainDepth 按后续轮次换算为全局额度 maxChainDepth+1，新字段优先；不改写用户文件。目标预算独立于 Topic，明确新目标建立新记录；同目标恢复、核对、Post 重试及压缩通过统一入队检查，不重置全局累计。
+
+释放前先保存正文/进度，再保存预算扣减；尚未释放的暂存不计数，保存失败不入队。窗口健康检查优先 JEV，失败后 LLM 模拟一次（分别10秒、512 tokens、零重试）；healthy 只重置局部，不健康或 unknown 保留待执行请求并暂停。精确“继续”/continue 跳过 Prediction，全局暂停追加额度，其他暂停重查原窗口。完整任务载荷和续写参数持久化并在压缩后保留。
+
+详见 [健康检查](../pipelines/follow-up-evaluator.md)。
+
+旧版运行时配置补丁若仅发送 maxChainDepth，也换算为 maxGlobalRounds=depth+1；同一补丁显式提供新字段时以新字段为准。

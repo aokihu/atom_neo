@@ -7,9 +7,10 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import type { ToolContextInjection, ToolDefinition, ToolEffect, ToolResultMetadata, ToolsGroup } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
-import type { TokenUsage } from "../../../session/context";
+import type { TokenUsage, TodoItem } from "../../../session/context";
+import { findTodoTarget, selectCurrentTodo } from "../../../session/context";
 import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT, CONTEXT_RESERVE } from "../../../constants";
-import { IntentInputSchema } from "../../../tools/builtin/intent";
+import { IntentInputSchema, retainIntentMemory } from "../../../tools/builtin/intent";
 import type { IntentToolInput } from "../../../tools/builtin/intent";
 import type { ConversationFlowState, ToolEffectSummary } from "./types";
 import { calcTokenUsage, calcTokenRatio } from "../../shared";
@@ -38,7 +39,12 @@ export function resolveModelInput(input: Pick<
 >) {
   return {
     systemText: input.contextSnapshot?.content ?? input.systemText ?? "",
-    userMessages: input.userMessages ?? [],
+    userMessages: (input.userMessages ?? []).map(message => message.role === "assistant" && message.reasoning_content
+      ? { role: "assistant" as const, content: [
+          { type: "reasoning" as const, text: message.reasoning_content },
+          { type: "text" as const, text: message.content },
+        ] }
+      : { role: message.role, content: message.content }) as ModelMessage[],
   };
 }
 
@@ -118,6 +124,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
+  #beforeCall?: (signal?: AbortSignal) => Promise<void>;
   #builtinTools: Record<string, any>;
   #aiTools: Record<string, any>;
   #maxTokens: number;
@@ -136,6 +143,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #toolRecordStore?: ToolRecordStore;
   #toolDefinitions: ReadonlyMap<string, ToolDefinition>;
   #task?: { id?: string; chatId?: string };
+  #memory: any;
 
   constructor(params: {
     name: string;
@@ -144,6 +152,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     apiKey: string;
     model: string;
     baseUrl?: string;
+    beforeCall?: (signal?: AbortSignal) => Promise<void>;
     tools: ToolDefinition[];
     mcpToolsRef?: { current: Record<string, any> };
     maxTokens?: number;
@@ -156,11 +165,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     contextService: ContextService;
     toolRecordStore?: ToolRecordStore;
     task?: { id?: string; chatId?: string };
+    memory?: any;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
+    this.#beforeCall = params.beforeCall;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
     this.#maxSteps = params.maxSteps ?? 50;
     this.#providerOptions = params.providerOptions ?? {};
@@ -171,6 +182,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     this.#contextService = params.contextService;
     this.#toolRecordStore = params.toolRecordStore;
     this.#task = params.task;
+    this.#memory = params.memory;
     this.#toolDefinitions = new Map(params.tools.map(definition => [definition.name, definition]));
     this.#sameToolBatchNames = new Set(
       params.tools.filter(tool => tool.allowSameToolBatch === true).map(tool => tool.name),
@@ -185,8 +197,17 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "formatted") return input;
+    const todoBefore: TodoItem[] = structuredClone(this.#session?.todoState ?? []);
+    const request = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data;
+    const reconcile = request?.kind === "reconcile_progress";
+    const trace = { sessionId: input.task.sessionId, taskId: input.task.id,
+      parentTaskId: input.task.parentTaskId, rootTaskId: input.task.chainId };
+    let currentTodo = request?.target ?? selectCurrentTodo(todoBefore);
+    let todoHandoff = false;
+    let reconciliationAttempts = 0;
+    input = { ...input, todoBefore, currentTodo };
     if (!this.#apiKey) {
-      this.report(BusEvents.Element.Data, { step: "no apiKey, fallback" });
+      this.report(BusEvents.Element.Data, { step: "no apiKey, fallback", ...trace, incomingContinuation: request, todoBefore, currentTodo });
       return { ...input, mode: "executing", responseText: "(no API key configured)" };
     }
     const reportTransport = (eventName: string, payload: Record<string, unknown>) => {
@@ -202,12 +223,16 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const mcpCurrent = this.#mcpToolsRef?.current ?? {};
     const wrappedMCP = wrapMCPAiTools(mcpCurrent, (event, payload) => this.report(event, payload), this.#stepCounter, this.#toolResults, this.#toolGovernance);
     this.#aiTools = { ...this.#builtinTools, ...wrappedMCP };
-    const modelTools = toSchemaOnlyTools(this.#aiTools);
-    const tools = Object.keys(this.#aiTools);
+    const availableTools = reconcile ? Object.fromEntries(Object.entries(this.#aiTools).filter(([name]) => name === "todowrite")) : this.#aiTools;
+    const modelTools = toSchemaOnlyTools(availableTools);
+    const tools = Object.keys(availableTools);
     this.#toolResults.clear();
     const initialGovernance = this.#toolGovernance.current.snapshot();
     this.report(BusEvents.Element.Data, {
       step: "starting LLM call",
+      ...trace,
+      incomingContinuation: request,
+      toolNames: tools,
       model: this.#model,
       msgCount: userMessages.length,
       toolCount: tools.length,
@@ -229,6 +254,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     let streamErrorCode = 0;
     let streamFailed = false;
     let timedOut = false;
+    let loopExitReason = "";
+    let lastStepToolsEnabled = false;
     let completeDetected = false;
     let cumulativeUsage = 0;
     let lastUsage: any = { totalTokens: 0, inputTokens: 0, outputTokens: 0 };
@@ -243,7 +270,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       ?? Math.max(1, this.#configContextLimit - this.#maxTokens - CONTEXT_RESERVE);
     let reportedGovernanceStop = "";
     let skillRevision = this.#skillService?.getRevision?.(this.#session?.sessionId) ?? 0;
-    let modelMessages = [...userMessages] as ModelMessage[];
+    let modelMessages = [...userMessages];
     const allToolCalls: { toolName: string; metadata: ToolResultMetadata }[] = [];
     let toolsGroup: ToolsGroup | undefined;
     const difficulty = this.#session?.pendingPrediction?.difficulty ?? "medium";
@@ -251,11 +278,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     const streamSignal = input.abortSignal
       ? AbortSignal.any([abortController.signal, input.abortSignal])
       : abortController.signal;
-    const timeoutTimer = setTimeout(() => {
+    let remainingTimeout = resolveTimeout(difficulty);
+    let timeoutStartedAt = Date.now();
+    const onTimeout = () => {
       timedOut = true;
       this.report(BusEvents.Element.Data, { step: "stream-timeout", level: "warn", stepCount: this.#stepCounter.count });
       abortController.abort();
-    }, resolveTimeout(difficulty));
+    };
+    let timeoutTimer = setTimeout(onTimeout, remainingTimeout);
 
     const completeStep = (stepNumber: number) => {
       this.bus.emit(BusEvents.Context.StepCompleted as any, {
@@ -332,7 +362,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
         name, description: definition.description, inputSchema: await asSchema(definition.inputSchema).jsonSchema,
       })));
       const toolDefinitionsHash = createHash("sha256").update(JSON.stringify(schemaDescriptions)).digest("hex").slice(0, 16);
-      while (!timedOut && modelStep <= this.#maxSteps + 1) {
+      while (!timedOut && modelStep <= this.#maxSteps + 1 && (!reconcile || reconciliationAttempts < 2)) {
         refreshStepContext();
         const governance = this.#toolGovernance.current.snapshot();
         if (governance.stopReason && governance.stopReason !== reportedGovernanceStop) {
@@ -340,7 +370,15 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           this.report(BusEvents.Element.Data, { step: "tool-governance-stop", stepNumber: modelStep, ...governance });
         }
         const forceText = forceFinalText || this.#toolGovernance.current.shouldForceText();
+        lastStepToolsEnabled = !forceText && tools.length > 0;
         const instructions = [currentSystemText, stepInstruction].filter(Boolean).join("\n\n");
+        if (this.#beforeCall) {
+          clearTimeout(timeoutTimer);
+          remainingTimeout = Math.max(0, remainingTimeout - (Date.now() - timeoutStartedAt));
+          try { await this.#beforeCall(streamSignal); }
+          finally { timeoutStartedAt = Date.now(); timeoutTimer = setTimeout(onTimeout, remainingTimeout); }
+          streamSignal.throwIfAborted();
+        }
         const streamResult = streamText({
           model,
           instructions: instructions || undefined,
@@ -375,6 +413,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           } else if (part.type === "finish" || part.type === "finish-step") {
             finishReason = part.finishReason ?? finishReason;
           } else if (part.type === "error") {
+            finishReason = "error";
             const err = part.error ?? {};
             streamFailed = true;
             if (err.statusCode) streamErrorCode = err.statusCode;
@@ -386,6 +425,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               responseBody: (err.responseBody ?? "").slice(0, 500),
             });
           } else if (part.type === "abort") {
+            finishReason = "error";
             streamFailed = true;
             this.report(BusEvents.Element.Data, { step: "abort", level: "warn" });
           }
@@ -414,7 +454,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
         } catch (err: any) {
           streamFailed = true;
-          finishReason ||= "error";
+          finishReason = "error";
           this.report(BusEvents.Element.Data, { step: "usage-error", level: "warn", error: err?.message ?? String(err) });
         } finally {
           clearTimeout(usageTimer);
@@ -422,31 +462,44 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
         this.report(BusEvents.Element.Data, {
           step: "model-step-ended",
+          ...trace,
+          snapshotId: currentSnapshot?.id,
+          toolsEnabled: lastStepToolsEnabled,
+          todowriteAvailable: lastStepToolsEnabled && tools.includes("todowrite"),
+          forceText,
+          currentTodo,
+          currentTodoState: findTodoTarget(this.#session?.todoState ?? [], currentTodo),
           stepNumber: modelStep,
           finishReason: finishReason || "natural",
           toolCallCount: stepCalls.length,
           textLength: stepText.length,
         });
 
+        reasoningText += stepReasoning;
         if (stepCalls.length === 0) {
-          reasoningText = stepReasoning;
           const markerIndex = stepText.indexOf("<<<COMPLETE>>>");
           if (markerIndex >= 0) {
             stepText = stepText.slice(0, markerIndex);
             completeDetected = true;
             this.report(BusEvents.Element.Data, { step: "complete-marker-detected" });
           }
-          const finalStepText = stripToolCallMarkup(stepText);
-          if (finalStepText) {
-            const offset = fullText.length;
-            fullText += finalStepText;
-            reportTransport(BusEvents.Transport.Delta, { textDelta: finalStepText, offset });
-          }
+        }
+        const visibleStepText = reconcile ? "" : stripToolCallMarkup(stepText);
+        if (visibleStepText) {
+          const offset = fullText.length;
+          const textDelta = (fullText ? "\n\n" : "") + visibleStepText;
+          fullText += textDelta;
+          reportTransport(BusEvents.Transport.Delta, { textDelta, offset });
+        }
+
+        if (stepCalls.length === 0) {
+          loopExitReason = "no_tool_calls";
           completeStep(modelStep);
           break;
         }
 
         if (forceText) {
+          loopExitReason = "tools_forced_off";
           this.report(BusEvents.Element.Data, {
             step: "tool-call-ignored",
             stepNumber: modelStep,
@@ -457,6 +510,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           break;
         }
 
+        if (reconcile) reconciliationAttempts += stepCalls.length;
         const batchDecision = validateToolCallBatch(stepCalls, this.#sameToolBatchNames);
         if (!batchDecision.allowed) {
           const error = formatToolBatchBlock(batchDecision);
@@ -490,7 +544,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
               error,
             });
           }
-          modelMessages = [...modelMessages, ...projectToolMessages(stepCalls, stepRecords)];
+          modelMessages = [...modelMessages, ...projectToolMessages(stepCalls, stepRecords, visibleStepText, stepReasoning)];
           stepInstruction = error;
           reportTransport(BusEvents.Transport.ToolStepFinished, {
             stepNumber: modelStep,
@@ -522,23 +576,32 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
             input: call.input,
           });
 
-          if (call.toolName === "intent") {
-            intentRequested = true;
+          if (call.toolName === "intent" && !reconcile) {
             const parsed = IntentInputSchema.safeParse(call.input);
+            const metadata: ToolResultMetadata = parsed.success
+              ? { ok: true, effect: "none" } as const
+              : { ok: false, effect: "none", error: "Invalid intent input", errorSource: "tool" } as const;
+            stepRecords.set(call.toolCallId, { toolName: call.toolName, input: call.input,
+              content: parsed.success ? "Intent received" : "Invalid intent input", metadata });
+            allToolCalls.push({ toolName: call.toolName, metadata });
             if (parsed.success) {
-              intentData = parsed.data;
+              if (parsed.data.action === "follow_up") {
+                intentData = parsed.data;
+                intentRequested = true;
+              } else {
+                if (retainIntentMemory(this.#memory, parsed.data.mem_id ?? "") && metadata.ok) metadata.effect = "state_changed";
+              }
               completedCalls++;
-            }
+            } else failedCalls++;
             reportTransport(BusEvents.Transport.ToolFinished, {
-              toolName: call.toolName,
-              toolCallId: call.toolCallId,
+              toolName: call.toolName, toolCallId: call.toolCallId,
               result: parsed.success ? "Intent received" : undefined,
               error: parsed.success ? undefined : "Invalid intent input",
             });
             continue;
           }
 
-          const executor = this.#aiTools[call.toolName]?.execute;
+          const executor = availableTools[call.toolName]?.execute;
           let status: ToolExecutionStatus;
           if (typeof executor !== "function") {
             status = {
@@ -585,6 +648,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           allToolCalls.push({ toolName: call.toolName, metadata: status.metadata });
           if (status.metadata.ok) completedCalls++;
           else failedCalls++;
+          if (call.toolName === "todowrite" && status.metadata.ok) {
+            const todos: TodoItem[] = this.#session?.todoState ?? [];
+            if (!currentTodo && !reconcile) currentTodo = selectCurrentTodo(todos);
+            const current = findTodoTarget(todos, currentTodo);
+            if (current && (current.todo.status === "completed" || current.todo.status === "cancelled")) todoHandoff = true;
+            if (reconcile) todoHandoff = true;
+          }
           const error = status.metadata.ok ? undefined : status.metadata.error;
           this.report(BusEvents.Element.Data, {
             step: "tool-call-finish",
@@ -662,7 +732,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           }
         }
 
-        const projectedMessages = projectToolMessages(stepCalls, stepRecords);
+        const projectedMessages = projectToolMessages(stepCalls, stepRecords, visibleStepText, stepReasoning);
         if (projectedMessages.length > 0) {
           modelMessages = [...modelMessages, ...projectedMessages];
         }
@@ -672,7 +742,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           warningThreshold: nextGovernance.maxConsecutiveNoProgress,
           stopReason: nextGovernance.stopReason,
         });
-        forceFinalText = intentRequested || Boolean(nextGovernance.stopReason);
+        forceFinalText = Boolean(nextGovernance.stopReason);
         reportTransport(BusEvents.Transport.ToolStepFinished, {
           stepNumber: modelStep,
           total: stepCalls.length,
@@ -681,9 +751,14 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           toolNames: stepCalls.map(call => call.toolName),
         });
         completeStep(modelStep);
+        if (intentRequested || todoHandoff) {
+          loopExitReason = intentRequested ? "intent_follow_up" : reconcile ? "reconciliation_updated" : "todo_handoff";
+          break;
+        }
         modelStep++;
       }
     } catch (err: any) {
+      loopExitReason = "stream_error";
       streamFailed = true;
       finishReason = "error";
       streamErrorCode = err?.statusCode ?? 0;
@@ -710,6 +785,21 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     }
     this.report(BusEvents.Element.Data, {
       step: "stream-loop-ended",
+      ...trace,
+      snapshotId: currentSnapshot?.id,
+      incomingContinuation: request,
+      exitReason: input.abortSignal?.aborted ? "cancelled" : timedOut ? "timeout" : loopExitReason
+        || (reconcile && reconciliationAttempts >= 2 ? "reconciliation_attempt_limit" : "model_step_limit"),
+      toolsEnabled: lastStepToolsEnabled,
+      todowriteAvailable: lastStepToolsEnabled && tools.includes("todowrite"),
+      currentTodo,
+      todoBefore,
+      todoAfter: structuredClone(this.#session?.todoState ?? []),
+      todoHandoff,
+      reconciliationAttempts,
+      streamFailed,
+      cancelled: !!input.abortSignal?.aborted,
+      governance: finalGovernance,
       timedOut,
       finishReason: finishReason || "natural",
       stepCount: this.#stepCounter.count,
@@ -728,7 +818,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       });
     }
 
-    tokenOverflow = !timedOut && this.#stepCounter.count === 0 && fullText.length === 0 && !streamFailed;
+    tokenOverflow = finishReason !== "length" && !reconcile && !timedOut && this.#stepCounter.count === 0 && fullText.length === 0 && !streamFailed;
     if (tokenOverflow) {
       const tu = this.#session?.contextTokens ?? 0;
       const ratio = calcTokenRatio(tu, this.#configContextLimit, this.#maxTokens);
@@ -780,22 +870,22 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       toolExecutions: finalGovernance.executions,
       toolBlocked: finalGovernance.blocked,
       toolConsecutiveNoProgress: finalGovernance.consecutiveNoProgress,
-      toolStopReason: finalGovernance.stopReason,
+      toolStopReason: finalGovernance.stopReason ?? (modelStep > this.#maxSteps + 1 ? "model_step_limit" : undefined),
     });
 
-    const chainAction = completeDetected ? undefined
-      : intents.some(intent => intent.request === IntentRequestType.FOLLOW_UP) ? "follow_up"
-      : finishReason === "length" ? "follow_up"
-      : finishReason === "error" && streamErrorCode < 400 ? "follow_up"
-      : undefined;
     return {
       ...input,
       mode: "executing",
-      responseText: fullText || (streamFailed ? "工具循环执行失败。" : ""),
+      responseText: fullText || (!reconcile && streamFailed ? "工具循环执行失败。" : ""),
       reasoningContent: reasoningText,
       tokenUsage,
       intents,
-      chainAction,
+      todoBefore,
+      currentTodo,
+      todoHandoff,
+      toolStopReason: finalGovernance.stopReason ?? (modelStep > this.#maxSteps + 1 ? "model_step_limit" : undefined),
+      streamInterrupted: timedOut || streamFailed,
+      cancelled: input.abortSignal?.aborted ?? false,
       tokenOverflow,
       errorStatusCode: streamErrorCode,
       finishReason,

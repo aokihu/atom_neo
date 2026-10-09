@@ -105,3 +105,13 @@ describe("FinalizeElement context snapshot", () => {
     expect(contextService.inspectSnapshot(input.contextSnapshot.id)?.status).toBe("released");
   });
 });
+
+test("finalize preserves arbitration and suppresses post-check for unresolved reconciliation", async () => {
+  const { element, input } = createFixture();
+  const continuationDecision = { kind: "reconcile_progress", reason: "stale", source: "jev", target: { index: 0, content: "起源" } };
+  const result = await element.doProcess({ ...input, chainAction: "reconcile_todo", continuationDecision } as any);
+  expect(result.continuationDecision).toEqual(continuationDecision);
+  expect(result.shouldPostCheck).toBe(false);
+  const stopped = await element.doProcess({ ...input, suppressPostCheck: true });
+  expect(stopped.shouldPostCheck).toBe(false);
+});

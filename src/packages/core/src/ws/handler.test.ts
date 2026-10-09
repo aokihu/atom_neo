@@ -4,7 +4,8 @@ import type { FullEventMap, TaskItem } from "@atom-neo/shared";
 import { SessionStore } from "../session/store";
 import { TaskQueue } from "../task-queue";
 import { Broadcaster } from "./broadcaster";
-import { createWsHandlers } from "./handler";
+import { buildSessionTelemetry, createWsHandlers } from "./handler";
+import { startExecutionGoal } from "../session/execution-budget";
 
 const createWebSocket = (sessionId: string) => ({
   data: { sessionId },
@@ -23,6 +24,31 @@ const submit = (handlers: ReturnType<typeof createWsHandlers>, ws: any, sessionI
 };
 
 describe("WebSocket session persistence", () => {
+  test("sends persisted TODO and minimal rounds on attach; failed save publishes nothing", () => {
+    let fail = false;
+    const store = new SessionStore(10, undefined, 0, {
+      restore: () => null,
+      checkpoint: () => { if (fail) throw new Error("disk full"); },
+    } as any);
+    const session = store.get("s1");
+    startExecutionGoal(session, "goal", "private original goal", 100);
+    session.executionBudget!.globalUsed = 15;
+    session.setTodoState([{ content: "task", status: "in_progress", priority: "medium" }]);
+    const saved = mock(() => {});
+    store.onSaved(saved);
+    expect(store.save("s1", "task_completed")).toBe(true);
+    expect(saved).toHaveBeenCalledTimes(1);
+    fail = true;
+    expect(store.save("s1", "task_completed")).toBe(false);
+    expect(saved).toHaveBeenCalledTimes(1);
+    const snapshot = buildSessionTelemetry(session, 7);
+    expect(snapshot.rounds).toEqual({ goalId: "goal", globalUsed: 15, globalAllowance: 100, localUsed: 0, localLimit: 7 });
+    expect(JSON.stringify(snapshot)).not.toContain("private original goal");
+    const handlers = createWsHandlers({ broadcaster: new Broadcaster(), taskQueue: new TaskQueue(), sessionStore: store, getLocalRoundLimit: () => 7 });
+    const ws = createWebSocket("s1");
+    handlers.open(ws);
+    expect(JSON.parse(ws.send.mock.calls[0][0]).payload.telemetry).toEqual(snapshot);
+  });
   test("uses the broadcaster sequence for direct WebSocket responses", () => {
     const broadcaster = new Broadcaster();
     const handlers = createWsHandlers({

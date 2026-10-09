@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  mergeConfig, RuntimeConfigSchema, loadConfig, saveRuntimeConfig, runtimeConfigPath,
+  ConfigSchema, mergeConfig, RuntimeConfigSchema, loadConfig, saveRuntimeConfig, runtimeConfigPath,
 } from "./config";
 
 const tempDirs: string[] = [];
@@ -121,4 +121,30 @@ describe("loadConfig layering", () => {
     const { userConfig } = loadConfig(sandbox);
     expect(userConfig.providerProfiles.balanced).toBe("deepseek/deepseek-v4-flash");
   });
+});
+
+test("continuation arbitration defaults to jev and supports rules-only runtime rollback", () => {
+  const sandbox = makeSandbox();
+  expect(loadConfig(sandbox).effective.decisionMode.continuation).toBe("jev");
+  saveRuntimeConfig(sandbox, { decisionMode: { continuation: "rules" } });
+  expect(loadConfig(sandbox).effective.decisionMode.continuation).toBe("rules");
+  expect(() => RuntimeConfigSchema.parse({ decisionMode: { continuation: "legacy" } })).toThrow();
+});
+
+
+test("two budgets default independently and migrate explicit legacy depth", () => {
+  expect(ConfigSchema.parse({}).conversation).toMatchObject({ maxGlobalRounds: 100, maxLocalRounds: 5 });
+  expect(ConfigSchema.parse({ conversation: { maxChainDepth: 5 } }).conversation.maxGlobalRounds).toBe(6);
+  expect(ConfigSchema.parse({ conversation: { maxChainDepth: 5, maxGlobalRounds: 200 } }).conversation.maxGlobalRounds).toBe(200);
+  for (const value of [0, -1, 1.5]) expect(() => ConfigSchema.parse({ conversation: { maxGlobalRounds: value } })).toThrow();
+  for (const value of [4, 11, 5.5]) expect(() => RuntimeConfigSchema.parse({ conversation: { maxLocalRounds: value } })).toThrow();
+  expect(RuntimeConfigSchema.parse({ conversation: { maxGlobalRounds: 200, maxLocalRounds: 10 } })).toEqual({ conversation: { maxGlobalRounds: 200, maxLocalRounds: 10 } });
+});
+
+
+test("legacy runtime budget patch is converted before merging parsed defaults", () => {
+  const patch = RuntimeConfigSchema.parse({ conversation: { maxChainDepth: 8 } });
+  expect(patch.conversation).toEqual({ maxChainDepth: 8, maxGlobalRounds: 9 });
+  expect(ConfigSchema.parse(mergeConfig(ConfigSchema.parse({}), patch)).conversation.maxGlobalRounds).toBe(9);
+  expect(RuntimeConfigSchema.parse({ conversation: { maxChainDepth: 8, maxGlobalRounds: 200 } }).conversation!.maxGlobalRounds).toBe(200);
 });

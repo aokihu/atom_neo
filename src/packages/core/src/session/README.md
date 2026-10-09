@@ -14,3 +14,5 @@ DSML 或 `toolEffectSummary`。
 
 磁盘目录以 Session 为单位。`.checkpoints/g-*` 保存完整三件套，`current` 的原子切换是
 checkpoint 提交点；顶层三个文件是兼容软链。`message-{n}.jsonl` 写入后不可修改。
+
+- `execution-budget.ts`：统一 conversation 释放政策、目标初始化、暂停和恢复授权；状态与完整待执行 TaskItem 随 checkpoint 保存。

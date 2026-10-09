@@ -5,10 +5,26 @@ import { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrat
 import { makeBus } from "../../test-helpers";
 import { CollectInputElement } from "./collect-input";
 import { PostConversationFinalizeElement } from "./finalize";
+import { FALLBACK_ANALYSIS } from "./types";
 
 beforeAll(initPromptRegistry);
 
 describe("PostConversationFinalizeElement", () => {
+  test("only confirmed completion reports the reviewed goal; fallback and conflict do not", async () => {
+    const bus = makeBus();
+    const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
+    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService });
+    const base = { mode: "acting", task: { id: "post" }, session: { originalSource: "external" }, executionGoalId: "reviewed-goal" };
+    const result = await element.doProcess({ ...base, analysis: { status: "satisfactory", confirmed: true, reason: "requirements_met", assessment: { contentState: "complete" } } } as any);
+    expect(result).toHaveProperty("completedGoalId", "reviewed-goal");
+    for (const analysis of [FALLBACK_ANALYSIS, undefined,
+      { status: "satisfactory", reason: "unconfirmed" },
+      { status: "satisfactory", confirmed: true, reason: "conflict", assessment: { contentState: "unfinished" } },
+      { status: "blocked", confirmed: true, reason: "blocked" },
+      { status: "needs_user_input", confirmed: true, reason: "question" }]) {
+      expect(await element.doProcess({ ...base, analysis } as any)).not.toHaveProperty("completedGoalId");
+    }
+  });
   test("records retry guidance in topic context", async () => {
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });

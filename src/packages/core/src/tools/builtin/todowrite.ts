@@ -24,8 +24,9 @@ function formatProgress(todos: TodoWriteInput["todos"]): string {
     const icon = icons[t.status] ?? "⬜";
     return `${icon} [${t.priority}] ${i + 1}. ${t.content}`;
   });
-  const next = todos.find(t => t.status === "pending");
-  const hint = next ? `\n下一步: ${next.content}` : "";
+  const current = todos.find(t => t.status === "in_progress");
+  const next = current ?? todos.find(t => t.status === "pending");
+  const hint = next ? `\n${current ? "当前任务" : "下一步"}: ${next.content}` : "";
   return `任务进度:\n${lines.join("\n")}${hint}`;
 }
 
@@ -37,7 +38,9 @@ export function createTodoWriteTool(): ToolDefinition {
     source: "builtin",
     inputSchema: TodoWriteInputSchema,
     execute: async (args) => {
-      const todos = (args as TodoWriteInput).todos;
+      const parsed = TodoWriteInputSchema.safeParse(args);
+      if (!parsed.success) return toolResult.failure("Invalid todowrite input: pass a complete todos array.");
+      const todos = parsed.data.todos;
       const inProgressCount = todos.filter(t => t.status === "in_progress").length;
       if (inProgressCount > 1) {
         const errMsg = `一次只能有一个任务处于进行中(in_progress)状态，当前有 ${inProgressCount} 个。请只保留一个 in_progress，其余置为 pending。`;
