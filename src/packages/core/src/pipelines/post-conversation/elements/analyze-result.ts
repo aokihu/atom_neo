@@ -12,6 +12,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
+  #thinking?: string;
   #maxTokens: number;
 
   constructor(params: {
@@ -21,12 +22,14 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
     apiKey: string;
     model: string;
     baseUrl?: string;
+    thinking?: string;
     maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
+    this.#thinking = params.thinking;
     this.#maxTokens = params.maxTokens ?? 256;
   }
 
@@ -67,6 +70,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
         apiKey: this.#apiKey,
         model: this.#model,
         baseUrl: this.#baseUrl,
+        thinking: this.#thinking,
         systemKey: PromptKey.ANALYZE_RESULT,
         prompt,
         maxTokens: this.#maxTokens,

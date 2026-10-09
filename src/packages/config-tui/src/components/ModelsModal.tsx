@@ -9,7 +9,7 @@ import type { ThinkingMode } from "../wizard-logic";
 const THINKING_LABELS = [
   { label: "disabled (default)", value: "disabled" },
   { label: "enabled (forced thinking)", value: "enabled" },
-  { label: "adaptive (model decides)", value: "adaptive" },
+  { label: "adaptive (legacy enabled)", value: "adaptive" },
 ];
 
 type Phase = "list" | "add" | "baseUrl" | "thinking" | "contextLimit";

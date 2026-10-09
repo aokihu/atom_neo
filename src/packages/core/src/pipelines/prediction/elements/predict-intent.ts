@@ -6,6 +6,7 @@ import { generateText, Output } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { z } from "zod";
 import type { PredictionFlowState } from "./types";
+import { deepSeekProviderOptions } from "../../shared/llm";
 
 const FALLBACK: IntentPredictionResult = {
   difficulty: "medium",
@@ -37,6 +38,7 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
+  #thinking?: string;
   #maxTokens: number;
 
   constructor(params: {
@@ -46,12 +48,14 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
     apiKey: string;
     model: string;
     baseUrl?: string;
+    thinking?: string;
     maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
+    this.#thinking = params.thinking;
     this.#maxTokens = params.maxTokens ?? 512;
   }
 
@@ -79,6 +83,7 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
         output: Output.object({ schema: IntentPredictionSchema }),
         maxOutputTokens: this.#maxTokens,
         temperature: 0,
+        providerOptions: deepSeekProviderOptions(this.#thinking),
         abortSignal: input.abortSignal,
       });
       const prediction = result.output;

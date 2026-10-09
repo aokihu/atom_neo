@@ -24,6 +24,7 @@ export function contextCompressPipeline(deps: {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  thinking?: string;
   orchestrator: InternalTaskOrchestrator;
   sandbox: string;
   configContextLimit?: number;
@@ -38,6 +39,7 @@ export function contextCompressPipeline(deps: {
       apiKey: deps.apiKey,
       model: deps.model,
       baseUrl: deps.baseUrl,
+      thinking: deps.thinking,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .sink("compress-finalize", {

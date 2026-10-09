@@ -35,6 +35,7 @@ import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./
 import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
 import { registerPostConversationElements, postConversationPipeline } from "./pipelines/post-conversation";
 import { registerSharedElements } from "./pipelines/shared";
+import { deepSeekProviderOptions } from "./pipelines/shared/llm";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
@@ -117,27 +118,19 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
     provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
   };
-  const compressResolved = runtime?.getResolvedModel?.("basic") ?? resolved;
+  const getModel = (level: string) => runtime?.getResolvedModel?.(level) ?? resolved;
+  const getContextLimit = (selected: typeof resolved) => resolveContextLimit(
+    `${selected.provider}/${selected.model}`, runtime?.appConfig?.providers?.[selected.provider]?.contextLimit,
+  );
   const decisionDeps = (purpose: "prediction" | "postConversation" | "continuation") => {
-    const selected = runtime.getResolvedModel("fast");
-    const fallback = runtime.getResolvedModel("basic");
+    const selected = getModel("fast");
+    const fallback = getModel("basic");
     return {
       decisionMode: runtime.appConfig?.decisionMode?.[purpose],
-      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, beforeCall: selected.beforeCall },
-      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl, beforeCall: fallback.beforeCall },
+      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, beforeCall: selected.beforeCall },
+      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl, thinking: fallback.thinking, beforeCall: fallback.beforeCall },
     };
   };
-  const apiKey: string = resolved.apiKey;
-  const model: string = resolved.model;
-  const baseUrl: string | undefined = resolved.baseUrl;
-  const providerOptions: Record<string, Record<string, unknown>> = {
-    deepseek: { thinking: { type: resolved.thinking ?? "disabled" } },
-  };
-  const providerModel = `${resolved.provider}/${model}`;
-  const configContextLimit: number | undefined = runtime?.appConfig?.providers?.[resolved.provider]?.contextLimit;
-  const resolvedContextLimit = resolveContextLimit(providerModel, configContextLimit);
-  const maxTokens: number = runtime?.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const maxSteps: number = runtime?.appConfig?.conversation?.maxSteps ?? 50;
   const budgetLimits = () => ({
     maxGlobalRounds: runtime.appConfig?.conversation?.maxGlobalRounds
       ?? (runtime.appConfig?.conversation?.maxChainDepth === undefined ? 100 : runtime.appConfig.conversation.maxChainDepth + 1),
@@ -235,14 +228,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const pipelineBuilders: Record<string, (task: any) => any> = {
     prediction: (task: any) => {
       const session = sessionStore.get(task.sessionId);
+      const selected = getModel("balanced");
+      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return predictionPipeline({
         maxGlobalRounds: budgetLimits().maxGlobalRounds,
         session,
         task,
-        apiKey, model, baseUrl, maxTokens,
+        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, maxTokens,
         ...decisionDeps("prediction"),
         orchestrator,
-        configContextLimit: resolvedContextLimit,
+        configContextLimit: getContextLimit(selected),
         skillService,
       }).build(bus);
     },
@@ -270,7 +265,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
       const resolvedModel = runtime.getResolvedModel
         ? runtime.getResolvedModel(effectiveProfile)
-        : { provider: "deepseek", model: "deepseek-v4-flash", apiKey, baseUrl, thinking: "disabled" as const };
+        : resolved;
+      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
 
       return conversationPipeline({
         ...decisionDeps("continuation"),
@@ -281,15 +277,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         baseUrl: resolvedModel.baseUrl,
         beforeCall: resolvedModel.beforeCall,
         providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
-        configContextLimit: resolvedContextLimit,
-        providerOptions: {
-          deepseek: { thinking: { type: resolvedModel.thinking ?? "disabled" } },
-        },
+        configContextLimit: getContextLimit(resolvedModel),
+        providerOptions: deepSeekProviderOptions(resolvedModel.thinking),
         tools: allTools,
         mcpToolsRef,
         getCompiledPrompt,
         maxTokens,
-        maxSteps,
+        maxSteps: runtime.appConfig?.conversation?.maxSteps ?? 50,
         memory,
         intent: prediction.intent,
         contextRelevance: prediction.contextRelevance,
@@ -303,30 +297,34 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
     "follow-up-evaluator": (task: any) => {
       const session = sessionStore.get(task.sessionId);
+      const selected = getModel("balanced");
+      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return followUpEvaluatorPipeline({
         ...decisionDeps("continuation"),
         toolRecordStore: persistence.toolRecords,
         session,
         task,
-        apiKey, model, baseUrl, maxTokens,
+        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, maxTokens,
         orchestrator,
-        configContextLimit: resolvedContextLimit,
+        configContextLimit: getContextLimit(selected),
         contextService,
       }).build(bus);
     },
 
     "context-compress": (task: any) => {
       const session = sessionStore.get(task.sessionId);
+      const selected = getModel("basic");
       return contextCompressPipeline({
         session,
         task,
-        apiKey: compressResolved.apiKey,
-        model: compressResolved.model,
-        baseUrl: compressResolved.baseUrl,
+        apiKey: selected.apiKey,
+        model: selected.model,
+        baseUrl: selected.baseUrl,
+        thinking: selected.thinking,
         orchestrator,
         sandbox,
-        configContextLimit: resolvedContextLimit,
-        maxTokens,
+        configContextLimit: getContextLimit(selected),
+        maxTokens: runtime.maxTokens ?? DEFAULT_MAX_TOKENS,
         contextService,
         persistence,
       }).build(bus);
@@ -334,12 +332,14 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
 
     "post-conversation": (task: any) => {
       const session = sessionStore.get(task.sessionId);
+      const selected = getModel("balanced");
+      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return postConversationPipeline({
         session,
         task,
-        apiKey, model, baseUrl, maxTokens,
+        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, maxTokens,
         ...decisionDeps("postConversation"),
-        configContextLimit: resolvedContextLimit,
+        configContextLimit: getContextLimit(selected),
         contextService,
       }).build(bus);
     },

@@ -1,6 +1,7 @@
 import type { IntentPredictionResult } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../../skills/types";
+import type { DecisionModel } from "../../../decision/choose";
 
 export type PredictionMode = "initial" | "predicting" | "routing";
 
@@ -27,9 +28,10 @@ export type PredictionPipelineDeps = {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  thinking?: string;
   decisionMode?: "legacy" | "jev";
-  decisionModel?: { type: "llm" | "jev"; apiKey: string; model: string; baseUrl?: string };
-  fallbackModel?: { apiKey: string; model: string; baseUrl?: string };
+  decisionModel?: DecisionModel;
+  fallbackModel?: DecisionModel;
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
   maxGlobalRounds?: number;

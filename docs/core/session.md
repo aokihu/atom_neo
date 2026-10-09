@@ -416,11 +416,11 @@ StatusBar 显示当前模型名称及 thinking 模式状态（始终显示 `[thi
 | 字段 | 来源 | 显示格式 |
 |------|------|----------|
 | `model` | `RuntimeService.getResolvedModel().model` | `deepseek-v4-flash` |
-| `thinking` | `RuntimeService.getResolvedModel().thinking` | `[thinking]` 标签，绿色=enabled，黄色=adaptive，灰色=disabled |
+| `thinking` | 当前有效配置中 balanced provider 的 thinking；设置保存后用 API 返回值刷新 | `[thinking]` 标签，高亮=enabled/adaptive，灰色=disabled |
 
 ```text
-atom neo ▎ ● connected ▎ deepseek-v4-flash [thinking] ▎ v1.3.7
-                                        ^^^^^^^^ 绿色/黄色/灰色 = enabled/adaptive/disabled
+atom neo ▎ ● connected ▎ deepseek-v4-flash [thinking] ▎ v1.18.1
+                                        ^^^^^^^^ 高亮/灰色 = 已启用/未启用
 ```
 
 ---

@@ -205,12 +205,13 @@ const providerOptions = {
 
 **`thinking` 字段说明**：
 - `"disabled"` — 禁用思考模式（默认），避免 `reasoning_content` 回传错误
-- `"adaptive"` — 模型自行决定是否启用思考
+- `"adaptive"` — 兼容旧配置；当前 DeepSeek SDK 会将其映射为 `enabled`
 - `"enabled"` — 强制启用思考模式
 
+运行时覆盖写入后，下一次创建的对话、预测、摘要、对话后分析及 LLM 决策回退请求都从有效配置读取所用 provider 的 thinking 值，并发送 `thinking.type`。已在执行中的请求继续使用创建时的配置。手动编辑 `config.json` 仍需重启 Core 才会重新载入。
+
 **TUI 展示**：`thinking` 状态会通过 `ServerInfo` 传递给 TUI，在 `StatusBar` 组件中于模型名称右侧显示 `[thinking]` 标签。颜色含义：
-- 绿色（`status.success`） — `enabled`（强制启用）
-- 黄色（`status.warning`） — `adaptive`（模型自适应）
+- 高亮（`status.success`） — `enabled`，或兼容值 `adaptive`（实际映射为启用）
 - 灰色（`text.muted`） — `disabled`（已关闭）
 
 **`edex` 主题（默认）**：使用近黑背景、淡青色边框与分段标题。它只改变颜色，
