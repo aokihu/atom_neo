@@ -8,6 +8,17 @@ import { createTaskItem } from "../task-factory";
 import type { InternalTaskOrchestrator } from "../task/internal-task-orchestrator";
 import type { SessionStore } from "../session/store";
 import type { TaskEngine } from "../task-engine";
+import type { SessionContext } from "../session/context";
+import type { SessionTelemetry } from "@atom-neo/shared";
+
+export function buildSessionTelemetry(session: SessionContext, localLimit: number): SessionTelemetry {
+  const budget = session.executionBudget;
+  return { sessionId: session.sessionId, todos: [...session.todoState], rounds: budget ? {
+    goalId: budget.goalId, globalUsed: budget.globalUsed, globalAllowance: budget.globalAllowance,
+    localUsed: budget.localUsed, localLimit, ...(budget.pause ? { pause: budget.pause } : {}),
+    ...(budget.completed ? { completed: true } : {}),
+  } : null };
+}
 
 type ServerContext = {
   broadcaster: Broadcaster;
@@ -18,6 +29,7 @@ type ServerContext = {
   sessionStore?: SessionStore;
   taskEngine?: TaskEngine;
   isStopping?: () => boolean;
+  getLocalRoundLimit?: () => number;
 };
 
 export function createWsHandlers(ctx: ServerContext) {
@@ -30,7 +42,9 @@ export function createWsHandlers(ctx: ServerContext) {
       const sid = (ws as any).data?.sessionId;
       if (sid) {
         ctx.broadcaster.add(ws, sid);
-        send(ws, WsMessages.Server.SessionReady, { sessionId: sid, messages: ctx.sessionStore?.load(sid)?.messages ?? [], contextTokens: ctx.sessionStore?.load(sid)?.contextTokens ?? 0, activeTaskIds: ctx.taskQueue.getSessionTasks(sid) });
+        const session = ctx.sessionStore?.load(sid);
+        send(ws, WsMessages.Server.SessionReady, { sessionId: sid, messages: session?.messages ?? [], contextTokens: session?.contextTokens ?? 0, activeTaskIds: ctx.taskQueue.getSessionTasks(sid),
+          telemetry: session ? buildSessionTelemetry(session, ctx.getLocalRoundLimit?.() ?? 5) : { sessionId: sid, rounds: null, todos: [] } });
       }
     },
     message(ws: ServerWebSocket<unknown>, msg: string | Buffer) {

@@ -1,5 +1,24 @@
-import type { SessionInitiator, ContinuationContext, InferenceFact, SessionMessage } from "@atom-neo/shared";
+import type { SessionInitiator, ContinuationContext, InferenceFact, SessionMessage, TaskItem } from "@atom-neo/shared";
 import type { TodoItem } from "./context";
+
+export type ExecutionBudget = {
+  goalId: string;
+  goal: string;
+  globalUsed: number;
+  globalAllowance: number;
+  localUsed: number;
+  completed?: boolean;
+  windowId: number;
+  windowStartSeq: number;
+  goalStartSeq: number;
+  todoBaseline: TodoItem[];
+  releasedTaskIds: string[];
+  pause?: "global_limit" | "health_check" | "unhealthy" | "unknown" | "cancelled" | "interrupted";
+  pendingTask?: TaskItem;
+  lastReleasedTask?: TaskItem;
+  resuming?: boolean;
+  legacyEvidenceMissing?: boolean;
+};
 
 export type PersistedSessionStatus = "active" | "suspended" | "interrupted" | "completed" | "failed";
 
@@ -34,6 +53,7 @@ export type PersistedSessionState = {
   closeReason?: SessionCheckpointReason;
   currentTopic: string | null;
   chainDepth: number;
+  executionBudget?: ExecutionBudget;
   todoState: TodoItem[];
   continuationContext: ContinuationContext | null;
   inferenceFacts: InferenceFact[];

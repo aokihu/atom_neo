@@ -78,6 +78,11 @@ Wide
 
 ### Telemetry
 
+- `ROUNDS` 位于 CONTEXT 与 SCHEDULES 之间。标题右侧显示当前目标累计已用轮次 / 获准总额度，下方复用 Context 条形样式，第三行 `WINDOW` 显示局部已用轮次 / 局部限额。条形表示消耗而非任务完成度；达到 80% 显示警示色。健康检查显示 CHECKING；暂停显示 PAUSED 与简短原因，全局额度耗尽提示输入“继续”。无预算显示 EMPTY，断连显示 OFFLINE。
+- 目标通过 Post 完成检查且没有未完成 TODO、暂停或待执行请求时，持久化完成标记。ROUNDS 与 WINDOW 的已用次数归零显示，指示条清空；实际累计次数保留在预算记录和日志中。暂停、检查失败、待用户输入及仅 TODO 全部完成均不等于目标完成，不触发归零。新一轮实际执行清除完成标记；重连保持完成后的显示。
+- `TODO` 标题右侧用 `≡ 总数`，有进行中项目时改为 `▶ 位置 / 总数`。统计压缩为一行：`✅完成 ⌛待办 ▶进行中 ✕取消`，删除 PENDING、CANCELLED、NO ACTIVE ITEM 和独立快捷键提示行。渲染完整列表，超过 5 项启用 15 行高的滚动视口，保留文字换行与滚动条，支持鼠标滚轮及 Alt+Up/Down。最近新激活的 in_progress 项自动滚入可见范围；按真实布局定位，不能按项目序号估算换行高度。相同状态更新不打断手动浏览；布局尺寸变化时重新定位当前项。5 项及以下保持自然高度。
+- Core 是预算与 TODO 状态的唯一权威。首次连接/重连携带 telemetry 快照，保存成功后推送更新；客户端不自行计数，失败的 todowrite 不改变计划。切换 Session 或断连清理旧状态。
+
 - `CONTEXT`：`contextTokens / contextLimit`；Gauge 横向占满 Telemetry 的内部可用宽度。
 - `TOOLS`：优先显示本轮 Tool 名称与状态；无本轮调用时退化为 Builtin / MCP 数量。
 - `MCP`：真实 Server online 状态。

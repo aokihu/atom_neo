@@ -45,6 +45,10 @@ Broadcaster 在进程生命周期内统一分配严格递增的 `seq`：
 
 ## 3. Client → Core Events
 
+### Session telemetry（Core → TUI）
+
+`session.ready` 增加 `telemetry` 快照；`event.session.telemetry` 在 Session 成功保存后发送同一快照，按 Session 路由。字段为 `sessionId`、`rounds`（无预算为 null）与 `todos`（当前完整 TODO 列表）。`rounds` 仅包含 `goalId`、`globalUsed`、`globalAllowance`、`localUsed`、`localLimit` 和可选 `pause`、`completed`；`completed` 为已保存的目标完成标记，客户端据此将已用次数归零显示，真实计数不变。不传递目标正文、工具历史或待执行任务。已有客户端可忽略新增字段。连接断开后客户端显示 OFFLINE，重连以快照恢复。
+
 ### 3.1 `task.submit`
 
 ```typescript

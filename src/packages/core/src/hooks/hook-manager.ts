@@ -1,6 +1,6 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { TaskSource, BusEvents } from "@atom-neo/shared";
-import type { Hook, HookTrigger, FullEventMap, Logger, PipelineEventBus } from "@atom-neo/shared";
+import type { Hook, HookTrigger, FullEventMap, Logger, PipelineEventBus, TaskItem } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
 import { createTaskItem } from "../task-factory";
 import type { ScheduleService } from "../tools/schedule-service";
@@ -15,6 +15,7 @@ export class HookManager {
   #scheduleService: ScheduleService;
   #bus: PipelineEventBus<FullEventMap>;
   #queue: TaskQueue;
+  #releaseTask?: (task: TaskItem) => boolean;
   #persistPath: string;
   #logger: Logger;
   #hooks = new Map<string, Hook>();
@@ -27,10 +28,12 @@ export class HookManager {
     queue: TaskQueue,
     persistPath: string,
     logger: Logger,
+    releaseTask?: (task: TaskItem) => boolean,
   ) {
     this.#scheduleService = scheduleService;
     this.#bus = bus;
     this.#queue = queue;
+    this.#releaseTask = releaseTask;
     this.#persistPath = persistPath;
     this.#logger = logger;
     this.#subscribe();
@@ -214,8 +217,11 @@ export class HookManager {
       payload: [{ type: "text", data: hook.prompt }],
       origin: { type: "hook", hookId: hook.id },
     });
-    this.#queue.enqueue(taskItem);
-    this.#bus.emit(BusEvents.Task.Enqueued as any, { task: taskItem });
+    if (this.#releaseTask) this.#releaseTask(taskItem);
+    else {
+      this.#queue.enqueue(taskItem);
+      this.#bus.emit(BusEvents.Task.Enqueued as any, { task: taskItem });
+    }
     hook.lastFiredAt = Date.now();
     this.#persist();
     this.#logger.info("hook fired", { id: hook.id, name: hook.name, trigger: hook.trigger.type, sessionId, taskItemId: taskItem.id });

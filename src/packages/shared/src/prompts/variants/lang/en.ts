@@ -18,10 +18,11 @@ Evaluate in order. Execute the first match. Skip the rest. **Do NOT skip any ste
 
 ### Step 0: Does the task need planning?
 Criteria: The task has multiple independently trackable sub-steps, or is complex enough to require phased execution.
-- Yes → Call \`todowrite\` with a complete task list first. Set the first item's status to in_progress and begin.
+- Yes → If no plan exists, create a complete list with \`todowrite\`, set the first item to in_progress and begin. Otherwise reuse the current item; never recreate the plan or reset completed items.
   **Execute only ONE task per reply.** The \`todowrite\` tool will reject multiple in_progress items.
   After completing it, call \`todowrite\` to mark it completed,
-  set the next pending to in_progress, then end the current reply normally. The system continues from the active TODO.
+  set the next pending to in_progress, then end the reply. The system saves progress and arbitrates before starting the next item.
+  If the current item's unfinished content needs a deliberate segment break, use intent.follow_up restricted to its remainder; never substitute the next item.
   If output is truncated due to length limit, do NOT manually call intent —
   the system will auto-continue so you can finish the current task.
 - No → Go to step 1.
@@ -35,7 +36,7 @@ Criteria: The user's question has been fully answered, no more output needed.
 Criteria: Your output cannot fit in one reply (e.g., long articles, multi-paragraph tutorials, detailed analysis).
 - Yes → Output the current segment, then call \`intent\` tool at the end:
   - \`action\`: \`follow_up\`
-  - \`next_prompt\`: hint for the next segment (e.g., "continue with the next section")
+  - \`next_prompt\`: hint restricted to the unfinished remainder of the current task
   - \`summary\`: brief summary of the current segment
 - No → Go to step 3.
 
@@ -58,9 +59,16 @@ Criteria: The conversation produced reusable long-term information, or existing 
 - When Memory references a Skill or workflow, prefer loading the corresponding Skill instead of relying on Memory to restate the full procedure.
 - If Skill-related Memory becomes outdated, wrong, or rejected by the user, use the same “search for its ID, then delete” \`forget_memory\` flow.
 
-## Important: Stop after calling \`intent\`
+## Continuation and progress boundaries
 
-Calling \`intent\` is the **endpoint** of the conversation. Once called, the system takes over. You **must not** continue generating text or explain the tool call.
+\`intent.follow_up\` requests unfinished content within the CURRENT task; it never skips TODOs or replaces progress updates.
+For a deliberate segment break, call intent with action=follow_up and next_prompt restricted to the current item's remainder.
+A valid follow_up ends this reply. Runtime arbitrates continuation versus progress reconciliation; do not append text.
+A real length cutoff may happen before a tool call; Runtime restores it automatically.
+When the current TODO is complete, update its status and end the reply; the next item starts after saving.
+\`<<<COMPLETE>>>\` declares overall completion and cannot override active TODOs.
+\`retain_memory\` is ordinary memory confirmation and does not end the reply.
+For progress reconciliation, use only todowrite against saved output; do not regenerate business content or mark completion from claims alone.
 
 ## Topic Constraints
 The system injects the current topic into context (\`[Topic Constraint] Current Topic: ...\`).
@@ -241,20 +249,9 @@ Use consistent wording for similar actions. Examples:
 
 Reply ONLY with JSON: {"status":"satisfactory|blocked|needs_user_input","reason":"brief explanation","fingerprint":"action description"}`,
 
-  [PromptKey.EVALUATOR_ANALYZE]: `You are a conversation health monitor. Analyze the recent conversation flow and classify:
-
-1. health: "healthy" | "looping" | "stuck" | "degrading"
-   - healthy: making genuine progress toward the goal
-   - looping: repeating similar outputs or tool calls without progress
-   - stuck: unable to proceed (persistent tool failures, dead ends)
-   - degrading: output quality declining, losing coherence or focus
-
-2. suggestion: concise advice to help the assistant break out of bad patterns.
-   Empty string if healthy. Otherwise, a brief guidance (1 sentence).
-
-3. upgradeModel: true if a more powerful model may help resolve the situation.
-
-Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false, "reason":"brief"}`,
+  [PromptKey.EVALUATOR_ANALYZE]: `Assess only the ORIGINAL goal and the current local execution window. Choose healthy, looping, stuck, degrading or unknown.
+Evaluate concrete output and actual ToolRecord results; success on earlier unrelated questions is irrelevant. TODO completion, output length and Agent completion claims alone cannot prove progress. Assess window progress, not overall acceptance. Cropping limits conclusions but does not require unknown when provided excerpts show concrete progress, even if final verification remains. Choose unknown only when window progress itself cannot be established.
+Healthy resets only the local window; global usage remains cumulative. Other results pause and preserve unfinished progress. Select a provided option.`,
 
   [PromptKey.COMPRESS_SUMMARIZE]: `Summarize the following conversation history in 500 characters or fewer. Evidence priority is user_goal, assistant_with_tool_evidence, then assistant_reference_unverified. Preserve user goals, verified tool evidence, confirmed decisions, and real state changes. Never promote Assistant reference text to fact by itself, and ignore failed or effect:none Tool results.`,
 
@@ -268,7 +265,7 @@ Reply with JSON: {"health":"...", "suggestion":"...", "upgradeModel":true|false,
 You are executing a complex task. Strictly follow these rules:
 1. Use \`todowrite\` to create a complete task plan. Execute only ONE task per reply.
 2. After completing an item, call \`todowrite\` to update status (mark completed, set next pending to in_progress). The \`todowrite\` tool rejects multiple in_progress items.
-3. End the current reply normally after updating. The system continues from the active TODO.
+3. Before handoff, check this item against user length and format requirements. Tables supplement the prose and do not replace the required prose length; complete missing content first. End the reply after updating. The system saves progress and arbitrates before continuing the plan; never execute the next item in this reply.
 4. Do not execute multiple tasks in a single reply%s
 6. Only enter decision protocol step 1 after all tasks are completed`,
 

@@ -77,6 +77,7 @@ describe("prediction pipeline elements", () => {
   test("predict-input adds current topic and the previous completed turn", async () => {
     const bus = makeBus();
     const session = {
+      todoState: [],
       sessionId: "s1",
       currentTopic: "knowledge.travel.hangzhou",
       messages: [
@@ -216,7 +217,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-finalize writes prediction to session and enqueues conversation task", async () => {
     const bus = makeBus();
-    const session = { sessionId: "s1", messages: [{ role: "user", content: "hello" }], currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
+    const session = { todoState: [], sessionId: "s1", messages: [{ role: "user", content: "hello" }], currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
@@ -246,7 +247,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-finalize uses fallback when no prediction", async () => {
     const bus = makeBus();
-    const session = { sessionId: "s1", currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
+    const session = { todoState: [], messages: [], sessionId: "s1", currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
     const Ctor = resolveElement("predict-finalize");
@@ -273,6 +274,7 @@ describe("prediction pipeline elements", () => {
     const cleared: string[] = [];
     const resetTopics: string[] = [];
     const session = {
+      todoState: [], messages: [],
       sessionId: "s1",
       currentTopic: "knowledge.weather.typhoon",
       pendingPrediction: undefined as any,
@@ -303,7 +305,7 @@ describe("prediction pipeline elements", () => {
   });
 
   test("predict-finalize clears topic skill context when the topic changes", async () => {
-    const session = { sessionId: "s1", currentTopic: "old", resetForNewTopic: (topic: string) => { session.currentTopic = topic; } };
+    const session = { todoState: [], messages: [], sessionId: "s1", currentTopic: "old", resetForNewTopic: (topic: string) => { session.currentTopic = topic; } };
     const cleared: string[] = [];
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
@@ -360,4 +362,23 @@ describe("prediction pipeline DSL", () => {
     expect(pipeline.elements[2].kind).toBe("boundary");
     expect(pipeline.elements[3].kind).toBe("sink");
   });
+});
+
+test("standalone request in the same Topic initializes a fresh goal budget", async () => {
+  const { SessionContext } = await import("../../session/context");
+  const { startExecutionGoal } = await import("../../session/execution-budget");
+  const session = new SessionContext("same-topic"); session.resetForNewTopic("knowledge.general.other");
+  session.addMessage({ role: "user", content: "old goal", timestamp: 0 });
+  startExecutionGoal(session, "old-root", "old goal", 200);
+  session.executionBudget!.globalUsed = 50;
+  session.setTodoState([{ content: "old plan", status: "pending", priority: "medium" }]);
+  session.addMessage({ role: "user", content: "new goal", timestamp: 1 });
+  const Ctor = resolveElement("predict-finalize");
+  await new Ctor({ name: "predict-finalize", kind: "sink", bus: makeBus(), orchestrator: makeMockOrchestrator(null), maxGlobalRounds: 100 }).process({
+    session, task: { id: "new-root", chainId: "new-root", chatId: "c", payload: [{ type: "text", data: "new goal" }] },
+    prediction: { topic: "knowledge.general.other", contextRelevance: "standalone", difficulty: "medium", modelProfile: "basic", intent: "question" },
+  });
+  expect(session.currentTopic).toBe("knowledge.general.other");
+  expect(session.executionBudget).toMatchObject({ goal: "new goal", goalId: "new-root", globalUsed: 0, globalAllowance: 100 });
+  expect(session.todoState).toEqual([]);
 });

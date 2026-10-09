@@ -1,5 +1,7 @@
 # Context Compress Pipeline
 
+自动压缩保留 `ContextCompressRequest.continuation`；健康窗口触发的压缩还保留完整 `resumeTask`。压缩保存成功后恢复的 conversation 统一经过 Orchestrator 预算入口，每次真正释放才扣一次；压缩本身不扣轮次。不能直接入队绕过限制。手动压缩不自动续写。
+
 > **Purpose**: 压缩 Context 与 Messages — 归档旧消息、生成累计摘要、清理 Session，并按触发来源决定是否恢复对话。
 
 ## 职责
@@ -217,3 +219,11 @@ src/packages/core/src/pipelines/context-compress/
 | [conversation.md](./conversation.md) | Token 使用统计和压缩触发条件 |
 | [follow-up-evaluator.md](./follow-up-evaluator.md) | evaluator 如何触发 context-compress |
 | [prompts.md](./prompts.md) | compress-summarize 使用的提示词 |
+
+## 双层执行预算（2026-10-09）
+
+conversation.maxGlobalRounds 默认100（正整数）；maxLocalRounds 默认5，允许5～10。显式旧 maxChainDepth 按后续轮次换算为全局额度 maxChainDepth+1，新字段优先；不改写用户文件。目标预算独立于 Topic，明确新目标建立新记录；同目标恢复、核对、Post 重试及压缩通过统一入队检查，不重置全局累计。
+
+释放前先保存正文/进度，再保存预算扣减；尚未释放的暂存不计数，保存失败不入队。窗口健康检查优先 JEV，失败后 LLM 模拟一次（分别10秒、512 tokens、零重试）；healthy 只重置局部，不健康或 unknown 保留待执行请求并暂停。精确“继续”/continue 跳过 Prediction，全局暂停追加额度，其他暂停重查原窗口。完整任务载荷和续写参数持久化并在压缩后保留。
+
+详见 [健康检查](../pipelines/follow-up-evaluator.md)。

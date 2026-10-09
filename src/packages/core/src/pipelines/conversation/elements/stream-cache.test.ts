@@ -66,7 +66,8 @@ test.each([false, true])("refreshes bounded snapshots and settles the actual ste
       reasoning_content: "tool reasoning", tool_calls: [{ id: "call-1" }] });
     expect(result.responseText).toBe(fail ? "第一段。" : "第一段。\n\n第二段。");
     expect(result.reasoningContent).toBe(fail ? "tool reasoning" : "tool reasoningfinal reasoning");
-    expect(result.chainAction).toBe(fail ? undefined : "follow_up");
+    expect(result.chainAction).toBeUndefined();
+    expect(result.finishReason).toBe(fail ? "error" : "length");
     expect(requests[1].messages[0].content).toContain("Skill\nInspect evidence.");
     expect(requests[1].messages[0].content).toContain("in_progress");
     expect(requests[1].messages[0].content).not.toContain("large large");

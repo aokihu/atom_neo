@@ -59,6 +59,7 @@ export const WsMessages = {
   },
   Server: {
     SessionReady: "session.ready",
+    SessionTelemetry: "event.session.telemetry",
     TaskCreated: "event.task.created",
     TaskCompleted: "event.task.completed",
     TaskFailed: "event.task.failed",

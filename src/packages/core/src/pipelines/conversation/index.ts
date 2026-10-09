@@ -37,11 +37,15 @@ export function registerConversationElements(): void {
 }
 
 export type ConversationPipelineDeps = {
+  decisionMode?: "jev" | "rules";
+  decisionModel?: import("../../decision/choose").DecisionModel;
+  fallbackModel?: import("../../decision/choose").DecisionModel;
   session: any;
   task: any;
   apiKey?: string;
   model?: string;
   baseUrl?: string;
+  beforeCall?: (signal?: AbortSignal) => Promise<void>;
   thinking?: string;
   providerOptions?: Record<string, any>;
   providerModel?: string;
@@ -87,6 +91,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-v4-flash",
       baseUrl: deps.baseUrl,
+      beforeCall: deps.beforeCall,
       tools: deps.tools ?? [],
       mcpToolsRef: deps.mcpToolsRef,
       maxTokens: deps.maxTokens ?? DEFAULT_MAX_TOKENS,
@@ -99,8 +104,9 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       contextService: deps.contextService,
       toolRecordStore: deps.toolRecordStore,
       task: deps.task,
+      memory: deps.memory,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .boundary("check-follow-up", { memory: deps.memory, session: deps.session })
+    .boundary("check-follow-up", { memory: deps.memory, session: deps.session, decisionMode: deps.decisionMode, decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel })
     .sink("finalize", { orchestrator: deps.orchestrator, session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }

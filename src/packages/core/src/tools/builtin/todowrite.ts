@@ -24,8 +24,9 @@ function formatProgress(todos: TodoWriteInput["todos"]): string {
     const icon = icons[t.status] ?? "⬜";
     return `${icon} [${t.priority}] ${i + 1}. ${t.content}`;
   });
-  const next = todos.find(t => t.status === "pending");
-  const hint = next ? `\n下一步: ${next.content}` : "";
+  const current = todos.find(t => t.status === "in_progress");
+  const next = current ?? todos.find(t => t.status === "pending");
+  const hint = next ? `\n${current ? "当前任务" : "下一步"}: ${next.content}` : "";
   return `任务进度:\n${lines.join("\n")}${hint}`;
 }
 

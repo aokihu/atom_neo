@@ -25,6 +25,7 @@ export async function createTaskHandler(
   body: any,
   bus?: PipelineEventBus<CoreEventMap>,
   pipeline?: Pipeline,
+  releaseTask?: (task: import("@atom-neo/shared").TaskItem) => boolean,
 ): Promise<Response> {
   try {
     const task = createTaskItem({
@@ -38,8 +39,17 @@ export async function createTaskHandler(
 
     if (pipeline) pipelineMap.set(task.id, pipeline);
 
-    taskQueue.enqueue(task);
-    if (bus) bus.emit(BusEvents.Task.Enqueued as any, { task });
+    if (releaseTask) {
+      releaseTask(task);
+      if (!taskQueue.getStatus(task.id)) {
+        task.state = TaskState.SUSPEND;
+        taskQueue.storeResult(task.id, { taskId: task.id, state: TaskState.SUSPEND });
+      }
+    }
+    else {
+      taskQueue.enqueue(task);
+      if (bus) bus.emit(BusEvents.Task.Enqueued as any, { task });
+    }
 
     return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
   } catch (err) {

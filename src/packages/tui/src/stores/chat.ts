@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Message, TodoItem, ToolInfo, MCPServerInfo } from "../types";
 import { estimateReceivedTokens } from "../components/format";
-import type { DecisionUpdatePayload } from "@atom-neo/shared";
+import type { DecisionUpdatePayload, SessionTelemetry } from "@atom-neo/shared";
 
 let _counter = 0;
 function now() { return Date.now(); }
@@ -25,6 +25,8 @@ type ChatState = {
   streamChunkCount: number;
   streamTokenBatches: number[];
   todoItems: TodoItem[];
+  rounds: SessionTelemetry["rounds"];
+  telemetryOnline: boolean;
   toolInfos: ToolInfo[];
   mcpServers: MCPServerInfo[];
   predictionDecision: DecisionUpdatePayload | null;
@@ -69,6 +71,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamChunkCount: 0,
   streamTokenBatches: [],
   todoItems: [],
+  rounds: null,
+  telemetryOnline: false,
   toolInfos: [],
   mcpServers: [],
   predictionDecision: null,
@@ -146,11 +150,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleToolEvent(event: ToolEventParams): "created" | "updated" | null {
-    if (event.name === "todowrite" && event.input) {
-      const todos = (event.input as any)?.todos;
-      if (Array.isArray(todos)) set({ todoItems: todos });
-    }
-
     const { toolGroupId, messages } = get();
     const callId = event.callId;
     const isResult = event.error !== undefined || event.result !== undefined;

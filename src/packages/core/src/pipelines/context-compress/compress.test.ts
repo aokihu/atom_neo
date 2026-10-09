@@ -231,7 +231,8 @@ describe("compress-archive", () => {
 });
 
 describe("compress-finalize", () => {
-  test("writes summary and resumes an interrupted conversation", async () => {
+  test.each([undefined, { kind: "resume_current", reason: "length", source: "rules", target: { index: 0, content: "文明起源" },
+    followUp: { summary: "前半", nextPrompt: "剩余", avoidRepeat: "前半" } }])("writes summary and resumes an interrupted conversation with request=%j", async continuation => {
     const bus = makeBus();
     const contextService = makeContextService(bus);
     const capture = { enqueued: null as any };
@@ -252,9 +253,9 @@ describe("compress-finalize", () => {
       persistence,
     });
 
-    await (el as any).doProcess({
+    const result = await (el as any).doProcess({
       mode: "finalizing", task: { id: "t1", chatId: "c1", parentTaskId: "root" },
-      request: { trigger: "token-overflow", resumeConversation: true },
+      request: { trigger: "token-overflow", resumeConversation: true, continuation },
       session, archiveMessages, summaryMessages: archiveMessages, archiveReceipt, summaryText: "",
       summary: "test summary",
       keepCount: 5,
@@ -264,8 +265,13 @@ describe("compress-finalize", () => {
     expect(contextService.get("session", { sessionId: "s1" }, "conversation-summary")?.content)
       .toEqual([{ role: "assistant", content: "[对话历史摘要]\ntest summary" }]);
     expect(session.messages.length).toBe(5);
-    expect(capture.enqueued).not.toBeNull();
-    expect(capture.enqueued.payload[0]?.data).toContain("从被截断处继续");
+    if (continuation) {
+      expect(capture.enqueued).toBeNull();
+      expect(result.chainAction).toBe("follow_up");
+      expect(result.continuationDecision).toEqual(continuation);
+    } else {
+      expect(capture.enqueued.payload[0]?.data).toContain("从被截断处继续");
+    }
     rmSync(root, { recursive: true, force: true });
   });
 

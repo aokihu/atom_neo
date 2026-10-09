@@ -13,7 +13,7 @@ export enum PipelineEnqueueTransition {
 }
 
 export type PipelineResult =
-  | { type: typeof PipelineResultType.Complete; task: TaskItem; output?: string }
+  | { type: typeof PipelineResultType.Complete; task: TaskItem; output?: string; completedGoalId?: string }
   | {
       type: typeof PipelineResultType.Enqueue;
       transition: PipelineEnqueueTransition;
@@ -34,7 +34,7 @@ export type PipelineResult =
 
 export type FlowState = { mode: string };
 
-export type ConversationContinuationAction = "follow_up" | "continue_todo";
+export type ConversationContinuationAction = "follow_up" | "continue_todo" | "reconcile_todo";
 export type ConversationChainAction = ConversationContinuationAction | "post_check_retry";
 export type TransportEventIdentity = {
   sessionId: string;
@@ -122,6 +122,7 @@ export type DomainEventMap = {
     parentTaskId: string;
     ownerTaskId?: string;
     action: ConversationChainAction;
+    continuation?: import("./task").ContinuationDecision;
   };
   "conversation.idle": {
     sessionId: string;

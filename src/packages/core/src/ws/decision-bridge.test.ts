@@ -24,6 +24,11 @@ describe("Decision bridge", () => {
     });
 
     expect(owner.send).toHaveBeenCalledTimes(1);
+    bus.emit(BusEvents.Element.Data, { name: "jev-decision", payload: {
+      step: "decision-request", sessionId: "session-a", taskId: "task-a", rootTaskId: "root-a",
+      purpose: "prediction", source: "jev", state: { userInput: "private input" }, questions: { privateQuestion: {} },
+    } });
+    expect(owner.send).toHaveBeenCalledTimes(1);
     expect(other.send).toHaveBeenCalledTimes(0);
     const message = JSON.parse(owner.send.mock.calls[0][0]);
     expect(message.type).toBe(WsMessages.Server.DecisionUpdated);

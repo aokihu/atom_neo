@@ -1,3 +1,4 @@
+import { buildAssistantReview } from "../post-conversation/elements/collect-input";
 import { describe, expect, test } from "bun:test";
 import { makeBus } from "../test-helpers";
 import { JevElement, composeTopic, TOPIC_CHOICES } from "./jev-element";
@@ -51,7 +52,9 @@ describe("JevElement", () => {
     let sent: any;
     const bus = makeBus();
     const updates: Record<string, unknown>[] = [];
+    const requests: Record<string, unknown>[] = [];
     bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
+    bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-request") requests.push(payload); });
     const element = new JevElement({
       name: "jev-decision", kind: "transform", bus, purpose: "prediction",
       model: { type: "jev", apiKey: "test-key", model: "typesafe/jev-1.13", baseUrl: "https://decisions.example.test/v1" },
@@ -69,6 +72,9 @@ describe("JevElement", () => {
       mode: "predicting", task: { id: "task-1", chainId: "root-1", sessionId: "session-1" }, session: {}, userMessage: "修复这个问题", currentTopic: "",
     });
     expect(sent.state.userInput).toBe("修复这个问题");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ purpose: "prediction", taskId: "task-1", rootTaskId: "root-1", source: "jev", ...sent });
+    expect(requests[0]).not.toHaveProperty("apiKey");
     expect(result.mode).toBe("routing");
     expect((result as any).prediction).toMatchObject({ intent: "instruction", topic: "code.debugging.issue" });
     expect(updates).toMatchObject([
@@ -155,4 +161,22 @@ describe("JevElement", () => {
     expect(updates.map(update => update.state)).toEqual(["run", "err"]);
     expect(updates[1]).not.toHaveProperty("error");
   });
+});
+
+
+test.each(["partial_work", "no_output"])("post review rejects satisfactory with contradictory %s", async behavior => {
+  const review = buildAssistantReview([{ seq: 7, content: "实际输出" }]);
+  let captured: any;
+  const element = new JevElement({ name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "post-conversation",
+    model: { type: "llm", apiKey: "test", model: "fast" }, fallback: { apiKey: "test", model: "basic" },
+    simulate: async (state, questions) => { captured = state;
+      expect(Object.keys(questions)).toEqual(["status", "behavior", "contentState", "reasonCode", "evidenceRef"]);
+      return { status: "satisfactory", behavior, contentState: "complete", reasonCode: "requirements_met", evidenceRef: "7" };
+    },
+  });
+  const result = await element.doProcess({ mode: "analyzing", task: {} as any, session: {}, userMessage: "写正文",
+    assistantResponse: review.response, predictedTaskIntent: "creative", stepCount: 0, ...review } as any);
+  expect((result as any).analysis.status).toBe("blocked");
+  expect((result as any).analysis.reason).toBe("inconsistent_success: requirements_met");
+  expect(captured.progressEvidence.outputRefs[0]).not.toHaveProperty("text");
 });

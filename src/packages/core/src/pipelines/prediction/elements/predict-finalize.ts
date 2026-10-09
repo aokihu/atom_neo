@@ -1,3 +1,4 @@
+import { startExecutionGoal } from "../../../session/execution-budget";
 import { BaseElement } from "@atom-neo/shared";
 import type { IntentPredictionResult, PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
@@ -16,6 +17,7 @@ export function resolveEffectiveTopic(
 export class PredictFinalizeElement extends BaseElement<PredictionFlowState, PipelineResult> {
   #orchestrator: InternalTaskOrchestrator;
   #skillService?: SkillServiceLike;
+  #maxGlobalRounds: number;
 
   constructor(params: {
     name: string;
@@ -23,9 +25,11 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator: InternalTaskOrchestrator;
     skillService?: SkillServiceLike;
+    maxGlobalRounds?: number;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#orchestrator = params.orchestrator;
+    this.#maxGlobalRounds = params.maxGlobalRounds ?? 100;
     this.#skillService = params.skillService;
   }
 
@@ -63,6 +67,13 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
       session.resetForNewTopic(effectiveTopic);
     }
 
+    // Goal lifecycle is independent of Topic; related turns retain the original goal.
+    if ((!session.executionBudget && session.legacyBudgetDepth === undefined) || prediction.contextRelevance === "standalone") {
+      if (prediction.contextRelevance === "standalone") { session.setTodoState?.([]); session.clearContinuationContext?.(); }
+      const goal = input.task.payload?.find((part: any) => part.type === "text")?.data ?? "";
+      const allowance = this.#maxGlobalRounds;
+      startExecutionGoal(session, input.task.chainId ?? input.task.id, goal, allowance);
+    }
     session.pendingPrediction = resolvedPrediction;
 
     this.report(BusEvents.Element.Data, { step: "scheduling conversation", difficulty: resolvedPrediction.difficulty, modelProfile: resolvedPrediction.modelProfile, intent: resolvedPrediction.intent, contextRelevance: resolvedPrediction.contextRelevance, topic: resolvedPrediction.topic });

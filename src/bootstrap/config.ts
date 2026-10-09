@@ -30,7 +30,8 @@ const ConfigSchema = z.object({
   decisionMode: z.object({
     prediction: z.enum(["legacy", "jev"]).default("legacy"),
     postConversation: z.enum(["legacy", "jev"]).default("legacy"),
-  }).default({ prediction: "legacy", postConversation: "legacy" }),
+    continuation: z.enum(["jev", "rules"]).default("jev"),
+  }).default({ prediction: "legacy", postConversation: "legacy", continuation: "jev" }),
   transport: z.object({
     maxOutputTokens: z.number().int().default(4096),
   }).default({ maxOutputTokens: 4096 }),
@@ -59,8 +60,12 @@ const ConfigSchema = z.object({
   }).default({ level: "debug", ignore: [] }),
   conversation: z.object({
     maxSteps: z.number().int().min(1).default(50),
-    maxChainDepth: z.number().int().min(1).default(5),
-  }).default({ maxSteps: 50, maxChainDepth: 5 }),
+    maxChainDepth: z.number().int().min(1).optional(),
+    maxGlobalRounds: z.number().int().positive().optional(),
+    maxLocalRounds: z.number().int().min(5).max(10).default(5),
+  }).default({ maxSteps: 50, maxLocalRounds: 5 }).transform(value => ({
+    ...value, maxGlobalRounds: value.maxGlobalRounds ?? (value.maxChainDepth === undefined ? 100 : value.maxChainDepth + 1),
+  })),
   schedule: z.object({
     persistPath: z.string().default("schedule-tasks.json"),
   }).default({ persistPath: "schedule-tasks.json" }),
@@ -79,6 +84,7 @@ export { ConfigSchema };
 
 /** Objects recurse into partials; arrays/records keep full element schemas (wholesale replace). */
 function overlaySchema(schema: any): any {
+  if (schema instanceof z.ZodPipe) return overlaySchema(schema.in);
   if (schema instanceof z.ZodDefault) return overlaySchema(schema.removeDefault());
   if (schema instanceof z.ZodOptional) return overlaySchema(schema.unwrap()).optional();
   if (schema instanceof z.ZodObject) {
@@ -102,7 +108,12 @@ export type RuntimeConfig = DeepPartial<Omit<AppConfig, "gateway">>;
 
 export const RuntimeConfigSchema: z.ZodType<RuntimeConfig> = overlaySchema(
   ConfigSchema.omit({ gateway: true }),
-) as z.ZodType<RuntimeConfig>;
+).transform((patch: RuntimeConfig) => {
+  const conversation = patch.conversation;
+  return conversation?.maxChainDepth !== undefined && conversation.maxGlobalRounds === undefined
+    ? { ...patch, conversation: { ...conversation, maxGlobalRounds: conversation.maxChainDepth + 1 } }
+    : patch;
+}) as z.ZodType<RuntimeConfig>;
 
 export type LoadedConfig = {
   userConfig: AppConfig;

@@ -93,7 +93,21 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     putData("task-state", { topic: this.#session?.currentTopic ?? "",
       difficulty: this.#session?.pendingPrediction?.difficulty ?? "medium",
-      todos: this.#session?.todoState ?? [] });
+      todos: this.#session?.todoState ?? [],
+      originalGoal: this.#session?.executionBudget?.goal,
+      executionBudget: this.#session?.executionBudget ? { globalUsed: this.#session.executionBudget.globalUsed,
+        globalAllowance: this.#session.executionBudget.globalAllowance, localUsed: this.#session.executionBudget.localUsed } : undefined });
+    const continuation = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data;
+    if (continuation) {
+      this.#putText("task", taskOwner, "continuation-rules", "runtime",
+        continuation.kind === "reconcile_progress"
+          ? "Only reconcile TODO progress against saved output. Use todowrite, do not regenerate business content. Do not mark work complete from claims alone."
+          : continuation.kind === "resume_current"
+            ? "Continue only the CURRENT unfinished content from the saved breakpoint. The original segment-break request has already been executed: do not execute it again. Do not repeat output. If a current TODO exists, when it is finished use todowrite to mark it completed and hand off the next item; that update ends this reply."
+            : "Execute ONLY the selected remaining TODO in continuation-request.target. Previous completed items are already delivered: do not recap, copy or rewrite them. After finishing the selected item, update TODO and end the reply.", 950);
+      putData("continuation-request", { kind: continuation.kind, target: continuation.target,
+        agentReferenceUntrusted: continuation.followUp });
+    }
     putData("current-time", { time: new Date().toISOString() });
     this.#putText("task", taskOwner, "difficulty-rules", "prompt-registry", this.#buildTaskInstructions(), 700);
 
@@ -101,7 +115,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       .filter(prompt => prompt.role !== "tool")
       .map(prompt => ({ role: prompt.role, content: prompt.content,
         ...(prompt.reasoning_content ? { reasoning_content: prompt.reasoning_content } : {}) }));
-    appendCurrentUserMessage(userMessages, input.task?.payload?.[0]?.data);
+    appendCurrentUserMessage(userMessages, input.task?.payload?.find((part: any) => part.type === "text")?.data);
     this.report(BusEvents.Element.Data, {
       step: "done",
       taskIntent: this.#taskIntent,

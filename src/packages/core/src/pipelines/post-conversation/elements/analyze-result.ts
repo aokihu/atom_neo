@@ -1,3 +1,4 @@
+import { getProgressFacts } from "../../shared/progress-evidence";
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
@@ -55,6 +56,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
         `AI回复元数据: parts=${input.assistantParts}, chars=${input.assistantLength}, activeTodos=${input.activeTodoCount}, finishReason=${input.finishReason || "unknown"}, completeDetected=${input.completeDetected}`,
         `工具事实: primaryEvidence=${input.toolEffectSummary.evidence}, referenceEvidence=${input.toolEffectSummary.referenceEvidence}, stateChanged=${input.toolEffectSummary.stateChanged}, none=${input.toolEffectSummary.none}, failed=${input.toolEffectSummary.failed}`,
         `AI回复声明（未验证参考，不能仅凭其自述判定完成）: ${substringWellFormed(input.assistantResponse, 0, 3000)}`,
+        ...(input.progressEvidence ? [`实际输出跟踪（不把 TODO 更新当作业务交付）: ${JSON.stringify(getProgressFacts(input.progressEvidence))}`] : []),
         `预期任务: ${TASK_INTENT_DESC[input.predictedTaskIntent] ?? "对话交流"}`,
         "判定顺序: 用户请求 > primary evidence/state change > MCP reference evidence > 完成元数据 > AI回复声明。MCP reference 只能辅助判断，不能单独支撑高置信度完成；工具型任务没有 primary evidence/stateChanged 且只有 empty/error/blocked/deferred 时，不得仅凭 AI 自述判为 satisfactory。",
       ].join("\n");
@@ -78,7 +80,8 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       }
 
       const status = ["satisfactory", "blocked", "needs_user_input"].includes(parsed.status) ? parsed.status as AnalysisResult["status"] : "satisfactory";
-      const analysis: AnalysisResult = { status, reason: parsed.reason ?? "", fingerprint: parsed.fingerprint };
+      const analysis: AnalysisResult = { status, reason: parsed.reason ?? "", fingerprint: parsed.fingerprint,
+        confirmed: ["satisfactory", "blocked", "needs_user_input"].includes(parsed.status) };
 
       this.report(BusEvents.Element.Data, { step: "analyzed", status, reason: analysis.reason });
       return { ...input, mode: "acting", analysis };

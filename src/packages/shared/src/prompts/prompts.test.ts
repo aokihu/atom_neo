@@ -80,8 +80,8 @@ describe("Memory discovery prompts", () => {
 
 describe("Continuation prompts", () => {
   test("keeps TODO progression separate from follow-up in both languages", () => {
-    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("系统会根据 active TODO 自动进入下一项");
-    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("system continues from the active TODO");
+    expect(zhBases[PromptKey.BASE_SYSTEM]).toContain("系统保存进度并仲裁后才启动下一项");
+    expect(enBases[PromptKey.BASE_SYSTEM]).toContain("system saves progress and arbitrates before starting the next item");
     expect(zhBases[PromptKey.BASE_SYSTEM]).not.toContain("`todowrite` → `intent`");
     expect(enBases[PromptKey.BASE_SYSTEM]).not.toContain("`todowrite` → `intent`");
     expect(zhBases[PromptKey.CONTEXT_DIFFICULTY_RULES]).not.toContain("action: follow_up");

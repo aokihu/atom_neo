@@ -1,5 +1,5 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import type { ContinuationDecision, PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ContextEntry } from "@atom-neo/shared";
@@ -12,6 +12,8 @@ type CompressResult = {
   type: typeof PipelineResultType.Complete;
   task: any;
   output: string;
+  chainAction?: "follow_up";
+  continuationDecision?: ContinuationDecision;
 };
 
 export class CompressFinalizeElement extends BaseElement<CompressFlowState, CompressResult> {
@@ -171,17 +173,22 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Comp
         sessionId,
         parentTaskId: input.task.parentTaskId,
       });
-      this.#orchestrator.scheduleConversation(
-        sessionId,
-        input.task.chatId ?? "chat",
-        input.task.parentTaskId ?? input.task.id,
-        [{
-          type: "text",
-          data: "请根据对话摘要和最近消息，从被截断处继续；不要重复已经完成的内容。",
-        }],
-        undefined,
-        input.task.id,
-      );
+      if (request.resumeTask) {
+        this.#orchestrator.releaseTask(request.resumeTask, input.task.id);
+      } else if (request.continuation && request.trigger === "token-overflow") {
+        // Core grants the recovery slot only after this compression checkpoint commits.
+        return { type: PipelineResultType.Complete, task: input.task,
+          output: "compress: saved, continuation awaiting chain governance",
+          chainAction: "follow_up", continuationDecision: request.continuation };
+      } else if (request.continuation) {
+        this.#orchestrator.scheduleContinuation(sessionId, input.task.chatId ?? "chat",
+          input.task.parentTaskId ?? input.task.id, input.task.id, request.continuation);
+      } else {
+        this.#orchestrator.scheduleConversation(sessionId, input.task.chatId ?? "chat",
+          input.task.parentTaskId ?? input.task.id,
+          [{ type: "text", data: "请根据对话摘要和最近消息，从被截断处继续；不要重复已经完成的内容。" }],
+          undefined, input.task.id);
+      }
     } else {
       this.report(BusEvents.Element.Data, {
         step: "completed without conversation resume",

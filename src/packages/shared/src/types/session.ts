@@ -1,5 +1,19 @@
 import type { ToolResultMetadata } from "./tool";
 
+export type SessionTelemetry = {
+  sessionId: string;
+  rounds: {
+    goalId: string;
+    globalUsed: number;
+    globalAllowance: number;
+    localUsed: number;
+    localLimit: number;
+    completed?: boolean;
+    pause?: "global_limit" | "health_check" | "unhealthy" | "unknown" | "cancelled" | "interrupted";
+  } | null;
+  todos: { content: string; status: "pending" | "in_progress" | "completed" | "cancelled"; priority: "high" | "medium" | "low" }[];
+};
+
 export type SessionInitiator =
   | { type: "tui" }
   | { type: "gateway"; clientId: string; platform: string }

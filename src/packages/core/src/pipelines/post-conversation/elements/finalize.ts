@@ -30,7 +30,7 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
     }
 
     if (status === "blocked") {
-      if (input.session?.originalSource === "external") {
+      if (input.session?.originalSource === "external" || input.analysis?.assessment?.reasonCode === "evidence_insufficient") {
         return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: blocked, awaiting user judgment — ${reason}` };
       }
 
@@ -76,6 +76,9 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
       return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: blocked, scheduling retry — ${reason}` };
     }
 
-    return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: no action — ${status}: ${reason}` };
+    const confirmedComplete = status === "satisfactory" && input.analysis?.confirmed === true
+      && (!input.analysis.assessment || input.analysis.assessment.contentState === "complete");
+    return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: no action — ${status}: ${reason}`,
+      ...(confirmedComplete && input.executionGoalId ? { completedGoalId: input.executionGoalId } : {}) };
   }
 }

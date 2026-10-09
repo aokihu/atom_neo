@@ -165,7 +165,7 @@ describe("conversation context pipeline", () => {
       skillService: { buildContext: () => "topic skill", getRevision: () => 3 },
     }, {
       mode: "streaming",
-      task: { id: "t1", payload: [{ data: "current request" }] },
+      task: { id: "t1", payload: [{ type: "text", data: "current request" }] },
       prompts: [{ role: "assistant", content: "previous answer" }],
     });
 
@@ -188,7 +188,7 @@ describe("conversation context pipeline", () => {
   test("does not duplicate a user message already checkpointed in the session", async () => {
     const { result } = await buildSnapshot({ session: makeSession() }, {
       mode: "streaming",
-      task: { id: "t1", payload: [{ data: "current request" }] },
+      task: { id: "t1", payload: [{ type: "text", data: "current request" }] },
       prompts: [{ role: "user", content: "current request" }],
     });
 
