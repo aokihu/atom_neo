@@ -9,10 +9,8 @@ interface StatusBarProps {
 export function StatusBar({ serverInfo }: StatusBarProps) {
   const { colors } = useTheme();
   const { width } = useTerminalDimensions();
-  const thinkingColor =
-    serverInfo.thinking === "enabled" ? colors.status.success :
-    serverInfo.thinking === "adaptive" ? colors.status.warning :
-    colors.text.muted;
+  const thinkingColor = serverInfo.thinking === "enabled" || serverInfo.thinking === "adaptive"
+    ? colors.status.success : colors.text.muted;
 
   if (width < 100) {
     return (

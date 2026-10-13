@@ -2,7 +2,7 @@ import { getProgressFacts } from "./progress-evidence";
 /** Optional typed-decision transform for Prediction and Post-Conversation. */
 import { BaseElement, BusEvents, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, IntentPredictionResult } from "@atom-neo/shared";
-import type { SimulateDecision } from "../../decision/choose";
+import type { DecisionModel, SimulateDecision } from "../../decision/choose";
 import { chooseDecision } from "../../decision/choose";
 import type { JevQuestion } from "../../decision/jev-client";
 import type { PredictionFlowState } from "../prediction/elements/types";
@@ -69,8 +69,8 @@ export function composeTopic(answers: DecisionChoices): string {
 
 export class JevElement extends BaseElement<PredictionFlowState | PostConversationFlowState, PredictionFlowState | PostConversationFlowState> {
   #purpose: "prediction" | "post-conversation";
-  #model: { type: "llm" | "jev"; apiKey: string; model: string; baseUrl?: string };
-  #fallback: { apiKey: string; model: string; baseUrl?: string };
+  #model: DecisionModel;
+  #fallback: DecisionModel;
   #maxTokens: number;
   #fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
   #simulate?: SimulateDecision;
@@ -80,8 +80,8 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     purpose: "prediction" | "post-conversation";
-    model: { type: "llm" | "jev"; apiKey: string; model: string; baseUrl?: string };
-    fallback: { apiKey: string; model: string; baseUrl?: string };
+    model: DecisionModel;
+    fallback: DecisionModel;
     maxTokens?: number;
     fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
     simulate?: SimulateDecision;

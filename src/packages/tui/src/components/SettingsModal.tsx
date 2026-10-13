@@ -48,7 +48,7 @@ export function serverInfoFromConfig(prev: ServerInfo, config: Record<string, an
     ...prev,
     model,
     theme: config.tui?.theme ?? prev.theme,
-    thinking: config.providers?.[provider]?.thinking ?? prev.thinking,
+    thinking: config.providers?.[provider]?.thinking ?? "disabled",
   };
 }
 

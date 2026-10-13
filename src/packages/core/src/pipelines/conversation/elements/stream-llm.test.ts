@@ -17,6 +17,25 @@ import { ToolCallLedger } from "../../../tools/governance";
 import type { Message } from "./types";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { streamText } from "ai";
+import { deepSeekProviderOptions } from "../../shared/llm";
+
+test("DeepSeek request uses the effective thinking mode", async () => {
+  const requests: any[] = [];
+  const testFetch = async (_url: URL | RequestInfo, init?: RequestInit) => {
+    requests.push(JSON.parse(String(init?.body)));
+    const chunk = { id: "test", object: "chat.completion.chunk", created: 1,
+      model: "deepseek-flash", choices: [{ index: 0, delta: { role: "assistant", content: "4" }, finish_reason: "stop" }] };
+    return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`,
+      { headers: { "Content-Type": "text/event-stream" } });
+  };
+  const provider = createDeepSeek({ apiKey: "local-test-only", fetch: testFetch as typeof fetch });
+  for (const thinking of ["disabled", "enabled", "adaptive"]) {
+    const result = streamText({ model: provider("deepseek-flash"), prompt: "2+2?",
+      providerOptions: deepSeekProviderOptions(thinking) });
+    expect(await result.text).toBe("4");
+  }
+  expect(requests.map(request => request.thinking?.type)).toEqual(["disabled", "enabled", "enabled"]);
+});
 
 test("distinguishes unknown cache usage from a measured zero hit", () => {
   expect(resolveCacheMetrics()).toEqual({ inputTokens: null, cacheReadTokens: null,

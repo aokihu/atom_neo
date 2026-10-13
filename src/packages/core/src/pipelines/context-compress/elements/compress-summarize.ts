@@ -8,6 +8,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
   #apiKey: string;
   #model: string;
   #baseUrl?: string;
+  #thinking?: string;
 
   constructor(params: {
     name: string;
@@ -16,11 +17,13 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
     apiKey: string;
     model: string;
     baseUrl?: string;
+    thinking?: string;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
     this.#baseUrl = params.baseUrl;
+    this.#thinking = params.thinking;
   }
 
   async doProcess(input: CompressFlowState): Promise<CompressFlowState> {
@@ -56,6 +59,7 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
         apiKey: this.#apiKey,
         model: this.#model,
         baseUrl: this.#baseUrl,
+        thinking: this.#thinking,
         systemKey: PromptKey.COMPRESS_SUMMARIZE,
         prompt: input.summaryText,
         maxTokens: input.summaryMaxTokens || 600,

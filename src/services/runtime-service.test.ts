@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeService } from "./runtime-service";
+import { ConfigSchema, loadConfig } from "../bootstrap/config";
 
 const tempDirs: string[] = [];
 function makeSandbox(): string {
@@ -25,6 +26,24 @@ function makeRuntime(sandbox: string): RuntimeService {
 }
 
 describe("RuntimeService runtime config", () => {
+  test("thinking overlay takes effect immediately and survives reload", async () => {
+    const sandbox = makeSandbox();
+    const userConfig = ConfigSchema.parse({ providers: {
+      deepseek: { apiKeyEnv: "DEEPSEEK_API_KEY", models: ["deepseek-flash"], thinking: "disabled" },
+    } });
+    await Bun.write(join(sandbox, "config.json"), JSON.stringify(userConfig));
+    const runtime = new RuntimeService({ mode: "core", port: 3100, host: "127.0.0.1", sandbox,
+      apiKey: "test-only", config: loadConfig(sandbox) });
+
+    runtime.updateRuntimeConfig({ providers: { deepseek: { thinking: "enabled" } } });
+    expect(runtime.getResolvedModel("balanced").thinking).toBe("enabled");
+    expect(JSON.parse(readFileSync(runtime.runtimeConfigPath, "utf-8"))).toEqual({ providers: { deepseek: { thinking: "enabled" } } });
+    expect(loadConfig(sandbox).effective.providers.deepseek.thinking).toBe("enabled");
+
+    runtime.updateRuntimeConfig({ providers: { deepseek: { thinking: "disabled" } } });
+    expect(runtime.getResolvedModel("balanced").thinking).toBe("disabled");
+  });
+
   test("resolves fast Jev provider separately from LLM credentials", () => {
     const runtime = makeRuntime(makeSandbox());
     runtime.updateRuntimeConfig({

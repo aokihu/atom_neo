@@ -63,6 +63,13 @@ describe("serverInfoFromConfig", () => {
     expect(info.theme).toBe("edex");
     expect(info.thinking).toBe("disabled");
   });
+
+  test("clears stale thinking state when the selected provider has no setting", () => {
+    const info = serverInfoFromConfig({ ...baseInfo, thinking: "enabled" }, {
+      providerProfiles: { balanced: "other/model" }, providers: { other: { models: ["model"] } },
+    });
+    expect(info.thinking).toBe("disabled");
+  });
 });
 
 describe("buildRuntimePatch", () => {
