@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ToolEntry, ToolGroupMessage } from "../types";
 import { useTheme } from "./App";
 
@@ -102,43 +103,67 @@ export function ToolMessageBox({
   onOpenDetails?: (groups: ToolGroupMessage[]) => void;
 }) {
   const { colors } = useTheme();
+  const [expanded, setExpanded] = useState(false);
 
   if (message.collapsed && message.summary) {
     return <ToolSummaryTrigger groups={[message]} onOpen={onOpenDetails} />;
   }
 
+  const current = message.entries.findLast(entry => entry.phase === "preparing" || entry.phase === "executing")
+    ?? message.entries.at(-1);
+  if (!current) return null;
+  const toggleExpanded = () => setExpanded(value => !value);
+
   return (
-    <box
-      marginLeft={2}
-      marginRight={2}
-      marginBottom={1}
-      paddingLeft={1}
-      paddingRight={1}
-      paddingBottom={1}
-      border
-      borderColor={colors.decoration.subtle}
-      borderStyle="single"
-      backgroundColor={colors.bg.popup}
-      flexDirection="column"
-    >
-      <text fg={colors.accent.brand}>TOOLS EXECUTION</text>
-      {message.entries.map(e => {
-        const state = entryState(e);
-        const active = state === "RUN";
-        const summary = e.detail ?? e.input;
-        const stateColor = active ? colors.status.warning
-          : e.phase === "done" ? colors.status.success
-            : colors.status.error;
-        return (
-          <box key={e.toolCallId} flexDirection="row">
-            <text width={5} fg={stateColor}>{state}</text>
-            <text width={22} fg={colors.text.primary}>{e.toolName}</text>
-            {summary !== undefined && (
-              <text flexGrow={1} fg={colors.text.muted} selectable>{truncate(summary, 80)}</text>
-            )}
-          </box>
-        );
-      })}
+    <box marginLeft={2} marginRight={2} marginBottom={1} flexDirection="column">
+      <box
+        id={`tool-trigger-${message.id}`}
+        height={1}
+        focusable
+        onMouseUp={toggleExpanded}
+        onKeyDown={(event) => {
+          if (event.name === "return" || event.name === "enter" || event.name === "space") {
+            event.preventDefault();
+            toggleExpanded();
+          }
+        }}
+      >
+        <text fg={expanded ? colors.accent.brand : colors.text.muted} wrapMode="none" truncate>
+          {current.toolName}
+        </text>
+      </box>
+      {expanded && (
+        <box
+          marginTop={1}
+          paddingLeft={1}
+          paddingRight={1}
+          paddingBottom={1}
+          border
+          borderColor={colors.decoration.subtle}
+          borderStyle="single"
+          backgroundColor={colors.bg.popup}
+          flexDirection="column"
+        >
+          <text fg={colors.accent.brand}>TOOLS EXECUTION</text>
+          {message.entries.map(e => {
+            const state = entryState(e);
+            const active = state === "RUN";
+            const summary = e.detail ?? e.input;
+            const stateColor = active ? colors.status.warning
+              : e.phase === "done" ? colors.status.success
+                : colors.status.error;
+            return (
+              <box key={e.toolCallId} flexDirection="row">
+                <text width={5} fg={stateColor}>{state}</text>
+                <text width={22} fg={colors.text.primary}>{e.toolName}</text>
+                {summary !== undefined && (
+                  <text flexGrow={1} fg={colors.text.muted} selectable>{truncate(summary, 80)}</text>
+                )}
+              </box>
+            );
+          })}
+        </box>
+      )}
     </box>
   );
 }
