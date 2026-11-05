@@ -2,8 +2,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { act, useState } from "react";
 import { createRoot } from "@opentui/react";
+import { RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { ToolMessageBox } from "./ToolMessageBox";
+import { getTheme } from "../theme";
 import type { ToolGroupMessage } from "../types";
 
 const toolGroup = (): ToolGroupMessage => ({
@@ -44,26 +46,26 @@ async function renderToolMessage(message: ToolGroupMessage, width = 80, onOpenDe
   };
 }
 
-test("shows only the current tool name and updates it in one line", async () => {
+test("shows the current tool name and parameters and updates them in one line", async () => {
   let message = toolGroup();
   const setup = await renderToolMessage(message);
   try {
-    expect(setup.captureCharFrame().trim()).toBe("webfetch");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: webfetch https://example.com");
     expect(setup.renderer.root.findDescendantById("tool-trigger-tools")?.height).toBe(1);
 
     message = { ...message, entries: [...message.entries, { toolCallId: "shell", toolName: "shell", phase: "preparing" }] };
     await setup.update(message);
-    expect(setup.captureCharFrame().trim()).toBe("shell");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: shell");
 
     message = { ...message, entries: message.entries.map(entry => entry.toolCallId === "shell" ? { ...entry, phase: "done" } : entry) };
     await setup.update(message);
-    expect(setup.captureCharFrame().trim()).toBe("webfetch");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: webfetch https://example.com");
 
     message = { ...message, entries: message.entries.map(entry => ({ ...entry, phase: "error" })) };
     await setup.update(message);
-    expect(setup.captureCharFrame().trim()).toBe("shell");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: shell");
 
-    setup.resize(20, 20);
+    setup.resize(40, 20);
     message = { ...message, entries: [{ toolCallId: "long", toolName: "mcp_server_with_a_very_long_tool_name", phase: "executing" }] };
     await setup.update(message);
     const lines = setup.captureCharFrame().split("\n").filter(line => line.trim());
@@ -80,9 +82,10 @@ test("toggles the existing list with mouse and keyboard and preserves the choice
   const setup = await renderToolMessage(message, 100);
   try {
     const trigger = setup.renderer.root.findDescendantById("tool-trigger-tools")!;
-    await act(async () => setup.mockMouse.click(trigger.x + 1, trigger.y));
+    await act(async () => setup.mockMouse.click(trigger.x + trigger.width - 2, trigger.y));
     await setup.renderOnce();
     expect(setup.captureCharFrame()).toContain("TOOLS EXECUTION");
+    expect(setup.captureCharFrame()).toContain("▾ Tool: webfetch https://example.com");
     expect(setup.captureCharFrame()).toContain("OK");
     expect(setup.captureCharFrame()).toContain("RUN");
     expect(setup.captureCharFrame()).toContain("file contents");
@@ -95,11 +98,11 @@ test("toggles the existing list with mouse and keyboard and preserves the choice
 
     await act(async () => setup.mockMouse.click(trigger.x + 1, trigger.y));
     await setup.renderOnce();
-    expect(setup.captureCharFrame().trim()).toBe("shell");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: shell");
 
     message = { ...message, entries: message.entries.map(entry => entry.toolCallId === "shell" ? { ...entry, phase: "error", detail: "command failed" } : entry) };
     await setup.update(message);
-    expect(setup.captureCharFrame().trim()).toBe("webfetch");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: webfetch https://example.com");
 
     trigger.focus();
     await act(async () => setup.mockInput.pressEnter());
@@ -109,12 +112,52 @@ test("toggles the existing list with mouse and keyboard and preserves the choice
     expect(setup.captureCharFrame()).toContain("command failed");
     await act(async () => setup.mockInput.pressKey(" "));
     await setup.renderOnce();
-    expect(setup.captureCharFrame().trim()).toBe("webfetch");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: webfetch https://example.com");
 
     await act(async () => setup.mockInput.pressEnter());
     await setup.renderOnce();
     await setup.update({ ...toolGroup(), id: "next-group" });
-    expect(setup.captureCharFrame().trim()).toBe("webfetch");
+    expect(setup.captureCharFrame().trim()).toBe("▸ Tool: webfetch https://example.com");
+  } finally {
+    await setup.destroy();
+  }
+});
+
+test("paints the whole clickable row with a subtle theme background and distinct text colors", async () => {
+  const setup = await renderToolMessage(toolGroup());
+  const { colors } = getTheme();
+  try {
+    const spans = setup.captureSpans().lines[0]!.spans;
+    const background = RGBA.fromHex(colors.bg.popup);
+    expect(spans.filter(span => span.bg.equals(background)).reduce((width, span) => width + span.width, 0)).toBe(76);
+    expect(spans.find(span => span.text.includes("webfetch"))?.fg.equals(RGBA.fromHex(colors.accent.brand))).toBe(true);
+    expect(spans.find(span => span.text.includes("Tool:"))?.fg.equals(RGBA.fromHex(colors.text.secondary))).toBe(true);
+    expect(spans.find(span => span.text.includes("https://example.com"))?.fg.equals(RGBA.fromHex(colors.text.secondary))).toBe(true);
+  } finally {
+    await setup.destroy();
+  }
+});
+
+const paramCases: [unknown, string][] = [
+  [{ command: "sleep 45\n", timeout: 60_000 }, "sleep 45"],
+  [{ filepath: "docs/tui-interface.md", offset: 1 }, "docs/tui-interface.md"],
+  [{ url: "https://example.com" }, "https://example.com"],
+  [{ query: "tool UI" }, "tool UI"],
+  [{ pattern: "ToolMessageBox", path: "src" }, "ToolMessageBox"],
+  [{ path: "src" }, "src"],
+  [{ limit: 5 }, '{"limit":5}'],
+  [["one", "two"], '["one","two"]'],
+  ["first\nsecond\tthird", "first second third"],
+  [undefined, ""],
+];
+
+test.each(paramCases)("keeps tool parameters readable and on one line for %j", async (input, expected) => {
+  const message = { ...toolGroup(), entries: [{ toolCallId: "shell", toolName: "shell", phase: "executing" as const, input }] };
+  const setup = await renderToolMessage(message);
+  try {
+    expect(setup.captureCharFrame().trim()).toBe(`▸ Tool: shell${expected ? ` ${expected}` : ""}`);
+    const lines = setup.captureCharFrame().split("\n").filter(line => line.trim());
+    expect(lines).toHaveLength(1);
   } finally {
     await setup.destroy();
   }

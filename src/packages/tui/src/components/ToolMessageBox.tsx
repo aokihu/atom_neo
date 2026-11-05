@@ -12,6 +12,17 @@ function truncate(s: unknown, n: number): string {
   return t.length > n ? t.slice(0, n - 1) + "…" : t;
 }
 
+function formatToolParams(input: unknown): string {
+  if (input === undefined) return "";
+  let summary = input;
+  if (input !== null && typeof input === "object" && !Array.isArray(input)) {
+    const params = input as Record<string, unknown>;
+    summary = ["command", "filepath", "url", "query", "pattern", "path"]
+      .map(key => params[key]).find(value => typeof value === "string") ?? input;
+  }
+  return truncate(summary, 160).replace(/\s+/g, " ").trim();
+}
+
 function entryState(entry: ToolEntry): "RUN" | "OK" | "ERR" {
   if (entry.phase === "preparing" || entry.phase === "executing") return "RUN";
   return entry.phase === "done" ? "OK" : "ERR";
@@ -113,12 +124,16 @@ export function ToolMessageBox({
     ?? message.entries.at(-1);
   if (!current) return null;
   const toggleExpanded = () => setExpanded(value => !value);
+  const params = formatToolParams(current.input);
 
   return (
     <box marginLeft={2} marginRight={2} marginBottom={1} flexDirection="column">
       <box
         id={`tool-trigger-${message.id}`}
         height={1}
+        paddingLeft={1}
+        paddingRight={1}
+        backgroundColor={colors.bg.popup}
         focusable
         onMouseUp={toggleExpanded}
         onKeyDown={(event) => {
@@ -128,8 +143,11 @@ export function ToolMessageBox({
           }
         }}
       >
-        <text fg={expanded ? colors.accent.brand : colors.text.muted} wrapMode="none" truncate>
-          {current.toolName}
+        <text fg={colors.text.secondary} wrapMode="none" truncate>
+          <span fg={colors.accent.brand}>{expanded ? "▾" : "▸"}</span>
+          {" Tool: "}
+          <span fg={colors.accent.brand}>{current.toolName}</span>
+          {params ? ` ${params}` : ""}
         </text>
       </box>
       {expanded && (

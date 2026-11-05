@@ -69,12 +69,15 @@ Wide
 
 - User 与 Assistant 消息显示角色和时间。
 - Reasoning 默认折叠，键盘操作优先；鼠标只作为可选增强。
-- Tool Group 执行中默认折叠为一行，仅显示当前工具名，不附加状态、计数、参数或结果。
+- Tool Group 执行中默认折叠为一行：`▸ Tool: shell sleep 45`。整行使用当前主题的
+  popup 背景色和左右各 1 列内边距，形成低对比度的可点击区域；不增加外框或高度。
+  箭头和工具名使用主题强调色，`Tool:` 与参数摘要使用 secondary 文字色。
   优先显示最近开始且仍在 preparing / executing 的工具；调用间隙保留最后一个工具名，
-  下一次调用在原位置更新。长工具名保持单行截断。
-- 点击工具名原位展开现有 `TOOLS EXECUTION` 列表，保留低亮度背景 Block、
-  单字符细边框和 `状态 / 名称 / 摘要` 行；再次点击收起。
-  展开状态不被后续工具事件重置。工具名可获得焦点，Enter / Space 同样切换展开状态。
+  下一次调用在原位置更新。参数优先显示 command、filepath、url、query、pattern、path
+  中的字符串主参数，其他输入复用 JSON 摘要；多行空白合并，超长内容保持单行截断。
+- 点击工具行任意位置原位展开现有 `TOOLS EXECUTION` 列表，箭头改为 `▾`；
+  保留低亮度背景 Block、单字符细边框和 `状态 / 名称 / 摘要` 行；再次点击收起。
+  展开状态不被后续工具事件重置。工具行可获得焦点，Enter / Space 同样切换展开状态。
 - Tool Group 完成后移除执行 Block，并聚合到同一 User Turn 最后一个可用的
   Thought 行：`THOUGHT 5s │ TOOLS 5/5 ▼`。点击 Tool 摘要或在其获得
   焦点后按 Enter，打开 Modal 查看每个 Tool 的状态、输入与结果摘要。
