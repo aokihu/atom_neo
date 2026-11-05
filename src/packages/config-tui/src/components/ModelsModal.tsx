@@ -3,8 +3,8 @@ import { useKeyboard } from "@opentui/react";
 import { Modal } from "../modal";
 import { FieldInput } from "./FieldInput";
 import { useTheme } from "../theme";
-import { addModel, removeModelAt, parseContextLimit } from "../wizard-logic";
-import type { ThinkingMode } from "../wizard-logic";
+import { addModel, removeModelAt, parseContextLimit, isDecisionEndpoint } from "../wizard-logic";
+import type { ProviderEdit, ProviderType, ThinkingMode } from "../wizard-logic";
 
 const THINKING_LABELS = [
   { label: "disabled (default)", value: "disabled" },
@@ -12,15 +12,19 @@ const THINKING_LABELS = [
   { label: "adaptive (legacy enabled)", value: "adaptive" },
 ];
 
-type Phase = "list" | "add" | "baseUrl" | "thinking" | "contextLimit";
+type Phase = "list" | "add" | "type" | "baseUrl" | "thinking" | "contextLimit";
+const PROVIDER_TYPES = ["llm", "jev"] as const;
+export type ModelEdit = Pick<ProviderEdit, "type" | "models" | "baseUrl" | "thinking" | "contextLimit">;
 
-export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit, onSubmit, onCancel }: {
+export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit, type, allowJev, onSubmit, onCancel }: {
   provider: string;
   models: string[];
   baseUrl?: string;
   thinking: ThinkingMode;
   contextLimit?: number;
-  onSubmit: (patch: { models: string[]; baseUrl?: string; thinking: ThinkingMode; contextLimit?: number }) => void;
+  type?: ProviderType;
+  allowJev: boolean;
+  onSubmit: (patch: ModelEdit) => boolean;
   onCancel: () => void;
 }) {
   const { colors } = useTheme();
@@ -29,7 +33,7 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
   const [selected, setSelected] = useState(0);
   const [draftUrl, setDraftUrl] = useState(baseUrl ?? "");
   const [draftThinking, setDraftThinking] = useState<ThinkingMode>(thinking);
-  const [draftLimit, setDraftLimit] = useState(contextLimit ? String(contextLimit) : "");
+  const [draftType, setDraftType] = useState<ProviderType>(type ?? "llm");
   const [error, setError] = useState("");
 
   // 'd' deletes the highlighted model in the list phase (Modal handles the rest)
@@ -45,21 +49,15 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
     else setPhase("list");
   };
 
-  const finalize = () => {
-    if (list.length === 0) {
-      setError("At least one model is required — Esc to cancel this provider edit");
-      return;
-    }
-    if (!draftLimit.trim()) {
-      onSubmit({ models: list, baseUrl: draftUrl.trim() || undefined, thinking: draftThinking, contextLimit: undefined });
-      return;
-    }
-    const parsed = parseContextLimit(draftLimit);
-    if (parsed === undefined) {
+  const finalize = (url: string, limit: string) => {
+    const parsed = parseContextLimit(limit);
+    if (limit && parsed === undefined) {
       setError("Context limit must be a positive integer");
       return;
     }
-    onSubmit({ models: list, baseUrl: draftUrl.trim() || undefined, thinking: draftThinking, contextLimit: parsed });
+    if (!onSubmit({ type: draftType, models: list, baseUrl: url || undefined, thinking: draftThinking, contextLimit: parsed })) {
+      setError("Keep at least one LLM for the conversation profiles");
+    }
   };
 
   const title = `MODELS — ${provider.toUpperCase()}`;
@@ -81,15 +79,39 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
     );
   }
 
+  if (phase === "type") {
+    return (
+      <Modal open title="PROVIDER TYPE" width={56} onClose={close}
+        listLength={PROVIDER_TYPES.length} selectedListIndex={PROVIDER_TYPES.indexOf(draftType)}
+        onListNavigate={i => setDraftType(PROVIDER_TYPES[i])}
+        onListActivate={() => { setError(""); setPhase("baseUrl"); }}
+        hint="↑/↓ select · Enter continue · Esc back"
+      >
+        {PROVIDER_TYPES.map(kind => (
+          <text key={kind} fg={kind === draftType ? colors.accent.brand : colors.text.primary}>
+            {`${kind === draftType ? "▸" : " "} ${kind === "jev" ? "Jev (structured decisions)" : "LLM (text generation)"}`}
+          </text>
+        ))}
+      </Modal>
+    );
+  }
+
   if (phase === "baseUrl") {
     return (
       <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc back">
         <FieldInput
-          label="Base URL"
+          label={draftType === "jev" ? "Decisions endpoint (full URL)" : "Base URL"}
           value={draftUrl}
-          placeholder="(optional, leave empty to unset)"
-          onSubmit={(url) => { setDraftUrl(url); setPhase("thinking"); }}
-          onCancel={() => setPhase("list")}
+          error={error}
+          placeholder={draftType === "jev" ? "https://…/decisions" : "(optional)"}
+          onSubmit={(url) => {
+            setError("");
+            setDraftUrl(url);
+            if (draftType === "llm") setPhase("thinking");
+            else if (!isDecisionEndpoint(url)) setError("Enter a full HTTP(S) Decisions endpoint");
+            else finalize(url, contextLimit ? String(contextLimit) : "");
+          }}
+          onCancel={() => { setError(""); setPhase(allowJev ? "type" : "list"); }}
         />
       </Modal>
     );
@@ -128,10 +150,10 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
       <Modal open title={title} width={56} interactive={false} onClose={onCancel} hint="Enter finish · Esc back">
         <FieldInput
           label="Context tokens"
-          value={draftLimit}
+          value={contextLimit ? String(contextLimit) : ""}
           placeholder="(optional, e.g. 131072)"
           error={error}
-          onSubmit={() => finalize()}
+          onSubmit={(limit) => finalize(draftUrl, limit)}
           onCancel={() => setPhase("thinking")}
         />
       </Modal>
@@ -151,7 +173,7 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
       onListNavigate={setSelected}
       onListActivate={(i) => {
         if (items[i] === "__add__") setPhase("add");
-        else setPhase("baseUrl");
+        else if (items[i]) { setError(""); setPhase(allowJev ? "type" : "baseUrl"); }
       }}
       hint="↑/↓ select · Enter edit · d delete · Esc back"
     >

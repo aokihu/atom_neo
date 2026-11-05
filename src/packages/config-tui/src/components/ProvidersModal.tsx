@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Modal } from "../modal";
 import { FieldInput } from "./FieldInput";
 import { useTheme } from "../theme";
+import { OPENROUTER_JEV } from "../wizard-logic";
 
-export function ProvidersModal({ providers, onSelect, onAdd, onBack }: {
+export function ProvidersModal({ providers, allowJev, onSelect, onAdd, onBack }: {
   providers: string[];
+  allowJev: boolean;
   onSelect: (id: string) => void;
   onAdd: (id: string) => void;
   onBack: () => void;
@@ -32,7 +34,8 @@ export function ProvidersModal({ providers, onSelect, onAdd, onBack }: {
             if (id) {
               setAdding(false);
               setNewId("");
-              onAdd(id);
+              if (providers.includes(id) || (allowJev && id === OPENROUTER_JEV)) onSelect(id);
+              else onAdd(id);
             }
           }}
           onCancel={() => { setAdding(false); setNewId(""); }}
@@ -41,11 +44,14 @@ export function ProvidersModal({ providers, onSelect, onAdd, onBack }: {
     );
   }
 
-  const items = providers.length > 0 ? [...providers, "__add__", "__back__"] : ["deepseek", "openai", "custom", "__add__", "__back__"];
+  const items = providers.length > 0 ? [...providers] : ["deepseek", "openai", "custom"];
+  if (allowJev && !providers.includes(OPENROUTER_JEV)) items.push(OPENROUTER_JEV);
+  items.push("__add__", "__back__");
 
   const label = (v: string) => {
     if (v === "__add__") return "➕ Add Provider";
     if (v === "__back__") return "← Back";
+    if (v === OPENROUTER_JEV && !providers.includes(v)) return "Add OpenRouter Jev";
     return `Provider: ${v}`;
   };
 

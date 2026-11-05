@@ -59,7 +59,7 @@ describe("beginEdit / beginNewProvider", () => {
     });
   });
 
-  test("first-run known providers reset the profiles and prefill env keys", () => {
+  test("first-run known providers prefill env keys without changing committed profiles", () => {
     const state = firstRunState({ envKeys: { DEEPSEEK_API_KEY: "sk-x" } });
     const { state: next, pending } = beginEdit(state, "deepseek");
 
@@ -491,6 +491,19 @@ test("config wizard preserves manually configured Jev profile, type, and decisio
   expect(saved.providerProfiles.fast).toBe("decisions/typesafe/jev-1.13");
   expect(saved.providers.decisions.type).toBe("jev");
   expect(saved.decisionMode).toEqual({ prediction: "jev", postConversation: "jev" });
+});
+
+test("adding a custom Jev provider validates the endpoint and keeps it out of conversation profiles", () => {
+  const state = configState({ editedProviders: { deepseek: deepseekEdit } });
+  const { pending } = beginNewProvider(state, "custom-decisions");
+  const patch = { type: "jev", models: ["org/decision-model"], thinking: "disabled" } as const;
+  const edit = { ...patch, models: [...patch.models] };
+  expect(finalizeEdit(state, pending, { ...edit, baseUrl: "decisions.example.test" })).toBeNull();
+
+  const next = finalizeEdit(state, pending, { ...edit, baseUrl: "https://decisions.example.test/decide" })!;
+  expect(collectModelIds(next.editedProviders, "llm")).toEqual(["deepseek/deepseek-v4-flash"]);
+  expect(collectModelIds(next.editedProviders)).toContain("custom-decisions/org/decision-model");
+  expect(next.profiles).toEqual(state.profiles);
 });
 
 // ─── parsers ──────────────────────────────────────────────────────────────

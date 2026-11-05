@@ -3,13 +3,15 @@ import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 import { ThemeProvider, useTheme } from "../theme";
 import { buildInitialState, beginEdit, beginNewProvider, updatePendingApiKey, finalizeEdit, collectModelIds, commit } from "../wizard-logic";
-import type { WizardMode, WizardState, PendingEdit, ThinkingMode } from "../wizard-logic";
+import type { WizardMode, WizardState, PendingEdit, DecisionModes } from "../wizard-logic";
 import { MenuModal } from "./MenuModal";
 import type { MenuKey } from "./MenuModal";
 import { ProvidersModal } from "./ProvidersModal";
 import { ApiKeyModal } from "./ApiKeyModal";
 import { ModelsModal } from "./ModelsModal";
+import type { ModelEdit } from "./ModelsModal";
 import { ProfilesModal } from "./ProfilesModal";
+import { DecisionsModal } from "./DecisionsModal";
 import { ThemeModal } from "./ThemeModal";
 import { GatewayModal } from "./GatewayModal";
 import { ProjectModal } from "./ProjectModal";
@@ -20,7 +22,7 @@ const QUIT_ACTIONS: ModalAction[] = [
   { key: "quit", label: "Quit", role: "destructive", variant: "danger" },
 ];
 
-type View = "menu" | "providers" | "apikey" | "models" | "profiles" | "theme" | "gateway" | "project" | "confirm";
+type View = "menu" | "providers" | "apikey" | "models" | "profiles" | "decisions" | "theme" | "gateway" | "project" | "confirm";
 
 export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
   sandboxPath: string;
@@ -32,6 +34,16 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
   const [pending, setPending] = useState<PendingEdit | null>(null);
   const [view, setView] = useState<View>(mode === "config" ? "menu" : "providers");
   const [quitConfirm, setQuitConfirm] = useState(false);
+  const [providersFromDecisions, setProvidersFromDecisions] = useState(false);
+  const allowJev = mode === "config" || providersFromDecisions;
+
+  const closeProviders = () => {
+    if (providersFromDecisions) {
+      setProvidersFromDecisions(false);
+      setView("decisions");
+    } else if (mode === "config") setView("menu");
+    else setQuitConfirm(true);
+  };
 
   const cancelEdit = () => {
     setPending(null);
@@ -61,18 +73,23 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
     setView("models");
   };
 
-  const submitModels = (patch: { models: string[]; baseUrl?: string; thinking: ThinkingMode; contextLimit?: number }) => {
-    if (!pending) return;
+  const submitModels = (patch: ModelEdit) => {
+    if (!pending) return false;
     const next = finalizeEdit(wizard, pending, patch);
-    if (next === null) return;
+    if (next === null) return false;
     setPending(null);
     setWizard(next);
-    setView(mode === "config" ? "providers" : "profiles");
+    setView(allowJev ? "providers" : "profiles");
+    return true;
   };
 
   const submitProfiles = (profiles: WizardState["profiles"]) => {
     setWizard(w => ({ ...w, profiles }));
-    setView(mode === "config" ? "menu" : "theme");
+    setView(mode === "config" ? "menu" : "decisions");
+  };
+
+  const saveDecisions = ({ fast, ...decisionMode }: DecisionModes & { fast?: string }) => {
+    setWizard(w => ({ ...w, profiles: { ...w.profiles, fast }, decisionMode }));
   };
 
   const submitTheme = (theme: string) => {
@@ -95,9 +112,7 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
     onComplete();
   };
 
-  const modelIds = collectModelIds(wizard.editedProviders);
   const provider = pending?.id ?? wizard.provider;
-  const isNewProvider = pending?.isNew ?? false;
 
   return (
     <ThemeProvider theme={wizard.theme}>
@@ -112,6 +127,7 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
                 switch (key) {
                   case "providers": setView("providers"); break;
                   case "profiles": setView("profiles"); break;
+                  case "decisions": setView("decisions"); break;
                   case "theme": setView("theme"); break;
                   case "gateway": setView("gateway"); break;
                   case "save": setView("confirm"); break;
@@ -120,23 +136,16 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
               onClose={() => setQuitConfirm(true)}
             />
           )}
-          {view === "providers" && (
-            <ProvidersModal
-              providers={Object.keys(wizard.editedProviders)}
-              onSelect={selectProvider}
-              onAdd={addProvider}
-              onBack={() => setView("menu")}
-            />
-          )}
         </>
       )}
 
-      {!quitConfirm && mode === "first-run" && view === "providers" && (
+      {!quitConfirm && view === "providers" && (
         <ProvidersModal
           providers={Object.keys(wizard.editedProviders)}
+          allowJev={allowJev}
           onSelect={selectProvider}
           onAdd={addProvider}
-          onBack={() => setQuitConfirm(true)}
+          onBack={closeProviders}
         />
       )}
 
@@ -146,7 +155,7 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
           apiKey={wizard.apiKey}
           apiKeyEnv={wizard.apiKeyEnv}
           baseUrl={wizard.customBaseUrl}
-          showEnv={mode === "config" ? !wizard.apiKeyEnv : wizard.provider === "custom" || isNewProvider}
+          showEnv={!wizard.apiKeyEnv || (mode === "first-run" && !allowJev && pending?.isNew === true)}
           showBaseUrl={mode === "first-run" && wizard.provider === "custom"}
           onSubmit={submitApiKey}
           onCancel={cancelEdit}
@@ -160,6 +169,8 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
           baseUrl={wizard.customBaseUrl}
           thinking={wizard.thinking}
           contextLimit={wizard.contextLimit}
+          type={pending?.edit.type}
+          allowJev={allowJev}
           onSubmit={submitModels}
           onCancel={mode === "config" ? cancelEdit : () => setView("apikey")}
         />
@@ -168,9 +179,23 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
       {!quitConfirm && view === "profiles" && (
         <ProfilesModal
           profiles={wizard.profiles}
-          modelIds={modelIds}
+          modelIds={collectModelIds(wizard.editedProviders, "llm")}
           onSubmit={submitProfiles}
-          onBack={() => setView(mode === "config" ? "menu" : "models")}
+          onBack={() => setView(mode === "config" ? "menu" : "providers")}
+        />
+      )}
+
+      {!quitConfirm && view === "decisions" && (
+        <DecisionsModal
+          state={wizard}
+          modelIds={collectModelIds(wizard.editedProviders)}
+          onSubmit={settings => { saveDecisions(settings); setView(mode === "config" ? "menu" : "theme"); }}
+          onProviders={settings => {
+            saveDecisions(settings);
+            setProvidersFromDecisions(true);
+            setView("providers");
+          }}
+          onBack={() => setView(mode === "config" ? "menu" : "profiles")}
         />
       )}
 
@@ -178,7 +203,7 @@ export function WizardApp({ sandboxPath, mode, onComplete, onAbort }: {
         <ThemeModal
           theme={wizard.theme}
           onSubmit={submitTheme}
-          onBack={() => setView(mode === "config" ? "menu" : "profiles")}
+          onBack={() => setView(mode === "config" ? "menu" : "decisions")}
         />
       )}
 

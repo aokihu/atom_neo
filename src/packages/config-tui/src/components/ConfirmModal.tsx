@@ -2,6 +2,7 @@ import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 import { useTheme } from "../theme";
 import type { WizardState } from "../wizard-logic";
+import { describeDecisions } from "./DecisionsModal";
 
 const ACTIONS: ModalAction[] = [
   { key: "back", label: "Back", role: "cancel" },
@@ -55,6 +56,7 @@ export function ConfirmModal({ state, onSave, onBack }: {
           <text fg={colors.text.secondary} width={20}>Profiles</text>
           <text fg={colors.text.primary}>{state.profiles.advanced} / {state.profiles.balanced} / {state.profiles.basic}</text>
         </box>
+        {describeDecisions(state).map(line => <text key={line} fg={colors.text.secondary}>{line}</text>)}
         <box flexDirection="row">
           <text fg={colors.text.secondary} width={20}>Theme</text>
           <text fg={colors.text.primary}>{state.theme}</text>

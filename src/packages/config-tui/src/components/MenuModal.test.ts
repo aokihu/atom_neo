@@ -17,6 +17,7 @@ describe("buildMenuItems", () => {
     expect(items.map(i => i.label)).toEqual([
       "Providers (2)",
       "Model Profiles",
+      "Decisions",
       "Theme (dracula)",
       "Gateway (port 4123)",
       "Save & Exit",

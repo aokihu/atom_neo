@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Modal } from "../modal";
 import { useTheme } from "../theme";
 import type { WizardState } from "../wizard-logic";
+import { describeDecisions } from "./DecisionsModal";
 
-export const MENU_KEYS = ["providers", "profiles", "theme", "gateway", "save"] as const;
+export const MENU_KEYS = ["providers", "profiles", "decisions", "theme", "gateway", "save"] as const;
 export type MenuKey = (typeof MENU_KEYS)[number];
 
 export function buildMenuItems(state: WizardState): { label: string; value: MenuKey }[] {
@@ -11,6 +12,7 @@ export function buildMenuItems(state: WizardState): { label: string; value: Menu
   return [
     { label: `Providers (${providerCount})`, value: "providers" },
     { label: "Model Profiles", value: "profiles" },
+    { label: "Decisions", value: "decisions" },
     { label: `Theme (${state.theme})`, value: "theme" },
     { label: `Gateway (port ${state.gatewayPort})`, value: "gateway" },
     { label: "Save & Exit", value: "save" },
@@ -33,9 +35,9 @@ export function describeSelection(key: MenuKey, state: WizardState): string[] {
       }
       const lines: string[] = [];
       for (const [id, edit] of entries) {
-        lines.push(id);
+        lines.push(edit.type === "jev" ? `${id} (Jev)` : id);
         lines.push(`  models: ${edit.models.join(", ")}`);
-        lines.push(`  thinking: ${edit.thinking}${edit.contextLimit ? ` · ctx ${edit.contextLimit}` : ""}`);
+        if (edit.type !== "jev") lines.push(`  thinking: ${edit.thinking}${edit.contextLimit ? ` · ctx ${edit.contextLimit}` : ""}`);
         lines.push("");
       }
       return lines.slice(0, -1);
@@ -57,6 +59,8 @@ export function describeSelection(key: MenuKey, state: WizardState): string[] {
         "Changes apply immediately",
         "and persist on save.",
       ];
+    case "decisions":
+      return describeDecisions(state);
     case "gateway":
       return [
         `Port: ${state.gatewayPort}`,

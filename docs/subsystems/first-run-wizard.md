@@ -56,8 +56,9 @@ src/packages/config-tui/
         ├── MenuModal.tsx      # 一级菜单：左详情 + 右列表（describeSelection 纯函数）
         ├── ProvidersModal.tsx # provider 列表 + 新增
         ├── ApiKeyModal.tsx    # API Key（明文，仅写入 .env）
-        ├── ModelsModal.tsx    # 模型增删 + baseUrl + thinking + contextLimit
-        ├── ProfilesModal.tsx  # 三档映射 + 模型选择子弹窗
+        ├── ModelsModal.tsx    # 模型增删 + provider 类型 + 端点或 LLM 参数
+        ├── ProfilesModal.tsx  # 三档对话模型映射
+        ├── DecisionsModal.tsx # fast 模型与三个判定模式
         ├── ThemeModal.tsx
         ├── GatewayModal.tsx   # 端口编辑
         ├── ProjectModal.tsx   # 项目描述（仅 first-run）
@@ -81,6 +82,7 @@ src/packages/config-tui/
         │ ┌───────┐ ┌─ Providers (1) ────────────┐ │
         │ │▸Providers (1)│ │ deepseek             │ │
         │ │ Model Profiles│ │   models: v4-pro,   │ │
+        │ │ Decisions     │ │                     │ │
         │ │ Theme (edex)│ │           v4-flash    │ │
         │ │ Gateway (port)│ │   thinking: enabled │ │
         │ │ Save & Exit│ │                        │ │
@@ -90,7 +92,7 @@ src/packages/config-tui/
         ╰──────────────────────────────────────────╯
 ```
 
-- **左栏（50%）**：垂直平铺一级菜单（5 项）
+- **左栏（50%）**：垂直平铺一级菜单（6 项）
 - **右栏（50%）**：设置数据详情，随左栏菜单选中项实时变化（providers 逐项列出 models/thinking；三档映射；当前主题；网关端口；保存目标说明）
 - Modal 宽度为加宽版（96 列），左右比例 1:1；仅保留中央 Modal，背景为纯色页面
 
@@ -117,10 +119,11 @@ src/packages/config-tui/
 ProvidersModal（deepseek / openai / custom）
   → ApiKeyModal（API Key；custom 附加 Env Var 与 Base URL）
     → ModelsModal（模型列表 + baseUrl + thinking + contextLimit）
-      → ProfilesModal（三档映射，Enter 打开模型选择子弹窗）
-        → ThemeModal
-          → ProjectModal（可选，写入 AGENTS.md）
-            → ConfirmModal → commit → 退出
+      → ProfilesModal（三档对话模型映射）
+        → DecisionsModal（可直接继续，也可进入 Providers 添加 Jev）
+          → ThemeModal
+            → ProjectModal（可选，写入 AGENTS.md）
+              → ConfirmModal → commit → 退出
 ```
 
 Esc 逐层回退；根层 Esc 弹退出确认。
@@ -134,7 +137,8 @@ Esc 逐层回退；根层 Esc 弹退出确认。
 ```text
 MenuModal
   ├─ Providers (N)     → ProvidersModal → ApiKeyModal → ModelsModal → finalize → 返回 Provider 列表
-  ├─ Model Profiles    → ProfilesModal（选项 = 所有 provider 实际模型；预填）
+  ├─ Model Profiles    → ProfilesModal（只列出 LLM；预填）
+  ├─ Decisions         → DecisionsModal（fast、Prediction、Post-Conversation、Continuation）
   ├─ Theme (edex)      → ThemeModal（预填）
   ├─ Gateway (port)    → GatewayModal（仅端口；clients 手动编辑 config.json）
   └─ Save & Exit       → ConfirmModal → commit
@@ -148,13 +152,20 @@ ProjectModal 在 config 模式跳过（不重写 AGENTS.md）。
 | 字段 | 来源 |
 |------|------|
 | provider 列表 | `config.providers` 的 keys（为空时展示 deepseek/openai/custom） |
-| models / baseUrl / thinking / contextLimit | `config.providers[x]` 对应字段 |
+| type / models / baseUrl / thinking / contextLimit | `config.providers[x]` 对应字段，缺省类型为 `llm` |
 | apiKey | `.env` 中 `providers[x].apiKeyEnv` 对应行 |
 | profiles | `config.providerProfiles` |
+| decision modes | `config.decisionMode`，缺省为 `legacy / legacy / jev` |
 | theme | `config.tui.theme` |
 | gatewayPort | `config.gateway.port` |
 
 读取全部为宽松解析（JSON.parse 容忍缺字段），未知字段原样保留。
+
+### Jev 设置
+
+在 Providers 选择 **Add OpenRouter Jev** 可预填 provider ID、`OPENROUTER_API_KEY`、`typesafe/jev-1.13` 和完整 Decisions 端点。其他兼容服务可通过 **Add Provider** 新建，在模型编辑中选择 `jev` 并填写完整的 HTTP(S) 端点。凭据沿用 API Key 表单，保存在沙箱 `.env`。
+
+在 **Decisions** 中，Fast 可选择 Jev、LLM 或 **Use Basic**（清除 `providerProfiles.fast`）。Prediction 和 Post-Conversation 各选 `legacy` 或 `jev`，Continuation 可选 `jev` 或 `rules`。使用 `jev` 模式且没有可用的 Jev 配置时，沿用运行时的 LLM 模拟。离开页面前用 Save 或 Continue 确认，最后在 Save & Exit 写盘。
 
 ---
 

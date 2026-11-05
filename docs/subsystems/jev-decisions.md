@@ -50,7 +50,7 @@ Post 与 continuation 的跟踪参数实验复用本调用模块，最终保留�
 3. 配置解析、两个模式开关和缺失凭据回退通过测试。
 4. 项目类型检查、构建和测试通过；配置真实 Key 后再执行一次 OpenRouter 端到端验收。
 
-配置向导保存时保留手工设置的 `fast`、`type` 和 `decisionMode`；运行时 Settings 可选择 `fast`，其余三个模型档位只列出 LLM。运行时 overlay 调整对后续任务生效；手工修改 `config.json` 后需要重启 Core。
+配置向导的 Providers 可添加 OpenRouter Jev 预设或自定义 Jev 服务，Decisions 可选择 `fast` 并独立设置三个判定模式。首次安装可在 Decisions 中打开 Providers 添加 Jev。运行时 Settings 也可选择 `fast`，其余三个模型档位只列出 LLM。向导写入沙箱配置，重启 Core 后加载。运行时 overlay 调整对后续任务生效。详见 [配置向导](./first-run-wizard.md#jev-设置)。
 
 ## Continuation 仲裁
 

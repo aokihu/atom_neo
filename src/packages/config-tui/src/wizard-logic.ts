@@ -5,8 +5,23 @@ import { mkdirSync, existsSync, readFileSync } from "node:fs";
 export type WizardMode = "first-run" | "config";
 
 export type ThinkingMode = "enabled" | "disabled" | "adaptive";
+export type ProviderType = "llm" | "jev";
+
+export const CONVERSATION_LEVELS = ["advanced", "balanced", "basic"] as const;
+export const DEFAULT_DECISION_MODES = {
+  prediction: "legacy",
+  postConversation: "legacy",
+  continuation: "jev",
+} satisfies DecisionModes;
+
+export type DecisionModes = {
+  prediction: "legacy" | "jev";
+  postConversation: "legacy" | "jev";
+  continuation: "rules" | "jev";
+};
 
 export type ProviderEdit = {
+  type?: ProviderType;
   apiKeyEnv: string;
   apiKey: string;
   models: string[];
@@ -29,7 +44,9 @@ export interface WizardState {
     advanced: string;
     balanced: string;
     basic: string;
+    fast?: string;
   };
+  decisionMode: Partial<DecisionModes>;
   theme: string;
   gatewayPort: number;
   projectDescription: string;
@@ -37,7 +54,9 @@ export interface WizardState {
   envKeys: Record<string, string>;
 }
 
-export const PROVIDERS: Record<string, { apiKeyEnv: string; models: string[]; baseUrl?: string }> = {
+export const OPENROUTER_JEV = "openrouter-jev";
+
+export const PROVIDERS: Record<string, { type?: ProviderType; apiKeyEnv: string; models: string[]; baseUrl?: string }> = {
   deepseek: {
     apiKeyEnv: "DEEPSEEK_API_KEY",
     models: ["deepseek-v4-flash", "deepseek-v4-pro"],
@@ -49,6 +68,12 @@ export const PROVIDERS: Record<string, { apiKeyEnv: string; models: string[]; ba
   custom: {
     apiKeyEnv: "",
     models: [],
+  },
+  [OPENROUTER_JEV]: {
+    type: "jev",
+    apiKeyEnv: "OPENROUTER_API_KEY",
+    models: ["typesafe/jev-1.13"],
+    baseUrl: "https://openrouter.ai/api/alpha/decisions",
   },
 };
 
@@ -81,6 +106,7 @@ export function initialState(mode: WizardMode = "first-run"): WizardState {
     thinking: "disabled",
     contextLimit: undefined,
     profiles: { ...DEFAULT_PROFILES },
+    decisionMode: {},
     theme: "edex",
     gatewayPort: 3000,
     projectDescription: "",
@@ -123,9 +149,8 @@ export function beginEdit(state: WizardState, id: string): { state: WizardState;
   }
   const info = PROVIDERS[id];
   if (!info) return { state, pending: null };
-  const firstModel = info.models[0] ?? "";
   const edit: ProviderEdit = {
-    apiKeyEnv: info.apiKeyEnv,
+    ...info,
     apiKey: state.envKeys[info.apiKeyEnv] ?? "",
     models: [...info.models],
     thinking: "disabled",
@@ -134,11 +159,6 @@ export function beginEdit(state: WizardState, id: string): { state: WizardState;
     state: {
       ...state,
       ...viewOf(id, edit),
-      profiles: {
-        advanced: `${id}/${firstModel}`,
-        balanced: `${id}/${firstModel}`,
-        basic: `${id}/${firstModel}`,
-      },
       step: state.step + 1,
     },
     pending: { id, isNew: true, edit },
@@ -178,10 +198,27 @@ export function updatePendingApiKey(
 export function finalizeEdit(
   state: WizardState,
   pending: PendingEdit,
-  patch: { models: string[]; baseUrl?: string; thinking: ThinkingMode; contextLimit?: number },
+  patch: Pick<ProviderEdit, "type" | "models" | "baseUrl" | "thinking" | "contextLimit">,
 ): WizardState | null {
   if (patch.models.length === 0) return null;
   const edit: ProviderEdit = { ...pending.edit, ...patch };
+  if (edit.type === "jev" && !isDecisionEndpoint(edit.baseUrl)) return null;
+  const editedProviders = { ...state.editedProviders, [pending.id]: edit };
+  const profiles = { ...state.profiles };
+  const prefix = `${pending.id}/`;
+  const firstLlm = collectModelIds(editedProviders, "llm")[0];
+  const firstRunProvider = state.mode === "first-run" && Object.keys(state.editedProviders).length === 0;
+  for (const level of CONVERSATION_LEVELS) {
+    const selected = profiles[level];
+    const needsModel = firstRunProvider || (selected.startsWith(prefix)
+      && (edit.type === "jev" || !edit.models.includes(selected.slice(prefix.length))));
+    if (!needsModel) continue;
+    if (!firstLlm) return null;
+    profiles[level] = edit.type === "jev" ? firstLlm : prefix + edit.models[0];
+  }
+  if (profiles.fast?.startsWith(prefix) && !edit.models.includes(profiles.fast.slice(prefix.length))) {
+    profiles.fast = undefined;
+  }
   const envKeys = { ...state.envKeys, ...(edit.apiKeyEnv ? { [edit.apiKeyEnv]: edit.apiKey } : {}) };
   return {
     ...state,
@@ -189,16 +226,18 @@ export function finalizeEdit(
     customBaseUrl: edit.baseUrl,
     thinking: edit.thinking,
     contextLimit: edit.contextLimit,
-    editedProviders: { ...state.editedProviders, [pending.id]: edit },
+    editedProviders,
+    profiles,
     envKeys,
     step: state.mode === "config" ? 1 : state.step + 1, // config: back to the providers list
   };
 }
 
 /** All "provider/model" ids from finalized edits, for the profiles step. */
-export function collectModelIds(editedProviders: Record<string, ProviderEdit>): string[] {
+export function collectModelIds(editedProviders: Record<string, ProviderEdit>, type?: ProviderType): string[] {
   const ids = new Set<string>();
   for (const [id, edit] of Object.entries(editedProviders)) {
+    if (type && (edit.type ?? "llm") !== type) continue;
     for (const model of edit.models) ids.add(`${id}/${model}`);
   }
   return [...ids].sort();
@@ -232,9 +271,15 @@ export function readEnvKeys(envPath: string): Record<string, string> {
 /** Build the initial wizard state; config mode pre-fills from the existing config.json + .env. */
 export function buildInitialState(mode: WizardMode, sandboxPath: string): WizardState {
   const base = initialState(mode);
-  if (mode === "first-run") return base;
-
   const config = readJsonFile(`${sandboxPath}/config.json`) ?? {};
+  const decisionMode: Partial<DecisionModes> = {};
+  const { prediction, postConversation, continuation } = config.decisionMode ?? {};
+  if (prediction === "legacy" || prediction === "jev") decisionMode.prediction = prediction;
+  if (postConversation === "legacy" || postConversation === "jev") decisionMode.postConversation = postConversation;
+  if (continuation === "rules" || continuation === "jev") decisionMode.continuation = continuation;
+  const fast = typeof config.providerProfiles?.fast === "string" ? config.providerProfiles.fast : undefined;
+  if (mode === "first-run") return { ...base, profiles: { ...base.profiles, fast }, decisionMode };
+
   const envKeys = readEnvKeys(`${sandboxPath}/.env`);
 
   const providersMap = (config.providers ?? {}) as Record<string, Record<string, any>>;
@@ -242,6 +287,7 @@ export function buildInitialState(mode: WizardMode, sandboxPath: string): Wizard
   for (const [id, p] of Object.entries(providersMap)) {
     const apiKeyEnv = typeof p?.apiKeyEnv === "string" ? p.apiKeyEnv : "";
     editedProviders[id] = {
+      ...(p?.type === "jev" || p?.type === "llm" ? { type: p.type } : {}),
       apiKeyEnv,
       apiKey: envKeys[apiKeyEnv] ?? "",
       models: Array.isArray(p?.models) ? p.models : [],
@@ -255,6 +301,7 @@ export function buildInitialState(mode: WizardMode, sandboxPath: string): Wizard
     advanced: config.providerProfiles?.advanced ?? DEFAULT_PROFILES.advanced,
     balanced: config.providerProfiles?.balanced ?? DEFAULT_PROFILES.balanced,
     basic: config.providerProfiles?.basic ?? DEFAULT_PROFILES.basic,
+    fast,
   };
   const theme = (THEMES as readonly string[]).includes(config.tui?.theme) ? config.tui.theme : "edex";
   const firstId = Object.keys(editedProviders)[0] ?? "deepseek";
@@ -265,6 +312,7 @@ export function buildInitialState(mode: WizardMode, sandboxPath: string): Wizard
     provider: firstId,
     ...viewOf(firstId, editedProviders[firstId]),
     profiles,
+    decisionMode,
     theme,
     gatewayPort: typeof config.gateway?.port === "number" ? config.gateway.port : 3000,
     editedProviders,
@@ -290,6 +338,7 @@ export function writeEnvKeys(envPath: string, keys: Record<string, string>): voi
 function buildProviderEntry(prev: Record<string, any> | undefined, edit: ProviderEdit): Record<string, any> {
   return {
     ...(prev ?? {}),
+    ...(edit.type ? { type: edit.type } : {}),
     apiKeyEnv: edit.apiKeyEnv || prev?.apiKeyEnv || "",
     models: edit.models,
     ...(edit.baseUrl ? { baseUrl: edit.baseUrl } : {}),
@@ -311,6 +360,9 @@ export function commit(sandboxPath: string, state: WizardState): void {
 
   const merged: Record<string, any> = { ...existing };
   merged.providerProfiles = { ...(existing.providerProfiles ?? {}), ...state.profiles };
+  if (Object.keys(state.decisionMode).length > 0) {
+    merged.decisionMode = { ...(existing.decisionMode ?? {}), ...state.decisionMode };
+  }
   merged.providers = { ...prevProviders };
   for (const [id, edit] of Object.entries(state.editedProviders)) {
     if (edit.models.length === 0) continue;
@@ -368,6 +420,16 @@ export function parseContextLimit(text: string): number | undefined {
   const value = Number(trimmed);
   if (!Number.isInteger(value) || value <= 0) return undefined;
   return value;
+}
+
+export function isDecisionEndpoint(value?: string): boolean {
+  if (!value || !/^https?:\/\//i.test(value)) return false;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export function parsePort(text: string): number | undefined {

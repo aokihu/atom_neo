@@ -41,10 +41,17 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
     return (
       <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
         <FieldInput
+          key="env"
           label="Env Variable"
           value={draftEnv}
           placeholder="e.g. VOLENGINE_API_KEY"
+          error={error}
           onSubmit={(env) => {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(env)) {
+              setError("Enter a valid environment variable name");
+              return;
+            }
+            setError("");
             if (showBaseUrl) {
               setDraftEnv(env);
               setPhase("baseUrl");
@@ -52,7 +59,7 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
               finish(draftKey, env);
             }
           }}
-          onCancel={() => setPhase("key")}
+          onCancel={() => { setError(""); setPhase("key"); }}
         />
       </Modal>
     );
@@ -62,6 +69,7 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
     return (
       <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
         <FieldInput
+          key="baseUrl"
           label="Base URL"
           value={draftUrl}
           placeholder="(optional, leave empty to unset)"
