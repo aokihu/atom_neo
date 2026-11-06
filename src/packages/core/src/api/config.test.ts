@@ -33,6 +33,12 @@ function makeRuntime() {
 }
 
 describe("isAdminRequest", () => {
+  test("only accepts remote management when explicitly enabled and correctly authenticated", () => {
+    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv("192.168.1.10"), TOKEN, true)).toBe(true);
+    expect(isAdminRequest(req({}), fakeSrv("192.168.1.10"), TOKEN, true)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": "wrong" }), fakeSrv("192.168.1.10"), TOKEN, true)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv(""), TOKEN, true)).toBe(false);
+  });
   test("rejects requests without a token", () => {
     expect(isAdminRequest(req({}), fakeSrv("127.0.0.1"), TOKEN)).toBe(false);
   });

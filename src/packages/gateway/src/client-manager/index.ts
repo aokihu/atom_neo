@@ -1,6 +1,7 @@
 import { generateSecret } from "../auth/secret";
 import type { ClientConfig, GatewayConfig } from "../config";
 import type { Logger } from "@atom-neo/shared";
+import { createChildProcessEnv } from "@atom-neo/shared";
 
 const RESERVED_ARGS = new Set(["secret", "port", "gateway-url"]);
 const MAX_RESTART_ATTEMPTS = 5;
@@ -159,6 +160,7 @@ export class ClientManager {
     const proc = Bun.spawn(
       [binary, "--secret", secret, "--port", String(port), "--gateway-url", `http://127.0.0.1:${this.#config.port}`, ...userArgs],
       {
+        env: createChildProcessEnv(),
         stdout: stdio,
         stderr: stdio,
         onExit: (_, exitCode, signalCode, error) => {

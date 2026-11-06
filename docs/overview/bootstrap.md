@@ -1,5 +1,9 @@
 # Bootstrap & Startup Sequence
 
+## menu 启动向导
+
+`atom menu` 在 Core/配置服务初始化前进入普通终端向导，最后一步自动执行原有启动入口。支持回退、参数回填及失败重试，成功后不返回菜单。历史固定为 `~/.config/atom/menu_history.json`，仅在成功就绪后保存；详见 [startup-menu.md](../subsystems/startup-menu.md)。
+
 > **Purpose**: 当前启动行为与待实施的五模式启动、TUI attach 和资源关闭契约。
 
 ## 2026-09-17：显式继续上次会话

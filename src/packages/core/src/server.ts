@@ -109,6 +109,7 @@ export type CoreDeps = {
   runtime: RuntimeLike;
   version?: string;
   adminToken?: string;
+  allowRemoteAdmin?: boolean;
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
@@ -667,7 +668,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         const method = req.method;
 
         if (url.pathname === `${API_PREFIX}tui/attach` && method === "POST") {
-          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
           if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
           let options: unknown;
           try {
@@ -693,21 +694,21 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
 
         if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
-          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
           if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
           return Response.json(hookManager.list().filter(h => h.trigger.type.startsWith("time:")).map(({ prompt, ...summary }) => summary));
         }
 
         if (url.pathname === `${API_PREFIX}config` && method === "GET") {
-          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
           return configGetHandler(runtime);
         }
         if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
-          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
           return configPatchHandler(runtime, req);
         }
         if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
-          if (!isAdminRequest(req, srv, adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
           return configResetHandler(runtime);
         }
 

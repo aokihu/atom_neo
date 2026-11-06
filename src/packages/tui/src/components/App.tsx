@@ -73,7 +73,7 @@ Keyboard shortcuts:
   Esc         Dismiss command menu / press twice to cancel running task
   Shift+Enter New line`;
 
-export function App({ url, sessionId, adminToken, serverInfo, onServerInfoChange, onQuit, exitHint }: { url: string; sessionId?: string; adminToken?: string; serverInfo: ServerInfo; onServerInfoChange?: (info: ServerInfo) => void; onQuit?: () => void; exitHint?: string | null }) {
+export function App({ url, sessionId, adminToken, historySandbox, serverInfo, onServerInfoChange, onQuit, exitHint }: { url: string; sessionId?: string; adminToken?: string; historySandbox?: string; serverInfo: ServerInfo; onServerInfoChange?: (info: ServerInfo) => void; onQuit?: () => void; exitHint?: string | null }) {
   const { width } = useTerminalDimensions();
   const theme = useMemo(() => getTheme(serverInfo.theme), [serverInfo.theme]);
   const layout = resolveTuiLayout(width);
@@ -95,7 +95,7 @@ export function App({ url, sessionId, adminToken, serverInfo, onServerInfoChange
     handleClientError,
   );
 
-  useEffect(() => { useInputHistory.getState().init(serverInfo.sandbox); }, [serverInfo.sandbox]);
+  useEffect(() => { useInputHistory.getState().init(historySandbox ?? process.cwd()); }, [historySandbox]);
 
   const closeModal = useCallback(() => { setActiveModal(null); }, []);
 

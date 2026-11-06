@@ -1,4 +1,4 @@
-import { localUrl, publishRuntimeFile, readRuntimeFile } from "./bootstrap/runtime-file";
+import { localUrl, publishRuntimeFile, readRuntimeFile, readAttachToken } from "./bootstrap/runtime-file";
 import { statSync } from "node:fs";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
@@ -15,6 +15,8 @@ import { AgentsCompilerService } from "./services/agents-compiler";
 import { MemoryService } from "./services/memory-service";
 import { SkillService } from "./services/skill-service";
 import { NetworkService } from "./services/network/network-service";
+import { formatMenuCommand, MenuFlow } from "./bootstrap/menu-flow";
+import { readMenuHistory, saveMenuHistory } from "./bootstrap/menu-history";
 
 declare global {
   var AI_SDK_LOG_WARNINGS: boolean;
@@ -58,6 +60,31 @@ export async function main(): Promise<void> {
   }
   const args = parsed;
 
+  if (args.menu) {
+    const { startMenu } = await import("./bootstrap/menu");
+    const history = readMenuHistory();
+    const flow = new MenuFlow(args, history.commands);
+    flow.error = history.warning ?? "";
+    while (true) {
+      const request = await startMenu(flow);
+      if (!request) return;
+      try {
+        console.log(`执行命令: ${formatMenuCommand(request.args)}`);
+        await runApp(request.args, () => {
+          try { saveMenuHistory(request.command, request.parameters); }
+          catch (error) { console.error(`Cannot save menu history: ${error instanceof Error ? error.message : String(error)}`); }
+        });
+        return;
+      } catch (error) {
+        flow.error = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+  await runApp(args);
+}
+
+async function runApp(args: BootArguments, onReady: () => void = () => {}): Promise<void> {
+
   // Must set BEFORE AI SDK (via @atom-neo/core) is imported
   globalThis.AI_SDK_LOG_WARNINGS = false;
 
@@ -71,15 +98,15 @@ export async function main(): Promise<void> {
   // --config: standalone config wizard (edit config.json + .env) and exit
   if (args.config) {
     const { startWizard } = await import("@atom-neo/config-tui");
-    await startWizard(args.sandbox, "config");
+    if (await startWizard(args.sandbox, "config")) onReady();
     return;
   }
 
   if (args.mode === "tui") {
     const host = args.coreServer!;
-    if (!["localhost", "127.0.0.1", "::1"].includes(host)) throw new Error("TUI admin attach currently requires a local Core server");
-    const runtimeFile = readRuntimeFile(args.sandbox, "core");
-    await attachTui(localUrl(host, args.corePort!), runtimeFile.token, args.continueSession);
+    loadEnv(args.sandbox);
+    const token = readAttachToken(args.sandbox, host, process.env.ATOM_ADMIN_TOKEN);
+    await attachTui(localUrl(host, args.corePort!), token, args.continueSession, args.sandbox, onReady);
     return;
   }
   if (args.mode === "gateway") {
@@ -90,8 +117,9 @@ export async function main(): Promise<void> {
       signal: AbortSignal.timeout(120_000),
     });
     const result = await response.json();
+    if (!response.ok) throw new Error(`Gateway control failed: ${JSON.stringify(result)}`);
     console.log(JSON.stringify(result, null, 2));
-    if (!response.ok) process.exitCode = 1;
+    onReady();
     return;
   }
 
@@ -122,7 +150,8 @@ export async function main(): Promise<void> {
 
   const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
   // TUI-only admin token: config endpoints reject any caller without it (gateway/clients never receive it)
-  const adminToken = crypto.randomUUID();
+  const remoteAdminToken = process.env.ATOM_ADMIN_TOKEN?.trim();
+  const adminToken = remoteAdminToken || crypto.randomUUID();
 
   // Runtime
   const runtime = new RuntimeService({
@@ -161,7 +190,7 @@ export async function main(): Promise<void> {
   try {
     await sm.startAll();
     const { startCore } = await import("@atom-neo/core");
-    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, version: VERSION });
+    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION });
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {
@@ -173,8 +202,9 @@ export async function main(): Promise<void> {
     const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };
     process.once("SIGTERM", onSignal);
     if (args.mode) process.once("SIGINT", onSignal);
+    if (args.mode) onReady();
     if (!args.mode) {
-      try { await attachTui(url, adminToken, args.continueSession); }
+      try { await attachTui(url, adminToken, args.continueSession, args.sandbox, onReady); }
       finally { process.removeListener("SIGTERM", onSignal); await shutdown(); }
     }
   } catch (error) {
@@ -183,15 +213,19 @@ export async function main(): Promise<void> {
   }
 }
 
-async function attachTui(url: string, adminToken: string, continueSession: boolean): Promise<void> {
+async function attachTui(url: string, adminToken: string, continueSession: boolean, historySandbox: string, onReady: () => void): Promise<void> {
   const response = await fetch(`${url}/api/tui/attach`, {
     method: "POST", headers: { "x-atom-admin-token": adminToken, "Content-Type": "application/json" },
     body: JSON.stringify({ continue: continueSession }), signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Cannot attach Core (${response.status}); check sandbox and running instance`);
   const data = await response.json() as { sessionId: string; serverInfo: import("@atom-neo/tui").ServerInfo };
+  if (typeof data.sessionId !== "string" || !data.sessionId || !data.serverInfo || typeof data.serverInfo !== "object") {
+    throw new Error("Core returned an invalid attach response");
+  }
+  onReady();
   const { startTui } = await import("@atom-neo/tui");
-  await startTui({ url, adminToken, ...data });
+  await startTui({ url, adminToken, historySandbox, sessionId: data.sessionId, serverInfo: data.serverInfo });
 }
 
 if (import.meta.main) {

@@ -3,6 +3,20 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { parseArguments } from "./cli";
 
+describe("menu command", () => {
+  test("accepts the command and optional sandbox", () => {
+    expect(parseArguments(["menu"])).toMatchObject({ menu: true, sandboxExplicit: false });
+    expect(parseArguments(["menu", "--sandbox", "./project"])).toMatchObject({ menu: true, sandboxExplicit: true, sandbox: resolve("project") });
+    expect(parseArguments(["menu", "--help"])).toBe("help");
+    expect(parseArguments([])).toMatchObject({ menu: false });
+  });
+
+  test.each([["menu", "--config"], ["menu", "--mode", "core"], ["menu", "--port", "0"],
+    ["menu", "--wizard"], ["menu", "--continue"], ["menu", "attach"], ["unknown"], ["--sandbox", ".", "menu"]].map(args => ({ args })))("rejects ambiguous invocation $args", ({ args }) => {
+    expect(() => parseArguments(args)).toThrow();
+  });
+});
+
 describe("parseArguments --config", () => {
   test("defaults to false", () => {
     const args = parseArguments(["--sandbox", "/tmp/sb"]) as any;

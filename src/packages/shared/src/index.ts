@@ -1,4 +1,5 @@
 export { isAdminRequest } from "./utils/admin-auth";
+export { createChildProcessEnv } from "./utils/child-process-env";
 
 // ── Types ──
 export {

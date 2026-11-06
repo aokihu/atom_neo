@@ -23,3 +23,13 @@ export function localUrl(host: string, port: number): string {
   const address = host === "0.0.0.0" ? "127.0.0.1" : host === "::" ? "::1" : host;
   return `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
 }
+
+/** Local runtime credentials stay authoritative; remote credentials are explicit. */
+export function readAttachToken(sandbox: string, host: string, remoteToken?: string): string {
+  if (["localhost", "127.0.0.1", "::1"].includes(host)) {
+    try { return readRuntimeFile(sandbox, "core").token; }
+    catch (error) { if (!remoteToken) throw error; }
+  }
+  if (!remoteToken?.trim()) throw new Error("Remote attach requires ATOM_ADMIN_TOKEN in the environment or sandbox .env");
+  return remoteToken.trim();
+}

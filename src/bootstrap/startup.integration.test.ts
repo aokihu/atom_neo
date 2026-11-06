@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { TuiClient } from "../packages/tui/src/client/ws-client";
@@ -28,8 +28,8 @@ async function finish(proc: Bun.Subprocess, signal: "SIGTERM" | "SIGINT" = "SIGT
   await waitFor(() => proc.exitCode !== null, "process exit");
   expect(await proc.exited).toBe(0);
 }
-async function run(command: string[], cwd = temp) {
-  const proc = Bun.spawn(command, { cwd, env, stdout: "pipe", stderr: "pipe" });
+async function run(command: string[], cwd = temp, extraEnv: Record<string, string> = {}) {
+  const proc = Bun.spawn(command, { cwd, env: { ...env, ...extraEnv }, stdout: "pipe", stderr: "pipe" });
   processes.push(proc);
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   return { stdout, stderr, code };
@@ -50,9 +50,9 @@ type Instance = { url: string; token: string; instanceId: string };
 function instance(path: string, kind = "core"): Instance {
   return JSON.parse(readFileSync(join(path, `.atom/${kind}-runtime.json`), "utf8"));
 }
-async function start(path: string, mode = "core", source = false, port = "0") {
+async function start(path: string, mode = "core", source = false, port = "0", host = "127.0.0.1") {
   const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
-  const proc = Bun.spawn([...command, "--mode", mode, "--sandbox", path, "--port", port], { cwd: temp, env, stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn([...command, "--mode", mode, "--sandbox", path, "--port", port, "--host", host], { cwd: temp, env, stdout: "ignore", stderr: "pipe" });
   processes.push(proc);
   await waitFor(() => {
     if (proc.exitCode !== null) throw new Error(`Core exited: ${proc.exitCode}`);
@@ -361,3 +361,141 @@ integration("occupied port and failed Client startup leave no Core resources", a
   expect(existsSync(join(broken, ".atom/core-runtime.json"))).toBe(false);
   expect(existsSync(join(broken, ".atom/gateway-runtime.json"))).toBe(false);
 }, 15000);
+
+type MenuStep = { wait: string; send: string; absent?: string; delay?: number; keyDelay?: number; waitFile?: string; signal?: string };
+async function driveMenu(steps: MenuStep[], command: string[], home: string, extraEnv: Record<string, string> = {}) {
+  const result = await run(["python3", join(import.meta.dir, "fixtures/menu-terminal.py"), JSON.stringify(steps), ...command], temp, { HOME: home, ...extraEnv });
+  expect(result.code, result.stderr).toBe(0);
+  const terminal = JSON.parse(result.stdout) as { code: number; steps: number; expectedSteps: number; restored: boolean; failure: string | null; tail: string; commands: string[] };
+  expect(terminal.failure, terminal.tail).toBeNull();
+  expect(terminal.code, terminal.tail).toBe(0);
+  expect(terminal.steps, terminal.tail).toBe(terminal.expectedSteps);
+  expect(terminal.restored, terminal.tail).toBe(true);
+  return terminal;
+}
+
+integration("menu cancellation and bracketed paste do not execute or write history", async () => {
+  for (const source of [true, false]) {
+    const home = join(temp, `menu-cancel-home-${source}`);
+    const history = join(home, ".config/atom/menu_history.json");
+    const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
+    const nonTerminal = await run([...command, "menu"], temp, { HOME: home });
+    expect(nonTerminal.code).toBe(1);
+    expect(nonTerminal.stderr).toContain("interactive terminal");
+    const cancelled = await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
+      { wait: "远程地址", send: "\x15\x1b[200~remote\raddress\x1b[201~" },
+      { wait: "> remote address", send: "\x03", absent: history },
+    ], [...command, "menu"], home);
+    expect(cancelled.commands).toEqual([]);
+    expect(existsSync(history)).toBe(false);
+    expect(existsSync(join(home, ".atom"))).toBe(false);
+  }
+}, 40000);
+
+integration("menu attach supports back, failed connection retry, handoff, and remembered defaults", async () => {
+  const path = sandbox("menu-attach-core");
+  writeFileSync(join(path, ".env"), "ATOM_ADMIN_TOKEN=menu-local-test-token\n");
+  const core = await start(path, "core", false, "0", "0.0.0.0");
+  expect(core.token).toBe("menu-local-test-token");
+  const rejected = Bun.serve({ hostname: "0.0.0.0", port: 0, fetch: () => Response.json({ error: "Forbidden" }, { status: 403 }) });
+  const home = join(temp, "menu-attach-home");
+  const history = join(home, ".config/atom/menu_history.json");
+  const port = new URL(core.url).port;
+  try {
+    const first = await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
+      { wait: "远程地址", send: "\x15127.0.0.1\r" },
+      { wait: "menu / attach / 端口", send: "\x1599999\r" },
+      { wait: "Invalid port: 99999", send: "\x1b" },
+      { wait: "远程地址", send: "\r" },
+      { wait: "> 99999", send: `\x15${rejected.port}\r` },
+      { wait: "Cannot attach Core (403)", send: `\x15${port}\r`, absent: history },
+      { wait: "Type a message...", send: "\x1b[200~LOCAL_HISTORY_CHECK\x1b[201~\r", delay: 0.15 },
+      { wait: "LOCAL_VERIFIED", send: "\x03" },
+      { wait: "again", send: "\x03" },
+    ], [process.execPath, "run", join(root, "src/main.ts"), "menu"], home, { ATOM_ADMIN_TOKEN: core.token });
+    expect(first.commands).toHaveLength(2);
+    expect(first.commands[0]).toContain(`run ${join(root, "src/main.ts")} --mode tui`);
+    expect(first.commands[0]).toContain(`--core-port ${rejected.port}`);
+    expect(first.commands[1]).toContain(`--core-port ${port}`);
+    expect(first.commands.join("\n")).not.toContain(core.token);
+    expect(JSON.parse(readFileSync(history, "utf8"))).toEqual({ version: 1, commands: { attach: { coreServer: "127.0.0.1", corePort: Number(port) } } });
+    expect(readFileSync(history, "utf8")).not.toContain(core.token);
+    expect(readFileSync(join(temp, ".atom/tui_history"), "utf8")).toContain("LOCAL_HISTORY_CHECK");
+    expect(existsSync(join(path, ".atom/tui_history"))).toBe(false);
+    expect(existsSync(join(temp, ".atom/core-runtime.json"))).toBe(false);
+
+    const replay = await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
+      { wait: "> 127.0.0.1", send: "\r" },
+      { wait: `> ${port}`, send: "\r" },
+      { wait: "CONVERSATION", send: "\x03" },
+      { wait: "again", send: "\x03" },
+    ], [binary, "menu"], home, { ATOM_ADMIN_TOKEN: core.token });
+    expect(replay.commands).toHaveLength(1);
+    expect([binary, realpathSync(binary)].some(entry => replay.commands[0].startsWith(`${entry} --mode tui `))).toBe(true);
+    expect(replay.commands[0]).toContain(`--core-server 127.0.0.1 --core-port ${port} --sandbox ${realpathSync(temp)}`);
+    expect((await fetch(`${core.url}/api/health`)).ok).toBe(true);
+  } finally { rejected.stop(true); await finish(core.proc); }
+}, 40000);
+
+integration("menu dispatches Gateway actions once and exits after success", async () => {
+  const path = sandbox("menu-gateway", [{ id: "local", platform: "local", binary: clientBinary }]);
+  const core = await start(path, "core-gateway");
+  const home = join(temp, "menu-gateway-home");
+  try {
+    await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\r" },
+      { wait: "menu / gateway", send: "\x1b[B\x1b[B\r" },
+      { wait: "工作目录", send: "\r" },
+      { wait: "Client ID", send: "all\r" },
+    ], [binary, "menu", "--sandbox", path], home);
+    expect(JSON.parse(readFileSync(join(home, ".config/atom/menu_history.json"), "utf8")).commands).toEqual({ "gateway-stop": { sandbox: path } });
+    expect((await fetch(`${core.url}/api/health`)).ok).toBe(true);
+  } finally { await finish(core.proc); }
+}, 20000);
+
+integration("menu configuration cancellation does not remember unsaved parameters", async () => {
+  const path = sandbox("menu-config-cancel");
+  const home = join(temp, "menu-config-cancel-home");
+  await driveMenu([
+    { wait: "atom menu", send: "\x1b[B\r" },
+    { wait: "工作目录", send: "\r" },
+    { wait: "CONFIGURATION", send: "\x04" },
+  ], [binary, "menu", "--sandbox", path], home);
+  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
+  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
+}, 20000);
+
+integration("menu saves service parameters when Core becomes ready before it exits", async () => {
+  const path = sandbox("menu-core-ready");
+  const home = join(temp, "menu-core-ready-home");
+  const history = join(home, ".config/atom/menu_history.json");
+  const ready = await driveMenu([
+    { wait: "atom menu", send: "\r" },
+    { wait: "menu / start", send: "\x1b[B\r" },
+    { wait: "工作目录", send: "\r" },
+    { wait: "监听地址", send: "\r" },
+    { wait: "监听端口", send: "\x150\r" },
+    { wait: "", waitFile: history, send: "", signal: "SIGTERM" },
+  ], [binary, "menu", "--sandbox", path], home);
+  expect(ready.commands).toHaveLength(1);
+  expect([binary, realpathSync(binary)].some(entry => ready.commands[0].startsWith(`${entry} --mode core `))).toBe(true);
+  expect(ready.commands[0]).toContain(`--host 127.0.0.1 --port 0 --sandbox ${path}`);
+  expect(JSON.parse(readFileSync(history, "utf8")).commands).toEqual({ core: { sandbox: path, host: "127.0.0.1", port: 0 } });
+  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
+}, 20000);
+
+integration("menu remembers configuration parameters only after saving the editor", async () => {
+  const path = sandbox("menu-config-save");
+  const home = join(temp, "menu-config-save-home");
+  await driveMenu([
+    { wait: "atom menu", send: "\x1b[B\r" },
+    { wait: "工作目录", send: "\r" },
+    { wait: "CONFIGURATION", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.06 },
+    { wait: "SAVE & EXIT", send: "\r" },
+  ], [binary, "menu", "--sandbox", path], home);
+  expect(JSON.parse(readFileSync(join(home, ".config/atom/menu_history.json"), "utf8")).commands).toEqual({ config: { sandbox: path } });
+  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
+}, 20000);

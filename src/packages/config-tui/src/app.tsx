@@ -7,8 +7,8 @@ import { WizardApp } from "./components/WizardApp";
 import type { WizardMode } from "./wizard-logic";
 
 /** Launch the standalone OpenTUI wizard (first-run setup or config editor). */
-export function startWizard(sandboxPath: string, mode: WizardMode): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
+export function startWizard(sandboxPath: string, mode: WizardMode): Promise<boolean> {
+  return new Promise<boolean>((resolve, reject) => {
     let settled = false;
     let completed = false;
     let renderer: Awaited<ReturnType<typeof createCliRenderer>> | undefined;
@@ -17,7 +17,7 @@ export function startWizard(sandboxPath: string, mode: WizardMode): Promise<void
       settled = true;
       process.stdin.off("end", abort);
       if (!completed && mode === "first-run") reject(new Error("Configuration cancelled"));
-      else resolve();
+      else resolve(completed);
     };
     const abort = () => {
       if (settled) return;

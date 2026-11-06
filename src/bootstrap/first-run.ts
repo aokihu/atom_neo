@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { buildAppCommand } from "./cli";
 
 export function isFirstRun(sandboxPath: string): boolean {
   return !existsSync(`${sandboxPath}/.atom/installed`);
@@ -11,9 +12,7 @@ export function markInstalled(sandboxPath: string): void {
 }
 
 export function buildWizardCommand(sandboxPath: string): string[] {
-  // Compiled entrypoints live in Bun's virtual filesystem, where existsSync is also true.
-  const compiled = Bun.main.startsWith("/$bunfs/");
-  return [process.execPath, ...(compiled ? [] : ["run", Bun.main]), "--wizard", "--sandbox", sandboxPath];
+  return buildAppCommand(["--wizard", "--sandbox", sandboxPath]);
 }
 
 function spawnWizard(sandboxPath: string): Bun.Subprocess {

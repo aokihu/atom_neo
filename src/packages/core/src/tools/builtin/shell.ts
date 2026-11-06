@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { PermissionLevel, substringWellFormed } from "@atom-neo/shared";
+import { PermissionLevel, substringWellFormed, createChildProcessEnv } from "@atom-neo/shared";
 import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
 import { toolResult } from "../outcome";
 
@@ -50,7 +50,7 @@ function spawnShell(params: {
   return Bun.spawn({
     cmd: ["sh", "-c", params.command],
     cwd: params.root,
-    env: { ...process.env },
+    env: createChildProcessEnv(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

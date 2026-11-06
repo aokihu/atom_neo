@@ -27,6 +27,7 @@ export function startTui(params: {
   url: string;
   sessionId?: string;
   adminToken?: string;
+  historySandbox?: string;
   serverInfo: ServerInfo;
 }): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -83,6 +84,7 @@ export function startTui(params: {
           url: params.url,
           sessionId: params.sessionId,
           adminToken: params.adminToken,
+          historySandbox: params.historySandbox ?? process.cwd(),
           serverInfo,
           onServerInfoChange: setServerInfo,
           onQuit: handleQuit,

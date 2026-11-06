@@ -1,0 +1,72 @@
+# Startup Menu
+
+v1.21.1 交付包含分层启动、参数历史、远程 attach 与执行前打印可复制命令；相对开发版本 v1.21.0 升级补丁版本。
+
+`atom menu` 是一次性启动向导：普通终端文本、单列菜单、面包屑，不使用 App 主题。一级只有命令名称，不展示长参数。最后一步自动执行，成功后结束菜单并交给对应 App，不回主菜单。
+
+```text
+menu
+├─ start > chat > sandbox > new / continue > Core + TUI
+│        └ core > sandbox > host > port > Core
+├─ config > sandbox > 现有配置编辑器
+├─ gateway > run > sandbox > host > port > Core + Gateway
+│          ├ start clients > sandbox > client ID / all > 启用
+│          └ stop clients > sandbox > client ID / all > 停止
+├─ attach > remote address > port > 连接并进入 TUI
+└─ exit
+```
+
+## 交互与生命周期
+
+上下选择，Enter 确认；Esc 回退并保留草稿，根层 Esc、Ctrl+C、Ctrl+D、EOF 取消。输入支持光标移动、删除、Home/End、Ctrl+A/E/U/W；多行粘贴不作为确认键。校验失败停在原步骤；执行失败重新打开当前路径的最后一步，可修改、重试或回退。成功前关闭菜单终端输入，随后才启动 App 渲染器。退出独立 TUI 不关闭被连接的 Core。
+
+向导最后一步完成、退出菜单终端后，先打印 `执行命令: ...`，再交给对应程序。打印包含实际启动入口、所选模式、工作目录及该路径的参数；源码入口显示 Bun + 入口脚本，编译入口显示实际二进制路径。参数按 POSIX shell 单引号规则转义，可复制执行；不展开环境变量，不打印 Token。取消菜单不打印；失败后每次重试打印当前参数对应的命令。执行仍复用进程内启动入口，不将显示字符串交给 shell。
+
+非交互终端拒绝启动，`menu --help` 例外。`menu` 可带 `--sandbox`；拒绝其他动作/启动参数。显式 sandbox 优先于历史 sandbox；attach 使用本次 sandbox，不额外增加目录问题，默认新建会话。
+
+## 记忆
+
+固定文件 `~/.config/atom/menu_history.json`，按动作保存上次成功的普通参数；自动回填后仍须 Enter 确认。目录延迟创建，取消不写盘。成功 attach 握手、配置保存、Gateway 请求成功或服务就绪后保存，不等长期 App 退出。配置取消不算保存成功。
+
+```json
+{
+  "version": 1,
+  "commands": {
+    "attach": { "coreServer": "192.168.1.20", "corePort": 3100 },
+    "config": { "sandbox": "/path/to/project" }
+  }
+}
+```
+
+按字段白名单解析，不保存 API Key、管理 Token、日志。缺失使用默认值；损坏提示后使用默认值。临时文件 + rename 原子替换，权限 0600；保存失败告警，不阻断已经成功的启动。测试使用临时文件，不读写真实用户历史。
+
+## 远程连接
+
+复用 `--mode tui --core-server ... --core-port ...` 入口。Core 端显式设置 `ATOM_ADMIN_TOKEN` 并绑定可访问的 `--host` 后，允许携带该 Token 的远程管理请求。客户端在环境变量或 sandbox `.env` 设置相同 Token，不通过 CLI 或历史传递，也不转发给 Gateway 平台 Client 和 shell 工具子进程（共享的 `createChildProcessEnv` 负责移除此字段）。未设置时继续随机 Token + 仅本机管理访问；Gateway 管理访问保持仅限本机。本机 attach 优先使用 sandbox runtime 凭据。跨网络使用可信网络或加密隧道。
+
+独立 TUI 的输入历史保存在客户端选择的 sandbox，由 `historySandbox` 显式传入；远端返回的 `serverInfo.sandbox` 仅用于显示，不作为客户端写盘位置。它与全局 menu_history.json 分工独立。
+
+## 实现与验收
+
+- `src/bootstrap/menu-flow.ts`：导航、草稿、默认值、校验、启动参数和可复制命令格式化。
+- `src/bootstrap/menu-history.ts`：白名单读取、按动作合并、原子保存。
+- `src/bootstrap/menu.ts`：普通终端输入输出及恢复。
+- `src/main.ts`：复用启动分流、成功保存历史、失败回到当前链路。
+
+验证 CLI 兼容及冲突、每条路径、回退、历史损坏与隔离、远程鉴权默认拒绝及显式开放；PTY 验证取消、重试、终端恢复、向 App 交接。检查源码与编译后二进制。
+
+### 2026-11-06 验证结果（v1.21.0）
+
+- 常规 `bun test`：766 通过，0 失败；重型启动测试由下列命令单独运行。
+- `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts`：19 通过、0 失败，211 项断言。包括源码与二进制、菜单回退/取消、粘贴保护、403 后修改端口重试、真实消息的客户端历史隔离、二次启动回填、配置保存/取消，以及 Core 就绪后立即记忆。
+- `bun run typecheck`、`bun run build`：全部 workspace 通过；新增 bootstrap 模块另行独立 `tsc --noEmit` 通过，`git diff --check` 通过。
+- 本机二进制使用 `bun-darwin-arm64` 编译并验收。通用 `--target=bun` 打包仍受现有非本机 OpenTUI 原生包缺失影响，不新增依赖处理该问题。
+- 根入口的额外整体类型扫描仍有原有 SDK 全局声明、MemoryService 可空值和旧启动测试类型问题，不计入本轮类型检查通过结论，未扩展修复范围。
+
+所有历史测试使用临时 HOME，模型为本地假模型。远程权限策略用单元测试验证，attach 全链路通过本机回环端到端验证；尚未连接另一台物理机器验证网络。用户已有的 `sandbox/config.json` 保留，未用于测试。
+
+命令打印补充验收：CLI/菜单定向测试 51 通过，菜单 PTY 测试 6 通过（78 项断言），workspace 与新增 bootstrap 类型检查通过。覆盖所有菜单路径的参数往返、特殊字符 shell 引用、源码/编译入口显示、重试打印新端口、取消无输出、凭据不输出；macOS 临时路径允许 `/var` 与 `/private/var` 的真实路径别名。
+
+### v1.21.1 提交前回归
+
+`bun test`：1392 通过、19 跳过、0 失败（构建后的 workspace 测试产物也被 Bun 发现）。19 项显式启动验收单独运行全部通过，224 项断言；workspace 类型检查/构建、新增 bootstrap 独立类型检查及差异检查通过。完整日志位于 `/private/tmp/atom-menu-v1.21.1-tests.log` 与 `/private/tmp/atom-menu-v1.21.1-startup.log`，临时日志可能被系统清理。

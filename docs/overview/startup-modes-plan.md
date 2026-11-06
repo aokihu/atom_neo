@@ -133,3 +133,7 @@ ClientManager 增加按 ID start/stop/list 和期望运行状态，复用现有 
 Markdown 与专用 Web 页面同时更新，Web 使用表格、阶段流程及状态说明，不运行时引用 Markdown 正文。执行文档 SSR 检查与 git diff --check；开发阶段再运行 CLI、Session、WS、ClientManager 相关测试及类型检查，最后执行上述进程级验收。
 
 相关文档： [启动](./bootstrap.md)、[会话](../core/session.md)、[Gateway](../communication/gateway.md)。
+
+## v1.21.0 补充
+
+一次性 `menu` 向导与显式 `ATOM_ADMIN_TOKEN` 远程 attach 见 [startup-menu.md](../subsystems/startup-menu.md)。初版“仅支持本机 attach”的边界由该规格补充；未显式配置 Token 时仍仅允许本机管理访问。

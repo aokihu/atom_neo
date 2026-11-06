@@ -15,6 +15,7 @@
 | [project-structure.md](./overview/project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
 | [startup-modes-plan.md](./overview/startup-modes-plan.md) | 启动模式、TUI attach、Client 控制与 Session 发起者（已实现，待验收） | 开发前确认与分阶段验收 |
 | [bootstrap.md](./overview/bootstrap.md) | 启动序列、初始化顺序 | 理解启动流程 |
+| [startup-menu.md](./subsystems/startup-menu.md) | 一次性分层启动向导、参数记忆、执行交接及远程 attach | 修改 menu 子命令 |
 | [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 
 ## 开发规范（编码时必查）

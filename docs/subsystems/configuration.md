@@ -257,7 +257,7 @@ runtime.resetRuntimeConfig();
 
 ## 8. 运行时调整 API（仅 TUI）
 
-**访问控制**：main.ts 启动时生成随机 admin token，仅注入 TUI。请求必须来自 loopback 且携带 `x-atom-admin-token` 头，否则一律 403。Gateway 与外部 client 无 token，天然被拒。
+**访问控制**：默认使用随机 admin token，仅接受 loopback 且携带正确 `x-atom-admin-token` 的管理请求。显式设置 `ATOM_ADMIN_TOKEN` 后 Core 使用该固定 Token，并允许正确鉴权的远程 TUI 管理请求，详见 [启动向导](startup-menu.md)。该环境变量不转发给 Gateway 平台 Client 或 shell 工具子进程；Gateway 自身管理端点仍仅限 loopback。
 
 | 端点 | 方法 | 说明 |
 |------|------|------|

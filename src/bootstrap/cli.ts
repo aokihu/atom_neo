@@ -8,6 +8,8 @@ export type Mode = "core" | "tui" | "core-gateway" | "gateway" | "full";
 export type LogMode = "console" | "pipe" | "file";
 
 export type BootArguments = {
+  menu: boolean;
+  sandboxExplicit: boolean;
   mode?: Mode;
   port: number;
   host: string;
@@ -27,9 +29,10 @@ export type BootArguments = {
   continueSession: boolean;
 };
 
-export function parseArguments(rawArgs: string[]): BootArguments | "help" {
+export function parseArguments(rawArgs: readonly string[]): BootArguments | "help" {
+  const menu = rawArgs[0] === "menu";
   const { values, tokens } = parseArgs({
-    args: rawArgs,
+    args: menu ? rawArgs.slice(1) : [...rawArgs],
     options: {
       wizard: { type: "boolean" },
       continue: { type: "boolean", short: "c", default: false },
@@ -56,12 +59,13 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
 
   if (values.help) return "help";
 
+  if (menu && tokens.some(t => t.kind === "option" && t.name !== "sandbox")) {
+    throw new Error("menu only accepts --sandbox; choose commands and parameters in the wizard");
+  }
+
   const sandboxPath = values.sandbox;
   if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
-  const sandbox = sandboxPath === undefined ? process.cwd()
-    : sandboxPath === "~" ? homedir()
-    : sandboxPath.startsWith("~/") ? resolve(homedir(), sandboxPath.slice(2))
-    : resolve(sandboxPath);
+  const sandbox = parseSandboxPath(sandboxPath ?? process.cwd());
 
   const modeExplicit = tokens?.some((t: any) =>
     t.kind === "option" && (t.name === "mode" || t.name === "m"),
@@ -81,6 +85,8 @@ export function parseArguments(rawArgs: string[]): BootArguments | "help" {
   if (values.clients !== undefined && !(values.clients as string).trim()) throw new Error("--clients cannot be empty");
   if ((mode === "tui" || mode === "gateway") && tokens?.some(t => t.kind === "option" && ["host", "port"].includes(t.name))) throw new Error("--host/--port are server listening options");
   return {
+    menu,
+    sandboxExplicit: sandboxPath !== undefined,
     coreServer: values["core-server"] as string | undefined,
     corePort: values["core-port"] === undefined ? undefined : parsePort(values["core-port"] as string, false),
     clients: values.clients as string | undefined,
@@ -109,6 +115,10 @@ atom-neo — AI Agent Development Platform
 
 USAGE
   ${binName} [OPTIONS]
+  ${binName} menu [--sandbox <path>]
+
+COMMANDS
+  menu                   一次性启动向导（参数自动回填，完成后执行）
 
 OPTIONS
   -m, --mode <mode>      运行模式: core | core-gateway | tui | gateway (默认: core + TUI)
@@ -116,6 +126,7 @@ OPTIONS
   --host <host>           绑定地址 (默认: 127.0.0.1)
   --core-server <host>    TUI attach 的 Core 主机（必填）
   --core-port <port>      TUI attach 的 Core 端口（必填）
+                         远程连接需双方设置 ATOM_ADMIN_TOKEN
   --action <start|stop>   Gateway Client 控制动作（必填）
   --clients <id>         指定 Client；省略则操作全部
   --sandbox <path>        沙箱目录 (默认: 当前目录)
@@ -129,6 +140,7 @@ OPTIONS
   -h, --help              显示此帮助信息
 
 EXAMPLES
+  ${binName} menu
   ${binName} --sandbox ./sandbox
   ${binName} --continue --sandbox ./sandbox
   ${binName} --mode core --port 3100 --log=console
@@ -154,7 +166,17 @@ function validateEnum<T extends string>(v: string, valid: readonly T[], label: s
   throw new Error(`Invalid ${label}: ${v}. Expected ${valid.join(" | ")}`);
 }
 
-function parsePort(value: string, allowZero: boolean): number {
+export function parseSandboxPath(value: string): string {
+  if (!value.trim()) throw new Error("--sandbox cannot be empty");
+  return value === "~" ? homedir() : value.startsWith("~/") ? resolve(homedir(), value.slice(2)) : resolve(value);
+}
+
+/** Compiled Bun entrypoints use a virtual main path; execute the real binary. */
+export function buildAppCommand(args: readonly string[], entrypoint = Bun.main, executable = process.execPath): string[] {
+  return [executable, ...(entrypoint.startsWith("/$bunfs/") ? [] : ["run", entrypoint]), ...args];
+}
+
+export function parsePort(value: string, allowZero: boolean): number {
   const port = Number(value);
   if (!/^\d+$/.test(value) || !Number.isInteger(port) || port < (allowZero ? 0 : 1) || port > 65535) throw new Error(`Invalid port: ${value}`);
   return port;
