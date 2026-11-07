@@ -29,7 +29,7 @@ export function AssistantMessage({
   }, [message.streaming]);
 
   return (
-    <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2}
+    <box paddingBottom={1} paddingLeft={2} paddingRight={2}
          marginBottom={1} flexDirection="column">
       <box flexDirection="row" gap={2}>
         <text fg={colors.accent.brand}>ATOM NEO</text>

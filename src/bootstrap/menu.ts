@@ -2,6 +2,60 @@
 import { emitKeypressEvents, type Key } from "node:readline";
 import { MenuFlow, type MenuRequest } from "./menu-flow";
 
+export function buildMenuScreen(flow: MenuFlow, columns: number, cursor: number) {
+  const view = flow.view();
+  const clipLine = (line: string) => {
+    if (Bun.stringWidth(line) < columns) return line;
+    const characters = Array.from(line);
+    while (characters.length && Bun.stringWidth(characters.join("")) > columns - 2) characters.pop();
+    return characters.join("") + "…";
+  };
+  const wrapHelp = (text: string) => {
+    const rows: string[] = [];
+    let row = "";
+    for (const character of text) {
+      if (row && Bun.stringWidth(row + character) > Math.max(1, columns - 4)) {
+        rows.push(row.trimEnd());
+        row = "";
+      }
+      row += character;
+    }
+    rows.push(row.trimEnd());
+    return rows;
+  };
+  const helpLine = (line: string) => line ? `  \x1b[2m${line}\x1b[0m` : "";
+  const lines = ["  atom menu", "", `  ${view.title === "menu" ? "选择要执行的命令" : view.title}`, ""].map(clipLine);
+  let inputCursor: { row: number; column: number } | undefined;
+  if (view.field) {
+    lines.push(clipLine(`  [${view.step}/${view.total}] ${view.label}`));
+    lines.push(...(view.help ?? []).flatMap(wrapHelp).map(helpLine));
+    if (!view.items) lines.push("");
+  }
+  if (view.items) {
+    lines.push(...view.items.map((item, i) => i === flow.selected ? `  \x1b[7m❯ ${item}\x1b[0m` : `    ${item}`));
+    const description = (view.description ?? []).flatMap(wrapHelp);
+    if (description.length > 2) description[1] += "…";
+    lines.push("", ...[description[0] ?? "", description[1] ?? ""].map(helpLine));
+  } else {
+    const characters = Array.from(view.value ?? "");
+    const width = Math.max(4, columns - 6);
+    let start = cursor;
+    while (start > 0 && Bun.stringWidth(characters.slice(start - 1, cursor).join("")) < width - 1) start--;
+    let visible = characters.slice(start).join("");
+    while (Bun.stringWidth(visible) > width) visible = Array.from(visible).slice(0, -1).join("");
+    inputCursor = { row: lines.length + 1, column: 5 + Bun.stringWidth(characters.slice(start, cursor).join("")) };
+    lines.push(`  ${start ? "…" : ">"} ${visible}`);
+    lines.push(...wrapHelp("回车沿用当前值，也可直接修改。").map(helpLine));
+  }
+  const action = view.field && view.step === view.total ? "执行" : "继续";
+  const hint = view.items
+    ? `↑ ↓ 选择  Enter / → ${view.field ? action : "进入"}  ${flow.page === "menu" ? "Esc 退出" : "← / Esc 返回"}`
+    : `Enter ${action}  Esc 上一步  Ctrl+U 清空`;
+  if (flow.error) lines.push("", `  ! ${flow.error}`);
+  lines.push("", `  ${hint}`, "  Ctrl+C 退出");
+  return { lines, cursor: inputCursor };
+}
+
 export function startMenu(flow: MenuFlow): Promise<MenuRequest | null> {
   const input = process.stdin;
   const output = process.stdout;
@@ -20,6 +74,7 @@ export function startMenu(flow: MenuFlow): Promise<MenuRequest | null> {
       input.off("end", cancel);
       input.off("error", onError);
       process.off("SIGTERM", cancel);
+      output.off("resize", render);
       input.setRawMode(wasRaw);
       input.pause();
       output.write("\x1b[?2004l\x1b[?25h\x1b[?1049l");
@@ -28,25 +83,11 @@ export function startMenu(flow: MenuFlow): Promise<MenuRequest | null> {
     const cancel = () => finish(null);
     const onError = (error: Error) => finish(null, error);
     const render = () => {
-      const view = flow.view();
-      const lines = ["atom menu", "", view.title, ""];
-      let column = 0;
-      if (view.items) {
-        lines.push(...view.items.map((item, i) => `${i === flow.selected ? "❯" : " "} ${item}`));
-      } else {
-        const characters = Array.from(view.value ?? "");
-        const width = Math.max(4, (output.columns || 80) - 4);
-        let start = cursor;
-        while (start > 0 && Bun.stringWidth(characters.slice(start - 1, cursor).join("")) < width - 1) start--;
-        let visible = characters.slice(start).join("");
-        while (Bun.stringWidth(visible) > width) visible = Array.from(visible).slice(0, -1).join("");
-        column = 3 + Bun.stringWidth(characters.slice(start, cursor).join(""));
-        lines.push(view.label ?? "", `${start ? "…" : ">"} ${visible}`);
-      }
-      lines.push("", flow.error, "", view.items ? "↑ ↓ 选择  Enter 确认  Esc 返回  Ctrl+C 退出" : "Enter 继续  Esc 返回  Ctrl+C 退出");
-      output.write(`\x1b[?25l\x1b[2J\x1b[H${lines.join("\n")}`);
-      if (!view.items) {
-        output.write(`\x1b[6;${column}H\x1b[?25h`);
+      if (finished) return;
+      const screen = buildMenuScreen(flow, output.columns || 80, cursor);
+      output.write(`\x1b[?25l\x1b[H${screen.lines.map(line => `\x1b[2K${line}`).join("\n")}\x1b[J`);
+      if (screen.cursor) {
+        output.write(`\x1b[${screen.cursor.row};${screen.cursor.column}H\x1b[?25h`);
       }
     };
     const onKey = (text: string | undefined, key: Key & { code?: string }) => {
@@ -54,19 +95,22 @@ export function startMenu(flow: MenuFlow): Promise<MenuRequest | null> {
       if (key.sequence === "\x1b[200~") { pasting = true; return; }
       if (key.sequence === "\x1b[201~") { pasting = false; return; }
       if (key.ctrl && (key.name === "c" || key.name === "d")) { cancel(); return; }
-      if (key.name === "escape" && !pasting) {
+      const view = flow.view();
+      if (!pasting && (key.name === "escape" || (key.name === "left" && view.items && flow.page !== "menu"))) {
         if (!flow.back()) { cancel(); return; }
         cursor = Array.from(flow.view().value ?? "").length;
         render();
         return;
       }
-      const view = flow.view();
-      const isSubmitKey = key.name === "return" || key.name === "enter";
+      const isSubmitKey = key.name === "return" || key.name === "enter" || (key.name === "right" && Boolean(view.items));
       if (view.items) {
         if (pasting) return;
         if (key.name === "up" || key.name === "down") {
           flow.selected = (flow.selected + (key.name === "down" ? 1 : view.items.length - 1)) % view.items.length;
         }
+        if (key.name === "home") flow.selected = 0;
+        if (key.name === "end") flow.selected = view.items.length - 1;
+        if (view.field === "session" && flow.selected < 2) flow.setValue(view.items[flow.selected]);
       } else {
         const chars = Array.from(view.value ?? "");
         if (key.name === "left") cursor = Math.max(0, cursor - 1);
@@ -103,6 +147,7 @@ export function startMenu(flow: MenuFlow): Promise<MenuRequest | null> {
     input.once("end", cancel);
     input.once("error", onError);
     process.once("SIGTERM", cancel);
+    output.on("resize", render);
     input.setRawMode(true);
     input.resume();
     output.write("\x1b[?1049h\x1b[?2004h");

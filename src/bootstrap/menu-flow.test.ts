@@ -86,6 +86,45 @@ test("root cancellation and exit do not produce a launch request", () => {
   expect(choose(menu, 4)).toBe("exit");
 });
 
+test("returning to a parent restores the entry that opened the child", () => {
+  const menu = flow();
+  choose(menu, 2); choose(menu, 2);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / stop clients", step: 1, total: 2 });
+  menu.back();
+  expect(menu.page).toBe("gateway");
+  expect(menu.selected).toBe(2);
+  menu.back();
+  expect(menu.page).toBe("menu");
+  expect(menu.selected).toBe(2);
+  choose(menu, 0); choose(menu, 1);
+  menu.back();
+  expect(menu.page).toBe("start");
+  expect(menu.selected).toBe(1);
+});
+
+test("back entries navigate without executing, including the final session step", () => {
+  const menu = flow({ chat: { continueSession: true } });
+  choose(menu, 2);
+  expect(choose(menu, 3)).toBeUndefined();
+  expect(menu.page).toBe("menu");
+  choose(menu, 0); choose(menu, 0); menu.submit();
+  expect(menu.view()).toMatchObject({ title: "menu / start / chat", items: ["new", "continue", "‹ back"], step: 2, total: 2 });
+  expect(choose(menu, 2)).toBeUndefined();
+  expect(menu.view().field).toBe("sandbox");
+  menu.submit();
+  expect(menu.selected).toBe(1);
+});
+
+test("progress and breadcrumbs stay within the selected startup path", () => {
+  const menu = flow();
+  choose(menu, 2); choose(menu, 0);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / run", step: 1, total: 3 });
+  menu.submit(); menu.submit();
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / run", step: 3, total: 3, field: "port" });
+  menu.back();
+  expect(menu.view()).toMatchObject({ step: 2, total: 3, field: "host" });
+});
+
 test.each(["http://host", "host:3100", "host/path", "", "bad host", "user@host"])("rejects non-host address %s", value => {
   expect(() => parseServerHost(value)).toThrow();
 });

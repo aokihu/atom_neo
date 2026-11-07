@@ -393,6 +393,26 @@ integration("menu cancellation and bracketed paste do not execute or write histo
   }
 }, 40000);
 
+integration("menu arrow navigation and back restore the selected branch without running it", async () => {
+  for (const source of [true, false]) {
+    const home = join(temp, `menu-navigation-home-${source}`);
+    const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
+    const result = await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
+      { wait: "menu / gateway", send: "\x1b[B\x1b[B\x1b[C" },
+      { wait: "[1/2] 工作目录", send: "\x1b" },
+      { wait: "❯ stop clients >", send: "\x1b[D" },
+      { wait: "❯ gateway >", send: "\x1b[B\x1b[C" },
+      { wait: "[1/2] 远程地址", send: "\x15example.com\r" },
+      { wait: "[2/2] 端口", send: "\x1b" },
+      { wait: "> example.com", send: "\x1b" },
+      { wait: "❯ attach >", send: "\x1b[F\r" },
+    ], [...command, "menu"], home);
+    expect(result.commands).toEqual([]);
+    expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
+  }
+}, 40000);
+
 integration("menu attach supports back, failed connection retry, handoff, and remembered defaults", async () => {
   const path = sandbox("menu-attach-core");
   writeFileSync(join(path, ".env"), "ATOM_ADMIN_TOKEN=menu-local-test-token\n");
@@ -406,7 +426,7 @@ integration("menu attach supports back, failed connection retry, handoff, and re
     const first = await driveMenu([
       { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
       { wait: "远程地址", send: "\x15127.0.0.1\r" },
-      { wait: "menu / attach / 端口", send: "\x1599999\r" },
+      { wait: "[2/2] 端口", send: "\x1599999\r" },
       { wait: "Invalid port: 99999", send: "\x1b" },
       { wait: "远程地址", send: "\r" },
       { wait: "> 99999", send: `\x15${rejected.port}\r` },
