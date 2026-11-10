@@ -2,9 +2,9 @@
 
 > **Purpose**: Gateway 是 Atom Neo 的平台 Client 中转层。通过管理平台 Client 子进程，将微信、Telegram 等外部平台的消息标准化后路由到 Core 引擎。
 
-## Gateway Client 控制模式（已实现，待验收）
+## Gateway Client 控制模式（已实现）
 
-2026-09-12：本节代码已实现；测试和进程级验收等待用户指令。详见 [启动模式计划](../overview/startup-modes-plan.md)。
+2026-09-12：本节代码已实现；测试和进程级验收已归档。详见 [启动模式计划](../records/startup-modes-plan.md) 与 [验收记录](../records/startup-validation.md)。
 
 | 入口 | 职责 |
 |------|------|
@@ -116,7 +116,7 @@ Gateway 向 Core 提交创建信息 initiator={type:gateway,clientId,platform}�
 | 通讯 | Client 每次 HTTP 调用都带 `X-Gateway-Secret` Header |
 | 崩溃重启 | Gateway 自动生成新 secret，旧 secret 立即失效 |
 
-Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。设计要求 Secret 与 Client 进程生命周期绑定；异常退出/重启路径现已撤销旧 Secret，等待验收。
+Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。设计要求 Secret 与 Client 进程生命周期绑定；异常退出/重启路径现已撤销旧 Secret；验收记录见 [验收记录](../records/startup-validation.md)。
 
 ## 5. Client Manager
 

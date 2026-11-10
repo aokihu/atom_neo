@@ -38,8 +38,27 @@ atom_neo/
 │   │   └── compiled_prompts/ # Cached compiled prompts
 │   └── logs/                 # Log output
 │
-└── docs/                      # Development documentation
+├── scripts/                   # Maintenance scripts (check-docs.ts, release helpers)
+│
+└── docs/                      # Markdown docs + local renderer
+    ├── index.md               # Documentation index
+    ├── package.json           # Scope marker: type=module for Node ESM
+    ├── server.ts              # Markdown → HTML HTTP server (Bun/Node)
+    ├── server.test.ts         # Render/resolve/server tests
+    ├── assets/
+    │   └── docs.css           # Dark theme + highlight.js token styles
+    ├── records/               # Historical validation/experiment records
+    ├── overview/
+    ├── standards/
+    ├── subsystems/
+    ├── core/
+    ├── pipelines/
+    ├── communication/
+    ├── clients/
+    └── code-review-2026-11-10/
 ```
+
+> 文档只维护 Markdown；`docs/server.ts` 在请求时渲染 HTML，不再保留旧 React/JSX 文档站页面。
 
 ## 2. Package: `shared`
 

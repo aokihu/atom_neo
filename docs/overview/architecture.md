@@ -13,9 +13,9 @@
 | **Memory 操作** | `search_memory` / `read_memory` / `save_memory` 注册为 Tool | 摘要发现与正文读取分离 |
 | **LLM 输出解析** | `streamText` + tool calling（流式输出 + 结构化工具调用）| 流式体验 + 零解析错误 |
 | **Pipeline 组装** | 声明式 `PipelineBuilder`，Element 通过名称引用 | 运行时注册新 pipeline |
-| **通信** | WebSocket 事件流（Core → Client 单向广播） | 可观测，可录制，可重放 |
-| **调试** | Pipeline Replay — 完整执行记录，可回溯 | 问题复现成本降为 0 |
-| **运行时架构** | 微内核 + 插件：Orchestrator + IntentPolicy + ToolCoordinator + MemoryManager | 职责单一，可独立测试 |
+| **通信** | WebSocket 事件流（Core → Client 广播）；TUI 任务提交走 `POST /api/tasks` | 可观测 |
+| **调试** | Pipeline Replay — **规划中**，录制/播放器尚未接入执行路径 | 目标：问题复现成本降低 |
+| **运行时架构** | 当前由 `startCore` 组装 services + PipelineBuilder；Orchestrator / IntentPolicy / ToolCoordinator / MemoryManager 为**规划中**，代码中尚未实现 | 目标：职责单一，可独立测试 |
 
 ---
 
@@ -164,7 +164,7 @@ const conversationPipeline = pipeline("conversation")
   .build();
 ```
 
-**优势：** 运行时注册新 pipeline，支持热重载，Element 按名称查找而非硬编码 import。
+**优势：** Element 按名称查找而非硬编码 import。Pipeline 热重载（`PipelineManager` 监听/重载）目前**未实现**，仅保留构建与注册能力。
 
 ### 3.4 Streaming + Tool Calling + IntentRequest
 
@@ -206,6 +206,8 @@ if (intents.some(i => i.request === IntentRequestType.FOLLOW_UP)) {
 
 ### 3.5 Pipeline Replay（录制与重放）
 
+> **状态：未接线（规划中）。** `PipelineRecorder` / `PipelinePlayer` 仅在 `src/packages/core/src/replay/` 导出并被测试引用，尚未接入 server、task engine 或 pipeline 执行路径。
+
 ```typescript
 class PipelineRecorder {
   record(taskId: string, events: PipelineEvent[]): void;
@@ -231,10 +233,10 @@ class PipelinePlayer {
 
 | Pipeline | 元素数 | 职责 |
 |----------|--------|------|
-| `conversation` | 9 | 核心对话管线：加载上下文 → 调用 LLM → 处理结果 → 链式续写 |
+| `conversation` | 8 | 核心对话管线：加载上下文 → 调用 LLM → 处理结果 → 链式续写 |
 | `prediction` | 3 | 意图预测：输入分类、难度评估、主题检测 |
 | `follow-up-evaluator` | 3 | 长会话质量保障、循环检测、必要时干预或升级模型 |
-| `context-compress` | 3 | Token 超限自动压缩。双触发：① Evaluator 检测 80%+ 阈值 ② Conversation 实时 token overflow 检测 |
+| `context-compress` | 4 | Token 超限自动压缩（含 token-ratio）。双触发：① Evaluator 检测 80%+ 阈值 ② Conversation 实时 token overflow 检测 |
 | `post-conversation` | 3 | 每轮对话后分析结果质量，判定是否需要重试 |
 
 ### 4.2 Tool Plugin 接口
@@ -339,7 +341,7 @@ type ServerEvent =
   | { type: "event.pipeline.replay-end"; payload: ReplayEndPayload };
 ```
 
-所有事件统一走 WebSocket，无 HTTP 轮询。TUI 直连 Core 的 HTTP/WebSocket；Gateway 仅为外部平台 Client 子进程提供消息中转，通过一次性 Secret 验证。
+核心事件统一走 WebSocket，无 HTTP 轮询。TUI 通过 `POST /api/tasks` 提交任务，并用 WebSocket 接收事件；WS `task.submit` 仍保留为兼容入口。TUI 直连 Core 的 HTTP/WebSocket；Gateway 仅为外部平台 Client 子进程提供消息中转，通过一次性 Secret 验证。
 
 ---
 
@@ -349,7 +351,7 @@ type ServerEvent =
 POST   /api/tasks              → 提交任务（返回 taskId）
 GET    /api/tasks/:id          → 查询任务状态
 DELETE /api/tasks/:id?sessionId=:sid → 校验 Session 并取消整条 Task Chain
-WS     /ws/:sessionId          → WebSocket 事件流（双向）
+WS     /ws/:sessionId          → WebSocket 事件流（事件接收；兼容 task.submit）
 GET    /api/health             → 健康检查
 GET    /api/metrics            → 运行时指标
 ```

@@ -1,5 +1,7 @@
 # Context Snapshot 缓存优化实施方案
 
+> **状态**: 历史实验方案，不代表当前实现；当前设计见 [文档索引](../index.md)。
+
 ## 状态与基线
 
 - 分支：`codex/context-snapshot-cache`。

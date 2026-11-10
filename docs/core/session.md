@@ -18,9 +18,9 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧
 
 ---
 
-## Session 发起者与默认 TUI attach（已实现，待验收）
+## Session 发起者与默认 TUI attach（已实现）
 
-2026-09-12：本节已实现，验收等待用户指令。详见 [启动模式计划](../overview/startup-modes-plan.md)。
+2026-09-12：本节已实现，验收记录已归档。详见 [启动模式计划](../records/startup-modes-plan.md) 与 [验收记录](../records/startup-validation.md)。
 
 | initiator.type | 附加字段 | 含义 |
 |------|------|------|

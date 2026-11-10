@@ -24,7 +24,7 @@ fast 模型优先；原生 JEV 失败后只执行一次现有 LLM 模拟。没�
 
 状态随 Session 检查点持久化。旧 chainDepth 转为含首次正文的已用次数；窗口证据不足先检查。压缩不清空预算，保留续写约束。达到限制明确未完成，不输出整体完成标记。
 
-相关：[对话](conversation.md)、[配置](../subsystems/configuration.md)、[JEV](../subsystems/jev-decisions.md)、[验收](continuation-validation.md)。
+相关：[对话](conversation.md)、[配置](../subsystems/configuration.md)、[JEV](../subsystems/jev-decisions.md)、[验收](../records/continuation-validation.md)。
 
 ### 真实测试后的判断口径澄清
 

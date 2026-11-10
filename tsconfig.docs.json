@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "noEmit": true
+  },
+  "include": ["docs/**/*.ts", "scripts/check-docs.ts"],
+  "exclude": ["**/dist/**"]
+}

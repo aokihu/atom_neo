@@ -9,7 +9,7 @@
 
 - **Core Side**: WebSocket server at `ws://host:port/ws/:sessionId`
 - **Gateway Side**: Message relay for platform Client subprocesses. Validates Client Secret for `/gateway/*` routes, forwards inbound messages to Core, polls task results, and pushes results back to Clients. WebSocket connections bypass Gateway and connect directly to Core.
-- **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
+- **TUI Side**: TUI 通过 `POST /api/tasks` 提交任务，并直连 Core 的 WebSocket 接收事件（localhost, no auth）
 - **Message Format**: JSON, one message per frame
 - **Session Routing**: Task-scoped `event.transport.*` and `event.decision.updated` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
 - **Session Path Encoding**: Clients must encode `sessionId` with `encodeURIComponent()` before placing it in `/ws/:sessionId` or `/api/sessions/:sessionId`. Core treats it as one URL path segment and applies `decodeURIComponent()` exactly once before Session lookup. Empty IDs, malformed percent escapes, and unencoded extra path segments are rejected with `400`.
@@ -50,6 +50,8 @@ Broadcaster 在进程生命周期内统一分配严格递增的 `seq`：
 `session.ready` 增加 `telemetry` 快照；`event.session.telemetry` 在 Session 成功保存后发送同一快照，按 Session 路由。字段为 `sessionId`、`rounds`（无预算为 null）与 `todos`（当前完整 TODO 列表）。`rounds` 仅包含 `goalId`、`globalUsed`、`globalAllowance`、`localUsed`、`localLimit` 和可选 `pause`、`completed`；`completed` 为已保存的目标完成标记，客户端据此将已用次数归零显示，真实计数不变。不传递目标正文、工具历史或待执行任务。已有客户端可忽略新增字段。连接断开后客户端显示 OFFLINE，重连以快照恢复。
 
 ### 3.1 `task.submit`
+
+> **TUI 提交方式**：当前 TUI `send()` 使用 `POST /api/tasks`，WebSocket 只接收事件。WS `event.task.submit` 仍受支持，并会使用 `payload.pipeline`（缺省为 `prediction`）；HTTP 与 WS 的 pipeline 选择行为一致。
 
 ```typescript
 {
@@ -336,6 +338,8 @@ Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客�
 
 ## 5. Pipeline Replay Events
 
+> **状态：未实现（规划中）。** `event.pipeline.replay-start` / `event.pipeline.replay-end` 只在共享协议类型中声明，当前没有 server 生产者；`replay.event` **未定义、未实现**，客户端不应依赖。
+
 ### 5.1 `replay.start`
 
 ```typescript
@@ -350,10 +354,10 @@ Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客�
 }
 ```
 
-### 5.2 `replay.event`
+### 5.2 `replay.event`（未实现）
 
 ```typescript
-// Emitted for each recorded event during replay
+// 规划中的事件；当前共享协议与 server 均未定义/发送
 {
   type: "replay.event",
   seq: 1,
@@ -405,9 +409,10 @@ export const ServerEventTypes = [
   "task.failed",
   "pong",
   "replay.start",
-  "replay.event",
   "replay.end",
 ] as const;
+
+// replay.event 未实现，不在共享协议中。
 
 export type ClientEventType = (typeof ClientEventTypes)[number];
 export type ServerEventType = (typeof ServerEventTypes)[number];

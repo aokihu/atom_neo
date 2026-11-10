@@ -195,7 +195,7 @@ graph LR
         D10["helpers: sleep/id/clamp..."]
         D11["Skill/Memory types x2-4"]
         D12["Event catalog x3"]
-        D13["docs/pages x33"]
+        D13["旧 JSX 页面 x33"]
     end
 
     subgraph Unified["目标统一模块"]
@@ -238,7 +238,7 @@ graph LR
 2. `tui-kit`（S5）
 3. `shared` 类型（S3）
 4. 事件目录（S6）
-5. 删除 `docs/pages`（S4）
+5. 删除旧 JSX 文档站（S4）
 
 ---
 
@@ -482,7 +482,7 @@ graph LR
 | CR-DUP-06 | helpers 多处 | S3 |
 | CR-DUP-07 | `shared/types`, `services`, `core/skills` | S3 |
 | CR-DUP-08 | `constants/events.ts`, `types/pipeline.ts`, `protocol.ts` | S6 |
-| CR-DUP-09 | `docs/pages`, `docs/server.tsx` | S4 |
+| CR-DUP-09 | 旧 JSX 文档站 | S4 |
 | CR-DUP-10 | 5 个测试文件 | S1/S3 |
 | CR-DUP-11 | `stream-llm.ts`, `tool-loop.ts` | S12 |
 | CR-DUP-12 | 消息投影多处 | S12 |

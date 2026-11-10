@@ -263,7 +263,7 @@ addModel / removeModelAt / parseContextLimit / parsePort / collectModelIds
 }
 ```
 
-根 `package.json` workspace：`"src/packages/config-tui"`（取代已删除的 `src/packages/setup-wizard`，Ink 依赖整体移除）。
+根 `package.json` workspace：`"src/packages/config-tui"`（取代已删除的 setup-wizard 包，Ink 依赖整体移除）。
 
 ## 相关文档
 

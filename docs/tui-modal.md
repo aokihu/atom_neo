@@ -6,7 +6,7 @@
 
 ## 概览
 
-`Modal` 是位于 `src/packages/tui/src/components/modal/` 的可复用浮层组件，独立于 chat store，UI 状态由调用方（当前为 `App.tsx`）局部持有。它在屏幕上以绝对定位覆盖整个终端区域，并通过全局键盘订阅接管按键，打开期间底部 `InputBar` 释放焦点。
+`Modal` 是位于 `src/packages/tui/src/components/modal/` 的可复用浮层组件，独立于 chat store，UI 状态由调用方（当前为 `components/App.tsx`）局部持有。它在屏幕上以绝对定位覆盖整个终端区域，并通过全局键盘订阅接管按键，打开期间底部 `InputBar` 释放焦点。
 
 ```
 ┌──────────────────────────────────────────────┐  ← 全屏 overlay (zIndex 1000)
@@ -148,19 +148,9 @@ Modal 有两种交互模式，由是否传入 `listLength` 决定：
 
 ## 命令面板（Command Palette）
 
-`CommandPalette`（`src/packages/tui/src/components/CommandPalette.tsx`）是基于 Modal **列表模式**构建的独立命令面板，替代旧的内联下拉菜单。
+> **状态：未接线。** `src/packages/tui/src/components/CommandPalette.tsx` 组件仍保留（代码审查禁区，暂不删除），但当前 `App` 没有 `paletteOpen` / `paletteSeed` / `anchorRef` 状态，也没有挂载它。输入 `/` 时由 `InputBar` 内联渲染 `CommandMenu`（`src/packages/tui/src/components/CommandMenu.tsx`）。
 
-**交互流程**：
-
-1. 用户在 `InputBar` 输入首字符 `/`，`InputBar` 调用 `onOpenPalette(seed)` 并清空输入框。
-2. `App` 持有 `paletteOpen` / `paletteSeed` 状态，在根节点渲染 `CommandPalette`，同时把 `InputBar` 置为 `disabled`（`textarea` 失焦）。
-3. **锚点定位**：`App` 用 `anchorRef`（指向 `InputBar` 内层输入框 box）作为锚点对象，`CommandPalette` 经 `el.screenX/screenY/width/height` 测得其屏幕矩形（首次打开 + 终端 `useOnResize` 重测），以 `anchorPosition="bottom-left"` / `position="bottom-left"` / `matchAnchorWidth` 传给 `Modal` —— 面板覆盖在输入框上、左对齐、满输入框宽。
-4. 面板内：
-   - **过滤**：`CommandPalette` 自身用全局 `useKeyboard` 收集可打印字符与 `Backspace`，构建 `filter`（无独立输入框元素，避免焦点争用）。
-   - **导航/执行/关闭**：交给 Modal 列表模式 —— `↑/↓` 切换、`Enter` 执行、`Esc` 关闭。
-5. 选中命令后 `onRun(cmd)` 由 `App` 分发到对应处理器（`/clear`、`/quit` 打开确认框；`/help`、`/compact` 直接执行），随后关闭面板，`InputBar` 恢复焦点。
-
-> 列表渲染复用既有 `CommandMenu`（高亮匹配子串 + 描述列）；过滤逻辑复用 `matchCommands`。两个全局 `useKeyboard`（面板过滤 vs Modal 导航）处理**互不相交**的按键，无冲突。
+`CommandPalette` 的设计基于 Modal 列表模式 + 锚点对齐；如果后续启用，入口应由 `InputBar` 的 `/` 触发，状态由 `components/App.tsx` 局部持有，打开期间 `InputBar` 禁用。当前实际行为以 `InputBar.tsx` 为准。
 
 ## 使用示例
 
@@ -196,7 +186,7 @@ const modalActions: ModalAction[] = [
 - Modal 状态属 UI 状态，放在 `App.tsx` 局部，**不进 chat store**。
 - **布局间距以 1 个单位为基准**：面板底部/两侧内边距为 1、`paddingTop={0}`（标题贴紧顶部边框）；标题用底部分隔线紧贴文字，内容无额外内边距，避免间距叠加。
 - 复用现有 `theme.colors`，不引入新颜色体系。
-- 命令面板复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。
+- 当前命令菜单由 `InputBar` 内联复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。`CommandPalette` 尚未接线。
 - 仅在 `open` 时拦截按键；关闭后 `InputBar` 自动恢复焦点。
 
 ## API Key 无效错误框

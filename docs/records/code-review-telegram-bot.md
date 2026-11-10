@@ -1,5 +1,7 @@
 # 代码审查报告 — Telegram Bot Client 分支
 
+> **状态**: 历史代码审查快照，不代表当前实现；当前设计见 [文档索引](../index.md)。
+
 > **审查范围**: `clients/telegram-bot/`、`src/packages/gateway/`、`src/main.ts`、`src/bootstrap/config.ts`
 > **审查日期**: 2026-07-23
 > **审查分支**: `feature/telegram-bot-client`

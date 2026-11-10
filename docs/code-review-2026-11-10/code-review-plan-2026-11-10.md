@@ -15,7 +15,7 @@
 | 决策 | 结论 | 影响 |
 |---|---|---|
 | Node.js 支持 | **正式支持目标** | 需要运行时标准化、Node HTTP/WS、构建/CI |
-| Web 文档 | **不保留现有 Web 页面**；需要 HTTP server 把 Markdown 渲染成 HTML | 删除 `docs/pages` + React SSR，新增 `node:http` 渲染服务 |
+| Web 文档 | **不保留现有 Web 页面**；需要 HTTP server 把 Markdown 渲染成 HTML | 删除旧 JSX 文档站 + React SSR，新增 `node:http` 渲染服务 |
 | 未实现 Element | **暂时不动** | 5 个兼容 Element、follow-up、Replay、PipelineRunner/Manager 保持原样 |
 | 多 Provider | **需要** | 新增 Provider 工厂、配置 protocol、Prompt 语言、Provider options |
 
@@ -202,21 +202,28 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-DUP-09`/`CR-DOC-01`：删除 `docs/pages/`、`docs/components/`、`docs/shared.ts`、`docs/server.tsx`。
-- [ ] 新建 `docs/server.ts`：
-  - `node:http` + `marked`（或 `markdown-it`）+ `highlight.js`。
+- [x] `CR-DUP-09`/`CR-DOC-01`：删除旧 JSX 文档站（pages/components/shared/server.tsx）。
+- [x] 新建 `docs/server.ts`：
+  - `node:http` + `marked` + `marked-highlight` + `highlight.js`。
   - `/` 渲染 `docs/index.md`；路径映射到 `.md`。
   - 相对链接重写；路径穿越防护；静态 CSS。
-  - 可选 `--watch`（`fs.watch`）。
-- [ ] `CR-DOC-02`：新建 `docs/records/`，移入验收/实验/计划记录。
-- [ ] `CR-DOC-03/04/05`：合并 Context、启动、Skill 重复文档。
-- [ ] `CR-DOC-06..08`：修正 architecture/configuration/protocol 的失真声明。
-- [ ] `CR-DOC-09/10`：修正失效 `src/` 路径、索引状态。
-- [ ] 新增 `scripts/check-docs.ts`：Markdown 链接 + `src/` 路径 + Element 名称。
+  - `--watch` 未实现；刷新页面即可看到 Markdown 更新。
+- [x] `CR-DOC-02`：新建 `docs/records/`，移入验收/实验/计划记录。
+- [ ] `CR-DOC-03/04/05`：合并 Context、启动、Skill 重复文档。本轮仅完成归档、索引与状态清理，未合并正文。
+- [x] `CR-DOC-06..08`：修正 architecture/configuration/protocol 的失真声明（本轮为定向修正）。
+- [x] `CR-DOC-09/10`：修正失效 `src/` 路径、索引状态（本轮覆盖 `check-docs` 可验证范围）。
+- [x] 新增 `scripts/check-docs.ts`：Markdown 链接 + 反引号 `src/` 路径。
+
+**实施记录（2026-11-11）**：
+
+- 文档服务统一为 `docs/server.ts`（marked 18 + marked-highlight 2 + highlight.js），删除 React SSR 站点；Bun 与 Node 26 启动同一路由。
+- 新增 `docs/assets/docs.css`、`docs/server.test.ts`、`scripts/check-docs.ts`；`docs`/`docs:node`/`docs:check` 脚本更新。
+- 历史验收/实验记录移入 `docs/records/`；`docs/index.md` 与全部相对链接同步。
+- 根 `tsconfig.json` 保持原状；新增 `tsconfig.docs.json` 与 `docs:typecheck` 仅检查 docs/scripts，避免用根配置隐藏 `src/` 的既有类型问题；workspace 类型检查仍由各包负责。
 
 **验收**：
 - `bun run docs` 与 Node 启动同一服务，输出一致。
-- 删除 `docs/pages` 后无 React 文档依赖。
+- 删除旧 JSX 文档站后无 React 文档依赖。
 - `check-docs` 通过。
 
 **风险/回滚**：中；纯文档，独立 PR，可 revert。
@@ -229,7 +236,7 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-DUP-01/02`：新建 `src/packages/tui-kit`：
+- [ ] `CR-DUP-01/02`：新建 `@atom-neo/tui-kit` 工作区包：
   - 主题清单 + `ThemeProvider/useTheme/ThemeContext`。
   - `Modal`、`ModalActionBar`、`types`、`ListModal`、`SelectableRow`、`FieldInput`。
 - [ ] `tui` 与 `config-tui` 改为依赖 `tui-kit`，删除副本。
@@ -525,7 +532,7 @@ bun run scripts/check-file-headers.ts
 | S1 | 按文件 revert | 局部修复 |
 | S2 | 按 2a/2b/2c 拆分 revert | S2c SQLite 可回退 `bun:sqlite` |
 | S3 | 保留旧配置读取路径一个版本 | 双写/双读过渡 |
-| S4 | 恢复 `docs/pages` | 删除前先打 tag |
+| S4 | 从 git 恢复旧 JSX 文档站 | 删除前先打 tag |
 | S5 | 保留旧 Modal 一个版本 | 先接入再删除 |
 | S6 | 保留旧事件常量映射 | 双发/双读过渡 |
 | S7 | 配置 protocol 默认推断 | 旧配置不破坏 |
@@ -557,7 +564,7 @@ bun run scripts/check-file-headers.ts
 | S1 | 已完成 | — | CR-COR-01..11 全部处理；测试 1453 pass / 21 skip / 0 fail；新增 service-manager/index 测试 |
 | S2 | 已完成 | — | CR-RUN-01..05（非 Server）全部处理；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；新增 `string-width`、`croner`；Node smoke 通过；版本 1.22.2；剩余 `Bun.serve`/`Bun.Server` 待 S9 |
 | S3 | 已完成 | — | 共享配置契约、env/原子写/helpers、类型收口；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
-| S4 | 未开始 | — | 文档 |
+| S4 | 已完成 | — | Markdown → HTML 服务；删除 JSX 文档站；records 归档；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；版本 1.22.4 |
 | S5 | 未开始 | — | TUI kit |
 | S6 | 未开始 | — | 事件/提交 |
 | S7 | 未开始 | — | Provider |

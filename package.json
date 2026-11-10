@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.22.3",
+  "version": "1.22.4",
   "engines": {
     "node": ">=24",
     "bun": ">=1.4"
@@ -17,8 +17,10 @@
     "dev:gateway": "bun run src/main.ts --mode core-gateway --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
     "config": "bun run src/main.ts --config --sandbox ./sandbox",
-    "docs": "bun run --watch docs/server.tsx",
-    "docs:dev": "bun run docs/server.tsx",
+    "docs": "bun run docs/server.ts",
+    "docs:node": "node docs/server.ts",
+    "docs:check": "bun run scripts/check-docs.ts",
+    "docs:typecheck": "tsc -p tsconfig.docs.json",
     "test": "bun test",
     "typecheck": "bun run --workspaces typecheck",
     "build": "bun run --workspaces build",
@@ -39,11 +41,14 @@
     "@opentui/react": "0.5.8",
     "ai": "^7.0.79",
     "highlight.js": "^11.12.0",
+    "marked": "^18.2.0",
+    "marked-highlight": "^2.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.14",
     "typescript": "^7.0.2",
     "zod": "^4.4.3"
   },

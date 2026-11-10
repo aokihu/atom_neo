@@ -1,6 +1,8 @@
 # 启动模式与 Session 发起者实施计划
 
 > **Purpose**: 明确 Core 常驻、独立 TUI attach、Gateway Client 控制和 Session 发起者的分阶段实施契约。
+>
+> **状态**: 历史记录。Web 页面已删除，当前文档只维护 Markdown，并由 `docs/server.ts` 渲染。
 
 ## 2026-09-17：显式继续上次会话
 
@@ -18,7 +20,7 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧
 
 2026-09-13：验收完成，部分通过。常规测试 1036 项通过；10 项隔离进程测试 8 通过、2 失败（冷启动全局定时任务、取消首次向导）。业务代码未在验收中修改；详见 [验证报告](./startup-validation.md)。下文 2026-09-12 的“待验收”说明为开发阶段记录。
 
-代码已实现，等待用户指令验收。已完成五模式分流、本机 TUI attach、Session initiator/lastTuiUsedAt 持久化、默认 TUI 会话恢复、Gateway 单个/全部 Client 启停与异步关闭。
+代码已实现。已完成五模式分流、本机 TUI attach、Session initiator/lastTuiUsedAt 持久化、默认 TUI 会话恢复、Gateway 单个/全部 Client 启停与异步关闭；历史验收结果见 [验证报告](./startup-validation.md)。
 
 本轮采用 --action start|stop；保留 full 为 core-gateway 兼容别名。core-server/core-port 必填，完整 attach 当前只支持 localhost/127.0.0.1/::1，使用 --sandbox 指向运行实例的管理凭据文件。Gateway 控制同样通过 sandbox 发现已有服务。
 
@@ -130,9 +132,9 @@ ClientManager 增加按 ID start/stop/list 和期望运行状态，复用现有 
 
 ## 文档与检查
 
-Markdown 与专用 Web 页面同时更新，Web 使用表格、阶段流程及状态说明，不运行时引用 Markdown 正文。执行文档 SSR 检查与 git diff --check；开发阶段再运行 CLI、Session、WS、ClientManager 相关测试及类型检查，最后执行上述进程级验收。
+历史阶段曾同时维护专用 Web 页面；该双轨已删除，当前仅维护 Markdown。执行 `bun run docs:check` 与 `git diff --check`；开发阶段再运行 CLI、Session、WS、ClientManager 相关测试及类型检查，最后执行上述进程级验收。
 
-相关文档： [启动](./bootstrap.md)、[会话](../core/session.md)、[Gateway](../communication/gateway.md)。
+相关文档： [启动](../overview/bootstrap.md)、[会话](../core/session.md)、[Gateway](../communication/gateway.md)。
 
 ## v1.21.0 补充
 

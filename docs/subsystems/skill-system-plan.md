@@ -1,5 +1,7 @@
 # Skill System — 开发计划
 
+> **状态**：历史开发计划，已按阶段实施；当前实现与使用方式见 [skill-system.md](./skill-system.md)。
+>
 > **原则**：测试先行，每阶段先写测试（红），再实现（绿）。完成全部阶段后统一验证 typecheck。
 
 ---
@@ -201,7 +203,7 @@ export type SkillServiceLike = {
 | `src/packages/core/src/pipelines/conversation/elements/format-system-messages.ts` | 拼接 `skillContext` 到 parts |
 | `src/packages/core/src/pipelines/conversation/elements/index.ts` | 导出 `InjectSkillContextElement` |
 | `src/packages/core/src/pipelines/conversation/index.ts` | 注册 element 名称，pipeline 链路插入 `.transform("inject-skill-context", {skillService})` |
-| `src/packages/shared/src/prompts/system.md` | 添加 `<available_skills>` + tool 使用说明 |
+| `src/packages/shared/src/prompts/registry.ts` | 注册/组装 skill 上下文提示（实现时未新增独立 `system.md`） |
 
 ### 测试
 - 运行 `bun test` 确保已有测试不受影响

@@ -757,9 +757,9 @@ export type ServerEvent =
 
 ---
 
-### CR-DUP-09 — docs/pages 与 Markdown 双轨
+### CR-DUP-09 — 旧 JSX 文档站与 Markdown 双轨
 
-**位置**: `docs/pages/*.tsx`（33 文件、6493 行）、`docs/server.tsx`
+**位置**: 旧 JSX 文档站（33 文件、6493 行）与 React SSR server
 
 **当前**:
 
@@ -779,7 +779,7 @@ export default function DocPage({ content, title, description, category }: DocPa
 
 **问题**: 32/33 页面忽略 Markdown `content`；修改 `.md` 不影响 Web 页面；与 `docs/index.md` “Markdown 唯一来源”矛盾。
 
-**目标**: 删除 `docs/pages`、`docs/components`、`docs/shared.ts`、`docs/server.tsx`；新建 `docs/server.ts`，用 `node:http` + `marked`（或 `markdown-it`）+ `highlight.js` 直接渲染 Markdown。
+**目标**: 删除旧 JSX 文档站；新建 `docs/server.ts`，用 `node:http` + `marked` + `marked-highlight` + `highlight.js` 直接渲染 Markdown。
 
 ---
 
@@ -1007,24 +1007,24 @@ this.report(BusEvents.Element.Data, { step: "model-step-ended" });
 ### CR-DOC-01 — 删除 Web 页面双轨，保留 Markdown → HTML 服务
 
 **现状**:
-- `docs/pages/` 33 文件 / 6493 行，32 个页面忽略 `content`。
-- `docs/components/`、`docs/shared.ts`、`docs/server.tsx` 依赖 React SSR。
+- 旧 JSX 文档站 33 文件 / 6493 行，32 个页面忽略 `content`。
+- React SSR 组件与共享模块依赖 React。
 - `docs/index.md` 声明 Markdown 唯一来源，但 Web 页面仍硬编码。
 
 **目标**:
-- 删除 `docs/pages/`、`docs/components/`、`docs/shared.ts`、`docs/server.tsx`。
+- 删除旧 JSX 文档站（pages/components/shared/server.tsx）。
 - 新建 `docs/server.ts`：`node:http` + `marked`/`markdown-it` + `highlight.js`；路由直接读 `.md`；相对链接重写；路径穿越防护；可选 `--watch`。
 - 新增 `scripts/check-docs.ts`：检查 Markdown 链接与反引号 `src/` 路径。
 
 ### CR-DOC-02 — 设计文档与历史记录混放
 
 建议新增 `docs/records/`，移入:
-- `overview/startup-validation.md`
-- `overview/startup-modes-plan.md`（契约部分并入 `bootstrap.md`）
-- `context-snapshot-cache-plan.md`
-- `pipelines/continuation-validation.md`
-- `pipelines/progress-evidence-experiment.md`
-- `clients/code-review-telegram-bot.md`
+- `records/startup-validation.md`
+- `records/startup-modes-plan.md`（契约部分并入 `bootstrap.md`）
+- `records/context-snapshot-cache-plan.md`
+- `records/continuation-validation.md`
+- `records/progress-evidence-experiment.md`
+- `records/code-review-telegram-bot.md`
 
 ### CR-DOC-03 — Context 三篇重叠
 
@@ -1077,10 +1077,10 @@ this.report(BusEvents.Element.Data, { step: "model-step-ended" });
 ### CR-DOC-09 — 约 36 处 `src/...` 路径不存在
 
 示例:
-- `src/packages/core/pipeline/runner.ts`（实际在 shared）
-- `src/packages/tui/src/app.ts`（实际 `app.tsx`）
-- `src/packages/tui/src/components/StatusBar.ts`（实际 `.tsx`）
-- `src/packages/core/src/tools/adapters/mcp-tool.ts`（不存在）
+- 'src/packages/core/pipeline/runner.ts'（旧路径；现为 `src/packages/shared/src/pipeline/runner.ts`）
+- 'src/packages/tui/src/app.ts'（旧路径；现为 `src/packages/tui/src/app.tsx`）
+- 'src/packages/tui/src/components/StatusBar.ts'（旧路径；现为 `src/packages/tui/src/components/StatusBar.tsx`）
+- 'src/packages/core/src/tools/adapters/mcp-tool.ts'（旧路径，当前无该适配器文件）
 
 **目标**: 文档路径检查脚本；修正 `.ts`/`.tsx` 与旧目录。
 
@@ -1677,7 +1677,7 @@ const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "ll
 
 ### CR-STR-11 — `tui-kit` 抽取
 
-见 CR-DUP-01/02/05；新包 `src/packages/tui-kit`。
+见 CR-DUP-01/02/05；新包 `@atom-neo/tui-kit`（S5 规划）。
 
 ---
 
@@ -1713,10 +1713,10 @@ const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "ll
 | `src/packages/shared/src/constants/events.ts` | 87 | CR-DUP-08 | 单一事件源 |
 | `src/packages/shared/src/types/pipeline.ts` | ~145 | CR-DUP-08 | 类型派生 |
 | `src/packages/shared/src/protocol.ts` | ~160 | CR-DUP-08, CR-DOC-08 | 删除/派生 |
-| `docs/pages/*.tsx` | 6493 | CR-DUP-09, CR-DOC-01 | 删除 |
-| `docs/server.tsx` | ~280 | CR-DOC-01 | 删除/替换 |
-| `docs/components/*` | — | CR-DOC-01 | 删除 |
-| `docs/shared.ts` | — | CR-DOC-01 | 删除 |
+| `pages/*.tsx` | 6493 | CR-DUP-09, CR-DOC-01 | 删除 |
+| `server.tsx` | ~280 | CR-DOC-01 | 删除/替换 |
+| `components/*` | — | CR-DOC-01 | 删除 |
+| `shared.ts` | — | CR-DOC-01 | 删除 |
 | `src/packages/tui/src/theme.ts` | ~150 | CR-DUP-02 | 移入 tui-kit |
 | `src/packages/config-tui/src/theme.tsx` | ~100 | CR-DUP-02 | 删除副本 |
 | `src/packages/tui/src/components/modal/*` | ~300 | CR-DUP-01, CR-ARCH-05 | 移入 tui-kit |
@@ -1786,3 +1786,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-10 | S0/S1 实施完成：P0 CR-COR-01..11；typecheck/build 5/5，测试 1453 pass / 21 skip / 0 fail；版本 1.22.1 |
 | 2026-11-10 | S2 实施完成（非 Server）：CR-RUN-01..05；`Bun.write/env/argv/sleep/stringWidth/main/spawn/Glob/cron`、`bun:sqlite` 全部迁移；新增 `string-width`、`croner`；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；版本 1.22.2 |
 | 2026-11-11 | S3 实施完成：共享配置契约、env/原子写/helpers、Skill/MemoryKind/Todo 类型收口；`config-tui`/`gateway` 使用 shared；删除顶层 `theme`；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
+| 2026-11-11 | S4 实施完成：删除 JSX 文档站，新增 `marked` Markdown → HTML 服务；records 归档；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；测试 1612 pass / 21 skip / 0 fail（源码 916）；版本 1.22.4 |

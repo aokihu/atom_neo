@@ -4,7 +4,7 @@
 
 `atom menu` 在 Core/配置服务初始化前进入普通终端向导，最后一步自动执行原有启动入口。支持回退、参数回填及失败重试，成功后不返回菜单。历史固定为 `~/.config/atom/menu_history.json`，仅在成功就绪后保存；详见 [startup-menu.md](../subsystems/startup-menu.md)。
 
-> **Purpose**: 当前启动行为与待实施的五模式启动、TUI attach 和资源关闭契约。
+> **Purpose**: 当前启动行为与五模式启动、TUI attach 和资源关闭契约。
 
 ## 2026-09-17：显式继续上次会话
 
@@ -18,20 +18,20 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧
 
 ## 开发进度（2026-09-12）
 
-代码已实现，等待用户指令验收。已完成五模式分流、本机 TUI attach、Session initiator/lastTuiUsedAt 持久化、默认 TUI 会话恢复、Gateway 单个/全部 Client 启停与异步关闭。
+代码已实现，历史验收结果见 [验收记录](../records/startup-validation.md)。已完成五模式分流、本机 TUI attach、Session initiator/lastTuiUsedAt 持久化、默认 TUI 会话恢复、Gateway 单个/全部 Client 启停与异步关闭。
 
 本轮采用 --action start|stop；保留 full 为 core-gateway 兼容别名。core-server/core-port 必填，完整 attach 当前只支持 localhost/127.0.0.1/::1，使用 --sandbox 指向运行实例的管理凭据文件。Gateway 控制同样通过 sandbox 发现已有服务。
 
 已落地接口：POST /api/tui/attach（本机管理认证，返回 sessionId/serverInfo）、POST /admin/clients（本机管理认证，action + 可选 clientId）。WS session.ready 同步消息、contextTokens 和 activeTaskIds，复用同步握手避免订阅/快照窗口；不提供离线 token 回放。
 
-基础检查：各 workspace 类型检查通过，入口外置依赖打包通过。完整打包受到本机缺少其他平台 OpenTUI 原生包影响，尚未通过。不运行单元测试、真实 Core/TUI/Gateway/Client 或进程级验收；这些等待用户指令。尚未提交或推送。
+基础检查（开发阶段记录）：各 workspace 类型检查通过，入口外置依赖打包通过。完整打包受到本机缺少其他平台 OpenTUI 原生包影响，当时尚未通过。后续进程级验收结果见 [验收记录](../records/startup-validation.md)。
 
 验收重点保留：首次配置、监听失败清理、attach/detach、磁盘恢复与并发首次 attach、Client 健康就绪与崩溃退避/手动停止、关闭等待、来源冲突及历史 unknown。Core HTTP 监听失败复用 stop 清理；更早初始化失败路径仍需验收关注。
 
 
 ## 设计记录
 
-2026-09-12：本文已按讨论更新设计，原设计记录，最新开发状态见上节。完整分阶段计划见 [启动模式计划](./startup-modes-plan.md)。
+2026-09-12：本文已按讨论更新设计，原设计记录，最新开发状态见上节。完整分阶段计划见 [启动模式计划](../records/startup-modes-plan.md)。
 
 ## 改造前代码基线
 
@@ -44,7 +44,7 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。以下旧
 
 当前 port 参数默认 0，但 main 使用 args.port || 3100；不能据帮助宣称随机端口。Core shutdown 已做调度停止、后台任务清理、任务 drain 和 Session checkpoint。TUI 当前直接 process.exit，Gateway.stop 当前未等待 Clients；这两处需要修复。
 
-## 模式契约（已实现，待验收）
+## 模式契约（已实现）
 
 | 参数 | 行为 |
 |------|------|
@@ -117,7 +117,7 @@ Core 独立拥有 ScheduleService/HookManager。global 仅表示定义跨重启�
 
 验收覆盖：五模式分流、无界面定时执行、TUI attach/detach/重启恢复、非法参数无副作用、关闭无遗留。当前健康接口仅报告 status/uptime/queue，新的运行信息接口不能假定这些信息已经存在。
 
-相关文档：[计划](./startup-modes-plan.md)、[Session](../core/session.md)、[Gateway](../communication/gateway.md)、[配置](../subsystems/configuration.md)。
+相关文档：[计划](../records/startup-modes-plan.md)、[Session](../core/session.md)、[Gateway](../communication/gateway.md)、[配置](../subsystems/configuration.md)。
 
 ## 首次向导子进程修正（2026-09-12）
 
@@ -125,4 +125,4 @@ Core 独立拥有 ScheduleService/HookManager。global 仅表示定义跨重启�
 
 编译后的 Bun 入口位于虚拟 `/$bunfs/` 路径，`process.argv[1]` 也指向该虚拟路径，不能作为可执行入口。`bootstrap/cli.ts` 据此区分：编译二进制以 `process.execPath + --wizard + --sandbox` 启动自身；Bun 源码用 `bun run <entrypoint>`；Node 直接运行入口脚本，不加 `run`。运行时检测不依赖 `Bun.main`。向导使用 parseArguments 已解析的 args.sandbox，兼容空格与等号参数写法。
 
-依据：[Bun 可执行文件与虚拟文件系统](https://bun.sh/docs/bundler/executables)。本修正只做定向启动验证，完整验收仍等待用户指令。
+依据：[Bun 可执行文件与虚拟文件系统](https://bun.sh/docs/bundler/executables)。本修正只做定向启动验证；完整验收记录见 [启动模式计划](../records/startup-modes-plan.md) 与 [验收记录](../records/startup-validation.md)。

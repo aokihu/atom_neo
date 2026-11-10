@@ -2,7 +2,7 @@
 
 > **Purpose**: 定义 Agent Context 的分层所有权、Snapshot 注入、事务消费、自动卸载和可观测性。
 
-> 已采用静态普通文本与动态 TOON。实施与实测边界见 [缓存优化方案](./context-snapshot-cache-plan.md)。
+> 已采用静态普通文本与动态 TOON。实施与实测边界见 [缓存优化方案](./records/context-snapshot-cache-plan.md)。
 > 文档以 Markdown 为准，不再维护 HTML/Web 版本。
 
 ## 1. 核心原则
