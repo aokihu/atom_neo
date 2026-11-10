@@ -182,7 +182,7 @@ src/packages/config-tui/
 ```
 
 Launched by `src/main.ts` (`--wizard` early-exit branch) and by
-`src/bootstrap/first-run.ts` via `Bun.spawn` for first-run detection.
+`src/bootstrap/first-run.ts` via shared `spawnProcess` for first-run detection.
 It does not import any code from `@atom-neo/tui` — the wizard UI is fully
 self-contained; responsibilities of the two packages stay independent.
 It participates in the root `bun run --workspaces build` contract with

@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { spawnProcess } from "@atom-neo/shared";
+import type { ProcessHandle } from "@atom-neo/shared";
 import { buildAppCommand } from "./cli";
 
 export function isFirstRun(sandboxPath: string): boolean {
@@ -8,15 +10,19 @@ export function isFirstRun(sandboxPath: string): boolean {
 export function markInstalled(sandboxPath: string): void {
   const installedPath = `${sandboxPath}/.atom/installed`;
   mkdirSync(`${sandboxPath}/.atom`, { recursive: true });
-  Bun.write(installedPath, "");
+  writeFileSync(installedPath, "", "utf8");
 }
 
 export function buildWizardCommand(sandboxPath: string): string[] {
   return buildAppCommand(["--wizard", "--sandbox", sandboxPath]);
 }
 
-function spawnWizard(sandboxPath: string): Bun.Subprocess {
-  return Bun.spawn(buildWizardCommand(sandboxPath), { stdio: ["inherit", "inherit", "inherit"] });
+function spawnWizard(sandboxPath: string): ProcessHandle {
+  return spawnProcess(buildWizardCommand(sandboxPath), {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
 }
 
 export async function runFirstRunWizard(sandboxPath: string): Promise<void> {

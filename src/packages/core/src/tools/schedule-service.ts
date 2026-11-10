@@ -1,4 +1,5 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
+import { Cron } from "croner";
 import { TaskSource } from "@atom-neo/shared";
 import type { ScheduledTask, Logger, TaskItem } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
@@ -6,8 +7,6 @@ import { createTaskItem } from "../task-factory";
 
 interface CronJob {
   stop(): void;
-  ref(): void;
-  unref(): void;
 }
 
 type TimerHandle = ReturnType<typeof setTimeout>;
@@ -16,6 +15,19 @@ let nextScheduleId = 0;
 
 function generateId(): string {
   return `schedule-${Date.now()}-${nextScheduleId++}`;
+}
+
+function nextCronFireAt(schedule: string): number | undefined {
+  try {
+    const job = new Cron(schedule, { paused: true });
+    try {
+      return job.nextRun()?.getTime();
+    } finally {
+      job.stop();
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 export class ScheduleService {
@@ -53,7 +65,7 @@ export class ScheduleService {
     const schedule = task.schedule ?? "";
     const delayMs = task.delayMs ?? 0;
     const intervalMs = task.intervalMs ?? 0;
-    const nextFireAt = task.nextFireAt ?? (type === "delay" ? now + delayMs : type === "interval" ? now + intervalMs : Bun.cron.parse(schedule)?.getTime());
+    const nextFireAt = task.nextFireAt ?? (type === "delay" ? now + delayMs : type === "interval" ? now + intervalMs : nextCronFireAt(schedule));
 
     const record: ScheduledTask = {
       id: generateId(),
@@ -111,7 +123,7 @@ export class ScheduleService {
         const now = Date.now();
         task.nextFireAt = task.type === "delay" ? now + task.delayMs
           : task.type === "interval" ? now + task.intervalMs
-          : Bun.cron.parse(task.schedule)?.getTime();
+          : nextCronFireAt(task.schedule);
         this.#startJob(task);
       }
     }
@@ -170,7 +182,7 @@ export class ScheduleService {
         task.nextFireAt += (Math.floor((now - task.nextFireAt) / task.intervalMs) + 1) * task.intervalMs;
       }
     } else {
-      task.nextFireAt = Bun.cron.parse(task.schedule)?.getTime();
+      task.nextFireAt = nextCronFireAt(task.schedule);
     }
     if (task.type === "delay") {
       this.#startDelay(task);
@@ -183,7 +195,7 @@ export class ScheduleService {
 
   #startCron(task: ScheduledTask): void {
     try {
-      const job = Bun.cron(task.schedule, () => this.#fire(task));
+      const job = new Cron(task.schedule, () => this.#fire(task));
       this.#jobs.set(task.id, job);
     } catch (err) {
       this.#logger.error("failed to start cron job", { id: task.id, name: task.name, error: String(err) });
@@ -217,7 +229,7 @@ export class ScheduleService {
     if (this.#stopped || !task.enabled || !this.#tasks.has(task.id)) return;
     task.lastFiredAt = Date.now();
     if (task.type === "cron") {
-      task.nextFireAt = Bun.cron.parse(task.schedule)?.getTime();
+      task.nextFireAt = nextCronFireAt(task.schedule);
     }
     this.#persist();
     this.#logger.info("schedule task fired", { id: task.id, name: task.name, type: task.type });

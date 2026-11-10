@@ -123,6 +123,6 @@ Core 独立拥有 ScheduleService/HookManager。global 仅表示定义跨重启�
 
 取消配置必须结束当前启动：首次向导收到 Ctrl+C、Ctrl+D、EOF 或取消操作时，以失败状态退出，不写入 installed 标记，不启动 Core/TUI。只有保存成功才允许继续首次启动。独立 --config 取消后正常退出配置界面，也不启动 Core。销毁界面本身不代表配置成功。
 
-编译后的 Bun 虚拟文件路径仍可被 existsSync 判为存在，不能据此判断源码模式。二进制应以 process.execPath + --wizard + --sandbox 启动自身；源码模式应运行 Bun.main 主入口，而不是 bootstrap/first-run.ts 模块。向导使用 parseArguments 已解析的 args.sandbox，兼容空格与等号参数写法。
+编译后的 Bun 入口位于虚拟 `/$bunfs/` 路径，`process.argv[1]` 也指向该虚拟路径，不能作为可执行入口。`bootstrap/cli.ts` 据此区分：编译二进制以 `process.execPath + --wizard + --sandbox` 启动自身；Bun 源码用 `bun run <entrypoint>`；Node 直接运行入口脚本，不加 `run`。运行时检测不依赖 `Bun.main`。向导使用 parseArguments 已解析的 args.sandbox，兼容空格与等号参数写法。
 
-依据：[Bun 可执行文件与虚拟文件系统](https://bun.sh/docs/bundler/executables)、[Bun.main 主入口](https://bun.sh/docs/runtime/utils)。本修正只做定向启动验证，完整验收仍等待用户指令。
+依据：[Bun 可执行文件与虚拟文件系统](https://bun.sh/docs/bundler/executables)。本修正只做定向启动验证，完整验收仍等待用户指令。

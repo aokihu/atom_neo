@@ -552,7 +552,7 @@ type Hook = {
 
 | 类型 | 实现 | 参数 | 行为 |
 |------|------|------|------|
-| `cron` | `Bun.cron()` | `schedule` (cron 表达式) | 按 cron 重复执行 |
+| `cron` | `croner` (`Cron`) | `schedule` (cron 表达式) | 按 cron 重复执行 |
 | `delay` | `setTimeout()` | `delayMs` (毫秒) | 一次性延时，执行后自动移除 |
 | `interval` | `setInterval()` | `intervalMs` (毫秒) | 按间隔重复执行 |
 
@@ -685,9 +685,9 @@ export const backgroundShellTool: ToolDefinition = {
 };
 ```
 
-两者复用同一套 `Bun.spawn(["sh", "-c", command])` 与有界输出收集。`shell` 等待完成并继承
+两者复用同一套 `spawnProcess(["sh", "-c", command])` 与有界输出收集。`shell` 等待完成并继承
 当前 Task 的 `AbortSignal`；`background_shell` 立即返回 `jobId` 和 `pid`，使用
-`Subprocess.exited` 在后台等待。命令成功或失败后均通过现有
+`ProcessHandle.exited` 在后台等待。命令成功或失败后均通过现有
 `InternalTaskOrchestrator.scheduleConversation()` 创建独立的内部 Task。后台 Job 不调用
 `unref()`，Core 关闭时由 Service 统一终止，因此不会产生无法回传完成状态的孤儿进程。
 

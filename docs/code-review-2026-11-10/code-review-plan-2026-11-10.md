@@ -127,30 +127,39 @@
 
 #### S2a 轻量替换（1–2 天）
 
-- [ ] `CR-RUN-01`：`Bun.write` → `writeFileSync` / `fs.promises.writeFile`。
-- [ ] `CR-RUN-02`：`Bun.env` → `process.env`。
-- [ ] `CR-RUN-03`：`Bun.argv` → `process.argv`。
-- [ ] `CR-RUN-04`：`Bun.sleep` → shared `sleep`；`Bun.stringWidth` → `string-width`。
-- [ ] `Bun.main` → `import.meta.main` / `process.argv[1]`。
+- [x] `CR-RUN-01`：`Bun.write` → `writeFileSync` / `fs.promises.writeFile`。
+- [x] `CR-RUN-02`：`Bun.env` → `process.env`。
+- [x] `CR-RUN-03`：`Bun.argv` → `process.argv`。
+- [x] `CR-RUN-04`：`Bun.sleep` → shared `sleep`；`Bun.stringWidth` → `string-width`。
+- [x] `Bun.main` → `import.meta.main` / `process.argv[1]`。
 
 #### S2b 进程/文件/定时（2–3 天）
 
-- [ ] `CR-RUN-02`：`Bun.spawn`/`Bun.Subprocess` → `node:child_process` + `ProcessHandle`。
-- [ ] `CR-RUN-03`：`Bun.Glob` → `fs.glob` / `fs.globSync`。
-- [ ] `CR-RUN-04`：`Bun.cron` → `croner`。
-- [ ] 涉及：`bootstrap/first-run.ts`、`gateway/client-manager`、`tools/builtin/shell.ts`、`builtin/fs.ts`、`tools/schedule-service.ts`。
+- [x] `CR-RUN-02`：`Bun.spawn`/`Bun.Subprocess` → `node:child_process` + `ProcessHandle`。
+- [x] `CR-RUN-03`：`Bun.Glob` → `fs.glob` / `fs.globSync`。
+- [x] `CR-RUN-04`：`Bun.cron` → `croner`。
+- [x] 涉及：`bootstrap/first-run.ts`、`gateway/client-manager`、`tools/builtin/shell.ts`、`builtin/fs.ts`、`tools/schedule-service.ts`。
 
 #### S2c SQLite（3–4 天，单独 PR）
 
-- [ ] `CR-RUN-05`：`bun:sqlite` → `node:sqlite` 包装器。
-- [ ] 保留 `run/prepare/get/all/exec/close` 语义。
-- [ ] 验证 FTS5、WAL、事务、参数绑定。
-- [ ] 若最低 Bun < 1.4，保留临时 Bun/Node 分支并记录移除条件。
+- [x] `CR-RUN-05`：`bun:sqlite` → `node:sqlite` 包装器。
+- [x] 保留 `run/prepare/get/all/exec/close` 语义。
+- [x] 验证 FTS5、WAL、事务、参数绑定。
+- [x] 若最低 Bun < 1.4，保留临时 Bun/Node 分支并记录移除条件。
+
+**实施记录（2026-11-10）**：
+
+- 新增 `shared/src/utils/process.ts`：`spawnProcess` / `ProcessHandle`，统一 first-run、Gateway Client 与 Shell 的子进程语义。
+- 新增 `shared/utils` 的 `stringWidth`（依赖 `string-width@8.3.0`）；`menu.ts` 不再使用 `Bun.stringWidth`。
+- `bootstrap/cli.ts` 用 `process.argv[1]` / `process.versions.bun` 区分 Bun 源码、Bun 编译二进制与 Node；编译态帮助仍显示 `atom`。
+- `fs.glob` 使用 `withFileTypes` 过滤目录，保留相对路径、cwd、500 上限与排序。
+- `croner@11.0.0` 替换 `Bun.cron`；暂停实例用于解析 next run，`stop()` 保留服务停止语义。
+- `services/sqlite-database.ts` 封装 `node:sqlite`（布尔/undefined 参数归一化、嵌套事务 savepoint、`changes` 数值化）；MemoryService 与测试改用包装器。
 
 **验收**：
 ```bash
 rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
-# 期望：仅剩 Bun.serve / ServerWebSocket（S9 处理）
+# 仅剩 Bun.serve / Bun.Server 与 fixtures/gateway-client.ts（S9 处理）
 ```
 - Node 下 config、memory、shell、glob、schedule smoke 通过。
 
@@ -546,7 +555,7 @@ bun run scripts/check-file-headers.ts
 |---|---|---|---|
 | S0 | 已完成 | — | 基线：typecheck/build 5/5；测试 1430 pass / 21 skip / 0 fail；Node 26 + Bun 1.4.2 验证 `node:sqlite` FTS5、`fs.glob` |
 | S1 | 已完成 | — | CR-COR-01..11 全部处理；测试 1453 pass / 21 skip / 0 fail；新增 service-manager/index 测试 |
-| S2 | 未开始 | — | 运行时标准 |
+| S2 | 已完成 | — | CR-RUN-01..05（非 Server）全部处理；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；新增 `string-width`、`croner`；Node smoke 通过；版本 1.22.2；剩余 `Bun.serve`/`Bun.Server` 待 S9 |
 | S3 | 未开始 | — | 配置/工具 |
 | S4 | 未开始 | — | 文档 |
 | S5 | 未开始 | — | TUI kit |

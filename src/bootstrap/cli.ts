@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
+import { basename, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 export type { LogLevel } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
@@ -147,7 +147,7 @@ function validateCommandArguments(command: Command, tokens: readonly { kind: str
 }
 
 export function printHelp(): void {
-  const binName = (Bun.main || "").endsWith("atom") ? "atom" : "bun run src/main.ts";
+  const binName = applicationCommandName();
 
   console.log(`
 atom-neo — AI Agent Development Platform
@@ -221,9 +221,53 @@ export function parseSandboxPath(value: string): string {
   return value === "~" ? homedir() : value.startsWith("~/") ? resolve(homedir(), value.slice(2)) : resolve(value);
 }
 
-/** Compiled Bun entrypoints use a virtual main path; execute the real binary. */
-export function buildAppCommand(args: readonly string[], entrypoint = Bun.main, executable = process.execPath): string[] {
-  return [executable, ...(entrypoint.startsWith("/$bunfs/") ? [] : ["run", entrypoint]), ...args];
+/** Compiled Bun entrypoints live under the virtual /$bunfs root and cannot be re-executed. */
+const BUN_VIRTUAL_ROOT = "/$bunfs/";
+
+export type RuntimeName = "bun" | "node";
+
+function currentRuntime(): RuntimeName {
+  return process.versions.bun ? "bun" : "node";
+}
+
+/** Source entrypoint; undefined for compiled Bun binaries and `node -e`. */
+export function sourceEntrypoint(): string | undefined {
+  const entrypoint = process.argv[1];
+  return !entrypoint || entrypoint.startsWith(BUN_VIRTUAL_ROOT) ? undefined : entrypoint;
+}
+
+function displayEntrypoint(entrypoint: string, cwd: string): string {
+  const path = relative(cwd, entrypoint);
+  return path && path !== ".." && !path.startsWith(`..${sep}`) ? path : entrypoint;
+}
+
+/** Command prefix for help text and menu previews. */
+export function applicationCommandName(
+  runtime: RuntimeName = currentRuntime(),
+  entrypoint: string | null = sourceEntrypoint() ?? null,
+  executable: string = process.execPath,
+  cwd: string = process.cwd(),
+): string {
+  if (runtime === "bun" && !entrypoint) return "atom";
+  if (!entrypoint) return basename(executable);
+  const display = displayEntrypoint(entrypoint, cwd);
+  return runtime === "bun" ? `bun run ${display}` : `${basename(executable)} ${display}`;
+}
+
+/**
+ * Build a command that re-enters the application.
+ * Bun source uses `bun run <entrypoint>`; compiled binaries and Node invoke the entrypoint directly.
+ */
+export function buildAppCommand(
+  args: readonly string[],
+  entrypoint: string | null = sourceEntrypoint() ?? null,
+  executable: string = process.execPath,
+  runtime: RuntimeName = currentRuntime(),
+): string[] {
+  const entry = runtime === "bun" && entrypoint
+    ? ["run", entrypoint]
+    : entrypoint ? [entrypoint] : [];
+  return [executable, ...entry, ...args];
 }
 
 export function parsePort(value: string, allowZero: boolean): number {

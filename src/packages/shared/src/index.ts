@@ -1,5 +1,7 @@
 export { isAdminRequest } from "./utils/admin-auth";
 export { createChildProcessEnv } from "./utils/child-process-env";
+export { spawnProcess } from "./utils/process";
+export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
 
 // ── Types ──
 export {
@@ -139,7 +141,7 @@ export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";
 export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
-export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
+export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, stringWidth, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
 
 // ── Constants ──
 export { BusEvents, TaskFailureCodes, WsMessages } from "./constants";

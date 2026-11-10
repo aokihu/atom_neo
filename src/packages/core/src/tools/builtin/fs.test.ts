@@ -1,19 +1,21 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createReadTool, createWriteTool, createLsTool, createCpTool, createMvTool, createGrepTool, createTreeTool, createSandbox } from "./fs";
+import { createReadTool, createWriteTool, createLsTool, createCpTool, createMvTool, createGrepTool, createTreeTool, createGlobTool, createSandbox } from "./fs";
 import type { ToolDefinition } from "@atom-neo/shared";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 let tmpDir: string;
 let read: ToolDefinition, write: ToolDefinition, ls: ToolDefinition,
-    cp: ToolDefinition, mv: ToolDefinition, grep: ToolDefinition, tree: ToolDefinition;
+    cp: ToolDefinition, mv: ToolDefinition, grep: ToolDefinition, tree: ToolDefinition,
+    globTool: ToolDefinition;
 
 function before() {
   tmpDir = mkdtempSync(resolve(tmpdir(), "atom-test-"));
   const sb = createSandbox(tmpDir);
   read = createReadTool(sb); write = createWriteTool(sb); ls = createLsTool(sb);
   cp = createCpTool(sb); mv = createMvTool(sb); grep = createGrepTool(sb); tree = createTreeTool(sb);
+  globTool = createGlobTool(sb);
 }
 function after() { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); }
 
@@ -91,5 +93,31 @@ describe("tree tool", () => {
     const result = await tree.execute({ path: ".", maxDepth: 3 });
     expect(result.metadata.ok).toBe(true);
     expect(result.content).toContain("root.txt");
+  });
+});
+
+describe("glob tool", () => {
+  beforeEach(before); afterEach(after);
+  test("finds files recursively with relative paths", async () => {
+    mkdirSync(resolve(tmpDir, "sub/deep"), { recursive: true });
+    writeFileSync(resolve(tmpDir, "b.ts"), "");
+    writeFileSync(resolve(tmpDir, "sub/c.ts"), "");
+    writeFileSync(resolve(tmpDir, "sub/deep/d.ts"), "");
+    writeFileSync(resolve(tmpDir, "sub/ignore.txt"), "");
+
+    const result = await globTool.execute({ pattern: "**/*.ts" });
+
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toBe(["b.ts", "sub/c.ts", "sub/deep/d.ts"].join("\n"));
+  });
+
+  test("prefixes results with the requested path and skips directories", async () => {
+    mkdirSync(resolve(tmpDir, "sub/nested"), { recursive: true });
+    writeFileSync(resolve(tmpDir, "sub/x.txt"), "");
+
+    const result = await globTool.execute({ pattern: "*", path: "sub" });
+
+    expect(result.metadata.ok).toBe(true);
+    expect(result.content).toBe("sub/x.txt");
   });
 });

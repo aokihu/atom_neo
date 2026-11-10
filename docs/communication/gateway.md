@@ -126,7 +126,8 @@ Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。设计要求 Se
 // Gateway 内部
 const secret = crypto.randomUUID();
 const port = allocatePort();
-const proc = Bun.spawn(clientBinaryPath, [
+const proc = spawnProcess([
+  clientBinaryPath,
   "--secret", secret,
   "--port", String(port),
   "--gateway-url", `http://127.0.0.1:${config.port}`,
@@ -140,7 +141,7 @@ Gateway 启动
   ├── 读取 config.gateway.clients[]
   ├── 对每个 client:
   │     ├── 生成 secret + 分配端口
-  │     ├── Bun.spawn(二进制, ["--secret", secret, "--port", port])
+  │     ├── spawnProcess([二进制, "--secret", secret, "--port", port])
   │     └── 等待 Client HTTP server 就绪
   │
   └── 运行中:

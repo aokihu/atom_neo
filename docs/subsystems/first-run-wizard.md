@@ -2,7 +2,7 @@
 
 > **Purpose**: 首次运行向导与 `--config` 配置编辑器的完整行为规格（OpenTUI 窗口化界面）。
 > **Package**: `@atom-neo/config-tui` (`src/packages/config-tui/`)
-> **启动方式**: 子进程（`Bun.spawn`）或独立进程入口，与主进程隔离
+> **启动方式**: 子进程（`spawnProcess` / `node:child_process`）或独立进程入口，与主进程隔离
 
 `startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。`menu` 仅在 true 时保存参数历史，避免把未完成的配置算作成功。
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 const ProviderProfilesSchema = z.object({
   advanced: z.string().default("deepseek/deepseek-v4-flash"),
@@ -157,7 +158,8 @@ function loadUserConfig(sandboxPath: string): AppConfig {
   const configPath = `${sandboxPath}/config.json`;
   if (!existsSync(configPath)) {
     const defaults = ConfigSchema.parse({});
-    Bun.write(configPath, JSON.stringify(defaults, null, 2));
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(configPath, JSON.stringify(defaults, null, 2), "utf8");
     return defaults;
   }
   let raw: unknown;
@@ -206,7 +208,7 @@ export function loadRuntimeConfig(sandboxPath: string): RuntimeConfig {
 export function saveRuntimeConfig(sandboxPath: string, overlay: RuntimeConfig): void {
   const atomDir = `${sandboxPath}/.atom`;
   if (!existsSync(atomDir)) mkdirSync(atomDir, { recursive: true });
-  Bun.write(runtimeConfigPath(sandboxPath), JSON.stringify(overlay, null, 2));
+  writeFileSync(runtimeConfigPath(sandboxPath), JSON.stringify(overlay, null, 2), "utf8");
 }
 
 export function deleteRuntimeConfig(sandboxPath: string): void {

@@ -1,6 +1,6 @@
 import { BaseService } from "./base-service";
 import { parseMemorySearchTerms } from "@atom-neo/shared";
-import { Database } from "bun:sqlite";
+import { SqliteDatabase } from "./sqlite-database";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
@@ -52,7 +52,7 @@ export type MemoryTraversalNode = MemoryNode & {
 export class MemoryService extends BaseService {
   readonly name = "memory";
 
-  #db: Database | null = null;
+  #db: SqliteDatabase | null = null;
   #dbPath: string;
   #legacyNodesPath?: string;
   #now: () => number;
@@ -296,9 +296,9 @@ export class MemoryService extends BaseService {
 
     const result = this.#dbHandle().transaction(() => {
       this.#dbHandle().run("DELETE FROM edges WHERE source_id = ? OR target_id = ?", [fullMemoryId, fullMemoryId]);
-      return this.#dbHandle().run("DELETE FROM nodes WHERE id = ?", [fullMemoryId]) as { changes?: number };
+      return this.#dbHandle().run("DELETE FROM nodes WHERE id = ?", [fullMemoryId]);
     })();
-    return (result.changes ?? 0) > 0;
+    return result.changes > 0;
   }
 
   retain(id: string): void {
@@ -341,7 +341,7 @@ export class MemoryService extends BaseService {
   protected async onStart(): Promise<void> {
     try {
       mkdirSync(dirname(this.#dbPath), { recursive: true });
-      this.#db = new Database(this.#dbPath);
+      this.#db = new SqliteDatabase(this.#dbPath);
       const searchIndexCreated = this.#initDb();
       if (searchIndexCreated) this.#db.run("INSERT INTO memory_fts(memory_fts) VALUES ('rebuild')");
       this.#migrateLegacyContent();
@@ -359,7 +359,7 @@ export class MemoryService extends BaseService {
 
   // == Internal ==
 
-  #dbHandle(): Database {
+  #dbHandle(): SqliteDatabase {
     if (!this.#db) throw new Error("MemoryService is not started");
     return this.#db;
   }

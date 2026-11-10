@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { Database } from "bun:sqlite";
+import { SqliteDatabase } from "./sqlite-database";
 import { parseMemorySearchTerms } from "@atom-neo/shared";
 import { MemoryService } from "./memory-service";
 import { DAY_MS } from "./memory-ranking";
@@ -217,13 +217,13 @@ describe("MemoryService save", () => {
     const { service, dir } = await createMemoryService();
     try {
       const id = service.save("high weight memory", [], undefined, { baseWeight: 60 });
-      const db = new Database(join(dir, "memory.db"));
+      const db = new SqliteDatabase(join(dir, "memory.db"));
       db.run("UPDATE nodes SET weight = 100 WHERE id = ?", [id]);
       db.close();
 
       service.retain(id);
 
-      const verify = new Database(join(dir, "memory.db"));
+      const verify = new SqliteDatabase(join(dir, "memory.db"));
       const row = verify.prepare("SELECT base_weight, weight FROM nodes WHERE id = ?").get(id);
       verify.close();
       expect(row).toEqual({ base_weight: 70, weight: 100 });
@@ -237,7 +237,7 @@ describe("MemoryService save", () => {
     try {
       const id = service.save("existing memory");
       service.save("existing memory", ["durable-index"]);
-      const db = new Database(join(dir, "memory.db"));
+      const db = new SqliteDatabase(join(dir, "memory.db"));
       const row = db.prepare("SELECT content, tags FROM nodes WHERE id = ?").get(id) as { content: string; tags: string };
 
       expect(row).toEqual({ content: "existing memory", tags: "durable-index" });
@@ -257,7 +257,7 @@ describe("MemoryService save", () => {
     const id = createHash("sha256").update(content).digest("hex");
     mkdirSync(nodesPath);
     writeFileSync(join(nodesPath, `${id}.txt`), content);
-    const db = new Database(dbPath);
+    const db = new SqliteDatabase(dbPath);
     db.run(`CREATE TABLE nodes (
       id TEXT PRIMARY KEY, tags TEXT DEFAULT '', weight REAL DEFAULT 100,
       access_count INTEGER DEFAULT 0, created_at INTEGER, accessed_at INTEGER
@@ -286,7 +286,7 @@ describe("MemoryService save", () => {
     const dbPath = join(dir, "memory.db");
     const content = "legacy sqlite typhoon workflow";
     const id = createHash("sha256").update(content).digest("hex");
-    const db = new Database(dbPath);
+    const db = new SqliteDatabase(dbPath);
     db.run(`CREATE TABLE nodes (
       id TEXT PRIMARY KEY, content TEXT NOT NULL DEFAULT '', tags TEXT DEFAULT '',
       weight REAL DEFAULT 100, access_count INTEGER DEFAULT 0, created_at INTEGER, accessed_at INTEGER

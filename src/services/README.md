@@ -5,6 +5,7 @@
 | 文件 | 职责 |
 |------|------|
 | `memory-service.ts` | SQLite Memory 存储、FTS5 召回、图关系和生命周期事件 |
+| `sqlite-database.ts` | `node:sqlite` 薄封装：参数归一化、`transaction(fn)()`、`run/get/all` 兼容面 |
 | `memory-ranking.ts` | 无状态的 Memory 相关性、质量与时间衰减计算 |
 | `network/` | 同进程 NetworkService、共享域名调度与 WebFetch 子功能 |
 | `skill-service.ts` | Skill 扫描、加载与 Context 构建 |

@@ -1,7 +1,7 @@
 // Local-only process fixture. Never connects to external platforms.
 import { parseArgs } from "node:util";
 import { writeFileSync } from "node:fs";
-const { values } = parseArgs({ args: Bun.argv.slice(2), strict: false, options: {
+const { values } = parseArgs({ args: process.argv.slice(2), strict: false, options: {
   port: { type: "string" }, secret: { type: "string" }, "gateway-url": { type: "string" },
   record: { type: "string" },
 } });

@@ -64,12 +64,15 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 
 ```typescript
 // src/bootstrap/first-run.ts
-export async function isFirstRun(sandboxPath: string): Promise<boolean> {
-  return !(await Bun.file(`${sandboxPath}/.atom/installed`).exists());
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+
+export function isFirstRun(sandboxPath: string): boolean {
+  return !existsSync(`${sandboxPath}/.atom/installed`);
 }
 
-export async function markInstalled(sandboxPath: string): Promise<void> {
-  await Bun.write(`${sandboxPath}/.atom/installed`, "");
+export function markInstalled(sandboxPath: string): void {
+  mkdirSync(`${sandboxPath}/.atom`, { recursive: true });
+  writeFileSync(`${sandboxPath}/.atom/installed`, "", "utf8");
 }
 ```
 
@@ -84,13 +87,15 @@ Agent 启动时检查 `SANDBOX/AGENTS.md` 是否存在：
 
 ```typescript
 // src/bootstrap/agents.ts
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import agentsMdTemplate from "@assets/prompts/agents_md_sample.md";
 
-export async function initAgentsMd(sandboxPath: string): Promise<void> {
+export function initAgentsMd(sandboxPath: string): void {
   const agentsPath = `${sandboxPath}/AGENTS.md`;
-  if (!(await Bun.file(agentsPath).exists())) {
-    // Bun.write 自动创建中间目录
-    await Bun.write(agentsPath, agentsMdTemplate);
+  if (!existsSync(agentsPath)) {
+    mkdirSync(dirname(agentsPath), { recursive: true });
+    writeFileSync(agentsPath, agentsMdTemplate, "utf8");
   }
 }
 ```
@@ -99,9 +104,11 @@ export async function initAgentsMd(sandboxPath: string): Promise<void> {
 
 ```typescript
 // 在启动序列中执行
-export async function initAtomDir(sandboxPath: string): Promise<void> {
-  // Bun.write 自动创建中间目录
-  await Bun.write(`${sandboxPath}/.atom/compiled_prompts/.gitkeep`, "");
+export function initAtomDir(sandboxPath: string): void {
+  const atomPath = `${sandboxPath}/.atom`;
+  mkdirSync(atomPath, { recursive: true });
+  mkdirSync(`${atomPath}/compiled_prompts`, { recursive: true });
+  mkdirSync(`${atomPath}/memory/nodes`, { recursive: true });
 }
 ```
 

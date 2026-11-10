@@ -8,14 +8,14 @@
 
 ```
 .atom/memory/
-└── memory.db              # SQLite (bun:sqlite) — 正文、元数据、图谱边、FTS5 索引
+└── memory.db              # SQLite (node:sqlite) — 正文、元数据、图谱边、FTS5 索引
 ```
 
 ### 设计原则
 
 - **SQLite 单一数据源** — 正文、生命周期和图关系在同一事务中更新
 - **SQLite FTS5 统一搜索** — `trigram` 负责三字符以上子串和 BM25 排序，短词使用索引表上的 `instr()` 兜底
-- **Bun 内置 SQLite** — `import { Database } from "bun:sqlite"`
+- **Node 内置 SQLite** — `import { DatabaseSync } from "node:sqlite"`，经 `services/sqlite-database.ts` 包装（参数归一化、事务 savepoint）
 
 ## 2. Schema
 

@@ -1,7 +1,7 @@
 import { generateSecret } from "../auth/secret";
 import type { ClientConfig, GatewayConfig } from "../config";
-import type { Logger } from "@atom-neo/shared";
-import { createChildProcessEnv } from "@atom-neo/shared";
+import type { Logger, ProcessHandle } from "@atom-neo/shared";
+import { createChildProcessEnv, sleep, spawnProcess } from "@atom-neo/shared";
 
 const RESERVED_ARGS = new Set(["secret", "port", "gateway-url"]);
 const MAX_RESTART_ATTEMPTS = 5;
@@ -29,7 +29,7 @@ export type ActiveClient = {
   url: string;
 };
 
-type ProcEntry = { proc: { pid: number; killed: boolean; exitCode: number | null; exited: Promise<number>; kill(signal?: NodeJS.Signals | number): void }; pid: number; killed: boolean; startedAt: number };
+type ProcEntry = { proc: ProcessHandle; pid: number; killed: boolean; startedAt: number };
 
 export class ClientManager {
   #config: GatewayConfig;
@@ -157,13 +157,14 @@ export class ClientManager {
     const stdio = cc.stdio ?? "inherit";
     this.#logger.info("spawning client", { id, platform, port, binary, stdio });
 
-    const proc = Bun.spawn(
+    const proc = spawnProcess(
       [binary, "--secret", secret, "--port", String(port), "--gateway-url", `http://127.0.0.1:${this.#config.port}`, ...userArgs],
       {
         env: createChildProcessEnv(),
+        stdin: "ignore",
         stdout: stdio,
         stderr: stdio,
-        onExit: (_, exitCode, signalCode, error) => {
+        onExit: (exitCode, signalCode, error) => {
           this.#logger.warn("client exited", { id, platform, exitCode, signalCode, error: error?.message });
           const entry = this.#procs.get(id);
           if (entry?.proc !== proc) return;
@@ -259,10 +260,6 @@ export class ClientManager {
       }
     }
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function waitForExit(exited: Promise<number>, timeoutMs: number): Promise<boolean> {

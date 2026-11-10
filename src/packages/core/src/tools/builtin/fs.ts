@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { readdir, stat, cp, rename } from "node:fs/promises";
+import { readdir, stat, cp, rename, glob } from "node:fs/promises";
 import { resolve, dirname, relative } from "node:path";
 import { toolResult } from "../outcome";
 
@@ -214,12 +214,14 @@ export function createGlobTool(sb: Sandbox): ToolDefinition {
       const p = parse(schema, args);
       if (!p) return toolResult.failure("Invalid input");
       try {
-        const glob = new Bun.Glob(p.pattern);
         const results: string[] = [];
         const MAX_RESULTS = 500;
         const target = sb.sp(p.path);
-        for await (const filepath of glob.scan({ cwd: target, absolute: false })) {
+        for await (const entry of glob(p.pattern, { cwd: target, withFileTypes: true })) {
           if (results.length >= MAX_RESULTS) break;
+          if (!entry.isFile()) continue;
+          const absolute = resolve(entry.parentPath ?? target, entry.name);
+          const filepath = relative(target, absolute);
           results.push(p.path === "." ? filepath : `${p.path}/${filepath}`);
         }
         results.sort();

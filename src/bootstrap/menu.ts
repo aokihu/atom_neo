@@ -1,20 +1,21 @@
 // Plain terminal prompts, restored before the selected application takes over.
 import { emitKeypressEvents, type Key } from "node:readline";
+import { stringWidth } from "@atom-neo/shared";
 import { MenuFlow, type MenuRequest } from "./menu-flow";
 
 export function buildMenuScreen(flow: MenuFlow, columns: number, cursor: number) {
   const view = flow.view();
   const clipLine = (line: string) => {
-    if (Bun.stringWidth(line) < columns) return line;
+    if (stringWidth(line) < columns) return line;
     const characters = Array.from(line);
-    while (characters.length && Bun.stringWidth(characters.join("")) > columns - 2) characters.pop();
+    while (characters.length && stringWidth(characters.join("")) > columns - 2) characters.pop();
     return characters.join("") + "…";
   };
   const wrapHelp = (text: string) => {
     const rows: string[] = [];
     let row = "";
     for (const character of text) {
-      if (row && Bun.stringWidth(row + character) > Math.max(1, columns - 4)) {
+      if (row && stringWidth(row + character) > Math.max(1, columns - 4)) {
         rows.push(row.trimEnd());
         row = "";
       }
@@ -40,10 +41,10 @@ export function buildMenuScreen(flow: MenuFlow, columns: number, cursor: number)
     const characters = Array.from(view.value ?? "");
     const width = Math.max(4, columns - 6);
     let start = cursor;
-    while (start > 0 && Bun.stringWidth(characters.slice(start - 1, cursor).join("")) < width - 1) start--;
+    while (start > 0 && stringWidth(characters.slice(start - 1, cursor).join("")) < width - 1) start--;
     let visible = characters.slice(start).join("");
-    while (Bun.stringWidth(visible) > width) visible = Array.from(visible).slice(0, -1).join("");
-    inputCursor = { row: lines.length + 1, column: 5 + Bun.stringWidth(characters.slice(start, cursor).join("")) };
+    while (stringWidth(visible) > width) visible = Array.from(visible).slice(0, -1).join("");
+    inputCursor = { row: lines.length + 1, column: 5 + stringWidth(characters.slice(start, cursor).join("")) };
     lines.push(`  ${start ? "…" : ">"} ${visible}`);
     lines.push(...wrapHelp("回车沿用当前值，也可直接修改。").map(helpLine));
   }

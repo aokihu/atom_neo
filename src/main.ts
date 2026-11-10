@@ -53,7 +53,7 @@ function createLogger(args: BootArguments) {
 }
 
 export async function main(): Promise<void> {
-  const parsed = parseArguments(Bun.argv.slice(2));
+  const parsed = parseArguments(process.argv.slice(2));
   if (parsed === "help") {
     printHelp();
     process.exit(0);

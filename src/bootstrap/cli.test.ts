@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { parseArguments } from "./cli";
+import { applicationCommandName, buildAppCommand, parseArguments } from "./cli";
 
 describe("menu command", () => {
   test("accepts the command and optional sandbox", () => {
@@ -94,6 +94,29 @@ describe("parseArguments sandbox paths", () => {
   });
 });
 
+
+describe("application command", () => {
+  test("Bun source runs the entrypoint with run", () => {
+    expect(buildAppCommand(["--wizard"], "/repo/src/main.ts", "/usr/bin/bun", "bun"))
+      .toEqual(["/usr/bin/bun", "run", "/repo/src/main.ts", "--wizard"]);
+  });
+
+  test("compiled Bun invokes the executable directly", () => {
+    expect(buildAppCommand(["--wizard"], null, "/repo/dist/atom", "bun"))
+      .toEqual(["/repo/dist/atom", "--wizard"]);
+  });
+
+  test("Node invokes the entrypoint directly", () => {
+    expect(buildAppCommand(["--wizard"], "/repo/src/main.ts", "/usr/bin/node", "node"))
+      .toEqual(["/usr/bin/node", "/repo/src/main.ts", "--wizard"]);
+  });
+
+  test("help names the compiled binary atom and shows source commands", () => {
+    expect(applicationCommandName("bun", null, "/repo/dist/atom", "/repo")).toBe("atom");
+    expect(applicationCommandName("bun", "/repo/src/main.ts", "/usr/bin/bun", "/repo")).toBe("bun run src/main.ts");
+    expect(applicationCommandName("node", "/repo/dist/node/main.js", "/usr/bin/node", "/repo")).toBe("node dist/node/main.js");
+  });
+});
 
 describe("parseArguments session continuation", () => {
   test.each([{ args: [], expected: false }, { args: ["-c"], expected: true }, { args: ["--continue"], expected: true },
