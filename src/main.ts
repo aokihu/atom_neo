@@ -60,6 +60,12 @@ export async function main(): Promise<void> {
   }
   const args = parsed;
 
+  if (args.command) {
+    const { runBackupCommand } = await import("./bootstrap/backup");
+    await runBackupCommand(args);
+    return;
+  }
+
   if (args.menu) {
     const { startMenu } = await import("./bootstrap/menu");
     const history = readMenuHistory();

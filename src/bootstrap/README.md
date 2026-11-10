@@ -6,6 +6,7 @@
 - `menu-history.ts`：`~/.config/atom/menu_history.json` 参数记忆与原子写入。
 - `runtime-file.ts`：本机 Core/Gateway 实例发现文件、管理 token 和实例归属清理。
 - `config.ts` / `env.ts`：用户配置、运行时 overlay 与环境变量。
+- `backup-format.ts` / `backup.ts`：`export` / `import` 子命令；`.atombak` 归档编解码、gzip、可选 scrypt + AES-256-GCM、`.env` merge 与原子写入。
 - `first-run.ts`：默认交互模式首次安装流程。
 - `agents.ts`：sandbox 初始化。
 

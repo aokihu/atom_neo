@@ -29,13 +29,14 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 - `config.json` 后续手动修改不会失效 —— overlay 只覆盖被改过的字段
 - **禁止运行时覆盖的字段**：`gateway` 子树（端口/客户端需重启才生效）；密钥本就只存于 `.env`（见 §7）
 
-**三个配置修改入口**：
+**配置读写入口**：
 
 | 入口 | 写入层 | 时机 |
 |------|--------|------|
 | 手动编辑 config.json / .env | 用户配置（基线） | 随时 |
 | `--config` 向导（`@atom-neo/config-tui`，OpenTUI 窗口化） | config.json（按 provider 合并）+ .env | 随时、交互式，详见 [first-run-wizard.md](./first-run-wizard.md) |
 | 运行时 settings（TUI `/settings`） | `.atom/runtime-config.json`（overlay） | 运行中即时生效，见 §8 |
+| `atom export` / `atom import` | config.json + .env（归档迁移） | 备份、跨机器迁移，详见 [backup.md](./backup.md) |
 
 ---
 

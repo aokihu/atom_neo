@@ -66,6 +66,7 @@ Gateway 为短时控制进程，不是 Gateway Server 启动模式。动作建�
 
 ```text
 解析并校验参数
+  ├─ export / import → 读写 sandbox 配置归档 → 返回
   ├─ config / wizard → 独立配置界面 → 返回
   ├─ tui → 校验目标与认证 → Core 选择 TUI 会话 → 同步历史/状态 → UI
   ├─ gateway → 发现已有 Gateway → 认证 → 单个/全部操作 → 返回
