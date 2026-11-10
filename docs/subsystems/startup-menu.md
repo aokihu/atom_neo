@@ -17,6 +17,8 @@ menu
 │          ├ start clients > sandbox > client ID / all > 启用
 │          └ stop clients > sandbox > client ID / all > 停止
 ├─ attach > remote address > port > 连接并进入 TUI
+├─ backup > export > sandbox > output > encrypt > 导出配置归档
+│          └ import > archive > sandbox > 导入配置归档
 └─ exit
 ```
 
@@ -34,7 +36,7 @@ menu
 
 ## 记忆
 
-固定文件 `~/.config/atom/menu_history.json`，按动作保存上次成功的普通参数；自动回填后仍须 Enter 确认。目录延迟创建，取消不写盘。成功 attach 握手、配置保存、Gateway 请求成功或服务就绪后保存，不等长期 App 退出。配置取消不算保存成功。
+固定文件 `~/.config/atom/menu_history.json`，按动作保存上次成功的普通参数；自动回填后仍须 Enter 确认。目录延迟创建，取消不写盘。成功 attach 握手、配置保存、Gateway 请求成功、备份命令完成或服务就绪后保存，不等长期 App 退出。配置取消不算保存成功。
 
 ```json
 {
@@ -53,6 +55,23 @@ menu
 复用 `--mode tui --core-server ... --core-port ...` 入口。Core 端显式设置 `ATOM_ADMIN_TOKEN` 并绑定可访问的 `--host` 后，允许携带该 Token 的远程管理请求。客户端在环境变量或 sandbox `.env` 设置相同 Token，不通过 CLI 或历史传递，也不转发给 Gateway 平台 Client 和 shell 工具子进程（共享的 `createChildProcessEnv` 负责移除此字段）。未设置时继续随机 Token + 仅本机管理访问；Gateway 管理访问保持仅限本机。本机 attach 优先使用 sandbox runtime 凭据。跨网络使用可信网络或加密隧道。
 
 独立 TUI 的输入历史保存在客户端选择的 sandbox，由 `historySandbox` 显式传入；远端返回的 `serverInfo.sandbox` 仅用于显示，不作为客户端写盘位置。它与全局 menu_history.json 分工独立。
+
+## 配置备份
+
+`backup >` 提供 `export` 与 `import` 两条向导路径，复用 `atom export` / `atom import` 的实现，不启动 Core。
+
+| 路径 | 步骤 | 说明 |
+|------|------|------|
+| `backup / export` | sandbox → output → encrypt | `output` 留空时写入当前目录的默认文件名 |
+| `backup / import` | archive → sandbox | 归档路径必填；导入确认与密码提示在执行阶段完成 |
+
+- 导出默认选择 `encrypt = yes`；选择 `no` 生成明文归档。密码只在执行时通过 TTY 隐藏输入或 `ATOM_BACKUP_PASSWORD` 提供。
+- 导入不询问是否加密；`runBackupCommand` 先读取归档信封，只有 `encryption != null` 时才提示密码，未加密归档直接导入。
+- 导入沿用直接命令的 `.env merge` 语义，现有文件自动备份；菜单不暴露 `--env replace` / `--dry-run` / `--force`。
+- 历史只保存 `archive`、`output`、`encrypt`，不保存密码。执行成功后结束菜单并退出；失败按现有规则重新打开当前路径最后一步。
+- 执行前打印可复制命令时，加密导出包含 `--password`，导入只包含归档与 sandbox，不输出密码值。
+
+详见 [backup.md](./backup.md)。
 
 ## 实现与验收
 
@@ -92,3 +111,9 @@ menu
 ### v1.21.3 合并 main 前回归
 
 常规 `bun test` 1396 通过、20 跳过、0 失败（包含被发现的 workspace 构建产物）；20 项显式启动验收全部通过，238 项断言。workspace 类型检查/构建、新增 bootstrap 独立类型检查及差异检查通过。日志保存在 `/private/tmp/atom-menu-v1.21.3-tests.log` 和 `/private/tmp/atom-menu-v1.21.3-startup.log`；本次版本提交只修改版本来源和交付文档，本地配置与运行数据继续保留。
+
+### 2026-11-10 配置备份菜单
+
+`backup > export / import` 接入菜单。定向测试 89 通过（菜单流程、历史、归档编解码、CLI）；新增 PTY 验收 1 项、36 项断言，覆盖源码与编译二进制的未加密导出/导入，确认未加密归档不出现 `Password:` 提示。加密导出/导入另以源码 PTY 实测：仅在归档 `encryption != null` 时提示密码，历史记录不含密码。
+
+完整 `bun test`：1430 通过、21 跳过、0 失败；workspace 类型检查与 `bun build --compile` 通过。

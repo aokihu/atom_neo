@@ -47,6 +47,22 @@ ATOM_BACKUP_PASSWORD='...' atom export --password --output backup.atombak
 
 密码只允许通过 TTY 提示或环境变量传入，**禁止写在命令行参数中**（会进入 shell history 与进程列表）。
 
+### 菜单向导
+
+`atom menu` 的一级菜单新增 `backup >`，内含两条路径：
+
+```text
+backup / export: sandbox → output → encrypt (yes / no)
+backup / import: archive → sandbox
+```
+
+- 导出默认 `encrypt = yes`；`output` 留空使用默认文件名。
+- 导入先校验归档信封：`encryption` 存在才提示密码，未加密归档不出现密码步骤。
+- 菜单固定使用 `.env merge`，不提供 `--env` / `--dry-run` / `--force`；导入确认仍由 `runBackupCommand` 完成。
+- 历史仅记录归档路径、输出路径和加密选择，密码不进入 `menu_history.json`。
+
+密码输入发生在向导结束、命令执行阶段；密码提示取消或密码错误按菜单的失败重试规则回到当前路径最后一步。导入确认选择 `no` 时不写盘，直接结束菜单。
+
 ---
 
 ## 3. 归档格式
@@ -127,8 +143,9 @@ ATOM_BACKUP_PASSWORD='...' atom export --password --output backup.atombak
 
 ```text
 读取归档（大小上限）
-  → 解析信封 / 版本校验
-  → 有密码 → 解密并验证 GCM tag
+  → 解析信封 / 版本校验 / 检测 encryption
+  → 未加密：直接解压
+  → 已加密：提示密码（TTY 或 ATOM_BACKUP_PASSWORD）并验证 GCM tag
   → 解压 → SHA-256 校验
   → config.json JSON + ConfigSchema 校验
   → 展示摘要并确认（--force 跳过）
@@ -182,8 +199,10 @@ ATOM_BACKUP_PASSWORD='...' atom export --password --output backup.atombak
 - 现有文件备份与 `--dry-run`
 - 非法 config 拒绝导入
 - 路径与键名解析
+- 命令层密码检测：未加密归档不提示密码，加密归档缺少密码时报错
+- PTY 验收：源码与编译二进制经菜单完成未加密导出/导入，且不出现密码提示
 
-CLI 参数解析覆盖在 `src/bootstrap/cli.test.ts`。
+CLI 参数解析覆盖在 `src/bootstrap/cli.test.ts`；菜单向导覆盖在 `src/bootstrap/menu-flow.test.ts` 与 `src/bootstrap/menu-history.test.ts`，端到端菜单路径在 `src/bootstrap/startup.integration.test.ts`（需 `ATOM_RUN_STARTUP_VALIDATION=1`）。
 
 ---
 

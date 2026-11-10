@@ -36,7 +36,7 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 | 手动编辑 config.json / .env | 用户配置（基线） | 随时 |
 | `--config` 向导（`@atom-neo/config-tui`，OpenTUI 窗口化） | config.json（按 provider 合并）+ .env | 随时、交互式，详见 [first-run-wizard.md](./first-run-wizard.md) |
 | 运行时 settings（TUI `/settings`） | `.atom/runtime-config.json`（overlay） | 运行中即时生效，见 §8 |
-| `atom export` / `atom import` | config.json + .env（归档迁移） | 备份、跨机器迁移，详见 [backup.md](./backup.md) |
+| `atom export` / `atom import`（或 `atom menu` → `backup`） | config.json + .env（归档迁移） | 备份、跨机器迁移，详见 [backup.md](./backup.md) |
 
 ---
 

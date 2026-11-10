@@ -1,5 +1,6 @@
 // Exercise complete user paths and their shared CLI launch arguments.
 import { expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { parseArguments } from "./cli";
 import { formatMenuCommand, MenuFlow, parseServerHost, type MenuRequest } from "./menu-flow";
 import type { MenuHistory } from "./menu-history";
@@ -83,7 +84,49 @@ test.each([1, 2])("gateway action %i preserves single-client and all semantics",
 test("root cancellation and exit do not produce a launch request", () => {
   const menu = flow();
   expect(menu.back()).toBe(false);
-  expect(choose(menu, 4)).toBe("exit");
+  expect(choose(menu, 5)).toBe("exit");
+});
+
+test("backup export wizard collects path and encryption choice", () => {
+  const menu = flow({ export: { sandbox: "/saved", output: "/tmp/old.atombak", encrypt: false } });
+  choose(menu, 4); choose(menu, 0);
+  expect(menu.view()).toMatchObject({ title: "menu / backup / export", field: "sandbox", value: "/saved" });
+  menu.submit("/project");
+  expect(menu.view()).toMatchObject({ field: "output", value: "/tmp/old.atombak" });
+  menu.submit("/tmp/new.atombak");
+  expect(menu.view()).toMatchObject({ field: "encrypt", value: "no", items: ["yes", "no", "‹ back"] });
+  const request = completed(menu.submit());
+  expect(request.args).toMatchObject({ command: "export", sandbox: resolve("/project"), output: "/tmp/new.atombak", password: false, menu: false });
+  expect(request.parameters).toEqual({ sandbox: resolve("/project"), output: "/tmp/new.atombak", encrypt: false });
+});
+
+test("backup export defaults to encryption and leaves output empty", () => {
+  const menu = flow();
+  choose(menu, 4); choose(menu, 0);
+  menu.submit("/project"); menu.submit();
+  expect(menu.view()).toMatchObject({ field: "encrypt", value: "yes" });
+  const request = completed(menu.submit());
+  expect(request.args).toMatchObject({ command: "export", password: true });
+  expect(request.args.output).toBeUndefined();
+  expect(request.parameters).toEqual({ sandbox: resolve("/project"), encrypt: true });
+});
+
+test("backup import wizard reuses archive and never asks for a password flag", () => {
+  const menu = flow({ import: { archive: "/tmp/backup.atombak", sandbox: "/saved" } });
+  choose(menu, 4); choose(menu, 1);
+  expect(menu.view()).toMatchObject({ title: "menu / backup / import", field: "archive", value: "/tmp/backup.atombak" });
+  menu.submit();
+  expect(menu.view()).toMatchObject({ field: "sandbox", value: "/saved" });
+  const request = completed(menu.submit());
+  expect(request.args).toMatchObject({ command: "import", archive: "/tmp/backup.atombak", sandbox: resolve("/saved"), password: false, menu: false });
+  expect(request.parameters).toEqual({ archive: "/tmp/backup.atombak", sandbox: resolve("/saved") });
+});
+
+test("backup import requires a non-empty archive path", () => {
+  const menu = flow();
+  choose(menu, 4); choose(menu, 1);
+  expect(() => menu.submit("")).toThrow("请填写归档文件路径");
+  expect(menu.view().field).toBe("archive");
 });
 
 test("returning to a parent restores the entry that opened the child", () => {
@@ -138,6 +181,8 @@ test.each([
   ["--mode", "tui", "--core-server", "::1", "--core-port", "4200"],
   ["--mode", "gateway", "--action", "start"],
   ["--mode", "gateway", "--action", "stop", "--clients", "telegram's $(printf BAD)"],
+  ["export", "--output", "backup.atombak", "--password"],
+  ["import", "backup.atombak"],
 ].map(argv => ({ argv })))("printed command preserves CLI behavior and literal shell arguments: $argv", ({ argv }) => {
   const args = parseArguments([...argv, "--sandbox", "/tmp/项目 O'Brien $(printf BAD); $HOME"]);
   if (args === "help") throw new Error("Unexpected help");

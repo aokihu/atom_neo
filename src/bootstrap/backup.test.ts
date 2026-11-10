@@ -5,7 +5,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyImport, exportBackup, planImport } from "./backup";
+import { applyImport, exportBackup, planImport, runBackupCommand } from "./backup";
+import { parseArguments } from "./cli";
 import { decodeBackup, encodeBackup } from "./backup-format";
 
 const folders: string[] = [];
@@ -150,5 +151,44 @@ describe("planImport and applyImport", () => {
     expect(result.envAction).toBe("merged");
     expect(readFileSync(join(sandbox, "config.json"), "utf8")).toBe(validConfig);
     expect(readFileSync(join(sandbox, ".env"), "utf8")).toBe("KEY=value\n");
+  });
+});
+
+async function withoutTTY(run: () => Promise<void>): Promise<void> {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const password = process.env.ATOM_BACKUP_PASSWORD;
+  Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: false });
+  delete process.env.ATOM_BACKUP_PASSWORD;
+  try {
+    await run();
+  } finally {
+    if (descriptor) Object.defineProperty(process.stdin, "isTTY", descriptor);
+    else Reflect.deleteProperty(process.stdin, "isTTY");
+    if (password !== undefined) process.env.ATOM_BACKUP_PASSWORD = password;
+  }
+}
+
+function importArguments(archive: string, sandbox: string) {
+  const args = parseArguments(["import", archive, "--sandbox", sandbox, "--force"]);
+  if (args === "help") throw new Error("Unexpected help");
+  return args;
+}
+
+describe("runBackupCommand password detection", () => {
+  test("imports an unencrypted archive without asking for a password", async () => {
+    await withoutTTY(async () => {
+      const sandbox = makeSandbox();
+      const archive = writeArchive({ "config.json": validConfig, ".env": "KEY=value\n" });
+      await runBackupCommand(importArguments(archive, sandbox));
+      expect(readFileSync(join(sandbox, ".env"), "utf8")).toBe("KEY=value\n");
+    });
+  });
+
+  test("requires a password for an encrypted archive", async () => {
+    await withoutTTY(async () => {
+      const sandbox = makeSandbox();
+      const archive = writeArchive({ "config.json": validConfig }, "correct-horse");
+      await expect(runBackupCommand(importArguments(archive, sandbox))).rejects.toThrow("Password required");
+    });
   });
 });
