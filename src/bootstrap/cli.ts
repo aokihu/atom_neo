@@ -6,9 +6,18 @@ import type { LogLevel } from "@atom-neo/shared";
 
 export type Mode = "core" | "tui" | "core-gateway" | "gateway" | "full";
 export type LogMode = "console" | "pipe" | "file";
+export type Command = "export" | "import";
+export type BackupEnvMode = "merge" | "replace";
 
 export type BootArguments = {
   menu: boolean;
+  command?: Command;
+  archive?: string;
+  output?: string;
+  password: boolean;
+  force: boolean;
+  dryRun: boolean;
+  envMode: BackupEnvMode;
   sandboxExplicit: boolean;
   mode?: Mode;
   port: number;
@@ -30,9 +39,11 @@ export type BootArguments = {
 };
 
 export function parseArguments(rawArgs: readonly string[]): BootArguments | "help" {
-  const menu = rawArgs[0] === "menu";
-  const { values, tokens } = parseArgs({
-    args: menu ? rawArgs.slice(1) : [...rawArgs],
+  const first = rawArgs[0];
+  const menu = first === "menu";
+  const command: Command | undefined = first === "export" || first === "import" ? first : undefined;
+  const { values, tokens, positionals } = parseArgs({
+    args: menu || command ? rawArgs.slice(1) : [...rawArgs],
     options: {
       wizard: { type: "boolean" },
       continue: { type: "boolean", short: "c", default: false },
@@ -46,6 +57,11 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
       clients: { type: "string" },
       action: { type: "string" },
       config: { type: "boolean", default: false },
+      output: { type: "string", short: "o" },
+      password: { type: "boolean", default: false },
+      force: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
+      env: { type: "string", default: "merge" },
       log: { type: "string", multiple: true, default: [] },
       "log-level": { type: "string", default: "debug" },
       "log-ignore": { type: "string", multiple: true, default: [] },
@@ -53,7 +69,7 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
       "log-pipepath": { type: "string" },
     },
     tokens: true,
-    allowPositionals: false,
+    allowPositionals: command === "import",
     strict: true,
   });
 
@@ -62,6 +78,11 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
   if (menu && tokens.some(t => t.kind === "option" && t.name !== "sandbox")) {
     throw new Error("menu only accepts --sandbox; choose commands and parameters in the wizard");
   }
+  if (command) validateCommandArguments(command, tokens, positionals);
+  if (!command && tokens.some(token => token.kind === "option" && ["output", "password", "force", "dry-run", "env"].includes(token.name))) {
+    throw new Error("--output/--password/--force/--dry-run/--env require export or import");
+  }
+  if (values.output === "") throw new Error("--output cannot be empty");
 
   const sandboxPath = values.sandbox;
   if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
@@ -86,6 +107,13 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
   if ((mode === "tui" || mode === "gateway") && tokens?.some(t => t.kind === "option" && ["host", "port"].includes(t.name))) throw new Error("--host/--port are server listening options");
   return {
     menu,
+    command,
+    archive: command === "import" ? resolve(positionals[0]) : undefined,
+    output: command === "export" ? values.output as string | undefined : undefined,
+    password: command ? values.password as boolean : false,
+    force: command ? values.force as boolean : false,
+    dryRun: command ? values["dry-run"] as boolean : false,
+    envMode: command ? validateEnum(values.env as string, ["merge", "replace"] as const, "--env") : "merge",
     sandboxExplicit: sandboxPath !== undefined,
     coreServer: values["core-server"] as string | undefined,
     corePort: values["core-port"] === undefined ? undefined : parsePort(values["core-port"] as string, false),
@@ -107,6 +135,15 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
   };
 }
 
+function validateCommandArguments(command: Command, tokens: readonly { kind: string; name?: string }[], positionals: readonly string[]): void {
+  const allowed = command === "export"
+    ? ["sandbox", "output", "password", "force", "help"]
+    : ["sandbox", "password", "force", "dry-run", "env", "help"];
+  const invalid = tokens.find(token => token.kind === "option" && token.name !== undefined && !allowed.includes(token.name));
+  if (invalid?.name) throw new Error(`${command} does not accept --${invalid.name}`);
+  if (command === "import" && (positionals.length !== 1 || !positionals[0].trim())) throw new Error("import requires exactly one archive path");
+}
+
 export function printHelp(): void {
   const binName = (Bun.main || "").endsWith("atom") ? "atom" : "bun run src/main.ts";
 
@@ -116,9 +153,13 @@ atom-neo — AI Agent Development Platform
 USAGE
   ${binName} [OPTIONS]
   ${binName} menu [--sandbox <path>]
+  ${binName} export [--sandbox <path>] [-o|--output <file>] [--password] [--force]
+  ${binName} import <archive> [--sandbox <path>] [--password] [--env merge|replace] [--dry-run] [--force]
 
 COMMANDS
   menu                   一次性启动向导（参数自动回填，完成后执行）
+  export                 导出 config.json + .env 为 .atombak 归档
+  import                 从 .atombak 归档导入配置
 
 OPTIONS
   -m, --mode <mode>      运行模式: core | core-gateway | tui | gateway (默认: core + TUI)
@@ -137,6 +178,11 @@ OPTIONS
   --log-ignore <level>    忽略的日志级别 (可多次使用)
   --log-file <path>       日志文件路径 (--log=file 时必需)
   --log-pipepath <path>   命名管道路径 (--log=pipe 时必需)
+  -o, --output <file>     导出归档路径 (默认: atom-backup-<time>.atombak)
+  --password              提示输入密码加密/解密归档 (或使用 ATOM_BACKUP_PASSWORD)
+  --env <mode>            导入 .env 策略: merge | replace (默认: merge)
+  --dry-run               仅显示导入计划，不写盘
+  --force                 覆盖已有归档/文件，跳过导入确认
   -h, --help              显示此帮助信息
 
 EXAMPLES
@@ -146,6 +192,8 @@ EXAMPLES
   ${binName} --mode core --port 3100 --log=console
   ${binName} --mode core-gateway --port 3100 --log=console
   ${binName} --config --sandbox ./sandbox
+  ${binName} export --sandbox ./sandbox --password -o ./backup.atombak
+  ${binName} import ./backup.atombak --sandbox ./sandbox
 `);
 }
 

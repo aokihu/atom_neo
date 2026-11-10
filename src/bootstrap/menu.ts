@@ -110,7 +110,7 @@ export function startMenu(flow: MenuFlow): Promise<MenuRequest | null> {
         }
         if (key.name === "home") flow.selected = 0;
         if (key.name === "end") flow.selected = view.items.length - 1;
-        if (view.field === "session" && flow.selected < 2) flow.setValue(view.items[flow.selected]);
+        if (view.field && flow.selected < view.items.length - 1) flow.setValue(view.items[flow.selected]);
       } else {
         const chars = Array.from(view.value ?? "");
         if (key.name === "left") cursor = Math.max(0, cursor - 1);

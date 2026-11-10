@@ -88,6 +88,14 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   // Must set BEFORE AI SDK (via @atom-neo/core) is imported
   globalThis.AI_SDK_LOG_WARNINGS = false;
 
+  // export / import: standalone CLI or menu action, never loads Core
+  if (args.command) {
+    const { runBackupCommand } = await import("./bootstrap/backup");
+    await runBackupCommand(args);
+    onReady();
+    return;
+  }
+
   // --wizard subprocess: run setup wizard and exit
   if (Bun.argv.includes("--wizard")) {
     const { startWizard } = await import("@atom-neo/config-tui");

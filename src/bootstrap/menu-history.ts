@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-export const MENU_COMMANDS = ["chat", "core", "config", "core-gateway", "gateway-start", "gateway-stop", "attach"] as const;
+export const MENU_COMMANDS = ["chat", "core", "config", "core-gateway", "gateway-start", "gateway-stop", "attach", "export", "import"] as const;
 export type MenuCommand = typeof MENU_COMMANDS[number];
 
 const parameterSchema = z.object({
@@ -15,6 +15,9 @@ const parameterSchema = z.object({
   corePort: z.number().int().min(1).max(65535).optional(),
   clients: z.string().min(1).optional(),
   continueSession: z.boolean().optional(),
+  archive: z.string().min(1).optional(),
+  output: z.string().min(1).optional(),
+  encrypt: z.boolean().optional(),
 });
 export type MenuParameters = z.infer<typeof parameterSchema>;
 export type MenuHistory = Partial<Record<MenuCommand, MenuParameters>>;
@@ -24,6 +27,7 @@ const FIELDS: Record<MenuCommand, (keyof MenuParameters)[]> = {
   "core-gateway": ["sandbox", "host", "port"],
   "gateway-start": ["sandbox", "clients"], "gateway-stop": ["sandbox", "clients"],
   attach: ["coreServer", "corePort"],
+  export: ["sandbox", "output", "encrypt"], import: ["archive", "sandbox"],
 };
 
 export function menuHistoryPath(): string {

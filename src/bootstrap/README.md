@@ -2,10 +2,11 @@
 
 - `cli.ts`：五模式参数、端口和模式适用性校验。
 - `buildAppCommand` 统一源码/编译入口的命令前缀，由首次配置子进程与菜单执行命令显示复用。
-- `menu-flow.ts` / `menu.ts`：一次性启动向导状态与普通终端交互。
+- `menu-flow.ts` / `menu.ts`：一次性启动向导状态与普通终端交互，含 `backup` 导出/导入子菜单。
 - `menu-history.ts`：`~/.config/atom/menu_history.json` 参数记忆与原子写入。
 - `runtime-file.ts`：本机 Core/Gateway 实例发现文件、管理 token 和实例归属清理。
 - `config.ts` / `env.ts`：用户配置、运行时 overlay 与环境变量。
+- `backup-format.ts` / `backup.ts`：`export` / `import` 子命令；`.atombak` 归档编解码、gzip、可选 scrypt + AES-256-GCM、`.env` merge 与原子写入。
 - `first-run.ts`：默认交互模式首次安装流程。
 - `agents.ts`：sandbox 初始化。
 

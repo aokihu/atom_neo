@@ -413,6 +413,42 @@ integration("menu arrow navigation and back restore the selected branch without 
   }
 }, 40000);
 
+integration("menu backup exports and imports unencrypted archives without password prompts", async () => {
+  for (const source of [true, false]) {
+    const path = sandbox(source ? "menu-backup-source" : "menu-backup-binary-source");
+    writeFileSync(join(path, ".env"), "ATOM_TEST_KEY=backup-test\nLOCAL_ONLY=keep\n");
+    const archive = join(temp, source ? "menu-backup-source.atombak" : "menu-backup-binary.atombak");
+    const target = join(temp, source ? "menu-backup-source-target" : "menu-backup-binary-target");
+    const home = join(temp, source ? "menu-backup-source-home" : "menu-backup-binary-home");
+    const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
+    const exported = await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r" },
+      { wait: "export >", send: "\r" },
+      { wait: "工作目录", send: "\r" },
+      { wait: "归档路径", send: `\x15${archive}\r` },
+      { wait: "加密归档", send: "\x1b[B\r" },
+    ], [...command, "menu", "--sandbox", path], home);
+    expect(exported.commands).toHaveLength(1);
+    expect(exported.commands[0]).toContain(`export --output ${archive}`);
+    expect(exported.tail).not.toContain("Password:");
+    const imported = await driveMenu([
+      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r" },
+      { wait: "import >", send: "\x1b[B\r" },
+      { wait: "归档文件", send: `\x15${archive}\r` },
+      { wait: "工作目录", send: `\x15${target}\r` },
+      { wait: "Continue? [y/N]", send: "y\r" },
+    ], [...command, "menu", "--sandbox", path], home);
+    expect(imported.commands).toHaveLength(1);
+    expect(imported.commands[0]).toContain(`import ${archive}`);
+    expect(imported.tail).not.toContain("Password:");
+    expect(readFileSync(join(target, ".env"), "utf8")).toContain("LOCAL_ONLY=keep");
+    expect(JSON.parse(readFileSync(join(home, ".config/atom/menu_history.json"), "utf8")).commands).toEqual({
+      export: { sandbox: path, output: archive, encrypt: false },
+      import: { archive, sandbox: target },
+    });
+  }
+}, 40000);
+
 integration("menu attach supports back, failed connection retry, handoff, and remembered defaults", async () => {
   const path = sandbox("menu-attach-core");
   writeFileSync(join(path, ".env"), "ATOM_ADMIN_TOKEN=menu-local-test-token\n");

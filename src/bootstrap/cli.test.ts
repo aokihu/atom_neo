@@ -17,6 +17,34 @@ describe("menu command", () => {
   });
 });
 
+describe("export / import commands", () => {
+  test("parses export options", () => {
+    const args = parseArguments(["export", "--sandbox", "./project", "-o", "backup.atombak", "--password"]) as any;
+    expect(args).toMatchObject({ command: "export", sandbox: resolve("project"), output: "backup.atombak", password: true, force: false });
+  });
+
+  test("parses import options and resolves the archive path", () => {
+    const args = parseArguments(["import", "backup.atombak", "--sandbox", "./project", "--env", "replace", "--dry-run", "--force"]) as any;
+    expect(args).toMatchObject({ command: "import", archive: resolve("backup.atombak"), sandbox: resolve("project"), envMode: "replace", dryRun: true, force: true });
+    expect(parseArguments(["import", "backup.atombak"])).toMatchObject({ envMode: "merge", password: false });
+  });
+
+  test("rejects invalid invocations", () => {
+    expect(() => parseArguments(["export", "--mode", "core"])).toThrow("export does not accept --mode");
+    expect(() => parseArguments(["export", "extra"])).toThrow();
+    expect(() => parseArguments(["import"])).toThrow("exactly one archive path");
+    expect(() => parseArguments(["import", "a.atombak", "b.atombak"])).toThrow("exactly one archive path");
+    expect(() => parseArguments(["import", "a.atombak", "--env", "bad"])).toThrow("Invalid --env");
+    expect(() => parseArguments(["import", "a.atombak", "--output", "x"])).toThrow("import does not accept --output");
+    expect(() => parseArguments(["--force"])).toThrow("require export or import");
+  });
+
+  test("shows help for subcommands", () => {
+    expect(parseArguments(["export", "--help"])).toBe("help");
+    expect(parseArguments(["import", "--help"])).toBe("help");
+  });
+});
+
 describe("parseArguments --config", () => {
   test("defaults to false", () => {
     const args = parseArguments(["--sandbox", "/tmp/sb"]) as any;

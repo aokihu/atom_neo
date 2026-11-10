@@ -34,6 +34,17 @@ test("remembers each action independently and strips credentials and unrelated f
   expect(readdirSync(dirname(path))).toEqual(["menu_history.json"]);
 });
 
+test("remembers backup paths and encryption choice without secrets", () => {
+  const path = historyPath();
+  saveMenuHistory("export", { sandbox: "/my project", output: "/tmp/backup.atombak", encrypt: true }, path);
+  saveMenuHistory("import", { sandbox: "/my project", archive: "/tmp/backup.atombak" }, path);
+  expect(readMenuHistory(path).commands).toEqual({
+    export: { sandbox: "/my project", output: "/tmp/backup.atombak", encrypt: true },
+    import: { archive: "/tmp/backup.atombak", sandbox: "/my project" },
+  });
+  expect(readFileSync(path, "utf8")).not.toContain("password");
+});
+
 test("warns for malformed or incompatible history and recovers on successful save", () => {
   const path = historyPath();
   saveMenuHistory("config", { sandbox: "/valid" }, path);
