@@ -1,0 +1,561 @@
+# Atom Neo Code Review Plan — 2026-11-10
+
+> 配套文件：
+> - [code-review-2026-11-10.md](./code-review-2026-11-10.md)
+> - [code-review-graph-2026-11-10.md](./code-review-graph-2026-11-10.md)
+>
+> **Branch**: `code-review/2026-11-10`
+> **Baseline**: `main` @ `e9b9452` (v1.22.0)
+> **状态**: 计划已锁定，尚未实施源码改动。
+
+---
+
+## 0. 决策记录
+
+| 决策 | 结论 | 影响 |
+|---|---|---|
+| Node.js 支持 | **正式支持目标** | 需要运行时标准化、Node HTTP/WS、构建/CI |
+| Web 文档 | **不保留现有 Web 页面**；需要 HTTP server 把 Markdown 渲染成 HTML | 删除 `docs/pages` + React SSR，新增 `node:http` 渲染服务 |
+| 未实现 Element | **暂时不动** | 5 个兼容 Element、follow-up、Replay、PipelineRunner/Manager 保持原样 |
+| 多 Provider | **需要** | 新增 Provider 工厂、配置 protocol、Prompt 语言、Provider options |
+
+### 版本基线
+
+- Node：建议 **>= 24 LTS**，CI 覆盖 24/26。
+- Bun：建议 **>= 1.4**（`node:sqlite` / `fs.glob` / `child_process` 已在本机 1.4.2 验证）。
+- 本机已验证：
+  - Node 26：`node:sqlite` + FTS5、`fs.glob`、`import.meta.main`、`@opentui/core` Node 导出可用。
+  - Bun 1.4.2：`node:sqlite` + FTS5、`fs.glob`、`node:child_process` 可用。
+
+---
+
+## 1. 总体原则
+
+1. **Node 标准 API 作为共同基线**：不为 `node:fs/path/crypto` 造抽象。
+2. **只对真正分歧点做端口**：HTTP/WebSocket；其余能力优先统一实现。
+3. **先修正确性，再谈结构**：P0 独立修复，避免重构掩盖 bug。
+4. **先加测试，再迁移**：每个阶段先写/补测试，再改调用点。
+5. **一个阶段一个 PR**：保持可回滚；大阶段拆子 PR。
+6. **禁区不动**：未实现 Element、follow-up、Replay、PipelineRunner/Manager 本次不改。
+7. **不做大爆炸**：不重写全部测试，不引入 DI 容器，不做全量插件化。
+
+---
+
+## 2. 阶段总览
+
+| 阶段 | 主题 | 风险 | 预估 | 依赖 | 主要 CR |
+|---|---|---|---|---|---|
+| S0 | 基线与可行性验证 | 极轻 | 0.5–1 天 | — | — |
+| S1 | P0 正确性修复 | 轻 | 1–2 天 | S0 | CR-COR-01..11 |
+| S2 | 运行时标准化（非 Server） | 中 | 4–6 天 | S1 | CR-RUN-01..05, CR-DUP-04/05/06 |
+| S3 | 共享配置与基础工具 | 轻–中 | 3–5 天 | S1 | CR-DUP-03..07, CR-NAM-01/09 |
+| S4 | 文档 Markdown → HTML 服务 | 中 | 2–3 天 | S1 | CR-DUP-09, CR-DOC-01..10 |
+| S5 | TUI 共享组件包 | 中 | 4–6 天 | S1/S3 | CR-DUP-01/02, CR-ARCH-05 |
+| S6 | 事件与任务提交统一 | 中 | 3–4 天 | S1 | CR-DUP-08, CR-COR-10, CR-ARCH-15 |
+| S7 | 多 Provider 抽象 | 中–高 | 4–6 天 | S3 | CR-PRO-01..06 |
+| S8 | 拆分 `server.ts` | 高 | 4–6 天 | S6/S7 | CR-ARCH-13, CR-STR-02 |
+| S9 | HTTP/WS 运行时统一 + Node 入口 | 极高 | 5–8 天 | S2/S8 | CR-RUN-06, CR-ARCH-04 |
+| S10 | Node 构建/测试/发布 | 高 | 4–6 天 | S9 | CR-RUN-07 |
+| S11 | 全局状态/DI 收口 | 极高 | 5–8 天 | S3/S10 | CR-ARCH-01..09 |
+| S12 | 巨型文件与 TUI 结构重构 | 极高 | 8–12 天 | S7/S11 | CR-STR-01..11, CR-DUP-11/12 |
+
+### 顺序原则
+
+- **S1 → S2 → S9 → S10**：Node 支持主路径。
+- **S1 → S3 → S7 → S8 → S9**：Provider + Server 拆分耦合路径。
+- **S4 / S5 可并行**：文档与 TUI kit 不阻塞主路径。
+- **S11 → S12**：先收口构造/全局状态，再拆文件，避免拆完又改构造。
+- **S6 → S8**：事件契约稳定后再拆 server。
+
+---
+
+## 3. 阶段详情
+
+### S0 — 基线与可行性验证（极轻）
+
+**目标**：锁定基线，验证 Node/Bun 关键能力，避免后期返工。
+
+**任务清单**：
+
+- [ ] 记录 `bun run typecheck`、`bun test`、`bun run build` 基线（通过数/失败数/耗时）。
+- [ ] 添加 `engines`：`node >= 24`、`bun >= 1.4`。
+- [ ] 验证 `node:http + ws` 在 Bun 下可用性：
+  - 可用 → S9 采用统一实现（方案 A）。
+  - 不可用 → S9 采用 Bun/Node 双实现端口（方案 B）。
+- [ ] 验证 `@opentui/react`/`@opentui/core` 在 Node 下的启动/渲染（本机已可加载，固化为 smoke）。
+- [ ] 确认 `node:sqlite` 在最低 Node/Bun 版本的 FTS5、WAL、参数绑定行为。
+- [ ] 创建 `scripts/node-smoke/` 骨架（config/memory/shell/glob/schedule）。
+
+**验收**：
+- 基线记录写入 PR 描述。
+- S0 决策记录（方案 A/B、最低版本）追加到本文件。
+
+**风险/回滚**：无源码改动，无风险。
+
+---
+
+### S1 — P0 正确性修复（轻）
+
+**目标**：消除数据丢失、生命周期错误、平台 bug。
+
+**任务清单**：
+
+- [ ] `CR-COR-01`：`config-tui` `commit()` 改 async/同步写；`tui` 未知字段保留。
+- [ ] `CR-COR-02`：Task.Completed 保存失败回滚消息 + tokenUsage + 预算。
+- [ ] `CR-COR-03`：MemoryService 构造器只存配置；`start()` 开库/迁移；`stop()` 关闭；修 `retain()` weight。
+- [ ] `CR-COR-04`：ServiceManager fail-fast + 已启动服务回滚；BaseService running 状态修正。
+- [ ] `CR-COR-05`：PipeSink 使用 `fs.constants.O_NONBLOCK`。
+- [ ] `CR-COR-06`：MCP init 增加 stopping 守卫；ref 声明前置。
+- [ ] `CR-COR-07`：删除 `registerSharedElements` 静默 catch。
+- [ ] `CR-COR-08`：trigram 百分比乘 100。
+- [ ] `CR-COR-09`：TaskQueue 完成状态上限；ToolRecord suspend 释放/裁剪。
+- [ ] `CR-COR-10`：WS `task.submit` 使用 `payload.pipeline`；与 HTTP 共用提交逻辑（最小版）。
+- [ ] `CR-COR-11`：`BootArguments.wizard` 入类型；`main.ts` 不再读原始 argv。
+
+**验收**：
+- 每项有回归测试（失败注入/并发/往返）。
+- `bun test` 全量通过。
+- `bun run typecheck` 通过。
+
+**风险/回滚**：低；按文件拆 commit，可单独 revert。
+
+---
+
+### S2 — 运行时标准化（非 Server）（中）
+
+**目标**：去掉所有非 Server 的 Bun 专有 API，统一到 Node 标准 API。
+
+#### S2a 轻量替换（1–2 天）
+
+- [ ] `CR-RUN-01`：`Bun.write` → `writeFileSync` / `fs.promises.writeFile`。
+- [ ] `CR-RUN-02`：`Bun.env` → `process.env`。
+- [ ] `CR-RUN-03`：`Bun.argv` → `process.argv`。
+- [ ] `CR-RUN-04`：`Bun.sleep` → shared `sleep`；`Bun.stringWidth` → `string-width`。
+- [ ] `Bun.main` → `import.meta.main` / `process.argv[1]`。
+
+#### S2b 进程/文件/定时（2–3 天）
+
+- [ ] `CR-RUN-02`：`Bun.spawn`/`Bun.Subprocess` → `node:child_process` + `ProcessHandle`。
+- [ ] `CR-RUN-03`：`Bun.Glob` → `fs.glob` / `fs.globSync`。
+- [ ] `CR-RUN-04`：`Bun.cron` → `croner`。
+- [ ] 涉及：`bootstrap/first-run.ts`、`gateway/client-manager`、`tools/builtin/shell.ts`、`builtin/fs.ts`、`tools/schedule-service.ts`。
+
+#### S2c SQLite（3–4 天，单独 PR）
+
+- [ ] `CR-RUN-05`：`bun:sqlite` → `node:sqlite` 包装器。
+- [ ] 保留 `run/prepare/get/all/exec/close` 语义。
+- [ ] 验证 FTS5、WAL、事务、参数绑定。
+- [ ] 若最低 Bun < 1.4，保留临时 Bun/Node 分支并记录移除条件。
+
+**验收**：
+```bash
+rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
+# 期望：仅剩 Bun.serve / ServerWebSocket（S9 处理）
+```
+- Node 下 config、memory、shell、glob、schedule smoke 通过。
+
+**风险/回滚**：中；S2c 单独 PR，可回退到 `bun:sqlite`。
+
+---
+
+### S3 — 共享配置与基础工具（轻–中）
+
+**目标**：消灭配置、env、原子写、helpers、领域类型的多份实现。
+
+**任务清单**：
+
+- [ ] `CR-DUP-03`：`shared/src/config/` 作为唯一配置契约：
+  - `ConfigSchema`、默认值、`RuntimeConfigSchema`、`mergeConfig`。
+  - `PROVIDERS`、`DEFAULT_PROFILES`、主题名清单。
+- [ ] `CR-DUP-04`：`shared/src/utils/env-file.ts`：`parseEnv` / `upsertEnv` / `serializeEnv`。
+- [ ] `CR-DUP-05`：`shared/src/utils/fs.ts`：`writeFileAtomic`。
+- [ ] `CR-DUP-06`：`shared/src/utils`：`createId`、`parsePort`、`clamp`、`sleep` 统一。
+- [ ] `CR-DUP-07`：Skill/Memory/Todo 类型收口到 shared；持久化行类型改名 `MemoryRow`。
+- [ ] `bootstrap/config.ts` 改为 re-export/薄封装。
+- [ ] `config-tui` 依赖 `@atom-neo/shared`，删除 `PROVIDERS`/`THEMES`/`DEFAULT_PROFILES`/env 解析。
+- [ ] `gateway/config.ts` 复用 ClientConfig schema。
+- [ ] 删除顶层 `theme` 死字段。
+- [ ] `CR-NAM-01/09`：文件命名与文件头规范；新增检查脚本。
+
+**验收**：
+- 配置/向导/Gateway schema 测试。
+- `.env` 的 `export KEY=`、CRLF、注释 round-trip。
+- 原子写失败注入测试。
+- 新增主题只改 1 处。
+
+**风险/回滚**：轻–中；配置是核心，先加测试再迁移。
+
+---
+
+### S4 — 文档 Markdown → HTML 服务（中）
+
+**目标**：删除 Web 双轨，只保留 Markdown + 极简 HTTP 渲染。
+
+**任务清单**：
+
+- [ ] `CR-DUP-09`/`CR-DOC-01`：删除 `docs/pages/`、`docs/components/`、`docs/shared.ts`、`docs/server.tsx`。
+- [ ] 新建 `docs/server.ts`：
+  - `node:http` + `marked`（或 `markdown-it`）+ `highlight.js`。
+  - `/` 渲染 `docs/index.md`；路径映射到 `.md`。
+  - 相对链接重写；路径穿越防护；静态 CSS。
+  - 可选 `--watch`（`fs.watch`）。
+- [ ] `CR-DOC-02`：新建 `docs/records/`，移入验收/实验/计划记录。
+- [ ] `CR-DOC-03/04/05`：合并 Context、启动、Skill 重复文档。
+- [ ] `CR-DOC-06..08`：修正 architecture/configuration/protocol 的失真声明。
+- [ ] `CR-DOC-09/10`：修正失效 `src/` 路径、索引状态。
+- [ ] 新增 `scripts/check-docs.ts`：Markdown 链接 + `src/` 路径 + Element 名称。
+
+**验收**：
+- `bun run docs` 与 Node 启动同一服务，输出一致。
+- 删除 `docs/pages` 后无 React 文档依赖。
+- `check-docs` 通过。
+
+**风险/回滚**：中；纯文档，独立 PR，可 revert。
+
+---
+
+### S5 — TUI 共享组件包（中）
+
+**目标**：消除 `tui` 与 `config-tui` 的 Modal/主题重复，解除主题循环依赖。
+
+**任务清单**：
+
+- [ ] `CR-DUP-01/02`：新建 `src/packages/tui-kit`：
+  - 主题清单 + `ThemeProvider/useTheme/ThemeContext`。
+  - `Modal`、`ModalActionBar`、`types`、`ListModal`、`SelectableRow`、`FieldInput`。
+- [ ] `tui` 与 `config-tui` 改为依赖 `tui-kit`，删除副本。
+- [ ] `CR-ARCH-05`：ThemeContext 从 `tui/components/App.tsx` 移出。
+- [ ] 修 Modal 状态 bug：`selectedIndex` 重置、Tab/←/→ 互斥。
+- [ ] `config-tui` `commit()` 保留未知 `tui` 字段。
+- [ ] 给 `@atom-neo/tui` 补 `zustand` 依赖。
+- [ ] 统一 Modal 术语、SelectableRow 模板。
+
+**验收**：
+- 两包交互/快照测试。
+- 新增主题只改 1 处。
+- Modal 键盘行为测试。
+
+**风险/回滚**：中；UI 回归风险，先接入 tui-kit 再删除旧文件。
+
+---
+
+### S6 — 事件与任务提交统一（中）
+
+**目标**：一个事件目录、一个任务提交入口、一个协议类型来源。
+
+**任务清单**：
+
+- [ ] `CR-DUP-08`：`shared/src/constants/events.ts` 作为唯一事件源。
+- [ ] `WsMessages`、`PipelineEventMap`、`ServerEvent/ClientEvent` 由常量派生。
+- [ ] 修复 `conversation.chain` / `conversation.idle` envelope，移除 `as any`。
+- [ ] `CR-COR-10`/`CR-ARCH-15`：新增 `TaskSubmissionService`：
+  - HTTP/WS 共用。
+  - WS 使用 `payload.pipeline`。
+  - Zod 校验。
+- [ ] TUI `ws-client.ts` 改判别联合 + 路由表。
+- [ ] `CR-DOC-08`：同步修正 `protocol.md`。
+
+**验收**：
+- HTTP/WS 提交行为一致。
+- WS 可选 pipeline 测试。
+- 事件路径无 `as any`。
+- 协议文档与实现对齐。
+
+**风险/回滚**：中；事件路径广，但改动集中。
+
+---
+
+### S7 — 多 Provider 抽象（中–高）
+
+**目标**：让 DeepSeek/OpenAI/Anthropic/OpenAI-compatible 真正可用。
+
+**任务清单**：
+
+- [ ] `CR-PRO-02`：配置增加 `providers[id].protocol`，默认按 id 推断。
+- [ ] `CR-PRO-01`：新增 `createLanguageModel(resolved)` 工厂。
+- [ ] 替换 5 处 `createDeepSeek`。
+- [ ] `CR-PRO-04`：ProviderOptionsStrategy（deepseek/openai/anthropic）。
+- [ ] `CR-PRO-03`：所有 `resolvePrompt` 传 provider/model；非 DeepSeek 默认英文。
+- [ ] `CR-PRO-05`：AgentsCompiler 注入模型 resolver。
+- [ ] `CR-PRO-06`：移除跨 Provider API Key 回退。
+- [ ] 增加 `@ai-sdk/openai`、`@ai-sdk/anthropic`、`@ai-sdk/openai-compatible` 依赖。
+
+**验收**：
+- 四种 provider 配置均能构造模型（fake）。
+- 提示词语言/Provider options 单测。
+- `rg 'createDeepSeek'` 只剩工厂内一处。
+- 可选 live smoke（不计入 CI）。
+
+**风险/回滚**：中–高；LLM 行为变化，必须用 fake 测试覆盖。
+
+---
+
+### S8 — 拆分 `server.ts`（高）
+
+**目标**：在接入 Node HTTP 前，把 `startCore` 拆成可测试模块，行为不变。
+
+**任务清单**：
+
+- [ ] `CR-ARCH-13`/`CR-STR-02`：拆为：
+  - `bootstrap.ts`（构造）
+  - `pipeline-factory.ts`（5 条 pipeline 的模型/Token/Context 解析）
+  - `task-lifecycle.ts`（Completed/Failed/Committed、回滚）
+  - `http-router.ts`（路由表 + `requireAdmin`）
+  - `mcp-lifecycle.ts`（初始化/health/stop）
+- [ ] `startCore` 只保留组装与启停，目标 <200 行。
+- [ ] 保持 `Bun.serve` 不变（S9 再换）。
+
+**验收**：
+- 现有 server/continuation 测试行为不变。
+- 新增路由表与 Task.Completed 回滚测试。
+- `startCore` 行数目标达成。
+
+**风险/回滚**：高；纯搬移 + 小修，按模块拆 commit。
+
+---
+
+### S9 — HTTP/WS 运行时统一 + Node 入口（极高）
+
+**目标**：Core/Gateway 在 Node 下正式启动，并保留 Bun 支持。
+
+**任务清单**：
+
+- [ ] 定义自有类型：`HttpServer`、`WebSocketPeer`、`RequestContext`。
+- [ ] S0 方案 A：统一 `node:http` + `ws`。
+- [ ] S0 方案 B：Bun `Bun.serve` + Node `node:http/ws` 双实现。
+- [ ] 替换 `Bun.serve`、`srv.upgrade`、`srv.requestIP`、`ServerWebSocket`。
+- [ ] `shared/utils/admin-auth.ts` 使用 `RequestContext.ip`。
+- [ ] Gateway 使用同一 `HttpServer`（无 WS）。
+- [ ] 新增 Node 入口（`main.node.ts` 或运行时检测）。
+- [ ] 保持现有 WS 协议、断线、session 路由、admin token 行为。
+
+**验收**：
+- Bun/Node 同一组 WS 协议测试。
+- Node 启动 Core、health、attach、一次 fake conversation。
+- Gateway start/stop。
+
+**风险/回滚**：极高；独立 PR，保留旧 `Bun.serve` 入口直到 Node 测试通过。
+
+---
+
+### S10 — Node 构建 / 测试 / 发布（高）
+
+**目标**：Node 可安装、可验证、可发布。
+
+**任务清单**：
+
+- [ ] `CR-RUN-07`：`tsconfig` 拆分：
+  - `tsconfig.base.json` 不含 `types: ["bun"]`。
+  - `tsconfig.bun.json` / `tsconfig.node.json`。
+- [ ] Bun 二进制继续 `bun build --compile`。
+- [ ] Node 产物：`bun build --target node` 或 esbuild，输出 `dist/node`；`@opentui/*` external。
+- [ ] `package.json`：`main`/`exports` 指向 dist（或明确源码运行要求）。
+- [ ] 确定 Node 包管理器（npm/pnpm）对 `workspace:*` 的策略。
+- [ ] Node smoke suite：
+  - config、memory FTS5、shell、glob、schedule。
+  - Core 启动 + health + WS 一次对话。
+  - TUI 入口 import。
+- [ ] CI 矩阵：Bun 全量；Node 24/26 typecheck + build + smoke。
+
+**验收**：
+- `node dist/node/main.js` 可启动。
+- CI 双运行时绿。
+- 发布包不含 `bun:` 导入。
+
+**风险/回滚**：高；构建/发布独立，可先保留 Bun 发布。
+
+---
+
+### S11 — 全局状态 / DI 收口（极高）
+
+**目标**：去掉模块级可变状态，落实 `dependency-injection.md`。
+
+**任务清单**：
+
+- [ ] `CR-ARCH-01`：`ElementRegistry` 实例化，注入 Builder/Manager/Engine。
+- [ ] `CR-ARCH-02`：`PipelineInstanceStore` 替代 `pipelineMap`。
+- [ ] `CR-ARCH-03`：`PromptRegistry` 实例化并注入。
+- [ ] `CR-ARCH-04`：Gateway Logger 注入。
+- [ ] `CR-ARCH-06`：类型化 `Services`，`startCore` 接收显式依赖。
+- [ ] `CR-ARCH-08`：TaskEngine 改直线循环 + 唤醒 Promise；FlowState 不变异。
+- [ ] `CR-ARCH-09`：ClientManager 拆 `ProcessSupervisor`（可与 S12 合并）。
+- [ ] 移除模块级计数器/日志器/单例。
+- [ ] 启动 fail-fast + 回滚。
+
+**验收**：
+- 两次 `startCore` / 并行测试不冲突。
+- 全局 `let` / 模块级 `new Map` 审查通过。
+- 服务缺失时启动失败，而非半初始化。
+
+**风险/回滚**：极高；按 registry/prompt/service/engine 拆 4 个 PR。
+
+---
+
+### S12 — 巨型文件与 TUI 结构重构（极高）
+
+**目标**：在 Provider/Runtime/DI 稳定后做纯结构拆分。
+
+#### S12a Core
+
+- [ ] `CR-STR-01`/`CR-ARCH-12`：`stream-llm.ts` 拆分。
+- [ ] `CR-STR-03`：`memory-service.ts` 拆分。
+- [ ] `CR-STR-04`：`context-service.ts` 拆分。
+- [ ] `CR-STR-05`：`persistence-service.ts` 拆分。
+- [ ] `CR-STR-06`：`ClientManager` → `ProcessSupervisor`。
+- [ ] `CR-STR-07`：`check-follow-up` / `compress-finalize` 纯函数化。
+- [ ] `CR-DUP-11/12`：工具执行与消息投影统一。
+
+#### S12b TUI
+
+- [ ] `CR-STR-08`：`chat.ts` / `useChat.ts` 拆分。
+- [ ] `CR-STR-09`：Sidebar/RuntimeSidebar/SettingsModal/InputBar 拆分。
+- [ ] `CR-ARCH-10`：App Modal 配置表。
+- [ ] `CR-ARCH-11`/`CR-STR-10`：WizardApp reducer。
+
+**验收**：
+- 拆分前后行为测试一致。
+- 单文件 ≤300 行、单函数 ≤100 行。
+- 新增/删除 Element 不再触碰全局。
+
+**风险/回滚**：极高；一次只拆一个文件/模块，特性测试先行。
+
+---
+
+## 4. 可并行 / 必须串行
+
+### 可并行
+
+- S4（文档）与 S2/S3 完全独立。
+- S5（TUI kit）与 S2/S3 独立，但需在 TUI 结构重构前完成。
+- S7（Provider）与 S9（HTTP/WS）可并行，但 S7 必须先于 S12 的 `stream-llm` 拆分。
+
+### 必须串行
+
+```text
+S1 → S2 → S9 → S10
+S1 → S3 → S7 → S8 → S9
+S6 → S8
+S10 → S11 → S12
+S7 → S12（stream-llm）
+S5 → S12（TUI）
+```
+
+---
+
+## 5. 每阶段 Definition of Done
+
+一个阶段完成必须同时满足：
+
+- [ ] 目标 CR 全部关闭或有明确遗留说明。
+- [ ] 新增/更新对应测试。
+- [ ] `bun run typecheck` 通过。
+- [ ] `bun test` 全量通过（或记录已知失败基线）。
+- [ ] 运行时相关阶段：Node smoke 通过。
+- [ ] 文档相关阶段：`check-docs` 通过。
+- [ ] 无新增 `any`（或已记录理由）。
+- [ ] 无新增模块级可变状态（S11 后严格执行）。
+- [ ] PR 描述包含：关联 CR ID、风险、回滚方式、验证命令。
+
+---
+
+## 6. 首个 PR 建议
+
+**PR-1：基线 + P0 正确性修复**
+
+范围：
+
+- S0 基线记录。
+- `CR-COR-01`、`CR-COR-03`、`CR-COR-04`、`CR-COR-05`、`CR-COR-08`。
+- 不碰 `server.ts` 大改（CR-COR-02/06 可放 PR-2，避免与 S8 冲突）。
+
+**理由**：这些都是局部、可测试、低耦合的修复；先建立“小步提交”的节奏。
+
+**PR-2：config-tui + server 生命周期 P0**
+
+- `CR-COR-01/02/06/07/10/11`。
+- 补失败注入与并发测试。
+
+---
+
+## 7. 验收命令汇总
+
+```bash
+# 类型
+bun run typecheck
+
+# 全量测试
+bun test
+
+# 目标测试
+bun test src/packages/core/src/session
+bun test src/packages/config-tui/src/wizard-logic.test.ts
+bun test src/packages/core/src/server.test.ts
+
+# Bun 运行
+bun run src/main.ts --mode core --sandbox ./sandbox
+
+# Node 运行（S9+）
+node dist/node/main.js --mode core --sandbox ./sandbox
+
+# 文档（S4+）
+bun run docs
+node dist/node/docs-server.js
+
+# 检查
+rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/node_modules/**'
+bun run scripts/check-docs.ts
+bun run scripts/check-file-headers.ts
+```
+
+---
+
+## 8. 风险与回滚矩阵
+
+| 阶段 | 回滚方式 | 备注 |
+|---|---|---|
+| S1 | 按文件 revert | 局部修复 |
+| S2 | 按 2a/2b/2c 拆分 revert | S2c SQLite 可回退 `bun:sqlite` |
+| S3 | 保留旧配置读取路径一个版本 | 双写/双读过渡 |
+| S4 | 恢复 `docs/pages` | 删除前先打 tag |
+| S5 | 保留旧 Modal 一个版本 | 先接入再删除 |
+| S6 | 保留旧事件常量映射 | 双发/双读过渡 |
+| S7 | 配置 protocol 默认推断 | 旧配置不破坏 |
+| S8 | 纯搬移，按模块 revert | 行为不变 |
+| S9 | 保留旧 Bun 入口 | Node 入口独立 |
+| S10 | 保留 Bun 发布流程 | Node 构建独立 |
+| S11 | 按 registry/prompt/service/engine 拆分 | 风险最高 |
+| S12 | 单文件/单模块 revert | 特性测试先行 |
+
+---
+
+## 9. 暂不做（与禁区一致）
+
+- 不删除未实现的 5 个兼容 Element。
+- 不删除 follow-up Element。
+- 不删除 Replay / PipelineRunner / PipelineManager / CommandPalette / useCopied。
+- 不为 `node:fs/path/crypto` 造抽象。
+- 不迁移全部 `bun:test` 到 Node。
+- 不引入 DI 容器。
+- 不做全量 Provider 插件化。
+
+---
+
+## 10. 进度追踪
+
+| 阶段 | 状态 | PR | 备注 |
+|---|---|---|---|
+| S0 | 未开始 | — | 基线/决策门 |
+| S1 | 未开始 | — | P0 |
+| S2 | 未开始 | — | 运行时标准 |
+| S3 | 未开始 | — | 配置/工具 |
+| S4 | 未开始 | — | 文档 |
+| S5 | 未开始 | — | TUI kit |
+| S6 | 未开始 | — | 事件/提交 |
+| S7 | 未开始 | — | Provider |
+| S8 | 未开始 | — | server 拆分 |
+| S9 | 未开始 | — | Node HTTP/WS |
+| S10 | 未开始 | — | Node 构建/CI |
+| S11 | 未开始 | — | DI 收口 |
+| S12 | 未开始 | — | 结构重构 |
+
+> 每完成一个阶段，更新本表与 `code-review-2026-11-10.md` 的变更记录。

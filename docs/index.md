@@ -81,3 +81,11 @@
 | [skill-system.md](./subsystems/skill-system.md) | 可插拔 AI Agent 技能系统 — 三层加载、分段注入、自主卸载 | 实现 skill 功能 |
 
 双层执行预算：[窗口健康检查](pipelines/follow-up-evaluator.md)、[验收记录](pipelines/continuation-validation.md)。
+
+## 代码审查
+
+| 文档 | 说明 | 何时 |
+|------|------|------|
+| [code-review-2026-11-10.md](./code-review-2026-11-10/code-review-2026-11-10.md) | 全量代码审查：问题 ID、文件位置、当前/目标代码片段、验收标准 | 实施整改前必读 |
+| [code-review-graph-2026-11-10.md](./code-review-2026-11-10/code-review-graph-2026-11-10.md) | 审查关系图：包依赖、运行时流程、重复源、Provider、Node 运行时、阶段依赖 | 理解影响面 |
+| [code-review-plan-2026-11-10.md](./code-review-2026-11-10/code-review-plan-2026-11-10.md) | 整改计划：S0–S12 阶段、风险、依赖、验收与进度追踪 | 按阶段实施 |
