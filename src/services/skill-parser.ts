@@ -1,16 +1,6 @@
-export type SkillSectionMeta = {
-  offset: number;
-  length: number;
-};
+import type { SkillDef, SkillSectionMeta } from "@atom-neo/shared";
 
-export type SkillDef = {
-  name: string;
-  description: string;
-  capabilities: string[];
-  version?: string;
-  filePath: string;
-  sections: Map<string, SkillSectionMeta>;
-};
+export type { SkillDef, SkillSectionMeta } from "@atom-neo/shared";
 
 export interface SkillParser {
   parse(content: string, filePath: string): SkillDef;

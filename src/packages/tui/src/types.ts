@@ -1,3 +1,7 @@
+import type { ThemeName } from "@atom-neo/shared";
+
+export type { ThemeName };
+
 export type ThemeColors = {
   bg: { page: string; codeBlock: string; input: string; popup: string };
   border: { default: string };
@@ -7,16 +11,6 @@ export type ThemeColors = {
   code: { red: string; cyan: string; blue: { light: string }; purple: string; orange: string };
   status: { success: string; warning: string; error: string };
 };
-
-export type ThemeName =
-  | "edex"
-  | "github-dark"
-  | "github-light"
-  | "dracula"
-  | "nord"
-  | "tokyo-night"
-  | "solarized-dark"
-  | "monokai";
 
 export type ToolPhase = "preparing" | "executing" | "done" | "error";
 
@@ -42,13 +36,9 @@ export type Message =
   | { role: "error"; content: string; id: string; timestamp: number }
   | { role: "info"; content: string; id: string; timestamp: number };
 
-export type ToolGroupMessage = Extract<Message, { role: "tool-group" }>;
+export type { TodoItem } from "@atom-neo/shared";
 
-export type TodoItem = {
-  content: string;
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  priority: "high" | "medium" | "low";
-};
+export type ToolGroupMessage = Extract<Message, { role: "tool-group" }>;
 
 export type ToolInfo = {
   name: string;

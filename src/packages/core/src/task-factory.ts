@@ -1,11 +1,5 @@
-import { TaskPriority, TaskSource, TaskState } from "@atom-neo/shared";
+import { TaskPriority, TaskSource, TaskState, createId } from "@atom-neo/shared";
 import type { TaskItem, TaskOrigin, TaskPayload } from "@atom-neo/shared";
-
-let nextId = 0;
-
-function generateId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${nextId++}`;
-}
 
 export function createTaskItem(params: {
   sessionId: string;
@@ -18,7 +12,7 @@ export function createTaskItem(params: {
   platform?: string;
   origin?: TaskOrigin;
 }): TaskItem {
-  const id = generateId("task");
+  const id = createId("task");
   const chainId = params.chainId ?? id;
   const now = Date.now();
 

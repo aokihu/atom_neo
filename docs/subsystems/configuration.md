@@ -45,7 +45,6 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 ```jsonc
 {
   "version": 2,
-  "theme": "dark",
 
   // 模型档位：advanced/balanced/basic 为对话模型；fast 用于可选决策模型
   "providerProfiles": {
@@ -116,35 +115,34 @@ CLI args (--port, --host, --sandbox)  >  runtime-config.json  >  config.json  > 
 
 ## 4. Schema 定义
 
+配置契约（Schema、默认值、Provider/TUI 主题清单）的**唯一来源**是
+`src/packages/shared/src/config/`，通过 `@atom-neo/shared` 导出：
+
+| 文件 | 内容 |
+|------|------|
+| `config/schema.ts` | `ConfigSchema`、`RuntimeConfigSchema`、`mergeConfig`、`overlaySchema` |
+| `config/providers.ts` | `ProviderProfilesSchema`、`ProviderDefinitionSchema`、`PROVIDERS`、`DEFAULT_PROFILES`、`DEFAULT_DECISION_MODES` |
+| `config/client.ts` | `ClientConfigSchema`（Core 配置与 Gateway 共用的 client 条目） |
+| `config/theme.ts` | `THEME_NAMES`、`ThemeName`、`DEFAULT_THEME` |
+
+`src/bootstrap/config.ts` 只负责文件加载/保存，并 re-export 上述类型与函数；`config-tui` 与
+`gateway` 直接依赖 shared，不再维护副本。
+
 ```typescript
-// src/bootstrap/config.ts
-const ProviderProfilesSchema = z.object({
-  advanced: z.string().default("deepseek/deepseek-v4-flash"),
-  balanced: z.string().default("deepseek/deepseek-v4-flash"),
-  basic: z.string().default("deepseek/deepseek-v4-flash"),
-});
-
-const ProviderDefinitionSchema = z.object({
-  apiKeyEnv: z.string(),
-  models: z.array(z.string()).min(1),
-  baseUrl: z.string().optional(),
-  options: z.record(z.unknown()).optional(),
-  thinking: z.enum(["enabled", "disabled", "adaptive"]).default("disabled"),
-  contextLimit: z.number().int().positive().optional(),
-});
-
+// src/packages/shared/src/config/schema.ts（节选）
 const ConfigSchema = z.object({
   version: z.literal(2).default(2),
-  theme: z.string().default("dark"),
-  providerProfiles: ProviderProfilesSchema.default({...}),
+  providerProfiles: ProviderProfilesSchema.default({ ...DEFAULT_PROFILES }),
   providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
-  transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({...}),
-  gateway: z.object({ port: z.number().int().default(3000) }).default({...}),
-  tui: z.object({ theme: z.enum(["edex", "github-dark", "github-light", "dracula", "nord", "tokyo-night", "solarized-dark", "monokai"]).default("edex") }).default({...}),
+  transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({ maxOutputTokens: 4096 }),
+  gateway: z.object({ port: z.number().int().default(3000), clients: z.array(ClientConfigSchema).default([]) }).default({ port: 3000, clients: [] }),
+  tui: z.object({ theme: z.enum(THEME_NAMES).default(DEFAULT_THEME) }).default({ theme: DEFAULT_THEME }),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;
 ```
+
+> 顶层 `theme` 字段已废弃：主题只读取 `tui.theme`，旧文件中的顶层 `theme` 会被忽略。
 
 ---
 
@@ -191,7 +189,6 @@ const providerOptions = {
 // 最小可执行默认值
 {
   version: 2,
-  theme: "dark",
   providerProfiles: {
     advanced: "deepseek/deepseek-v4-flash",
     balanced: "deepseek/deepseek-v4-flash",

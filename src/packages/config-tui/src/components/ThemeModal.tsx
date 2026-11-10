@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { THEME_NAMES } from "@atom-neo/shared";
 import { Modal } from "../modal";
 import { useTheme } from "../theme";
-import { THEMES } from "../wizard-logic";
 
 export function ThemeModal({ theme, onSubmit, onBack }: {
   theme: string;
@@ -9,7 +9,7 @@ export function ThemeModal({ theme, onSubmit, onBack }: {
   onBack: () => void;
 }) {
   const { colors } = useTheme();
-  const [selected, setSelected] = useState(Math.max(0, THEMES.indexOf(theme as (typeof THEMES)[number])));
+  const [selected, setSelected] = useState(Math.max(0, THEME_NAMES.indexOf(theme as (typeof THEME_NAMES)[number])));
 
   return (
     <Modal
@@ -17,14 +17,14 @@ export function ThemeModal({ theme, onSubmit, onBack }: {
       title="THEME"
       width={48}
       onClose={onBack}
-      listLength={THEMES.length}
+      listLength={THEME_NAMES.length}
       selectedListIndex={selected}
       onListNavigate={setSelected}
-      onListActivate={(i) => onSubmit(THEMES[i])}
+      onListActivate={(i) => onSubmit(THEME_NAMES[i])}
       hint="↑/↓ select · Enter choose · Esc back"
     >
       <box flexDirection="column">
-        {THEMES.map((t, i) => {
+        {THEME_NAMES.map((t, i) => {
           const isSelected = i === selected;
           return (
             <box key={t} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>

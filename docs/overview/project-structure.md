@@ -48,6 +48,12 @@ src/packages/shared/
 ├── package.json
 ├── tsconfig.json
 ├── index.ts              # Barrel exports
+├── config/               # Single config contract (schema/defaults/presets)
+│   ├── index.ts
+│   ├── schema.ts
+│   ├── providers.ts
+│   ├── client.ts
+│   └── theme.ts
 ├── types/
 │   ├── index.ts
 │   ├── task.ts
@@ -56,7 +62,6 @@ src/packages/shared/
 │   ├── tool.ts
 │   ├── pipeline.ts
 │   ├── session.ts
-│   ├── config.ts
 │   └── primitive.ts
 ├── pipeline/
 │   ├── index.ts
@@ -79,7 +84,11 @@ src/packages/shared/
     ├── index.ts
     ├── error.ts
     ├── string.ts
-    └── timing.ts
+    ├── timing.ts
+    ├── env-file.ts        # .env parse/upsert/merge
+    ├── fs.ts              # writeFileAtomic
+    ├── id.ts              # createId
+    └── number.ts          # clamp/parsePortValue
 ```
 
 ## 3. Package: `core`

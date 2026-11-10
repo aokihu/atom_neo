@@ -1,4 +1,5 @@
 import { SyntaxStyle, RGBA } from "@opentui/core";
+import { DEFAULT_THEME } from "@atom-neo/shared";
 import type { ThemeColors, ThemeName } from "./types";
 
 export const THEMES: Record<ThemeName, ThemeColors> = {
@@ -76,8 +77,8 @@ export const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
-export function getTheme(name: ThemeName = "edex"): { colors: ThemeColors; syntaxStyle: SyntaxStyle } {
-  const c = THEMES[name] ?? THEMES.edex;
+export function getTheme(name: ThemeName = DEFAULT_THEME): { colors: ThemeColors; syntaxStyle: SyntaxStyle } {
+  const c = THEMES[name] ?? THEMES[DEFAULT_THEME];
   return { colors: c, syntaxStyle: buildSyntaxStyle(c) };
 }
 

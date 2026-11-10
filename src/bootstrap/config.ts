@@ -1,120 +1,28 @@
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { z } from "zod";
-import { readFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  ClientConfigSchema,
+  ConfigSchema,
+  ProviderDefinitionSchema,
+  ProviderProfilesSchema,
+  RuntimeConfigSchema,
+  mergeConfig,
+  overlaySchema,
+  runtimeConfigPath,
+  writeFileAtomic,
+} from "@atom-neo/shared";
+import type { AppConfig, DeepPartial, RuntimeConfig } from "@atom-neo/shared";
 
-const ProviderProfilesSchema = z.object({
-  advanced: z.string().default("deepseek/deepseek-v4-flash"),
-  balanced: z.string().default("deepseek/deepseek-v4-flash"),
-  basic: z.string().default("deepseek/deepseek-v4-flash"),
-  fast: z.string().optional(),
-});
-
-const ProviderDefinitionSchema = z.object({
-  type: z.enum(["llm", "jev"]).default("llm"),
-  apiKeyEnv: z.string(),
-  models: z.array(z.string()).min(1),
-  baseUrl: z.string().optional(),
-  options: z.record(z.string(), z.unknown()).optional(),
-  thinking: z.enum(["enabled", "disabled", "adaptive"]).default("disabled"),
-  contextLimit: z.number().int().positive().optional(),
-});
-
-const ConfigSchema = z.object({
-  version: z.literal(2).default(2),
-  theme: z.string().default("dark"),
-  providerProfiles: ProviderProfilesSchema.default({
-    advanced: "deepseek/deepseek-v4-flash",
-    balanced: "deepseek/deepseek-v4-flash",
-    basic: "deepseek/deepseek-v4-flash",
-  }),
-  providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
-  decisionMode: z.object({
-    prediction: z.enum(["legacy", "jev"]).default("legacy"),
-    postConversation: z.enum(["legacy", "jev"]).default("legacy"),
-    continuation: z.enum(["jev", "rules"]).default("jev"),
-  }).default({ prediction: "legacy", postConversation: "legacy", continuation: "jev" }),
-  transport: z.object({
-    maxOutputTokens: z.number().int().default(4096),
-  }).default({ maxOutputTokens: 4096 }),
-  gateway: z.object({
-    port: z.number().int().default(3000),
-    clients: z.array(z.object({
-      id: z.string(),
-      platform: z.string(),
-      binary: z.string(),
-      clientArgs: z.record(z.string(), z.string()).optional(),
-      stdio: z.enum(["inherit", "ignore"]).default("inherit"),
-    })).default([]),
-  }).default({ port: 3000, clients: [] }),
-  tui: z.object({
-    theme: z.enum([
-      "edex", "github-dark", "github-light", "dracula", "nord",
-      "tokyo-night", "solarized-dark", "monokai",
-    ]).default("edex"),
-  }).default({ theme: "edex" }),
-  permission: z.object({
-    whitelist: z.array(z.string()).default([]),
-  }).default({ whitelist: [] }),
-  log: z.object({
-    level: z.enum(["debug", "info", "warn", "error"]).default("debug"),
-    ignore: z.array(z.enum(["debug", "info", "warn", "error"])).default([]),
-  }).default({ level: "debug", ignore: [] }),
-  conversation: z.object({
-    maxSteps: z.number().int().min(1).default(50),
-    maxChainDepth: z.number().int().min(1).optional(),
-    maxGlobalRounds: z.number().int().positive().optional(),
-    maxLocalRounds: z.number().int().min(5).max(10).default(5),
-  }).default({ maxSteps: 50, maxLocalRounds: 5 }).transform(value => ({
-    ...value, maxGlobalRounds: value.maxGlobalRounds ?? (value.maxChainDepth === undefined ? 100 : value.maxChainDepth + 1),
-  })),
-  schedule: z.object({
-    persistPath: z.string().default("schedule-tasks.json"),
-  }).default({ persistPath: "schedule-tasks.json" }),
-  mcpServers: z.array(z.object({
-    name: z.string(),
-    transport: z.discriminatedUnion("type", [
-      z.object({ type: z.literal("http"), url: z.string(), headers: z.record(z.string(), z.string()).optional() }),
-      z.object({ type: z.literal("sse"), url: z.string(), headers: z.record(z.string(), z.string()).optional() }),
-      z.object({ type: z.literal("stdio"), command: z.string(), args: z.array(z.string()).optional(), env: z.record(z.string(), z.string()).optional(), cwd: z.string().optional() }),
-    ]),
-  })).default([]),
-});
-
-export type AppConfig = z.infer<typeof ConfigSchema>;
-export { ConfigSchema };
-
-/** Objects recurse into partials; arrays/records keep full element schemas (wholesale replace). */
-function overlaySchema(schema: any): any {
-  if (schema instanceof z.ZodPipe) return overlaySchema(schema.in);
-  if (schema instanceof z.ZodDefault) return overlaySchema(schema.removeDefault());
-  if (schema instanceof z.ZodOptional) return overlaySchema(schema.unwrap()).optional();
-  if (schema instanceof z.ZodObject) {
-    const shape: Record<string, any> = {};
-    for (const [key, child] of Object.entries(schema.shape)) {
-      shape[key] = overlaySchema(child).optional();
-    }
-    return z.object(shape).strict();
-  }
-  if (schema instanceof z.ZodRecord) {
-    return z.record(schema.keyType, overlaySchema(schema.valueType));
-  }
-  return schema;
-}
-
-type DeepPartial<T> = T extends readonly unknown[]
-  ? T
-  : { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
-
-export type RuntimeConfig = DeepPartial<Omit<AppConfig, "gateway">>;
-
-export const RuntimeConfigSchema: z.ZodType<RuntimeConfig> = overlaySchema(
-  ConfigSchema.omit({ gateway: true }),
-).transform((patch: RuntimeConfig) => {
-  const conversation = patch.conversation;
-  return conversation?.maxChainDepth !== undefined && conversation.maxGlobalRounds === undefined
-    ? { ...patch, conversation: { ...conversation, maxGlobalRounds: conversation.maxChainDepth + 1 } }
-    : patch;
-}) as z.ZodType<RuntimeConfig>;
+export {
+  ConfigSchema,
+  ProviderDefinitionSchema,
+  ProviderProfilesSchema,
+  RuntimeConfigSchema,
+  mergeConfig,
+  overlaySchema,
+  runtimeConfigPath,
+};
+export type { AppConfig, DeepPartial, RuntimeConfig };
 
 export type LoadedConfig = {
   userConfig: AppConfig;
@@ -122,44 +30,45 @@ export type LoadedConfig = {
   effective: AppConfig;
 };
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+/**
+ * Drop invalid provider/client entries so one broken nested value cannot nuke the
+ * whole config. Other valid sections are preserved.
+ */
+function sanitizeConfig(raw: unknown): Record<string, unknown> {
+  const config = { ...((raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>) };
 
-/** Deep merge: objects recurse, arrays/records/primitives replace wholesale. */
-export function mergeConfig(base: object, overlay: object): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(overlay)) {
-    const prev = (base as Record<string, unknown>)[key];
-    out[key] = isPlainObject(value) && isPlainObject(prev) ? mergeConfig(prev, value) : value;
-  }
-  return out;
-}
-
-export function runtimeConfigPath(sandboxPath: string): string {
-  return `${sandboxPath}/.atom/runtime-config.json`;
-}
-
-/** Drop provider entries that fail their schema so one broken provider cannot nuke the whole config. */
-function sanitizeProviders(raw: unknown): Record<string, unknown> {
-  const config = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const providers = config.providers;
-  if (!providers || typeof providers !== "object" || Array.isArray(providers)) return config;
-  const cleaned: Record<string, unknown> = {};
-  for (const [id, def] of Object.entries(providers as Record<string, unknown>)) {
-    const result = ProviderDefinitionSchema.safeParse(def);
-    if (result.success) cleaned[id] = result.data;
-    else console.error(`[config] Dropping invalid provider "${id}"`);
+  if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [id, def] of Object.entries(providers as Record<string, unknown>)) {
+      const result = ProviderDefinitionSchema.safeParse(def);
+      if (result.success) cleaned[id] = result.data;
+      else console.error(`[config] Dropping invalid provider "${id}"`);
+    }
+    config.providers = cleaned;
   }
-  return { ...config, providers: cleaned };
+
+  const gateway = config.gateway;
+  if (gateway && typeof gateway === "object" && !Array.isArray(gateway)) {
+    const clients = (gateway as Record<string, unknown>).clients;
+    if (Array.isArray(clients)) {
+      const cleaned = clients.filter((client, index) => {
+        if (ClientConfigSchema.safeParse(client).success) return true;
+        console.error(`[config] Dropping invalid gateway client at index ${index}`);
+        return false;
+      });
+      config.gateway = { ...(gateway as Record<string, unknown>), clients: cleaned };
+    }
+  }
+
+  return config;
 }
 
 function loadUserConfig(sandboxPath: string): AppConfig {
   const configPath = `${sandboxPath}/config.json`;
   if (!existsSync(configPath)) {
     const defaults = ConfigSchema.parse({});
-    mkdirSync(dirname(configPath), { recursive: true });
-    writeFileSync(configPath, JSON.stringify(defaults, null, 2), "utf8");
+    writeFileAtomic(configPath, JSON.stringify(defaults, null, 2));
     return defaults;
   }
   let raw: unknown;
@@ -177,10 +86,10 @@ function loadUserConfig(sandboxPath: string): AppConfig {
     const path = issue.path.length ? issue.path.join(".") : "(root)";
     console.error(`  ${path}: ${issue.message}`);
   }
-  const sanitized = sanitizeProviders(raw);
+  const sanitized = sanitizeConfig(raw);
   const recovered = ConfigSchema.safeParse(sanitized);
   if (recovered.success) {
-    console.error(`[config] Recovered ${configPath} by dropping invalid provider entries`);
+    console.error(`[config] Recovered ${configPath} by dropping invalid nested entries`);
     return recovered.data;
   }
   return ConfigSchema.parse({});
@@ -206,9 +115,7 @@ export function loadRuntimeConfig(sandboxPath: string): RuntimeConfig {
 }
 
 export function saveRuntimeConfig(sandboxPath: string, overlay: RuntimeConfig): void {
-  const atomDir = `${sandboxPath}/.atom`;
-  if (!existsSync(atomDir)) mkdirSync(atomDir, { recursive: true });
-  writeFileSync(runtimeConfigPath(sandboxPath), JSON.stringify(overlay, null, 2), "utf8");
+  writeFileAtomic(runtimeConfigPath(sandboxPath), JSON.stringify(overlay, null, 2));
 }
 
 export function deleteRuntimeConfig(sandboxPath: string): void {

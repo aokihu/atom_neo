@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { basename, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
+import { parsePortValue } from "@atom-neo/shared";
 export type { LogLevel } from "@atom-neo/shared";
 import type { LogLevel } from "@atom-neo/shared";
 
@@ -271,7 +272,7 @@ export function buildAppCommand(
 }
 
 export function parsePort(value: string, allowZero: boolean): number {
-  const port = Number(value);
-  if (!/^\d+$/.test(value) || !Number.isInteger(port) || port < (allowZero ? 0 : 1) || port > 65535) throw new Error(`Invalid port: ${value}`);
+  const port = parsePortValue(value, { allowZero });
+  if (port === undefined) throw new Error(`Invalid port: ${value}`);
   return port;
 }

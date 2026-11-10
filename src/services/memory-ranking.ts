@@ -1,14 +1,10 @@
+import { clamp } from "@atom-neo/shared";
+import type { MemoryKind } from "@atom-neo/shared";
+
+export type { MemoryKind } from "@atom-neo/shared";
+
 export const DAY_MS = 86_400_000;
 export const USAGE_HALF_LIFE_DAYS = 30;
-
-export type MemoryKind =
-  | "identity"
-  | "preference"
-  | "stable_fact"
-  | "decision"
-  | "workflow"
-  | "temporary_state"
-  | "realtime_data";
 
 const FRESHNESS_HALF_LIFE_DAYS: Record<MemoryKind, number> = {
   identity: Infinity,
@@ -28,10 +24,6 @@ const RELATION_WEIGHTS: Record<string, number> = {
   relates_to: 0.3,
 };
 
-function clamp(value: number, min = 0, max = 100): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function elapsedDays(from: number | null | undefined, now: number): number {
   if (!from) return 0;
   return Math.max(0, now - from) / DAY_MS;
@@ -47,11 +39,11 @@ export function calculateDecayedUsage(
 }
 
 export function calculateUsageScore(decayedUsage: number): number {
-  return clamp(100 * (1 - Math.exp(-Math.max(0, decayedUsage) / 4)));
+  return clamp(100 * (1 - Math.exp(-Math.max(0, decayedUsage) / 4)), 0, 100);
 }
 
 export function calculateSelectionScore(readCount: number, retrievalCount: number): number {
-  return clamp(100 * (Math.max(0, readCount) + 1) / (Math.max(0, retrievalCount) + 2));
+  return clamp(100 * (Math.max(0, readCount) + 1) / (Math.max(0, retrievalCount) + 2), 0, 100);
 }
 
 export function calculateFreshnessScore(params: {
@@ -64,7 +56,7 @@ export function calculateFreshnessScore(params: {
   const halfLife = FRESHNESS_HALF_LIFE_DAYS[params.kind];
   if (params.pinned || halfLife === Infinity) return 100;
   const referenceTime = params.lastConfirmedAt || params.createdAt;
-  return clamp(100 * Math.exp(-Math.LN2 * elapsedDays(referenceTime, params.now) / halfLife));
+  return clamp(100 * Math.exp(-Math.LN2 * elapsedDays(referenceTime, params.now) / halfLife), 0, 100);
 }
 
 export function calculateGraphScore(
@@ -72,9 +64,9 @@ export function calculateGraphScore(
 ): number {
   const weightedReferences = references.reduce((total, reference) => {
     const relationWeight = RELATION_WEIGHTS[reference.relation] ?? 0;
-    return total + relationWeight * clamp(reference.sourceBaseWeight) / 100;
+    return total + relationWeight * clamp(reference.sourceBaseWeight, 0, 100) / 100;
   }, 0);
-  return clamp(100 * (1 - Math.exp(-weightedReferences / 3)));
+  return clamp(100 * (1 - Math.exp(-weightedReferences / 3)), 0, 100);
 }
 
 export function calculateMemoryQuality(params: {
@@ -94,9 +86,9 @@ export function calculateMemoryQuality(params: {
   const usage = calculateUsageScore(calculateDecayedUsage(params.usageScore, params.usageUpdatedAt, params.now));
   const selection = calculateSelectionScore(params.readCount, params.retrievalCount);
   const freshness = calculateFreshnessScore(params);
-  const rawQuality = clamp(params.baseWeight) * 0.4
+  const rawQuality = clamp(params.baseWeight, 0, 100) * 0.4
     + usage * 0.25
-    + clamp(params.graphScore) * 0.2
+    + clamp(params.graphScore, 0, 100) * 0.2
     + freshness * 0.1
     + selection * 0.05;
   return clamp(rawQuality * clamp(params.confidence, 0, 1), 0, 100);
@@ -112,9 +104,9 @@ export function calculateRetrievalRelevance(params: {
   const rankScore = params.candidateCount <= 1
     ? 100
     : (1 - params.rankIndex / (params.candidateCount - 1)) * 100;
-  return clamp(coverage * 0.7 + rankScore * 0.3);
+  return clamp(coverage * 0.7 + rankScore * 0.3, 0, 100);
 }
 
 export function calculateFinalMemoryScore(relevance: number, quality: number): number {
-  return clamp(relevance) * 0.65 + clamp(quality) * 0.35;
+  return clamp(relevance, 0, 100) * 0.65 + clamp(quality, 0, 100) * 0.35;
 }

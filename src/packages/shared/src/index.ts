@@ -24,6 +24,7 @@ export type {
   TaskPayload,
   ContextCompressRequest,
   ContinuationDecision,
+  TodoItem,
   TodoTarget,
   TaskToolCall,
   TaskToolReport,
@@ -41,6 +42,10 @@ export type {
   MemoryScope,
   MemorySearchRequest,
   MemorySearchResult,
+  SkillSectionMeta,
+  SkillDef,
+  SkillListItem,
+  SkillLoadResult,
   WebFetchMethod,
   WebFetchRequest,
   NetworkRequestOptions,
@@ -115,6 +120,38 @@ export type {
   PipelineElementDef,
 } from "./pipeline";
 
+// ── Config ──
+export {
+  ConfigSchema,
+  RuntimeConfigSchema,
+  ClientConfigSchema,
+  ProviderProfilesSchema,
+  ProviderDefinitionSchema,
+  PROVIDERS,
+  DEFAULT_PROFILES,
+  DEFAULT_DECISION_MODES,
+  OPENROUTER_JEV,
+  PROVIDER_TYPES,
+  THINKING_MODES,
+  THEME_NAMES,
+  DEFAULT_THEME,
+  isThemeName,
+  mergeConfig,
+  overlaySchema,
+  runtimeConfigPath,
+} from "./config";
+export type {
+  AppConfig,
+  RuntimeConfig,
+  DeepPartial,
+  ClientConfig,
+  ProviderType,
+  ProviderPreset,
+  ThinkingMode,
+  DecisionModes,
+  ThemeName,
+} from "./config";
+
 // ── Protocol ──
 export type {
   ClientEvent,
@@ -141,7 +178,8 @@ export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";
 export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
-export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, stringWidth, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
+export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, stringWidth, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms, parseEnv, parseEnvEntries, parseEnvKeys, serializeEnv, upsertEnv, mergeEnv, writeFileAtomic, createId, clamp, parsePortValue } from "./utils";
+export type { EnvEntry, WriteFileAtomicOptions } from "./utils";
 
 // ── Constants ──
 export { BusEvents, TaskFailureCodes, WsMessages } from "./constants";

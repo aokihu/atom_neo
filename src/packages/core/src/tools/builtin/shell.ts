@@ -3,7 +3,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { z } from "zod";
-import { PermissionLevel, substringWellFormed, createChildProcessEnv, sleep, spawnProcess } from "@atom-neo/shared";
+import { PermissionLevel, substringWellFormed, createChildProcessEnv, createId, sleep, spawnProcess } from "@atom-neo/shared";
 import type { ProcessHandle, ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
 import { toolResult } from "../outcome";
 
@@ -120,7 +120,6 @@ export class BackgroundShellService {
   #root: string;
   #onComplete: (result: BackgroundShellCompletion) => void | Promise<void>;
   #jobs = new Map<string, RunningShellJob>();
-  #nextId = 0;
   #stopping = false;
 
   constructor(params: {
@@ -133,7 +132,7 @@ export class BackgroundShellService {
 
   start(command: string, context: BackgroundShellContext): { jobId: string; pid: number } {
     if (this.#stopping) throw new Error("Background shell service is stopping");
-    const jobId = `shell-job-${Date.now()}-${this.#nextId++}`;
+    const jobId = createId("shell-job");
     const startedAt = Date.now();
     const process = spawnShell({ root: this.#root, command });
     const completion = this.#watch({ jobId, command, context, process, startedAt });

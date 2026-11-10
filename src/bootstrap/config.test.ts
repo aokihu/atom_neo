@@ -115,6 +115,28 @@ describe("loadConfig layering", () => {
     expect(effective.providers.deepseek.thinking).toBe("enabled");
   });
 
+  test("recovers from an invalid gateway client while keeping valid clients and config", () => {
+    const sandbox = makeSandbox();
+    Bun.write(`${sandbox}/config.json`, JSON.stringify({
+      version: 2,
+      providers: { deepseek: { apiKeyEnv: "DEEPSEEK_API_KEY", models: ["deepseek-v4-flash"] } },
+      gateway: {
+        port: 3456,
+        clients: [
+          { id: "valid", platform: "telegram", binary: "./bot" },
+          { id: "", platform: "telegram", binary: "./broken" },
+        ],
+      },
+      tui: { theme: "nord" },
+    }));
+
+    const { userConfig } = loadConfig(sandbox);
+    expect(userConfig.gateway.port).toBe(3456);
+    expect(userConfig.gateway.clients).toHaveLength(1);
+    expect(userConfig.gateway.clients[0]?.id).toBe("valid");
+    expect(userConfig.tui.theme).toBe("nord");
+  });
+
   test("falls back to defaults only when sanitizing cannot fix the config", () => {
     const sandbox = makeSandbox();
     Bun.write(`${sandbox}/config.json`, JSON.stringify({ version: 3, providers: "nonsense" }));
@@ -129,6 +151,13 @@ test("continuation arbitration defaults to jev and supports rules-only runtime r
   saveRuntimeConfig(sandbox, { decisionMode: { continuation: "rules" } });
   expect(loadConfig(sandbox).effective.decisionMode.continuation).toBe("rules");
   expect(() => RuntimeConfigSchema.parse({ decisionMode: { continuation: "legacy" } })).toThrow();
+});
+
+
+test("legacy top-level theme is ignored in favor of tui.theme", () => {
+  const config = ConfigSchema.parse({ theme: "dark", tui: { theme: "nord" } });
+  expect("theme" in config).toBe(false);
+  expect(config.tui.theme).toBe("nord");
 });
 
 

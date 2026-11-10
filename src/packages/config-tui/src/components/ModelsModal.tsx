@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PROVIDER_TYPES } from "@atom-neo/shared";
 import { useKeyboard } from "@opentui/react";
 import { Modal } from "../modal";
 import { FieldInput } from "./FieldInput";
@@ -13,7 +14,6 @@ const THINKING_LABELS = [
 ];
 
 type Phase = "list" | "add" | "type" | "baseUrl" | "thinking" | "contextLimit";
-const PROVIDER_TYPES = ["llm", "jev"] as const;
 export type ModelEdit = Pick<ProviderEdit, "type" | "models" | "baseUrl" | "thinking" | "contextLimit">;
 
 export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit, type, allowJev, onSubmit, onCancel }: {

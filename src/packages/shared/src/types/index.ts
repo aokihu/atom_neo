@@ -8,6 +8,7 @@ export type {
   TaskPayload,
   ContextCompressRequest,
   ContinuationDecision,
+  TodoItem,
   TodoTarget,
   TaskToolCall,
   TaskToolReport,

@@ -173,18 +173,18 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-DUP-03`：`shared/src/config/` 作为唯一配置契约：
+- [x] `CR-DUP-03`：`shared/src/config/` 作为唯一配置契约：
   - `ConfigSchema`、默认值、`RuntimeConfigSchema`、`mergeConfig`。
   - `PROVIDERS`、`DEFAULT_PROFILES`、主题名清单。
-- [ ] `CR-DUP-04`：`shared/src/utils/env-file.ts`：`parseEnv` / `upsertEnv` / `serializeEnv`。
-- [ ] `CR-DUP-05`：`shared/src/utils/fs.ts`：`writeFileAtomic`。
-- [ ] `CR-DUP-06`：`shared/src/utils`：`createId`、`parsePort`、`clamp`、`sleep` 统一。
-- [ ] `CR-DUP-07`：Skill/Memory/Todo 类型收口到 shared；持久化行类型改名 `MemoryRow`。
-- [ ] `bootstrap/config.ts` 改为 re-export/薄封装。
-- [ ] `config-tui` 依赖 `@atom-neo/shared`，删除 `PROVIDERS`/`THEMES`/`DEFAULT_PROFILES`/env 解析。
-- [ ] `gateway/config.ts` 复用 ClientConfig schema。
-- [ ] 删除顶层 `theme` 死字段。
-- [ ] `CR-NAM-01/09`：文件命名与文件头规范；新增检查脚本。
+- [x] `CR-DUP-04`：`shared/src/utils/env-file.ts`：`parseEnv` / `upsertEnv` / `serializeEnv`。
+- [x] `CR-DUP-05`：`shared/src/utils/fs.ts`：`writeFileAtomic`（persistence generation 延后 S12）。
+- [x] `CR-DUP-06`：`shared/src/utils`：`createId`、`parsePort`、`clamp`、`sleep` 统一。
+- [x] `CR-DUP-07`：Skill/MemoryKind/Todo 类型收口到 shared；`MemoryNode` 持久化行改名延后 S12。
+- [x] `bootstrap/config.ts` 改为 re-export/薄封装。
+- [x] `config-tui` 依赖 `@atom-neo/shared`，删除 `PROVIDERS`/`THEMES`/`DEFAULT_PROFILES`/env 解析。
+- [x] `gateway/config.ts` 复用 ClientConfig schema。
+- [x] 删除顶层 `theme` 死字段。
+- [ ] `CR-NAM-01/09`：文件命名与文件头规范；新增检查脚本（延后 S3b）。
 
 **验收**：
 - 配置/向导/Gateway schema 测试。
@@ -556,7 +556,7 @@ bun run scripts/check-file-headers.ts
 | S0 | 已完成 | — | 基线：typecheck/build 5/5；测试 1430 pass / 21 skip / 0 fail；Node 26 + Bun 1.4.2 验证 `node:sqlite` FTS5、`fs.glob` |
 | S1 | 已完成 | — | CR-COR-01..11 全部处理；测试 1453 pass / 21 skip / 0 fail；新增 service-manager/index 测试 |
 | S2 | 已完成 | — | CR-RUN-01..05（非 Server）全部处理；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；新增 `string-width`、`croner`；Node smoke 通过；版本 1.22.2；剩余 `Bun.serve`/`Bun.Server` 待 S9 |
-| S3 | 未开始 | — | 配置/工具 |
+| S3 | 已完成 | — | 共享配置契约、env/原子写/helpers、类型收口；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
 | S4 | 未开始 | — | 文档 |
 | S5 | 未开始 | — | TUI kit |
 | S6 | 未开始 | — | 事件/提交 |

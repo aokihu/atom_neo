@@ -1,24 +1,28 @@
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import {
+  DEFAULT_DECISION_MODES,
+  DEFAULT_PROFILES,
+  DEFAULT_THEME,
+  OPENROUTER_JEV,
+  PROVIDERS,
+  THEME_NAMES,
+  isThemeName,
+  parseEnv,
+  parsePortValue,
+  upsertEnv,
+  writeFileAtomic,
+} from "@atom-neo/shared";
+import type { DecisionModes, ProviderType, ThinkingMode } from "@atom-neo/shared";
+
+export { DEFAULT_DECISION_MODES, DEFAULT_PROFILES, OPENROUTER_JEV, PROVIDERS } from "@atom-neo/shared";
+export type { DecisionModes, ProviderType, ThinkingMode } from "@atom-neo/shared";
+export const THEMES = THEME_NAMES;
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type WizardMode = "first-run" | "config";
 
-export type ThinkingMode = "enabled" | "disabled" | "adaptive";
-export type ProviderType = "llm" | "jev";
-
 export const CONVERSATION_LEVELS = ["advanced", "balanced", "basic"] as const;
-export const DEFAULT_DECISION_MODES = {
-  prediction: "legacy",
-  postConversation: "legacy",
-  continuation: "jev",
-} satisfies DecisionModes;
-
-export type DecisionModes = {
-  prediction: "legacy" | "jev";
-  postConversation: "legacy" | "jev";
-  continuation: "rules" | "jev";
-};
 
 export type ProviderEdit = {
   type?: ProviderType;
@@ -54,60 +58,21 @@ export interface WizardState {
   envKeys: Record<string, string>;
 }
 
-export const OPENROUTER_JEV = "openrouter-jev";
-
-export const PROVIDERS: Record<string, { type?: ProviderType; apiKeyEnv: string; models: string[]; baseUrl?: string }> = {
-  deepseek: {
-    apiKeyEnv: "DEEPSEEK_API_KEY",
-    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
-  },
-  openai: {
-    apiKeyEnv: "OPENAI_API_KEY",
-    models: ["gpt-4o", "gpt-4o-mini", "o4-mini"],
-  },
-  custom: {
-    apiKeyEnv: "",
-    models: [],
-  },
-  [OPENROUTER_JEV]: {
-    type: "jev",
-    apiKeyEnv: "OPENROUTER_API_KEY",
-    models: ["typesafe/jev-1.13"],
-    baseUrl: "https://openrouter.ai/api/alpha/decisions",
-  },
-};
-
-export const THEMES = [
-  "edex",
-  "github-dark",
-  "github-light",
-  "dracula",
-  "nord",
-  "tokyo-night",
-  "solarized-dark",
-  "monokai",
-] as const;
-
-export const DEFAULT_PROFILES = {
-  advanced: "deepseek/deepseek-v4-flash",
-  balanced: "deepseek/deepseek-v4-flash",
-  basic: "deepseek/deepseek-v4-flash",
-};
-
 export function initialState(mode: WizardMode = "first-run"): WizardState {
+  const preset = PROVIDERS.deepseek;
   return {
     step: 0,
     mode,
     provider: "deepseek",
-    apiKeyEnv: "DEEPSEEK_API_KEY",
+    apiKeyEnv: preset.apiKeyEnv,
     apiKey: "",
-    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
+    models: [...preset.models],
     customBaseUrl: undefined,
     thinking: "disabled",
     contextLimit: undefined,
     profiles: { ...DEFAULT_PROFILES },
     decisionMode: {},
-    theme: "edex",
+    theme: DEFAULT_THEME,
     gatewayPort: 3000,
     projectDescription: "",
     editedProviders: {},
@@ -257,15 +222,7 @@ export function readJsonFile(path: string): Record<string, any> | null {
 /** Parse KEY=VALUE lines from a .env file (comments and blanks ignored). */
 export function readEnvKeys(envPath: string): Record<string, string> {
   if (!existsSync(envPath)) return {};
-  const keys: Record<string, string> = {};
-  for (const line of readFileSync(envPath, "utf-8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    keys[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
-  }
-  return keys;
+  return parseEnv(readFileSync(envPath, "utf-8"));
 }
 
 /** Build the initial wizard state; config mode pre-fills from the existing config.json + .env. */
@@ -303,7 +260,7 @@ export function buildInitialState(mode: WizardMode, sandboxPath: string): Wizard
     basic: config.providerProfiles?.basic ?? DEFAULT_PROFILES.basic,
     fast,
   };
-  const theme = (THEMES as readonly string[]).includes(config.tui?.theme) ? config.tui.theme : "edex";
+  const theme = isThemeName(config.tui?.theme) ? config.tui.theme : DEFAULT_THEME;
   const firstId = Object.keys(editedProviders)[0] ?? "deepseek";
 
   return {
@@ -324,15 +281,8 @@ export function buildInitialState(mode: WizardMode, sandboxPath: string): Wizard
 
 /** Upsert the given keys into .env — existing lines are replaced, other lines (incl. old keys) are preserved. */
 export function writeEnvKeys(envPath: string, keys: Record<string, string>): void {
-  const lines = existsSync(envPath)
-    ? readFileSync(envPath, "utf-8").replace(/\n$/, "").split("\n").filter(l => l !== "")
-    : [];
-  for (const [key, value] of Object.entries(keys)) {
-    const idx = lines.findIndex(l => l.startsWith(`${key}=`));
-    if (idx >= 0) lines[idx] = `${key}=${value}`;
-    else lines.push(`${key}=${value}`);
-  }
-  writeFileSync(envPath, lines.join("\n") + "\n", "utf8");
+  const existing = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
+  writeFileAtomic(envPath, upsertEnv(existing, keys));
 }
 
 function buildProviderEntry(prev: Record<string, any> | undefined, edit: ProviderEdit): Record<string, any> {
@@ -373,7 +323,7 @@ export function commit(sandboxPath: string, state: WizardState): void {
     merged.gateway = { ...(existing.gateway ?? {}), port: state.gatewayPort ?? 3000 };
   }
 
-  writeFileSync(`${sandboxPath}/config.json`, JSON.stringify(merged, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+  writeFileAtomic(`${sandboxPath}/config.json`, JSON.stringify(merged, null, 2) + "\n", { mode: 0o600 });
 
   if (Object.keys(state.envKeys).length > 0) {
     writeEnvKeys(`${sandboxPath}/.env`, state.envKeys);
@@ -393,10 +343,10 @@ export function commit(sandboxPath: string, state: WizardState): void {
         state.projectDescription,
         "",
       ].join("\n");
-      writeFileSync(`${sandboxPath}/AGENTS.md`, template, "utf8");
+      writeFileAtomic(`${sandboxPath}/AGENTS.md`, template);
     }
     mkdirSync(`${sandboxPath}/.atom`, { recursive: true });
-    writeFileSync(`${sandboxPath}/.atom/installed`, "", "utf8");
+    writeFileAtomic(`${sandboxPath}/.atom/installed`, "");
   }
 }
 
@@ -433,9 +383,5 @@ export function isDecisionEndpoint(value?: string): boolean {
 }
 
 export function parsePort(text: string): number | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  const value = Number(trimmed);
-  if (!Number.isInteger(value) || value < 1 || value > 65535) return undefined;
-  return value;
+  return parsePortValue(text, { allowZero: false });
 }

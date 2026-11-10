@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TextAttributes } from "@opentui/core";
+import { DEFAULT_THEME, THEME_NAMES } from "@atom-neo/shared";
 import { Modal } from "./modal";
 import type { ModalAction } from "./modal";
 import { useTheme } from "./App";
-import type { ServerInfo, ThemeName } from "../types";
+import type { ServerInfo } from "../types";
 
 const PROFILE_LEVELS = ["advanced", "balanced", "basic", "fast"] as const;
-const THEMES: ThemeName[] = [
-  "edex", "github-dark", "github-light", "dracula", "nord",
-  "tokyo-night", "solarized-dark", "monokai",
-];
+const THEMES = THEME_NAMES;
 const THINKING_OPTIONS = ["disabled", "enabled", "adaptive"];
 const MAX_TOKEN_OPTIONS = [2048, 4096, 8192, 16384];
 
@@ -121,7 +119,7 @@ export function SettingsModal({ open, url, adminToken, serverInfo, onSaved, onCl
         balanced,
         basic: cfg.providerProfiles?.basic ?? balanced,
         fast: cfg.providerProfiles?.fast ?? cfg.providerProfiles?.basic ?? balanced,
-        theme: cfg.tui?.theme ?? "edex",
+        theme: cfg.tui?.theme ?? DEFAULT_THEME,
         thinking: cfg.providers?.[provider]?.thinking ?? "disabled",
         maxTokens: String(cfg.transport?.maxOutputTokens ?? 4096),
       });

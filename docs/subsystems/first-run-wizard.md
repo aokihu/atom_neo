@@ -37,6 +37,9 @@ src/main.ts (主进程)
 
 ## 2. Package 结构
 
+> Provider 预设、默认模型档位与主题名清单由 `@atom-neo/shared` 的 `config/`
+> 统一提供；本包只保留向导 UI 与 pending 状态机。
+
 ```
 src/packages/config-tui/
 ├── package.json            # @atom-neo/config-tui

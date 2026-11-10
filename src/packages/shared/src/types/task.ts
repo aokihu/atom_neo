@@ -25,6 +25,12 @@ export enum TaskState {
 
 export type TaskOrigin = { type: "hook"; hookId: string };
 
+export type TodoItem = {
+  content: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  priority: "high" | "medium" | "low";
+};
+
 export type TodoTarget = { index: number; content: string };
 export type ContinuationDecision = {
   kind: "resume_current" | "advance_todo" | "reconcile_progress" | "finish";

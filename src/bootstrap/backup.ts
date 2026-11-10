@@ -1,12 +1,11 @@
 /**
  * export / import subcommands: pack sandbox config.json + .env into a .atombak archive.
  */
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { BackupEnvMode, BootArguments } from "./cli";
-import { ConfigSchema } from "./config";
+import { ConfigSchema, mergeEnv, parseEnvKeys, writeFileAtomic } from "@atom-neo/shared";
 import {
   BACKUP_EXTENSION,
   MAX_ARCHIVE_BYTES,
@@ -18,8 +17,6 @@ import {
   type BackupSummary,
 } from "./backup-format";
 import { VERSION } from "../version";
-
-const ENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/;
 
 export type ExportRequest = { sandbox: string; output?: string; password?: string; force?: boolean };
 export type ExportResult = { path: string; files: BackupFileEntry[]; encrypted: boolean; bytes: number };
@@ -75,19 +72,6 @@ function readArchive(path: string): string {
   return readText(path);
 }
 
-function writeAtomic(path: string, content: string, mode: number): void {
-  const temporary = `${path}.tmp-${randomUUID()}`;
-  try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(temporary, content, { encoding: "utf8", mode, flag: "wx" });
-    chmodSync(temporary, mode);
-    renameSync(temporary, path);
-  } catch (error) {
-    rmSync(temporary, { force: true });
-    throw error;
-  }
-}
-
 function backupFile(path: string): string | undefined {
   if (!existsSync(path)) return undefined;
   const stamp = timestamp();
@@ -96,47 +80,6 @@ function backupFile(path: string): string | undefined {
   copyFileSync(path, candidate);
   chmodSync(candidate, statSync(path).mode & 0o777);
   return candidate;
-}
-
-function envKey(line: string): string | undefined {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) return undefined;
-  return ENV_LINE.exec(line)?.[1];
-}
-
-function envKeys(text: string): string[] {
-  const keys: string[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const key = envKey(line);
-    if (key && !keys.includes(key)) keys.push(key);
-  }
-  return keys;
-}
-
-function mergeEnv(local: string, incoming: string): string {
-  const eol = local.includes("\r\n") ? "\r\n" : "\n";
-  const archiveLines = new Map<string, string>();
-  for (const line of incoming.split(/\r?\n/)) {
-    const key = envKey(line);
-    if (key) archiveLines.set(key, line);
-  }
-  const lines = local.split(/\r?\n/);
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const seen = new Set<string>();
-  const merged: string[] = [];
-  for (const line of lines) {
-    const key = envKey(line);
-    if (key && archiveLines.has(key)) {
-      if (!seen.has(key)) {
-        merged.push(archiveLines.get(key)!);
-        seen.add(key);
-      }
-      continue;
-    }
-    merged.push(line);
-  }
-  for (const [key, line] of archiveLines) if (!seen.has(key)) merged.push(line);
-  return merged.length > 0 ? merged.join(eol) + eol : "";
 }
 
 function validateConfig(content: string): void {
@@ -169,7 +112,7 @@ export function exportBackup(request: ExportRequest): ExportResult {
   const text = encodeBackup(bundle, { password: request.password, appVersion: VERSION });
   const output = resolveOutput(request.output);
   if (existsSync(output) && !request.force) throw new Error(`Output already exists: ${output} (use --force to overwrite)`);
-  writeAtomic(output, text, 0o600);
+  writeFileAtomic(output, text, { mode: 0o600 });
   const summary = inspectBackup(text);
   return { path: output, files: summary.files, encrypted: summary.encrypted, bytes: Buffer.byteLength(text, "utf8") };
 }
@@ -205,7 +148,7 @@ export function planImport(request: ImportRequest): ImportPlan {
     envContent,
     envExists,
     envAction,
-    envKeys: archivedEnv === undefined ? [] : envKeys(archivedEnv),
+    envKeys: archivedEnv === undefined ? [] : parseEnvKeys(archivedEnv),
   };
 }
 
@@ -214,8 +157,8 @@ export function applyImport(plan: ImportPlan): ImportResult {
   const configMode = plan.configExists ? statSync(plan.configPath).mode & 0o777 : 0o644;
   const configBackup = backupFile(plan.configPath);
   const envBackup = plan.envContent === undefined ? undefined : backupFile(plan.envPath);
-  writeAtomic(plan.configPath, plan.configContent, configMode);
-  if (plan.envContent !== undefined) writeAtomic(plan.envPath, plan.envContent, 0o600);
+  writeFileAtomic(plan.configPath, plan.configContent, { mode: configMode });
+  if (plan.envContent !== undefined) writeFileAtomic(plan.envPath, plan.envContent, { mode: 0o600 });
   return {
     configPath: plan.configPath,
     configBackup,

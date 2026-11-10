@@ -1,14 +1,8 @@
 import { z } from "zod";
+import { ClientConfigSchema } from "@atom-neo/shared";
+import type { ClientConfig } from "@atom-neo/shared";
 
-const ClientConfigSchema = z.object({
-  id: z.string().min(1),
-  platform: z.string().min(1),
-  binary: z.string().min(1),
-  clientArgs: z.record(z.string(), z.string()).optional(),
-  stdio: z.enum(["inherit", "ignore"]).default("inherit"),
-});
-
-export type ClientConfig = z.infer<typeof ClientConfigSchema>;
+export type { ClientConfig };
 
 const GatewayConfigSchema = z.object({
   port: z.number().int().min(0).max(65535).default(3000),

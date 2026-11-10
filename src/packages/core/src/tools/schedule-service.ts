@@ -1,6 +1,6 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { Cron } from "croner";
-import { TaskSource } from "@atom-neo/shared";
+import { TaskSource, createId } from "@atom-neo/shared";
 import type { ScheduledTask, Logger, TaskItem } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
 import { createTaskItem } from "../task-factory";
@@ -10,12 +10,6 @@ interface CronJob {
 }
 
 type TimerHandle = ReturnType<typeof setTimeout>;
-
-let nextScheduleId = 0;
-
-function generateId(): string {
-  return `schedule-${Date.now()}-${nextScheduleId++}`;
-}
 
 function nextCronFireAt(schedule: string): number | undefined {
   try {
@@ -68,7 +62,7 @@ export class ScheduleService {
     const nextFireAt = task.nextFireAt ?? (type === "delay" ? now + delayMs : type === "interval" ? now + intervalMs : nextCronFireAt(schedule));
 
     const record: ScheduledTask = {
-      id: generateId(),
+      id: createId("schedule"),
       name: task.name,
       type,
       schedule,

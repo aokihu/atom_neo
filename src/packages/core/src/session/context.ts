@@ -8,6 +8,7 @@ import type {
   ScopeState,
   MemoryScopeState,
   ContinuationContext,
+  TodoItem,
 } from "@atom-neo/shared";
 import type {
   PersistedSessionState,
@@ -17,13 +18,9 @@ import type {
   SessionCheckpointReason,
 } from "./types";
 
-export type TokenUsage = { total: number };
+export type { TodoItem };
 
-export type TodoItem = {
-  content: string;
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  priority: "high" | "medium" | "low";
-};
+export type TokenUsage = { total: number };
 
 export function selectCurrentTodo(todos: readonly TodoItem[]): import("@atom-neo/shared").TodoTarget | undefined {
   const index = todos.findIndex(todo => todo.status === "in_progress");

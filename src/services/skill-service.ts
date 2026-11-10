@@ -3,18 +3,9 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { MechanicalParser } from "./skill-parser";
 import type { SkillParser, SkillDef } from "./skill-parser";
+import type { SkillListItem, SkillLoadResult } from "@atom-neo/shared";
 
-export type SkillListItem = {
-  name: string;
-  description: string;
-  capabilities: string[];
-};
-
-export type SkillLoadResult = {
-  ok: boolean;
-  sections?: string[];
-  error?: string;
-};
+export type { SkillListItem, SkillLoadResult } from "@atom-neo/shared";
 
 export class SkillService extends BaseService {
   readonly name = "skill";

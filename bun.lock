@@ -31,6 +31,7 @@
       "name": "@atom-neo/config-tui",
       "version": "1.0.1",
       "dependencies": {
+        "@atom-neo/shared": "workspace:*",
         "@opentui/core": "0.5.8",
         "@opentui/react": "0.5.8",
         "react": "^19.2.8",

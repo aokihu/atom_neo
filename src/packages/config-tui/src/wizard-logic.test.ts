@@ -197,6 +197,25 @@ describe("readEnvKeys / writeEnvKeys", () => {
     expect(content).toContain("NEWPROVIDER_API_KEY=sk-new");
     expect(content).not.toContain("DEEPSEEK_API_KEY=old");
   });
+
+  test("updates export lines without duplicating keys and preserves CRLF", () => {
+    const sandbox = makeSandbox();
+    const envPath = `${sandbox}/.env`;
+    Bun.write(envPath, "# keep\r\nexport DEEPSEEK_API_KEY=old\r\nOTHER=1\r\n");
+
+    writeEnvKeys(envPath, { DEEPSEEK_API_KEY: "new" });
+
+    const content = readFileSync(envPath, "utf-8");
+    expect(content).toBe("# keep\r\nexport DEEPSEEK_API_KEY=new\r\nOTHER=1\r\n");
+    expect(content.match(/DEEPSEEK_API_KEY/g)?.length).toBe(1);
+  });
+
+  test("reads quoted and exported values", () => {
+    const sandbox = makeSandbox();
+    const envPath = `${sandbox}/.env`;
+    Bun.write(envPath, 'export A="hello world"\nB=\'literal\'\n');
+    expect(readEnvKeys(envPath)).toEqual({ A: "hello world", B: "literal" });
+  });
 });
 
 // ─── commit (config mode) ─────────────────────────────────────────────────
@@ -495,6 +514,16 @@ describe("buildInitialState", () => {
     Bun.write(`${sandbox}/config.json`, JSON.stringify({ tui: { theme: "neon" } }));
     const state = buildInitialState("config", sandbox);
     expect(state.theme).toBe("edex");
+  });
+
+  test("config mode reads tui.theme and ignores the legacy top-level theme", () => {
+    const sandbox = makeSandbox();
+    Bun.write(`${sandbox}/config.json`, JSON.stringify({ theme: "dracula", tui: { theme: "nord" } }));
+    expect(buildInitialState("config", sandbox).theme).toBe("nord");
+
+    const legacyOnly = makeSandbox();
+    Bun.write(`${legacyOnly}/config.json`, JSON.stringify({ theme: "dracula" }));
+    expect(buildInitialState("config", legacyOnly).theme).toBe("edex");
   });
 });
 

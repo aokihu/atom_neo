@@ -1,15 +1,9 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
-import { TaskSource, BusEvents } from "@atom-neo/shared";
+import { TaskSource, BusEvents, createId } from "@atom-neo/shared";
 import type { Hook, HookTrigger, FullEventMap, Logger, PipelineEventBus, TaskItem } from "@atom-neo/shared";
 import type { TaskQueue } from "../task-queue";
 import { createTaskItem } from "../task-factory";
 import type { ScheduleService } from "../tools/schedule-service";
-
-let nextHookId = 0;
-
-function generateId(): string {
-  return `hook-${Date.now()}-${nextHookId++}`;
-}
 
 export class HookManager {
   #scheduleService: ScheduleService;
@@ -50,7 +44,7 @@ export class HookManager {
     if (this.#stopped) throw new Error("Core scheduler is stopped");
     const now = Date.now();
     const hook: Hook = {
-      id: generateId(),
+      id: createId("hook"),
       name: def.name,
       scope: def.scope ?? "session",
       sessionId: def.sessionId,
