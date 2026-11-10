@@ -2,7 +2,7 @@ import { buildAssistantReview } from "../post-conversation/elements/collect-inpu
 import { describe, expect, test } from "bun:test";
 import { makeBus } from "../test-helpers";
 import { JevElement, composeTopic, TOPIC_CHOICES } from "./jev-element";
-import { getRegisteredNames } from "../../pipeline/registry";
+import { clearRegistry } from "../../pipeline/registry";
 import { predictionPipeline, registerPredictionElements } from "../prediction";
 import { postConversationPipeline, registerPostConversationElements } from "../post-conversation";
 import { registerSharedElements } from ".";
@@ -18,8 +18,9 @@ const choose = (questions: Record<string, { criteria: Record<string, unknown> }>
 
 describe("JevElement", () => {
   test("both pipelines select JevElement independently and preserve legacy transforms", () => {
-    if (!getRegisteredNames().includes("predict-input")) registerPredictionElements();
-    if (!getRegisteredNames().includes("post-collect-input")) registerPostConversationElements();
+    clearRegistry();
+    registerPredictionElements();
+    registerPostConversationElements();
     registerSharedElements();
     const decision = { type: "jev" as const, apiKey: "key", model: "typesafe/jev-1.13" };
     const fallback = { apiKey: "llm-key", model: "deepseek-v4-flash" };

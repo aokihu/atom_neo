@@ -20,8 +20,22 @@ export class ServiceManager {
   }
 
   async startAll(): Promise<void> {
-    for (const [name, svc] of this.#services) {
-      try { await svc.start(); } catch (err) { this.#logger?.error(`Service "${name}" start failed`, { error: String(err) }); }
+    const started: BaseService[] = [];
+    try {
+      for (const [name, svc] of this.#services) {
+        try {
+          await svc.start();
+        } catch (error) {
+          this.#logger?.error(`Service "${name}" start failed`, { error: String(error) });
+          throw error;
+        }
+        started.push(svc);
+      }
+    } catch (error) {
+      for (const svc of started.reverse()) {
+        try { await svc.stop(); } catch (stopError) { this.#logger?.error(`Service "${svc.name}" rollback stop failed`, { error: String(stopError) }); }
+      }
+      throw error;
     }
   }
 

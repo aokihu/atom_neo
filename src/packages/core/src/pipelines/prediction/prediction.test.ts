@@ -1,13 +1,14 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { registerPredictionElements, predictionPipeline } from "../index";
 import { registerSharedElements } from "../shared";
-import { resolveElement } from "../../pipeline/registry";
+import { clearRegistry, resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
 import { buildPredictionEnvelope, IntentPredictionSchema } from "./elements/predict-intent";
 import { resolveEffectiveTopic } from "./elements/predict-finalize";
 
 beforeAll(() => {
+  clearRegistry();
   registerPredictionElements();
   registerSharedElements();
 });

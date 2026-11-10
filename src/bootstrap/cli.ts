@@ -11,6 +11,7 @@ export type BackupEnvMode = "merge" | "replace";
 
 export type BootArguments = {
   menu: boolean;
+  wizard: boolean;
   command?: Command;
   archive?: string;
   output?: string;
@@ -107,6 +108,7 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
   if ((mode === "tui" || mode === "gateway") && tokens?.some(t => t.kind === "option" && ["host", "port"].includes(t.name))) throw new Error("--host/--port are server listening options");
   return {
     menu,
+    wizard: values.wizard === true,
     command,
     archive: command === "import" ? resolve(positionals[0]) : undefined,
     output: command === "export" ? values.output as string | undefined : undefined,

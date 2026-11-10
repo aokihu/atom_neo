@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { BusEvents, initPromptRegistry } from "@atom-neo/shared";
+import { BusEvents, PipelineResultType, initPromptRegistry } from "@atom-neo/shared";
 import { ContextService } from "../../../context/context-service";
 import { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import { makeBus } from "../../test-helpers";
@@ -25,6 +25,29 @@ describe("PostConversationFinalizeElement", () => {
       expect(await element.doProcess({ ...base, analysis } as any)).not.toHaveProperty("completedGoalId");
     }
   });
+  test("reports stall similarity as a percentage", async () => {
+    const bus = makeBus();
+    const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
+    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService });
+    const session = {
+      sessionId: "s1",
+      originalSource: "internal",
+      postCheckFingerprints: ["repeated-fingerprint"],
+      addPostCheckFingerprint: () => {},
+      todoState: [],
+    };
+
+    const result = await element.doProcess({
+      mode: "acting",
+      task: { id: "t1", chatId: "c1" },
+      session,
+      analysis: { status: "blocked", reason: "no progress", fingerprint: "repeated-fingerprint" },
+    } as any);
+
+    expect(result.type).toBe(PipelineResultType.Complete);
+    expect((result as any).output).toContain("100.00% similar to previous");
+  });
+
   test("records retry guidance in topic context", async () => {
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });

@@ -144,6 +144,29 @@ describe("TaskQueue", () => {
     expect(q.dequeue()?.id).toBe("unrelated");
   });
 
+  test("bounds completed and identity tracking growth", () => {
+    const q = new TaskQueue();
+    const old = makeTask("processed-old");
+    q.markProcessing(old);
+    q.markDone(old.id);
+    for (let i = 0; i < 6000; i++) {
+      q.storeResult(`completed-${i}`, { taskId: `completed-${i}`, state: TaskState.COMPLETED });
+      q.markProcessing(makeTask(`processed-${i}`));
+      q.markDone(`processed-${i}`);
+    }
+
+    expect(q.getStatus("completed-0")).toBeUndefined();
+    expect(q.getStatus("completed-5999")?.state).toBe(TaskState.COMPLETED);
+
+    q.enqueue({ ...makeTask("queued-old"), chainId: old.chainId });
+    expect(q.cancelChain(old.id, "s1")).toBeUndefined();
+    expect(q.waiting).toBe(1);
+
+    const recent = makeTask("processed-5999");
+    q.enqueue({ ...makeTask("queued-recent"), chainId: recent.chainId });
+    expect(q.cancelChain(recent.id, "s1")?.queued.map(task => task.id)).toEqual(["queued-recent"]);
+  });
+
   test("uses a completed root task ID to cancel remaining chain members", () => {
     const q = new TaskQueue();
     const root = { ...makeTask("root"), chainId: "chain" };

@@ -152,11 +152,14 @@ test("full Core reports the chain limit and never schedules another continuation
     .toMatchObject({ globalUsed: 2, globalAllowance: 2, pendingTask: { payload: expect.arrayContaining([expect.objectContaining({ type: "continuation_request", data: expect.objectContaining({ kind: "resume_current" }) })]) } });
 });
 
-test("failed assistant checkpoint discards continuation before enqueue", async () => {
+test("failed assistant checkpoint rolls back the assistant message and discards continuation", async () => {
   const result = await scenario("checkpoint_failure");
   expect(result.modelStep).toBe(1);
   expect(result.logs.some(entry => entry.message === "session checkpoint failed after task completion")).toBe(true);
   expect(result.logs.some(entry => entry.message === "conversation chain: handler entered")).toBe(false);
+  expect(result.messages.filter((message: any) => message.role === "user").map((message: any) => message.content)).toEqual(["请写世界文明史"]);
+  expect(result.messages.filter((message: any) => message.role === "assistant" && message.pipeline === "conversation")).toEqual([]);
+  expect(result.messages[0]?.content).toBe("请写世界文明史");
 });
 
 test("compression recovery shares the continuation depth limit and preserves unfinished TODO", async () => {

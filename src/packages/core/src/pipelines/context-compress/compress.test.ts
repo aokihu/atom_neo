@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { registerContextCompressElements, contextCompressPipeline } from "../index";
 import { registerSharedElements } from "../shared";
-import { resolveElement } from "../../pipeline/registry";
+import { clearRegistry, resolveElement } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
 import { SessionContext } from "../../session/context";
@@ -19,6 +19,7 @@ function makeContextService(bus: ReturnType<typeof makeBus>) {
 }
 
 beforeAll(() => {
+  clearRegistry();
   registerContextCompressElements();
   registerSharedElements();
 });

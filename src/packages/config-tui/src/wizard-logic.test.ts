@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -251,6 +251,25 @@ describe("commit (config mode)", () => {
     });
     expect(config.providerProfiles.basic).toBe("openai/gpt-4o");
     expect(config.tui).toEqual({ theme: "dracula" });
+  });
+
+  test("propagates write failures instead of reporting success", () => {
+    const sandbox = makeSandbox();
+    mkdirSync(`${sandbox}/config.json`);
+
+    expect(() => commit(sandbox, configState({ editedProviders: {} }))).toThrow();
+  });
+
+  test("preserves unknown tui fields while updating the theme", () => {
+    const sandbox = makeSandbox();
+    Bun.write(`${sandbox}/config.json`, JSON.stringify({
+      tui: { theme: "edex", sidebarWidth: 42, nested: { keep: true } },
+    }));
+
+    commit(sandbox, configState({ theme: "dracula", editedProviders: {} }));
+
+    const config = JSON.parse(readFileSync(`${sandbox}/config.json`, "utf-8"));
+    expect(config.tui).toEqual({ theme: "dracula", sidebarWidth: 42, nested: { keep: true } });
   });
 
   test("adds new providers and writes API keys to .env only", () => {

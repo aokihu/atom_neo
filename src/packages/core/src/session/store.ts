@@ -191,6 +191,7 @@ export class SessionStore {
         this.#log?.("session-store suspend failed", { sid: sessionId, reason, error: String(error) });
         return false;
       }
+      this.#persistence.toolRecords?.removeSession?.(sessionId);
     }
     this.#sessions.delete(sessionId);
     this.#lastAccess.delete(sessionId);

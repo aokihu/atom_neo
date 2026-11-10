@@ -71,7 +71,7 @@ export function createWsHandlers(ctx: ServerContext) {
           const task = createTaskItem({
             sessionId: sid,
             chatId: payload.chatId ?? "default",
-            pipeline: "conversation",
+            pipeline: payload.pipeline ?? "prediction",
             source: TaskSource.EXTERNAL,
             payload: [{ type: "text", data: text }],
           });

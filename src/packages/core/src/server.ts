@@ -187,6 +187,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const mcpToolsRef: { current: Record<string, any> } = { current: {} };
   let mcpServerInfos: { name: string; online: boolean; toolCount: number }[] = [];
   let mcpClients: Array<Awaited<ReturnType<typeof initMCPClients>>["clients"][number]> = [];
+  const mcpHealthStopRef = { current: () => {} };
+  let stopping = false;
 
   const hookManagerRef: { current: HookManager | null } = { current: null };
 
@@ -195,9 +197,18 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const mcpConfigs: MCPServerConfig[] = runtime?.appConfig?.mcpServers ?? [];
   if (mcpConfigs.length > 0) {
     initMCPClients(mcpConfigs, logger).then(async ({ clients, matchedConfigs }) => {
+      if (stopping) {
+        await closeMCPClients(clients);
+        return;
+      }
       mcpClients = clients;
       if (clients.length === 0) return;
       const { tools, toolServers } = await fetchMCPTools(clients, matchedConfigs, logger);
+      if (stopping) {
+        mcpClients = [];
+        await closeMCPClients(clients);
+        return;
+      }
       mcpToolsRef.current = tools;
       const names = Object.keys(tools);
       logger.info("mcp tools loaded", { mcpToolCount: names.length, totalTools: allTools.length + names.length });
@@ -220,11 +231,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
           if (info) info.online = s.online;
         }
       }, logger);
+      if (stopping) {
+        healthStop();
+        mcpClients = [];
+        await closeMCPClients(clients);
+        return;
+      }
       mcpHealthStopRef.current = healthStop;
     }).catch(err => logger.warn("mcp async init failed", { error: String(err) }));
   }
-
-  const mcpHealthStopRef = { current: () => {} };
 
   const pipelineBuilders: Record<string, (task: any) => any> = {
     prediction: (task: any) => {
@@ -382,9 +397,12 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       output: result.output ? substringWellFormed(result.output, 0, LOG_OUTPUT_MAX_LEN) : undefined,
     });
     const sid = p.task.sessionId;
+    const session = sid ? sessionStore.get(sid) : undefined;
+    const tokenUsageBefore = session?.tokenUsage.total ?? 0;
     const output = sanitizeForJSON(result.responseText || result.output || "");
     const reasoningContent = result.reasoningContent || "";
-    if (sid && output) {
+    let addedMessageSeq: number | undefined;
+    if (session && output) {
       const msg = {
         role: "assistant" as const,
         content: output,
@@ -399,30 +417,33 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         },
         ...(reasoningContent ? { reasoningContent } : {}),
       };
-      sessionStore.get(sid).addMessage(msg);
-      logger.debug("task completed: message added to session", { sessionId: sid, msgCount: sessionStore.get(sid).messages.length, pipeline: p.task.pipeline });
+      session.addMessage(msg);
+      addedMessageSeq = session.messages.at(-1)?.seq;
+      logger.debug("task completed: message added to session", { sessionId: sid, msgCount: session.messages.length, pipeline: p.task.pipeline });
       if (p.task.pipeline === "conversation") {
-        sessionStore.get(sid).markSafeMessageCount();
+        session.markSafeMessageCount();
       }
     }
-    if (sid && result.tokenUsage) {
-      sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
+    if (session && result.tokenUsage) {
+      session.addTokenUsage(result.tokenUsage.total);
     }
-    const completedBudget = sid ? sessionStore.get(sid).executionBudget : undefined;
+    const completedBudget = session?.executionBudget;
     const releasedReceipt = completedBudget?.lastReleasedTask;
     const previouslyCompleted = completedBudget?.completed;
     if (p.task.pipeline === "post-conversation" && result.type === "complete" && result.completedGoalId === completedBudget?.goalId
       && completedBudget && !completedBudget.pause && !completedBudget.pendingTask && !completedBudget.lastReleasedTask
-      && !sessionStore.get(sid).todoState.some(todo => todo.status === "pending" || todo.status === "in_progress")) {
+      && session && !session.todoState.some(todo => todo.status === "pending" || todo.status === "in_progress")) {
       completedBudget.completed = true;
     }
     if (p.task.pipeline === "conversation" && releasedReceipt?.id === p.task.id) completedBudget!.lastReleasedTask = undefined;
     const checkpointed = !sid || sessionStore.save(sid, "task_completed");
     if (!checkpointed) {
+      if (session && addedMessageSeq !== undefined) session.removeMessages([addedMessageSeq]);
+      if (session) session.addTokenUsage(tokenUsageBefore - session.tokenUsage.total);
       if (completedBudget) completedBudget.completed = previouslyCompleted;
       if (completedBudget && releasedReceipt) completedBudget.lastReleasedTask = releasedReceipt;
-      if (sid && result.budgetBefore) {
-        sessionStore.get(sid).executionBudget = result.budgetBefore;
+      if (session && result.budgetBefore) {
+        session.executionBudget = result.budgetBefore;
         result.budgetBefore.pause = "unknown"; result.budgetBefore.resuming = false;
       }
       const error = "Session checkpoint failed after task completion";
@@ -615,7 +636,6 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     isStopping: () => stopping,
   });
 
-  let stopping = false;
   let server: Bun.Server<unknown> | undefined;
   let stopPromise: Promise<void> | null = null;
   const stop = (): Promise<void> => {

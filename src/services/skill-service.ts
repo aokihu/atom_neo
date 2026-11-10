@@ -31,8 +31,7 @@ export class SkillService extends BaseService {
     this.#parser = params.parser ?? new MechanicalParser();
   }
 
-  async start(): Promise<void> {
-    await super.start();
+  protected async onStart(): Promise<void> {
     const dir = join(this.#sandbox, ".atom", "skills");
     if (!existsSync(dir)) return;
 
@@ -47,11 +46,10 @@ export class SkillService extends BaseService {
     }
   }
 
-  async stop(): Promise<void> {
+  protected async onStop(): Promise<void> {
     this.#skillDefs.clear();
     this.#activeSections.clear();
     this.#scopeRevisions.clear();
-    await super.stop();
   }
 
   list(): SkillListItem[] {

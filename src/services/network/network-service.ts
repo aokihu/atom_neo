@@ -31,16 +31,14 @@ export class NetworkService extends BaseService implements NetworkServiceLike {
     this.#random = options.random ?? Math.random;
   }
 
-  async start(): Promise<void> {
+  protected async onStart(): Promise<void> {
     this.#scheduler.clear();
     this.#stopController = new AbortController();
-    await super.start();
   }
 
-  async stop(): Promise<void> {
+  protected async onStop(): Promise<void> {
     this.#stopController.abort();
     this.#scheduler.clear();
-    await super.stop();
   }
 
   async webFetch(

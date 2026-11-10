@@ -544,8 +544,8 @@ bun run scripts/check-file-headers.ts
 
 | 阶段 | 状态 | PR | 备注 |
 |---|---|---|---|
-| S0 | 未开始 | — | 基线/决策门 |
-| S1 | 未开始 | — | P0 |
+| S0 | 已完成 | — | 基线：typecheck/build 5/5；测试 1430 pass / 21 skip / 0 fail；Node 26 + Bun 1.4.2 验证 `node:sqlite` FTS5、`fs.glob` |
+| S1 | 已完成 | — | CR-COR-01..11 全部处理；测试 1453 pass / 21 skip / 0 fail；新增 service-manager/index 测试 |
 | S2 | 未开始 | — | 运行时标准 |
 | S3 | 未开始 | — | 配置/工具 |
 | S4 | 未开始 | — | 文档 |

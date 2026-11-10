@@ -1783,3 +1783,4 @@ bun run scripts/check-file-headers.ts
 | 日期 | 变更 |
 |---|---|
 | 2026-11-10 | 初始审查快照；锁定 ID、代码片段与验收标准 |
+| 2026-11-10 | S0/S1 实施完成：P0 CR-COR-01..11；typecheck/build 5/5，测试 1453 pass / 21 skip / 0 fail；版本 1.22.1 |

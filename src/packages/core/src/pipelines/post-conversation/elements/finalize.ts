@@ -44,7 +44,7 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
         }
         if (maxSim > STALL_THRESHOLD) {
           this.report(BusEvents.Element.Data, { step: "stalled", maxSimilarity: +maxSim.toFixed(3), threshold: STALL_THRESHOLD, fingerprint: fp, prevCount: prev.length });
-          return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: stalled — ${+maxSim.toFixed(2)}% similar to previous (reason: ${reason})` };
+          return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: stalled — ${(maxSim * 100).toFixed(2)}% similar to previous (reason: ${reason})` };
         }
         input.session.addPostCheckFingerprint(fp);
       }

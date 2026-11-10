@@ -97,7 +97,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   }
 
   // --wizard subprocess: run setup wizard and exit
-  if (Bun.argv.includes("--wizard")) {
+  if (args.wizard) {
     const { startWizard } = await import("@atom-neo/config-tui");
     await startWizard(args.sandbox, "first-run");
     return;

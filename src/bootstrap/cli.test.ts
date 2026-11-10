@@ -45,6 +45,18 @@ describe("export / import commands", () => {
   });
 });
 
+describe("parseArguments --wizard", () => {
+  test("defaults to false", () => {
+    const args = parseArguments(["--sandbox", "/tmp/sb"]) as any;
+    expect(args.wizard).toBe(false);
+  });
+
+  test("detects the --wizard flag", () => {
+    const args = parseArguments(["--wizard", "--sandbox", "/tmp/sb"]) as any;
+    expect(args.wizard).toBe(true);
+  });
+});
+
 describe("parseArguments --config", () => {
   test("defaults to false", () => {
     const args = parseArguments(["--sandbox", "/tmp/sb"]) as any;

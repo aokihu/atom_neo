@@ -91,6 +91,29 @@ describe("WebSocket session persistence", () => {
     expect(queue.waiting).toBe(1);
   });
 
+  test("uses payload.pipeline and defaults to prediction", () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const pipelines: string[] = [];
+    bus.on(BusEvents.Task.Enqueued, ({ task }) => { pipelines.push(task.pipeline); });
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      bus,
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { sessionId: "url-session", chatId: "chat", pipeline: "conversation", data: { text: "go" } },
+    }));
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { sessionId: "url-session", chatId: "chat", data: { text: "go" } },
+    }));
+
+    expect(pipelines).toEqual(["conversation", "prediction"]);
+  });
+
   test("does not enqueue when the message checkpoint fails", () => {
     const store = new SessionStore(10, undefined, 0, {
       restore: () => null,

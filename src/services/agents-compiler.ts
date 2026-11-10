@@ -29,16 +29,14 @@ export class AgentsCompilerService extends BaseService {
     return this.#prompt;
   }
 
-  async start(): Promise<void> {
-    await super.start();
+  protected async onStart(): Promise<void> {
     this.#ensureDirs();
     this.#startWatch();
     await this.#sync();
   }
 
-  async stop(): Promise<void> {
+  protected async onStop(): Promise<void> {
     if (this.#watcher) { this.#watcher.close(); this.#watcher = null; }
-    await super.stop();
   }
 
   // == internal ==

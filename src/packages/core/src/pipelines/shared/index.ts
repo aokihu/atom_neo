@@ -7,6 +7,6 @@ export { calcTokenUsage, calcTokenRatio, applyCompressRatio } from "./token-rati
 export { callLLM, parseJsonFromLLMResponse } from "./llm";
 
 export function registerSharedElements(): void {
-  try { registerElement("jev-decision", JevElement); } catch {}
-  try { registerElement("token-ratio", TokenRatioElement); } catch {}
+  registerElement("jev-decision", JevElement);
+  registerElement("token-ratio", TokenRatioElement);
 }

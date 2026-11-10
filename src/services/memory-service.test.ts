@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,26 +8,62 @@ import { parseMemorySearchTerms } from "@atom-neo/shared";
 import { MemoryService } from "./memory-service";
 import { DAY_MS } from "./memory-ranking";
 
-function createMemoryService(now?: () => number): { service: MemoryService; dir: string } {
+const activeServices: MemoryService[] = [];
+
+function track(service: MemoryService): MemoryService {
+  activeServices.push(service);
+  return service;
+}
+
+async function createMemoryService(now?: () => number): Promise<{ service: MemoryService; dir: string }> {
   const dir = mkdtempSync(join(tmpdir(), "atom-memory-"));
-  return {
-    service: new MemoryService({
-      dbPath: join(dir, "memory.db"),
-      legacyNodesPath: join(dir, "nodes"),
-      now,
-    }),
-    dir,
-  };
+  const service = track(new MemoryService({
+    dbPath: join(dir, "memory.db"),
+    legacyNodesPath: join(dir, "nodes"),
+    now,
+  }));
+  await service.start();
+  return { service, dir };
 }
 
 function cleanup(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
+afterEach(async () => {
+  for (const service of activeServices.splice(0)) await service.stop();
+});
+
+describe("MemoryService lifecycle", () => {
+  test("opens the database only in start and supports repeated start/stop", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "atom-memory-lifecycle-"));
+    const dbPath = join(dir, "memory.db");
+    const service = track(new MemoryService({ dbPath }));
+
+    expect(existsSync(dbPath)).toBe(false);
+    expect(() => service.getById("abcdef")).toThrow("MemoryService is not started");
+
+    await service.start();
+    await service.start();
+    expect(service.isRunning).toBe(true);
+    expect(existsSync(dbPath)).toBe(true);
+
+    await service.stop();
+    await service.stop();
+    expect(service.isRunning).toBe(false);
+    expect(() => service.getById("abcdef")).toThrow("MemoryService is not started");
+
+    await service.start();
+    expect(service.isRunning).toBe(true);
+    await service.stop();
+    cleanup(dir);
+  });
+});
+
 describe("MemoryService save", () => {
   test("hard-expires temporary memory from lookup and traversal", async () => {
     let now = 1_000;
-    const { service, dir } = createMemoryService(() => now);
+    const { service, dir } = await createMemoryService(() => now);
     try {
       const id = service.save("temporary weather", ["weather"], undefined, {
         kind: "realtime_data",
@@ -46,8 +82,8 @@ describe("MemoryService save", () => {
     }
   });
 
-  test("does not reset lifecycle when saving duplicate content", () => {
-    const { service, dir } = createMemoryService();
+  test("does not reset lifecycle when saving duplicate content", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       const id = service.save("stable memory", ["first"], undefined, { baseWeight: 80, kind: "preference", confidence: 0.7 });
       service.recordRead(id);
@@ -68,7 +104,7 @@ describe("MemoryService save", () => {
   });
 
   test("stores a compact summary and reuses content when savings are small", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const content = "台风查询需要先加载对应技能，然后按照技能中的数据源顺序获取最新资料。";
       const compactId = service.save(content, ["typhoon"], "台风技能查询流程");
@@ -84,7 +120,7 @@ describe("MemoryService save", () => {
   });
 
   test("atomically saves a replacement and excludes the superseded memory", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const oldId = service.save("project endpoint is api-v1", ["endpoint"]);
       const newId = service.save("project endpoint is api-v2", ["endpoint"], undefined, {
@@ -103,7 +139,7 @@ describe("MemoryService save", () => {
   });
 
   test("rejects invalid or self-referencing replacements without changing storage", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const content = "replacement must stay atomic";
       const id = service.save(content);
@@ -121,7 +157,7 @@ describe("MemoryService save", () => {
 
   test("decays usage lazily and records only full reads", async () => {
     let now = 100 * DAY_MS;
-    const { service, dir } = createMemoryService(() => now);
+    const { service, dir } = await createMemoryService(() => now);
     try {
       const id = service.save("usage decay memory");
 
@@ -141,8 +177,8 @@ describe("MemoryService save", () => {
     }
   });
 
-  test("counts graph traversal summaries as retrievals", () => {
-    const { service, dir } = createMemoryService();
+  test("counts graph traversal summaries as retrievals", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       const source = service.save("graph source");
       const target = service.save("graph target");
@@ -159,9 +195,9 @@ describe("MemoryService save", () => {
     }
   });
 
-  test("retain confirms a memory without resetting read history", () => {
+  test("retain confirms a memory without resetting read history", async () => {
     let now = 100 * DAY_MS;
-    const { service, dir } = createMemoryService(() => now);
+    const { service, dir } = await createMemoryService(() => now);
     try {
       const id = service.save("retained decision", [], undefined, { baseWeight: 70, kind: "decision" });
       service.recordRead(id);
@@ -177,8 +213,27 @@ describe("MemoryService save", () => {
     }
   });
 
+  test("retain never lowers an already higher weight", async () => {
+    const { service, dir } = await createMemoryService();
+    try {
+      const id = service.save("high weight memory", [], undefined, { baseWeight: 60 });
+      const db = new Database(join(dir, "memory.db"));
+      db.run("UPDATE nodes SET weight = 100 WHERE id = ?", [id]);
+      db.close();
+
+      service.retain(id);
+
+      const verify = new Database(join(dir, "memory.db"));
+      const row = verify.prepare("SELECT base_weight, weight FROM nodes WHERE id = ?").get(id);
+      verify.close();
+      expect(row).toEqual({ base_weight: 70, weight: 100 });
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   test("stores content only in SQLite and keeps FTS tags synchronized", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const id = service.save("existing memory");
       service.save("existing memory", ["durable-index"]);
@@ -211,7 +266,8 @@ describe("MemoryService save", () => {
     db.close();
 
     try {
-      const service = new MemoryService({ dbPath, legacyNodesPath: nodesPath });
+      const service = track(new MemoryService({ dbPath, legacyNodesPath: nodesPath }));
+      await service.start();
 
       expect(service.traverse(id)[0]?.content).toBe(content);
       expect(service.getById(id)?.summary).toBe(content);
@@ -241,7 +297,8 @@ describe("MemoryService save", () => {
     db.close();
 
     try {
-      const service = new MemoryService({ dbPath });
+      const service = track(new MemoryService({ dbPath }));
+      await service.start();
 
       expect(service.getById(id)?.summary).toBe(content);
       expect((await service.search("typhoon"))[0]?.id).toBe(id);
@@ -253,7 +310,7 @@ describe("MemoryService save", () => {
 
 describe("MemoryService search", () => {
   test("rejects weak partial matches for a long unsegmented Chinese query", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const relevant = service.save("浙江大学紫金港校区设有游泳馆和游泳池。");
       service.save("浙江省杭州近期文娱活动与演出信息。");
@@ -264,14 +321,14 @@ describe("MemoryService search", () => {
     }
   });
 
-  test("parses broad terms and ignores a year when concepts are present", () => {
+  test("parses broad terms and ignores a year when concepts are present", async () => {
     expect(parseMemorySearchTerms("台风 最新 2026")).toEqual(["台风"]);
     expect(parseMemorySearchTerms("2026")).toEqual(["2026"]);
     expect(parseMemorySearchTerms("查询一下台风最新动向")).toContain("台风");
   });
 
   test("finds capability memory by a core keyword", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       service.save("查询台风信息时使用 Typhoon Skill。", ["skill", "typhoon"]);
 
@@ -285,7 +342,7 @@ describe("MemoryService search", () => {
   });
 
   test("matches any broad query term instead of the complete phrase", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       service.save("查询台风信息时使用 Typhoon Skill。", ["skill", "typhoon"]);
 
@@ -299,7 +356,7 @@ describe("MemoryService search", () => {
   });
 
   test("matches a useful part of an unsegmented Chinese query", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       service.save("台风资料应通过 Typhoon Skill 获取。", ["skill"]);
 
@@ -312,7 +369,7 @@ describe("MemoryService search", () => {
   });
 
   test("searches tags and prioritizes more relevant terms", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       service.save("通用气象资料。", ["typhoon-skill"]);
       service.save("2026 年最新项目状态。", ["status"]);
@@ -326,7 +383,7 @@ describe("MemoryService search", () => {
   });
 
   test("keeps lexical relevance ahead of intrinsic weight", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const exactId = service.save("typhoon weather exact workflow", [], undefined, { baseWeight: 0 });
       service.save("weather general archive", [], undefined, { baseWeight: 100, pinned: true });
@@ -340,7 +397,7 @@ describe("MemoryService search", () => {
   });
 
   test("excludes memories superseded through graph relations", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const referencedId = service.save("shared topic alpha");
       const plainId = service.save("shared topic beta");
@@ -353,8 +410,8 @@ describe("MemoryService search", () => {
 });
 
 describe("MemoryService findFullId", () => {
-  test("resolves exact and unique short IDs", () => {
-    const { service, dir } = createMemoryService();
+  test("resolves exact and unique short IDs", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       const id = service.save("user prefers concise answers", ["preference"]);
 
@@ -366,8 +423,8 @@ describe("MemoryService findFullId", () => {
     }
   });
 
-  test("does not resolve ambiguous short IDs", () => {
-    const { service, dir } = createMemoryService();
+  test("does not resolve ambiguous short IDs", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       const idsByPrefix = new Map<string, string[]>();
 
@@ -386,8 +443,8 @@ describe("MemoryService findFullId", () => {
     }
   });
 
-  test("rejects non-hash IDs", () => {
-    const { service, dir } = createMemoryService();
+  test("rejects non-hash IDs", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       service.save("valid memory");
 
@@ -398,8 +455,8 @@ describe("MemoryService findFullId", () => {
     }
   });
 
-  test("links unique graph edges using short IDs", () => {
-    const { service, dir } = createMemoryService();
+  test("links unique graph edges using short IDs", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       const source = service.save("short edge source");
       const target = service.save("short edge target");
@@ -430,9 +487,9 @@ describe("MemoryService findFullId", () => {
     }
   });
 
-  test("does not count expired related memories", () => {
+  test("does not count expired related memories", async () => {
     let now = 1_000;
-    const { service, dir } = createMemoryService(() => now);
+    const { service, dir } = await createMemoryService(() => now);
     try {
       const source = service.save("stable source");
       const target = service.save("temporary target", [], undefined, { ttlSeconds: 60 });
@@ -450,7 +507,7 @@ describe("MemoryService findFullId", () => {
 
 describe("MemoryService forget", () => {
   test("deletes memory content and metadata by short ID", async () => {
-    const { service, dir } = createMemoryService();
+    const { service, dir } = await createMemoryService();
     try {
       const id = service.save("memory to forget", ["cleanup"]);
       const otherId = service.save("related memory", ["cleanup"]);
@@ -468,8 +525,8 @@ describe("MemoryService forget", () => {
     }
   });
 
-  test("returns false for missing memory", () => {
-    const { service, dir } = createMemoryService();
+  test("returns false for missing memory", async () => {
+    const { service, dir } = await createMemoryService();
     try {
       expect(service.forget("abcdef")).toBe(false);
     } finally {

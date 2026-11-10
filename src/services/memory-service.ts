@@ -2,7 +2,8 @@ import { BaseService } from "./base-service";
 import { parseMemorySearchTerms } from "@atom-neo/shared";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
+import { dirname } from "node:path";
 import {
   calculateDecayedUsage,
   calculateFinalMemoryScore,
@@ -51,18 +52,16 @@ export type MemoryTraversalNode = MemoryNode & {
 export class MemoryService extends BaseService {
   readonly name = "memory";
 
-  #db: Database;
+  #db: Database | null = null;
+  #dbPath: string;
   #legacyNodesPath?: string;
   #now: () => number;
 
   constructor(params: { dbPath: string; legacyNodesPath?: string; now?: () => number }) {
     super();
-    this.#db = new Database(params.dbPath);
+    this.#dbPath = params.dbPath;
     this.#legacyNodesPath = params.legacyNodesPath;
     this.#now = params.now ?? Date.now;
-    const searchIndexCreated = this.#initDb();
-    if (searchIndexCreated) this.#db.run("INSERT INTO memory_fts(memory_fts) VALUES ('rebuild')");
-    this.#migrateLegacyContent();
   }
 
   // == Public API ==
@@ -77,7 +76,7 @@ export class MemoryService extends BaseService {
     const ftsTerms = terms.filter((term) => Array.from(term).length >= 3);
     if (ftsTerms.length > 0) {
       const matchQuery = ftsTerms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" OR ");
-      const rows = this.#db.prepare(
+      const rows = this.#dbHandle().prepare(
         `SELECT nodes.id, bm25(memory_fts) AS rank
          FROM memory_fts JOIN nodes ON nodes.rowid = memory_fts.rowid
          WHERE memory_fts MATCH ? AND (nodes.expires_at IS NULL OR nodes.expires_at > ?) ${kindFilter}
@@ -92,7 +91,7 @@ export class MemoryService extends BaseService {
         .map(() => "instr(lower(summary), lower(?)) > 0 OR instr(lower(content), lower(?)) > 0 OR instr(lower(tags), lower(?)) > 0")
         .join(" OR ");
       const params = shortTerms.flatMap((term) => [term, term, term]);
-      const rows = this.#db.prepare(
+      const rows = this.#dbHandle().prepare(
         `SELECT id FROM nodes WHERE (${where}) AND (expires_at IS NULL OR expires_at > ?) ${kindFilter} LIMIT ?`,
       ).all(...params, this.#now(), candidateLimit) as Array<{ id: string }>;
       for (const row of rows) if (!ranks.has(row.id)) ranks.set(row.id, 0);
@@ -154,7 +153,7 @@ export class MemoryService extends BaseService {
       if (!node) continue;
       results.push({ ...node, sourceId, relation, direction, depth });
 
-      const neighbors = this.#db.prepare(
+      const neighbors = this.#dbHandle().prepare(
         `SELECT target_id AS id, relation, 'outgoing' AS direction FROM edges WHERE source_id = ?
          UNION ALL
          SELECT source_id AS id, relation, 'incoming' AS direction FROM edges WHERE target_id = ?`,
@@ -204,8 +203,8 @@ export class MemoryService extends BaseService {
     if (supersededMemoryId === hash) {
       throw new Error("A memory cannot supersede itself");
     }
-    this.#db.transaction(() => {
-      this.#db.run(
+    this.#dbHandle().transaction(() => {
+      this.#dbHandle().run(
         `INSERT INTO nodes (
            id, content, summary, tags, weight, access_count, base_weight, usage_score,
            retrieval_count, read_count, kind, confidence, pinned, expires_at, last_confirmed_at,
@@ -230,7 +229,7 @@ export class MemoryService extends BaseService {
         ],
       );
       if (supersededMemoryId) {
-        this.#db.run(
+        this.#dbHandle().run(
           "INSERT OR IGNORE INTO edges (source_id, target_id, relation) VALUES (?, ?, 'supersedes')",
           [hash, supersededMemoryId],
         );
@@ -251,7 +250,7 @@ export class MemoryService extends BaseService {
   countRelated(memoryId: string): number {
     const fullMemoryId = this.findFullId(memoryId);
     if (!fullMemoryId) return 0;
-    const row = this.#db.prepare(
+    const row = this.#dbHandle().prepare(
       `SELECT COUNT(*) AS count
        FROM (
          SELECT target_id AS id FROM edges WHERE source_id = ?
@@ -269,12 +268,12 @@ export class MemoryService extends BaseService {
     if (!/^[a-f0-9]+$/.test(key)) return null;
 
     const now = this.#now();
-    const exact = this.#db.prepare(
+    const exact = this.#dbHandle().prepare(
       "SELECT id FROM nodes WHERE id = ? AND (expires_at IS NULL OR expires_at > ?)",
     ).get(key, now) as { id: string } | null;
     if (exact) return exact.id;
 
-    const rows = this.#db.prepare(
+    const rows = this.#dbHandle().prepare(
       "SELECT id FROM nodes WHERE id LIKE ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY id LIMIT 2",
     ).all(`${key}%`, now) as Array<{ id: string }>;
     return rows.length === 1 ? rows[0].id : null;
@@ -284,7 +283,7 @@ export class MemoryService extends BaseService {
     const sourceId = this.findFullId(source);
     const targetId = this.findFullId(target);
     if (!sourceId || !targetId) return false;
-    this.#db.run(
+    this.#dbHandle().run(
       "INSERT OR IGNORE INTO edges (source_id, target_id, relation) VALUES (?, ?, ?)",
       [sourceId, targetId, relation],
     );
@@ -295,9 +294,9 @@ export class MemoryService extends BaseService {
     const fullMemoryId = this.findFullId(id);
     if (!fullMemoryId) return false;
 
-    const result = this.#db.transaction(() => {
-      this.#db.run("DELETE FROM edges WHERE source_id = ? OR target_id = ?", [fullMemoryId, fullMemoryId]);
-      return this.#db.run("DELETE FROM nodes WHERE id = ?", [fullMemoryId]) as { changes?: number };
+    const result = this.#dbHandle().transaction(() => {
+      this.#dbHandle().run("DELETE FROM edges WHERE source_id = ? OR target_id = ?", [fullMemoryId, fullMemoryId]);
+      return this.#dbHandle().run("DELETE FROM nodes WHERE id = ?", [fullMemoryId]) as { changes?: number };
     })();
     return (result.changes ?? 0) > 0;
   }
@@ -306,10 +305,10 @@ export class MemoryService extends BaseService {
     const fullMemoryId = this.findFullId(id);
     if (!fullMemoryId) return;
     const now = this.#now();
-    this.#db.run(
+    this.#dbHandle().run(
       `UPDATE nodes SET
          base_weight = MIN(100, base_weight + 10),
-         weight = MIN(100, base_weight + 10),
+         weight = MIN(100, weight + 10),
          last_confirmed_at = ?,
          accessed_at = ?
        WHERE id = ?`,
@@ -318,13 +317,13 @@ export class MemoryService extends BaseService {
   }
 
   recordRead(id: string): void {
-    const row = this.#db.prepare(
+    const row = this.#dbHandle().prepare(
       "SELECT usage_score, usage_updated_at FROM nodes WHERE id = ?",
     ).get(id) as { usage_score: number; usage_updated_at: number | null } | null;
     if (!row) return;
     const now = this.#now();
     const usageScore = calculateDecayedUsage(row.usage_score, row.usage_updated_at, now) + 1;
-    this.#db.run(
+    this.#dbHandle().run(
       `UPDATE nodes SET
          usage_score = ?,
          read_count = read_count + 1,
@@ -339,18 +338,34 @@ export class MemoryService extends BaseService {
 
   // == Service lifecycle ==
 
-  async start(): Promise<void> {
-    await super.start();
+  protected async onStart(): Promise<void> {
+    try {
+      mkdirSync(dirname(this.#dbPath), { recursive: true });
+      this.#db = new Database(this.#dbPath);
+      const searchIndexCreated = this.#initDb();
+      if (searchIndexCreated) this.#db.run("INSERT INTO memory_fts(memory_fts) VALUES ('rebuild')");
+      this.#migrateLegacyContent();
+    } catch (error) {
+      this.#db?.close();
+      this.#db = null;
+      throw error;
+    }
   }
 
-  async stop(): Promise<void> {
-    await super.stop();
+  protected async onStop(): Promise<void> {
+    this.#db?.close();
+    this.#db = null;
   }
 
   // == Internal ==
 
+  #dbHandle(): Database {
+    if (!this.#db) throw new Error("MemoryService is not started");
+    return this.#db;
+  }
+
   #initDb(): boolean {
-    this.#db.run(`CREATE TABLE IF NOT EXISTS nodes (
+    this.#dbHandle().run(`CREATE TABLE IF NOT EXISTS nodes (
       id TEXT PRIMARY KEY,
       content TEXT NOT NULL DEFAULT '',
       summary TEXT NOT NULL DEFAULT '',
@@ -372,11 +387,11 @@ export class MemoryService extends BaseService {
       accessed_at INTEGER
     )`);
     const nodeColumns = new Set(
-      (this.#db.prepare("PRAGMA table_info(nodes)").all() as Array<{ name: string }>).map((column) => column.name),
+      (this.#dbHandle().prepare("PRAGMA table_info(nodes)").all() as Array<{ name: string }>).map((column) => column.name),
     );
     const addColumn = (name: string, sql: string) => {
       if (nodeColumns.has(name)) return false;
-      this.#db.run(`ALTER TABLE nodes ADD COLUMN ${sql}`);
+      this.#dbHandle().run(`ALTER TABLE nodes ADD COLUMN ${sql}`);
       nodeColumns.add(name);
       return true;
     };
@@ -394,39 +409,39 @@ export class MemoryService extends BaseService {
     const lastReadAdded = addColumn("last_read_at", "last_read_at INTEGER");
     const lastConfirmedAdded = addColumn("last_confirmed_at", "last_confirmed_at INTEGER");
     const usageUpdatedAdded = addColumn("usage_updated_at", "usage_updated_at INTEGER");
-    this.#db.run("UPDATE nodes SET summary = content WHERE summary = ''");
-    if (baseWeightAdded) this.#db.run("UPDATE nodes SET base_weight = weight");
-    if (usageScoreAdded) this.#db.run("UPDATE nodes SET usage_score = MIN(access_count, 4)");
-    if (readCountAdded) this.#db.run("UPDATE nodes SET read_count = access_count");
-    if (lastReadAdded) this.#db.run("UPDATE nodes SET last_read_at = accessed_at WHERE access_count > 0");
-    if (lastConfirmedAdded) this.#db.run("UPDATE nodes SET last_confirmed_at = created_at");
-    if (usageUpdatedAdded) this.#db.run("UPDATE nodes SET usage_updated_at = COALESCE(accessed_at, created_at)");
+    this.#dbHandle().run("UPDATE nodes SET summary = content WHERE summary = ''");
+    if (baseWeightAdded) this.#dbHandle().run("UPDATE nodes SET base_weight = weight");
+    if (usageScoreAdded) this.#dbHandle().run("UPDATE nodes SET usage_score = MIN(access_count, 4)");
+    if (readCountAdded) this.#dbHandle().run("UPDATE nodes SET read_count = access_count");
+    if (lastReadAdded) this.#dbHandle().run("UPDATE nodes SET last_read_at = accessed_at WHERE access_count > 0");
+    if (lastConfirmedAdded) this.#dbHandle().run("UPDATE nodes SET last_confirmed_at = created_at");
+    if (usageUpdatedAdded) this.#dbHandle().run("UPDATE nodes SET usage_updated_at = COALESCE(accessed_at, created_at)");
 
-    this.#db.run(`CREATE TABLE IF NOT EXISTS edges (
+    this.#dbHandle().run(`CREATE TABLE IF NOT EXISTS edges (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       source_id TEXT NOT NULL,
       target_id TEXT NOT NULL,
       relation TEXT NOT NULL
     )`);
-    this.#db.run("CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id)");
-    this.#db.run("CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id)");
-    this.#db.run(`DELETE FROM edges WHERE id NOT IN (
+    this.#dbHandle().run("CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id)");
+    this.#dbHandle().run("CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id)");
+    this.#dbHandle().run(`DELETE FROM edges WHERE id NOT IN (
       SELECT MIN(id) FROM edges GROUP BY source_id, target_id, relation
     )`);
-    this.#db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_unique ON edges(source_id, target_id, relation)");
+    this.#dbHandle().run("CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_unique ON edges(source_id, target_id, relation)");
 
-    const searchIndexExists = Boolean(this.#db.prepare(
+    const searchIndexExists = Boolean(this.#dbHandle().prepare(
       "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_fts'",
     ).get());
     const searchIndexColumns = searchIndexExists
-      ? this.#db.prepare("PRAGMA table_info(memory_fts)").all() as Array<{ name: string }>
+      ? this.#dbHandle().prepare("PRAGMA table_info(memory_fts)").all() as Array<{ name: string }>
       : [];
     const searchIndexNeedsRebuild = !searchIndexExists || !searchIndexColumns.some((column) => column.name === "summary");
-    this.#db.run("DROP TRIGGER IF EXISTS nodes_fts_insert");
-    this.#db.run("DROP TRIGGER IF EXISTS nodes_fts_delete");
-    this.#db.run("DROP TRIGGER IF EXISTS nodes_fts_update");
-    if (searchIndexExists && searchIndexNeedsRebuild) this.#db.run("DROP TABLE memory_fts");
-    this.#db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+    this.#dbHandle().run("DROP TRIGGER IF EXISTS nodes_fts_insert");
+    this.#dbHandle().run("DROP TRIGGER IF EXISTS nodes_fts_delete");
+    this.#dbHandle().run("DROP TRIGGER IF EXISTS nodes_fts_update");
+    if (searchIndexExists && searchIndexNeedsRebuild) this.#dbHandle().run("DROP TABLE memory_fts");
+    this.#dbHandle().run(`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
       summary,
       content,
       tags,
@@ -434,13 +449,13 @@ export class MemoryService extends BaseService {
       content_rowid='rowid',
       tokenize='trigram'
     )`);
-    this.#db.run(`CREATE TRIGGER nodes_fts_insert AFTER INSERT ON nodes BEGIN
+    this.#dbHandle().run(`CREATE TRIGGER nodes_fts_insert AFTER INSERT ON nodes BEGIN
       INSERT INTO memory_fts(rowid, summary, content, tags) VALUES (new.rowid, new.summary, new.content, new.tags);
     END`);
-    this.#db.run(`CREATE TRIGGER nodes_fts_delete AFTER DELETE ON nodes BEGIN
+    this.#dbHandle().run(`CREATE TRIGGER nodes_fts_delete AFTER DELETE ON nodes BEGIN
       INSERT INTO memory_fts(memory_fts, rowid, summary, content, tags) VALUES ('delete', old.rowid, old.summary, old.content, old.tags);
     END`);
-    this.#db.run(`CREATE TRIGGER nodes_fts_update AFTER UPDATE OF summary, content, tags ON nodes BEGIN
+    this.#dbHandle().run(`CREATE TRIGGER nodes_fts_update AFTER UPDATE OF summary, content, tags ON nodes BEGIN
       INSERT INTO memory_fts(memory_fts, rowid, summary, content, tags) VALUES ('delete', old.rowid, old.summary, old.content, old.tags);
       INSERT INTO memory_fts(rowid, summary, content, tags) VALUES (new.rowid, new.summary, new.content, new.tags);
     END`);
@@ -456,13 +471,13 @@ export class MemoryService extends BaseService {
     for (const file of readdirSync(path)) {
       if (!file.endsWith(".txt")) continue;
       const id = file.slice(0, -4);
-      if (!this.#db.prepare("SELECT 1 FROM nodes WHERE id = ?").get(id)) continue;
+      if (!this.#dbHandle().prepare("SELECT 1 FROM nodes WHERE id = ?").get(id)) continue;
       rows.push({ id, content: readFileSync(`${path}/${file}`, "utf-8") });
       migratedFiles.push(file);
     }
 
-    this.#db.transaction(() => {
-      const update = this.#db.prepare("UPDATE nodes SET content = ?, summary = ? WHERE id = ? AND content = ''");
+    this.#dbHandle().transaction(() => {
+      const update = this.#dbHandle().prepare("UPDATE nodes SET content = ?, summary = ? WHERE id = ? AND content = ''");
       for (const row of rows) update.run(row.content, row.content, row.id);
     })();
     for (const file of migratedFiles) {
@@ -472,7 +487,7 @@ export class MemoryService extends BaseService {
   }
 
   #loadNode(id: string): MemoryNode | null {
-    const row = this.#db.prepare("SELECT * FROM nodes WHERE id = ?").get(id) as any;
+    const row = this.#dbHandle().prepare("SELECT * FROM nodes WHERE id = ?").get(id) as any;
     if (!row || (row.expires_at !== null && row.expires_at <= this.#now())) return null;
     return {
       id: row.id,
@@ -501,7 +516,7 @@ export class MemoryService extends BaseService {
   }
 
   #memoryQuality(node: MemoryNode): number {
-    const references = this.#db.prepare(
+    const references = this.#dbHandle().prepare(
       `SELECT edges.relation, nodes.base_weight AS sourceBaseWeight
        FROM edges JOIN nodes ON nodes.id = edges.source_id
        WHERE edges.target_id = ? AND edges.relation != 'supersedes'`,
@@ -523,18 +538,18 @@ export class MemoryService extends BaseService {
   }
 
   #isSuperseded(id: string): boolean {
-    return Boolean(this.#db.prepare(
+    return Boolean(this.#dbHandle().prepare(
       "SELECT 1 FROM edges WHERE target_id = ? AND relation = 'supersedes' LIMIT 1",
     ).get(id));
   }
 
   #recordRetrievals(ids: string[]): void {
     if (ids.length === 0) return;
-    const markRetrieved = this.#db.prepare(
+    const markRetrieved = this.#dbHandle().prepare(
       "UPDATE nodes SET retrieval_count = retrieval_count + 1, accessed_at = ? WHERE id = ?",
     );
     const now = this.#now();
-    this.#db.transaction(() => {
+    this.#dbHandle().transaction(() => {
       for (const id of new Set(ids)) markRetrieved.run(now, id);
     })();
   }

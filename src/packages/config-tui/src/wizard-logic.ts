@@ -1,4 +1,4 @@
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -332,7 +332,7 @@ export function writeEnvKeys(envPath: string, keys: Record<string, string>): voi
     if (idx >= 0) lines[idx] = `${key}=${value}`;
     else lines.push(`${key}=${value}`);
   }
-  Bun.write(envPath, lines.join("\n") + "\n");
+  writeFileSync(envPath, lines.join("\n") + "\n", "utf8");
 }
 
 function buildProviderEntry(prev: Record<string, any> | undefined, edit: ProviderEdit): Record<string, any> {
@@ -368,12 +368,12 @@ export function commit(sandboxPath: string, state: WizardState): void {
     if (edit.models.length === 0) continue;
     merged.providers[id] = buildProviderEntry(prevProviders[id], edit);
   }
-  merged.tui = { theme: state.theme };
+  merged.tui = { ...(existing.tui ?? {}), theme: state.theme };
   if (state.mode === "config") {
     merged.gateway = { ...(existing.gateway ?? {}), port: state.gatewayPort ?? 3000 };
   }
 
-  Bun.write(`${sandboxPath}/config.json`, JSON.stringify(merged, null, 2) + "\n");
+  writeFileSync(`${sandboxPath}/config.json`, JSON.stringify(merged, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
 
   if (Object.keys(state.envKeys).length > 0) {
     writeEnvKeys(`${sandboxPath}/.env`, state.envKeys);
@@ -393,10 +393,10 @@ export function commit(sandboxPath: string, state: WizardState): void {
         state.projectDescription,
         "",
       ].join("\n");
-      Bun.write(`${sandboxPath}/AGENTS.md`, template);
+      writeFileSync(`${sandboxPath}/AGENTS.md`, template, "utf8");
     }
     mkdirSync(`${sandboxPath}/.atom`, { recursive: true });
-    Bun.write(`${sandboxPath}/.atom/installed`, "");
+    writeFileSync(`${sandboxPath}/.atom/installed`, "", "utf8");
   }
 }
 
