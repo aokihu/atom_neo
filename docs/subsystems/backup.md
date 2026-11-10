@@ -2,6 +2,8 @@
 
 > **Purpose**: 将 sandbox 的配置与密钥打包迁移到另一台机器或留作备份，支持可选密码加密。
 
+v1.22.0 起可用：直接命令 `atom export` / `atom import`，或 `atom menu` → `backup` 向导。
+
 ---
 
 ## 1. 范围
@@ -74,7 +76,7 @@ backup / import: archive → sandbox
   "format": "atom-backup",
   "version": 1,
   "createdAt": "2026-11-10T10:30:00.000Z",
-  "appVersion": "1.21.3",
+  "appVersion": "1.22.0",
   "files": [
     { "name": "config.json", "size": 745, "sha256": "..." },
     { "name": ".env", "size": 210, "sha256": "..." }
