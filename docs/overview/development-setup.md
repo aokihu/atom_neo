@@ -64,6 +64,9 @@ bun run typecheck:node
 # Node platform + release artifact smokes (Node >= 26)
 bun run smoke:node
 
+# Pack the root package, install the tarball in a temp project and run it (Node >= 26)
+bun run smoke:node:package
+
 # Run all tests
 bun test
 
@@ -201,7 +204,9 @@ bun run scripts/node-smoke/build.ts
 
 Build details:
 
-- `build:node` runs `bun build src/main.ts --target node --outdir dist/node --external '@opentui/*'`.
+- `build:node` runs `bun build src/main.ts --target node --outdir dist/node --external '@opentui/*' --banner '#!/usr/bin/env node'`.
+- The banner makes `dist/node/main.js` directly executable and is required by the
+  `atom` npm `bin` entry.
 - `@opentui/*` stays external so Bun-only OpenTUI runtime code is not inlined.
 - `ws` is bundled, so `dist/node/main.js` resolves its WebSocket dependency from
   the bundle instead of requiring a root-level `ws` install.
@@ -215,9 +220,9 @@ Build details:
   creating the renderer: Bun registers the plugin, Node skips the import
   entirely. Importing the TUI modules under Node therefore no longer throws.
 
-S10-B1 adds the platform and release artifact smokes in section 7.3. CI is still
-not wired; S10-B2 owns the CI matrix, release packaging, `main`/`exports`/`bin`/
-`files`, the `workspace:*` publish strategy, and the version bump.
+S10-B1 adds the platform and release artifact smokes in section 7.3. S10-B2 adds
+the npm package layout, tarball install smoke (section 7.4) and the two-job CI
+workflow (section 12).
 
 ---
 
@@ -268,6 +273,58 @@ Release coverage (`scripts/node-smoke/release.ts`):
 
 The platform smoke has a 45 s watchdog and the release smoke a 60 s watchdog.
 Both print `PASS ...` lines and exit non-zero on the first failure.
+
+---
+
+### 7.4 Node package layout and tarball install (S10-B2)
+
+The root package is publishable as an npm tarball. `prepack` rebuilds
+`dist/node`, and `files` ships only the Node bundle plus `package.json`.
+
+```bash
+# From the repository root; prepack runs `bun run build:node`
+npm pack
+# -> atom-neo-1.22.12.tgz
+#    ~0.55 MiB packed / ~2.82 MiB unpacked
+#    package/package.json + package/dist/node/main.js only
+
+# Install into a throwaway project
+mkdir /tmp/atom-neo-install && cd /tmp/atom-neo-install
+npm init -y
+npm install /path/to/atom-neo-1.22.12.tgz
+
+# Entrypoint and bin
+node node_modules/atom-neo/dist/node/main.js --help
+npx --no-install atom --help
+
+# Core under Node (Node >= 26)
+ATOM_HTTP_RUNTIME=node \
+  node node_modules/atom-neo/dist/node/main.js --mode core --port 3100 --sandbox ./sandbox
+```
+
+Package layout:
+
+- `main` / `exports["."].bun` / `exports["."].node` / `exports["."].default` -> `./dist/node/main.js`.
+- The published tarball ships only `dist/node`; Bun workspace development still runs
+  `bun run src/main.ts`, but package imports resolve to the built artifact.
+- `bin.atom` -> `./dist/node/main.js`; `build:node` prepends
+  `#!/usr/bin/env node`, and npm links the bin on install.
+- `files` -> `["dist/node/main.js"]`, so source, tests, docs and scripts do not
+  ship. `package.json` is always included by npm.
+- `@atom-neo/*` workspace packages are build-time only and live in
+  `devDependencies`. The Node bundle inlines them, so the tarball's runtime
+  dependencies are only `@opentui/core`, `@opentui/react`, `react` and `ws`.
+- `@opentui/*` stays external and is installed from the registry. The TUI needs
+  those packages at runtime; Core/HTTP mode does not import the TUI entrypoints.
+- Node **26 only** (`engines.node >= 26`). The Bun source path and
+  `build:bin --compile` binary are unchanged.
+
+`bun run smoke:node:package` validates this end to end: build, `npm pack`,
+tarball contents, runtime dependency rewrite, installation into a temp project,
+`--help`, `npx --no-install atom --help`, and a real installed Core
+health/SIGTERM cycle. The TUI entrypoint import is covered by
+`scripts/node-smoke/build.ts`; an automated TUI render test under Node remains a
+follow-up.
 
 ---
 
@@ -373,31 +430,35 @@ git push origin feature/my-feature
 
 ## 12. CI Setup (GitHub Actions)
 
-> S10-A/S10-B1 prepare the local Node build and smoke commands. The CI matrix
-> below is the target for S10-B2 and is not wired in this repository yet.
+`.github/workflows/ci.yml` runs two jobs on every push and pull request. YAML
+syntax is validated locally with `ruby -ryaml -e 'YAML.load_file(".github/workflows/ci.yml")'`.
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "26"
-      - run: bun install
-      - run: bun run typecheck
-      - run: bun run typecheck:node
-      - run: bun test
-      - run: bun run build
-      - run: bun run build:node
-      - run: node dist/node/main.js --help
-      - run: bun run smoke:node
-```
+**Bun job** (`ubuntu-latest`):
+
+1. `actions/checkout@v4`
+2. `oven-sh/setup-bun@v2` with Bun `1.4.2`
+3. `actions/cache@v4` for `~/.bun/install/cache`, keyed by `bun.lock`
+4. `bun install --frozen-lockfile`
+5. `bun run typecheck`
+6. `bun test`
+7. `bun run build`
+8. `bun run docs:check`
+9. `bun run docs:typecheck`
+
+**Node 26 job** (`ubuntu-latest`):
+
+1. `actions/checkout@v4`
+2. `oven-sh/setup-bun@v2` with Bun `1.4.2` (build/smoke orchestration)
+3. `actions/setup-node@v4` with Node `26` (runtime under test)
+4. Bun install cache + `bun install --frozen-lockfile`
+5. `bun run typecheck:node`
+6. `bun run build:node`
+7. `node scripts/node-smoke/build.ts`
+8. `bun run smoke:node`
+9. `bun run smoke:node:package`
+
+The Node job intentionally uses Bun to build/bundle the smoke scripts while the
+runtime checks execute with the real Node 26 binary.
 
 ---
 
@@ -410,7 +471,7 @@ jobs:
   `@atom-neo/tui` 自有的 `BounceBarSpinner`。
 - TypeScript `7.x` 不再支持 `baseUrl`；路径别名直接通过 `paths` 解析。
 - `@types/bun` 跟随实际验证的 Bun runtime；当前保持 `1.3.14`，不提前使用 `1.4.x` API 类型。
-- Node 类型检查使用根目录 `@types/node`（当前锁定 `25.9.1`）；`tsconfig.node.json`
+- Node 类型检查使用根目录 `@types/node`（当前锁定 `26.6.6`）；`tsconfig.node.json`
   仅包含生产源码，不引入 `@types/bun`，因此源码中的运行时判断不能再直接引用 `Bun` 全局
   （统一使用 `hasBunRuntime()`）。
 - 升级顺序固定为：更新文档 → 修改 manifest → `bun install` → `bun run typecheck`

@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: S0–S9 已完成；S10-A（Node 构建/类型检查边界）与 S10-B1（平台/发布产物 smoke）已完成，S10-B2（CI/发布包/版本）待实施。
+> **状态**: S0–S10 已完成；S10-A（Node 构建/类型检查边界）、S10-B1（平台/发布产物 smoke）与 S10-B2（CI/发布包/版本）均已完成。下一步为 S11。
 
 ---
 
@@ -20,6 +20,7 @@
 | 未实现 Element | **暂时不动** | 5 个兼容 Element、follow-up、Replay、PipelineRunner/Manager 保持原样 |
 | 多 Provider | **需要** | 新增 Provider 工厂、配置 protocol、Prompt 语言、Provider options |
 | S9 运行时形态 | **双 adapter**；默认 Bun，`ATOM_HTTP_RUNTIME=node` 可选 | `ws` on Bun spike 通过，但 S9 不统一/不删除 Bun adapter，至少保留一个版本（1.22.10）作为回滚；S10 再评估 |
+| Node 发布包 | **tarball 仅含 `dist/node/main.js` + `package.json`**；`@atom-neo/*` 为 `devDependencies`；运行时依赖仅 external `@opentui/*` + `react`/`ws` | npm 安装不再解析未发布的 workspace 包；CI 用 `smoke:node:package` 验证真实安装 |
 
 ### 版本基线
 
@@ -377,18 +378,19 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-RUN-07`：`tsconfig` 拆分：
-  - `tsconfig.base.json` 不含 `types: ["bun"]`。
-  - `tsconfig.bun.json` / `tsconfig.node.json`。
-- [ ] Bun 二进制继续 `bun build --compile`。
-- [ ] Node 产物：`bun build --target node` 或 esbuild，输出 `dist/node`；`@opentui/*` external。
-- [ ] `package.json`：`main`/`exports` 指向 dist（或明确源码运行要求）。
-- [ ] 确定 Node 包管理器（npm/pnpm）对 `workspace:*` 的策略。
-- [ ] Node smoke suite：
+- [x] `CR-RUN-07`：`tsconfig` 拆分：
+  - 根 `tsconfig.json` 保持共享基础（不含 `types`）；新增 `tsconfig.node.json`。
+  - 未单列 `tsconfig.bun.json`：workspace 配置继续 `types: ["bun"]`，行为不变。
+- [x] Bun 二进制继续 `bun build --compile`。
+- [x] Node 产物：`bun build --target node`，输出 `dist/node`；`@opentui/*` external。
+- [x] `package.json`：`main`/`exports`/`bin`/`files` 指向 dist。
+- [x] 确定 Node 包管理器（npm）对 `workspace:*` 的策略：工作区包移入 `devDependencies`，运行时依赖仅 external 包。
+- [x] Node smoke suite：
   - config、memory FTS5、shell、glob、schedule。
   - Core 启动 + health + WS 一次对话。
   - TUI 入口 import。
-- [ ] CI 矩阵：Bun 全量；Node 26 typecheck + build + smoke。
+  - tarball 打包/安装/运行 smoke。
+- [x] CI 矩阵：Bun 全量；Node 26 typecheck + build + smoke + package。
 
 **验收**：
 - `node dist/node/main.js` 可启动。
@@ -437,8 +439,41 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
   `build:node` 2.96 MB、`docs:check`/`docs:typecheck` 通过；
   `node dist/node/main.js --help` 复验通过。
 - [x] S10-B1 完成：platform/release smoke、`smoke:node` 编排与文档。
-- [ ] S10-B2：CI 矩阵、发布包/`main`/`exports`/`bin`/`files`、`workspace:*`
-  发布策略、版本 bump。
+
+**S10-B2 实施记录（2026-11-11，Node 发布包 + CI + 版本）**：
+
+- [x] 发布布局：根 `package.json` 增加 `main`、`exports`（`bun`/`node`/`default` → `dist/node/main.js`，
+  `./package.json`）、`bin.atom`、`files: ["dist/node/main.js"]`、`prepack: bun run build:node`；
+  `build:node` 增加 `--banner '#!/usr/bin/env node'`，构建产物可直接执行。
+- [x] `workspace:*` 策略：`@atom-neo/*` 从 `dependencies` 移到 `devDependencies`
+  （仅构建期，Node bundle 内联）；运行时 `dependencies` 仅保留 external
+  `@opentui/core`、`@opentui/react`、`react` 与 `ws`。`bun install --frozen-lockfile`
+  与 workspace typecheck/build 正常。
+- [x] 新增 `scripts/node-smoke/package.ts` 与 `smoke:node:package`：build →
+  `npm pack --ignore-scripts` → 校验 tarball 仅含 `package.json` +
+  `dist/node/main.js`、运行时依赖无 `workspace:`、产物无静态 `bun:` 导入 →
+  临时项目 `npm init -y` + `npm install <tarball> --ignore-scripts` →
+  `node node_modules/atom-neo/dist/node/main.js --help` →
+  `npx --no-install atom --help` → `ATOM_HTTP_RUNTIME=node` 安装态 Core
+  health/SIGTERM。
+- [x] 实测：`atom-neo-1.22.12.tgz` 566.9 KiB（unpacked 2.82 MiB，2 个文件）；
+  安装后不存在 `node_modules/@atom-neo`；package smoke 11/11 PASS。`files`
+  白名单已覆盖 `.gitignore` 的 `dist/`，无需新增 `.npmignore`。
+- [x] CI：新增 `.github/workflows/ci.yml`，两个 job：
+  - Bun：`bun install --frozen-lockfile`、`typecheck`、`bun test`、`build`、
+    `docs:check`、`docs:typecheck`。
+  - Node 26：`setup-node@v4` Node 26、`typecheck:node`、`build:node`、
+    `node scripts/node-smoke/build.ts`、`smoke:node`、`smoke:node:package`。
+  - Bun install 缓存按 `bun.lock`；YAML 用 Ruby Psych 本地校验通过。
+- [x] 版本 bump：`package.json` 与 `src/version.ts` 1.22.11 → 1.22.12；
+  `development-setup.md`/`project-structure.md` 同步发布布局、安装命令与 CI。
+- 验证：`typecheck` 6/6、`typecheck:node` 0 error、源码测试 1001 pass / 21
+  skip / 0 fail、全量 1781 pass / 21 skip / 0 fail、`build` 6/6、`build:bin`、
+  `build:node` 2.82 MiB、`docs:check`/`docs:typecheck`、`smoke:node`
+  build check 5/5 + platform 15/15 + release 9/9 + conversation 11/11、
+  `smoke:node:package` 11/11、`node dist/node/main.js --help` 全部通过。
+- [x] S10 完成。限制：Node TUI 仅验证入口 import，未做自动化 TUI render；
+  Windows 平台 shell 行为未在 CI 覆盖。
 
 **风险/回滚**：高；构建/发布独立，可先保留 Bun 发布。
 
@@ -632,7 +667,7 @@ bun run scripts/check-file-headers.ts
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
 | S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；1.22.11 起 Node 支持下限 26；保留双 adapter，S10 再评估统一 |
-| S10 | 进行中（S10-A/S10-B1 完成） | — | S10-A：`tsconfig.node.json`/`typecheck:node`、`build:node` → `dist/node/main.js`、Node TUI import guard、Node build smoke；S10-B1：platform smoke（config/env/memory FTS5/shell/glob/schedule）、release artifact smoke（health/attach/WS/SIGTERM）、`smoke:node` 编排；S10-B2（CI/发布包/版本）未开始 |
+| S10 | 已完成 | — | S10-A：`tsconfig.node.json`/`typecheck:node`、`build:node` → `dist/node/main.js`、Node TUI import guard、Node build smoke；S10-B1：platform smoke（config/env/memory FTS5/shell/glob/schedule）、release artifact smoke（health/attach/WS/SIGTERM）、`smoke:node` 编排；S10-B2：`main`/`exports`/`bin`/`files`、`@atom-neo/*` 发布策略、`prepack`、tarball 安装 smoke（11/11）、CI 双 job、版本 1.22.12；TUI render 自动化列为后续 |
 | S11 | 未开始 | — | DI 收口 |
 | S12 | 未开始 | — | 结构重构 |
 

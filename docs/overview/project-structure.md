@@ -9,10 +9,12 @@
 
 ```text
 atom_neo/
-├── package.json              # Workspace root
+├── package.json              # Workspace root + publishable Node package
 ├── tsconfig.json             # Shared/base TypeScript config (no runtime types)
 ├── tsconfig.node.json        # Node production-source typecheck (types: ["node"])
 ├── tsconfig.docs.json        # Docs-only typecheck config
+├── .github/
+│   └── workflows/ci.yml      # Two jobs: Bun (full) + Node 26 (smoke/package)
 ├── .gitignore
 ├── .env.example              # Template for sandbox/.env
 │
@@ -349,8 +351,19 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.11",
+  "version": "1.22.12",
   "type": "module",
+  "main": "./dist/node/main.js",
+  "exports": {
+    ".": {
+      "bun": "./dist/node/main.js",
+      "node": "./dist/node/main.js",
+      "default": "./dist/node/main.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": { "atom": "./dist/node/main.js" },
+  "files": ["dist/node/main.js"],
   "engines": { "node": ">=26", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
@@ -367,16 +380,36 @@ src/packages/tui/
     "typecheck:node": "tsc -p tsconfig.node.json",
     "build": "bun run --workspaces build",
     "build:bin": "bun build ./src/main.ts --compile --outfile dist/atom --target bun",
-    "build:node": "bun build ./src/main.ts --target node --outdir ./dist/node --external '@opentui/*'",
+    "build:node": "bun build ./src/main.ts --target node --outdir ./dist/node --external '@opentui/*' --banner '#!/usr/bin/env node'",
     "smoke:node": "bun run scripts/node-smoke/run-all.ts",
     "smoke:node:platform": "bun run scripts/node-smoke/run-all.ts platform",
     "smoke:node:release": "bun run scripts/node-smoke/run-all.ts release",
+    "smoke:node:package": "bun run scripts/node-smoke/package.ts",
+    "prepack": "bun run build:node",
     "docs": "bun run docs/server.ts",
     "docs:check": "bun run scripts/check-docs.ts",
     "docs:typecheck": "tsc -p tsconfig.docs.json"
+  },
+  "dependencies": {
+    "@opentui/core": "0.5.8",
+    "@opentui/react": "0.5.8",
+    "react": "^19.2.8",
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "@atom-neo/*": "workspace:*",
+    "ai": "^7.0.169"
   }
 }
 ```
+
+The published tarball contains only `package.json` and `dist/node/main.js`.
+All `@atom-neo/*` workspace packages are build-time `devDependencies`; the Node
+bundle inlines them. Runtime dependencies stay limited to external `@opentui/*`
+packages (plus `react` and `ws`, which `@opentui/react` peers on). Source,
+tests, docs and scripts are excluded through `files`; npm always includes
+`package.json`. Tarball install/run instructions are in
+[development-setup.md](./development-setup.md#74-node-package-layout-and-tarball-install-s10-b2).
 
 ### TypeScript configurations
 
@@ -436,10 +469,11 @@ scripts/node-smoke/
 ├── build.ts               # S10-A: dist/node artifact + --help + bun-import + TUI import smoke
 ├── platform.ts            # S10-B1: config/env + memory FTS5 + shell + glob + schedule
 ├── release.ts             # S10-B1: built dist/node/main.js health/attach/WS/SIGTERM
+├── package.ts             # S10-B2: pack/install tarball + installed --help/bin/Core smoke
 └── run-all.ts             # S10-B1: smoke:node orchestrator
 ```
 
-The S9 Node scripts (`http-runtime.ts`, `core-runtime.ts`, `core-conversation.ts`) are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. `build.ts` runs under Bun, executes its checks under Node, and requires `bun run build:node` first. `platform.ts` is bundled for Node and uses only temp sandboxes. `release.ts` runs under Bun but starts the built `dist/node/main.js` artifact under Node; it never builds the artifact itself. `run-all.ts` wires `smoke:node` (build check + platform + release + conversation), `smoke:node:platform` and `smoke:node:release`. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional), [development-setup.md](./development-setup.md#72-node-build-and-tui-import-guard-s10-a) and [development-setup.md](./development-setup.md#73-node-platform-and-release-artifact-smoke-s10-b1).
+The S9 Node scripts (`http-runtime.ts`, `core-runtime.ts`, `core-conversation.ts`) are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. `build.ts` runs under Bun, executes its checks under Node, and requires `bun run build:node` first. `platform.ts` is bundled for Node and uses only temp sandboxes. `release.ts` runs under Bun but starts the built `dist/node/main.js` artifact under Node; it never builds the artifact itself. `package.ts` is the S10-B2 tarball install smoke: build, `npm pack`, inspect, `npm install` into a temp project, installed `--help`/bin, and a real Core health/SIGTERM cycle. `run-all.ts` wires `smoke:node` (build check + platform + release + conversation), `smoke:node:platform` and `smoke:node:release`. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional), [development-setup.md](./development-setup.md#72-node-build-and-tui-import-guard-s10-a), [development-setup.md](./development-setup.md#73-node-platform-and-release-artifact-smoke-s10-b1) and [development-setup.md](./development-setup.md#74-node-package-layout-and-tarball-install-s10-b2).
 
 ### Node build output
 
@@ -447,11 +481,12 @@ The S9 Node scripts (`http-runtime.ts`, `core-runtime.ts`, `core-conversation.ts
 dist/                           # gitignored
 ├── atom                        # Bun compiled binary (`bun run build:bin`)
 └── node/
-    └── main.js                 # Node bundle (`bun run build:node`)
+    └── main.js                 # Node bundle (`bun run build:node`), shebang + bin.atom
 ```
 
-`build:node` keeps `@opentui/*` external and bundles `ws`; `build:bin` remains
-the Bun single-file compile path and is unchanged.
+`build:node` keeps `@opentui/*` external, bundles `ws`, prepends
+`#!/usr/bin/env node`, and is rebuilt by `prepack` before `npm pack`.
+`build:bin` remains the Bun single-file compile path and is unchanged.
 
 ## 10. Runtime Directories
 
