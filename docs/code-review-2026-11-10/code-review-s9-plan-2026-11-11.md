@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `fc78eac` (v1.22.9)
-> **状态**: S9-A/B 已实施；S9-C..E 待实施
+> **状态**: S9-A/B/C 已实施；S9-D..E 待实施
 > **目标**: Core/Gateway 在 Node 下正式启动，Bun 保持默认且行为不变
 
 ---
@@ -671,13 +671,13 @@ ATOM_HTTP_RUNTIME=node node scripts/node-smoke/http-runtime.ts
 
 #### 5.7 验收 / DoD
 
-- [ ] `node:http` + `ws` 在 Node 下完成 Core 启动、health、attach、task、WS、stop。
-- [ ] admin IP 在 Node 下正确（loopback 允许，远端拒绝）。
-- [ ] Bun 路径测试全部通过，默认不变。
-- [ ] Node 适配器错误路径不泄漏 socket/timer。
-- [ ] `rg -n 'ServerWebSocket|requestIP' src --glob '!**/dist/**'` 只在 Bun adapter。
-- [ ] `bun install` 更新 lockfile，`ws`/`@types/ws` 进入 shared。
-- [ ] 全量测试、build、docs 检查通过。
+- [x] `node:http` + `ws` 在 Node 下完成 adapter 启动、health、POST、WS、admin 与 stop（Core 入口/attach/task 留给 S9-D）。
+- [x] admin IP 在 Node 下正确（loopback 允许，远端拒绝）。
+- [x] Bun 路径测试全部通过，默认不变。
+- [x] Node 适配器错误路径不泄漏 socket/timer。
+- [x] `rg -n 'ServerWebSocket|requestIP' src --glob '!**/dist/**'` 只在 Bun adapter。
+- [x] `bun install` 更新 lockfile，`ws`/`@types/ws` 进入 shared。
+- [x] 全量测试、build、docs 检查通过。
 
 #### 5.8 风险 / 回滚
 
@@ -687,6 +687,73 @@ ATOM_HTTP_RUNTIME=node node scripts/node-smoke/http-runtime.ts
 - **风险**: `peer` 每次新建 → broadcaster 泄漏。
 - **回滚**: 删除 Node adapter、`ws` 依赖与工厂 Node 分支；Bun adapter 不受影响。
 - **注意**: 不在本阶段切默认入口。
+
+#### 5.9 实施记录（2026-11-11）
+
+**状态**: 已完成。
+
+**新增**:
+
+- `src/packages/shared/src/http/node-http-server.ts`：`createNodeHttpServer(): HttpServer`；`http.createServer` + `WebSocketServer({ noServer: true })`；Request/Response 桥接、raw upgrade 响应与两阶段 stop 全部收敛在此文件。
+- `src/packages/shared/src/http/node-websocket-peer.ts`：`createPeerRegistry`（`WeakMap<WebSocket, WebSocketPeer>`）、`normalizeMessage`（`Buffer[]`/`ArrayBuffer`/`Buffer` → `string`/`Uint8Array`）、`attachPeerHandlers`（open/message/close/drain；close/error 只回调一次，error 后 terminate）。
+- `src/packages/shared/src/http/node-http-server.test.ts`：12 个契约测试。
+- `scripts/node-smoke/http-runtime.ts`：真实 Node smoke（health、POST、admin、WS ready/ping-pong、两阶段 stop）。
+
+**依赖**:
+
+- shared `dependencies` 新增 `ws@^8.22.2`，`devDependencies` 新增 `@types/ws@^8.18.2`；`bun install` 更新 `bun.lock`。
+- Node adapter 由工厂动态 import，shared 根导出与 TUI 不加载 `ws`。
+
+**HTTP 桥接**:
+
+- `listen` 后读取 `server.address()` 的真实端口；`ctx = { runtime: "node", ip: req.socket.remoteAddress ?? "", port }`。
+- GET/HEAD 无 body；其余方法 `Readable.toWeb(req)` + `duplex: "half"`；abort signal 来自 `aborted` 与未完成的 `close`。
+- Response：状态/headers/`getSetCookie()`；204/304/HEAD 不写 body；`Readable.fromWeb` + `pipeline`；客户端中断或流错误只销毁响应；fetch 在 headers 未发送时返回 500 JSON；`clientError` 写 400 并销毁 socket。
+
+**WS 桥接**:
+
+- `undefined` upgrade → raw 404；`{ response }` → 序列化 raw HTTP；`{ data }` 无 handlers → raw 426；有 handlers → `wss.handleUpgrade` 后绑定 peer。
+- 同一 socket 的 open/message/close/drain 复用同一个 peer；text 归一为 string，binary 归一为 `Uint8Array`；close/error 只触发一次 close。
+
+**Stop**:
+
+- `stop(false)`：发起 `server.close()`、关闭 idle keep-alive，立即 resolve，不等活跃 HTTP/WS。
+- `stop(true)`：等待 graceful，`wss.clients` 以 1001/`server shutdown` 关闭，`closeAllConnections()`，等待 `wss.close` 与 server close；幂等，force 可升级 graceful；`ERR_SERVER_NOT_RUNNING` 正常 resolve。
+
+**Node smoke（实际命令与输出）**:
+
+```bash
+mkdir -p /tmp/atom-node-http-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-http-smoke/node_modules/ws
+bun build scripts/node-smoke/http-runtime.ts --target node --external ws \
+  --outfile /tmp/atom-node-http-smoke/http-runtime.mjs
+node /tmp/atom-node-http-smoke/http-runtime.mjs
+```
+
+```text
+PASS health
+PASS post-json
+PASS admin-loopback
+PASS ws-ready
+PASS ws-ping-pong
+PASS ws-close
+PASS stop-graceful-with-active-ws
+PASS stop-force-closes-ws
+PASS stop-refuses-connections
+PASS all (9 checks)
+```
+
+**验证**:
+
+- `bun run typecheck`：6/6。
+- `bun test --path-ignore-patterns='**/dist/**'`：992 pass / 21 skip / 0 fail（1013 tests，123 files）。
+- `bun test`：build 前 1762 pass / 21 skip / 0 fail；build 后 1763 pass / 21 skip / 0 fail（1784 tests，227 files）。
+- `bun run build`：6/6。
+- `bun run docs:check` / `bun run docs:typecheck`：通过。
+- `rg -n 'Bun\.serve|Bun\.Server' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：仅 Bun adapter 与待 S9-E 清理的 fixture。
+- `rg -n 'ServerWebSocket|from "bun"' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：无结果。
+- `rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：仅 Bun adapter。
+- `rg -n 'from "ws"' src --glob '!**/dist/**'`：仅 Node adapter/tests。
 
 ---
 
@@ -1046,7 +1113,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 |---|---|---|---|
 | S9-A | 已完成 | — | 契约/类型 + spike；shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；`ws` on Bun spike 通过；源码 975 pass / 21 skip / 0 fail |
 | S9-B | 已完成 | — | Bun adapter：`createBunHttpServer` / `createHttpServer`；Core/Gateway 改由 `HttpServer` 启停；源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass |
-| S9-C | 未开始 | — | Node adapter |
+| S9-C | 已完成 | — | Node adapter：`createNodeHttpServer` / `node-websocket-peer`；12 个契约测试 + 真实 Node smoke（9 项 PASS）；源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass |
 | S9-D | 未开始 | — | Node 入口 |
 | S9-E | 未开始 | — | 双运行时验收 |
 
@@ -1061,3 +1128,4 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | 2026-11-11 | 初始 S9 拆分计划：S9-A..E、spike、文件改动、测试、风险/回滚、DoD |
 | 2026-11-11 | S9-A 实施完成：新增 shared `http` 契约与运行时检测；admin 鉴权改用 `ctx.ip`；删除 `RouterServer`，router 拆为 `fetch`/`upgrade`；WS peer/消息归一；`node:http + ws` on Bun spike 通过（101/text/binary/close/50 连接/remoteAddress）；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后） |
 | 2026-11-11 | S9-B 实施完成：新增 Bun `HttpServer` adapter 与工厂；Core/Gateway 删除 `Bun.serve`，改由注入/默认 `HttpServer` 启停；两阶段 stop 语义收敛到 adapter；新增 5 个 adapter 契约测试；typecheck/build 6/6，源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass；`Bun.serve`/`requestIP` 仅剩 adapter 与待清理 fixture |
+| 2026-11-11 | S9-C 实施完成：新增 Node `node:http` + `ws` adapter 与 peer（WeakMap、帧归一、close-once）；HTTP Request/Response 桥接、raw upgrade 404/400/426、两阶段 stop；shared 新增 `ws`/`@types/ws` 并更新 `bun.lock`；新增 12 个契约测试与 Node smoke（9 项 PASS）；typecheck/build 6/6，源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass；`from "ws"` 仅 Node adapter/tests |
