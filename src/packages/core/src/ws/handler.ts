@@ -1,7 +1,6 @@
-import type { ServerWebSocket } from "bun";
 import type { Broadcaster } from "./broadcaster";
 import type { TaskQueue } from "../task-queue";
-import type { PipelineEventBus, Logger } from "@atom-neo/shared";
+import type { PipelineEventBus, Logger, WebSocketPeer } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
 import { WsMessages, errorMessage, isClientEventType } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../task/internal-task-orchestrator";
@@ -38,8 +37,10 @@ type WsData = {
   chatId?: string;
 };
 
-/** Bun stores the upgrade payload as `unknown`; keep the cast at this single boundary. */
-function wsData(ws: ServerWebSocket<unknown>): WsData {
+type WsPeer = WebSocketPeer<WsData>;
+
+/** The adapter stores the upgrade payload as `unknown`; keep the cast at this single boundary. */
+function wsData(ws: WsPeer): WsData {
   return (ws.data ?? {}) as WsData;
 }
 
@@ -54,11 +55,11 @@ export function createWsHandlers(ctx: ServerContext) {
     sessionStore: ctx.sessionStore,
   });
 
-  function send(ws: ServerWebSocket<unknown>, type: string, payload: unknown) {
+  function send(ws: WsPeer, type: string, payload: unknown) {
     ctx.broadcaster.send(ws, type, payload);
   }
 
-  function rejectSubmission(ws: ServerWebSocket<unknown>, error: unknown): void {
+  function rejectSubmission(ws: WsPeer, error: unknown): void {
     if (error instanceof TaskSubmissionError) {
       send(ws, WsMessages.Control.Error, { message: error.message, code: error.code });
       return;
@@ -68,7 +69,7 @@ export function createWsHandlers(ctx: ServerContext) {
   }
 
   return {
-    open(ws: ServerWebSocket<unknown>) {
+    open(ws: WsPeer) {
       const sid = wsData(ws).sessionId;
       if (sid) {
         ctx.broadcaster.add(ws, sid);
@@ -77,9 +78,10 @@ export function createWsHandlers(ctx: ServerContext) {
           telemetry: session ? buildSessionTelemetry(session, ctx.getLocalRoundLimit?.() ?? 5) : { sessionId: sid, rounds: null, todos: [] } });
       }
     },
-    message(ws: ServerWebSocket<unknown>, msg: string | Buffer) {
+    message(ws: WsPeer, msg: string | Uint8Array) {
       try {
-        const frame: unknown = JSON.parse(msg.toString());
+        const text = typeof msg === "string" ? msg : new TextDecoder().decode(msg);
+        const frame: unknown = JSON.parse(text);
         if (!isRecord(frame) || typeof frame.type !== "string") {
           send(ws, WsMessages.Control.Error, { message: "Invalid message format" });
           return;
@@ -153,7 +155,7 @@ export function createWsHandlers(ctx: ServerContext) {
         send(ws, WsMessages.Control.Error, { message: "Invalid message format" });
       }
     },
-    close(ws: ServerWebSocket<unknown>) {
+    close(ws: WsPeer) {
       ctx.broadcaster.remove(ws);
     },
   };

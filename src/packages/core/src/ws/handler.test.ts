@@ -229,6 +229,15 @@ describe("WebSocket session persistence", () => {
     expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("Task not found"))).toBe(true);
   });
 
+  test("decodes binary frames before parsing", () => {
+    const handlers = createWsHandlers({ broadcaster: new Broadcaster(), taskQueue: new TaskQueue() });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, new TextEncoder().encode(JSON.stringify({ type: WsMessages.Control.Ping })));
+
+    expect(ws.send.mock.calls.some(([value]: [string]) => value.includes(WsMessages.Control.Pong))).toBe(true);
+  });
+
   test("manual compact logs its scope and never requests conversation resume", () => {
     const scheduleCompress = mock(() => {});
     const info = mock(() => {});

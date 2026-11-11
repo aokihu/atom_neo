@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `fc78eac` (v1.22.9)
 > **Scope**: Core/Gateway HTTP + WebSocket、admin IP 鉴权、Node 入口
-> **Status**: 文档完成；S9-A..E 尚未实施，`src/` 未改动
+> **Status**: S9-A 已实施；S9-B..E 待实施
 > **Related**:
 > - [code-review-s9-graph-2026-11-11.md](./code-review-s9-graph-2026-11-11.md)
 > - [code-review-s9-plan-2026-11-11.md](./code-review-s9-plan-2026-11-11.md)
@@ -1115,3 +1115,4 @@ rg -n 'Bun\.serve|Bun\.Server|ServerWebSocket|requestIP' src --glob '!**/dist/**
 | 日期 | 变更 |
 |---|---|
 | 2026-11-11 | 初始 S9 专项审查：拆分 S9-A..E，记录 14 个问题、目标契约、兼容矩阵与验收命令 |
+| 2026-11-11 | S9-A 实施完成：`packages/shared/src/http` 契约与 `resolveHttpRuntime`；`isAdminRequest(req, { ip })`；`RouterServer` 删除，router 拆为 `fetch`/`upgrade`，`/ws/` 无 Upgrade 返回 400/426，attach 使用 `ctx.port`；WS 改用 `WebSocketPeer` 并归一消息；`ws` on Bun spike 通过（101/text/binary/close/50 连接/remoteAddress，`EXIT=0`）；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后） |

@@ -106,7 +106,7 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig> & { 
       const url = new URL(req.url);
 
       if (url.pathname === "/admin/clients" && req.method === "POST") {
-        if (!isAdminRequest(req, srv, configOverrides?.adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+        if (!isAdminRequest(req, { ip: srv.requestIP(req)?.address ?? "" }, configOverrides?.adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
         if (stopping) return Response.json({ error: "Gateway stopping" }, { status: 503 });
         const body = await req.json().catch(() => null) as { action?: string; clientId?: string } | null;
         if (!body || !["start", "stop"].includes(body.action ?? "") || (body.clientId !== undefined && (typeof body.clientId !== "string" || !body.clientId.trim()))) return Response.json({ error: "Expected action start|stop and optional clientId" }, { status: 400 });

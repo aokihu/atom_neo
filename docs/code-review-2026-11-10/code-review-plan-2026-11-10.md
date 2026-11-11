@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: S0–S8 已完成；S9 已拆分并完成文档，S9-A..E 待实施。
+> **状态**: S0–S8 已完成；S9-A 已完成；S9-B..E 待实施。
 
 ---
 
@@ -584,7 +584,7 @@ bun run scripts/check-file-headers.ts
 | S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
-| S9 | 已拆分，待实施 | — | 文档完成：S9-A 契约/spike、S9-B Bun Adapter、S9-C Node Adapter、S9-D Node 入口、S9-E 双运行时验收；详见 `code-review-s9-2026-11-11.md` / `code-review-s9-graph-2026-11-11.md` / `code-review-s9-plan-2026-11-11.md` |
+| S9 | 进行中（S9-A 完成） | — | S9-A 契约/类型 + spike 完成：shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；`ws` on Bun spike 通过；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后）；S9-B..E 待实施 |
 | S10 | 未开始 | — | Node 构建/CI |
 | S11 | 未开始 | — | DI 收口 |
 | S12 | 未开始 | — | 结构重构 |

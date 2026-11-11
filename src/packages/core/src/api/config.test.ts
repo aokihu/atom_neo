@@ -6,8 +6,8 @@ import {
 
 const TOKEN = "secret-token";
 
-function fakeSrv(ip: string) {
-  return { requestIP: () => ({ address: ip }) };
+function fakeCtx(ip: string) {
+  return { ip };
 }
 
 function req(headers: Record<string, string>, body?: string): Request {
@@ -34,30 +34,31 @@ function makeRuntime() {
 
 describe("isAdminRequest", () => {
   test("only accepts remote management when explicitly enabled and correctly authenticated", () => {
-    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv("192.168.1.10"), TOKEN, true)).toBe(true);
-    expect(isAdminRequest(req({}), fakeSrv("192.168.1.10"), TOKEN, true)).toBe(false);
-    expect(isAdminRequest(req({ "x-atom-admin-token": "wrong" }), fakeSrv("192.168.1.10"), TOKEN, true)).toBe(false);
-    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv(""), TOKEN, true)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeCtx("192.168.1.10"), TOKEN, true)).toBe(true);
+    expect(isAdminRequest(req({}), fakeCtx("192.168.1.10"), TOKEN, true)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": "wrong" }), fakeCtx("192.168.1.10"), TOKEN, true)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeCtx(""), TOKEN, true)).toBe(false);
   });
   test("rejects requests without a token", () => {
-    expect(isAdminRequest(req({}), fakeSrv("127.0.0.1"), TOKEN)).toBe(false);
+    expect(isAdminRequest(req({}), fakeCtx("127.0.0.1"), TOKEN)).toBe(false);
   });
 
   test("rejects requests with a wrong token", () => {
-    expect(isAdminRequest(req({ "x-atom-admin-token": "nope" }), fakeSrv("127.0.0.1"), TOKEN)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": "nope" }), fakeCtx("127.0.0.1"), TOKEN)).toBe(false);
   });
 
   test("rejects non-loopback sources even with the token", () => {
-    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv("192.168.1.10"), TOKEN)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeCtx("192.168.1.10"), TOKEN)).toBe(false);
   });
 
   test("rejects when no admin token is configured on the server", () => {
-    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv("127.0.0.1"), undefined)).toBe(false);
+    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeCtx("127.0.0.1"), undefined)).toBe(false);
   });
 
-  test("accepts loopback with the correct token", () => {
-    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv("127.0.0.1"), TOKEN)).toBe(true);
-    expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeSrv("::1"), TOKEN)).toBe(true);
+  test("accepts every loopback form with the correct token", () => {
+    for (const ip of ["127.0.0.1", "::1", "::ffff:127.0.0.1"]) {
+      expect(isAdminRequest(req({ "x-atom-admin-token": TOKEN }), fakeCtx(ip), TOKEN)).toBe(true);
+    }
   });
 });
 

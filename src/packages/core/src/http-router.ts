@@ -2,7 +2,7 @@
  * Core HTTP route table. Keeps the legacy if-chain order and response contracts
  * so the Bun server and the future Node adapter share one router.
  */
-import type { Logger } from "@atom-neo/shared";
+import type { HttpRequestContext, HttpRouter, Logger } from "@atom-neo/shared";
 import type { BudgetLimits, ResolvedModel, RuntimeLike } from "./pipeline-factory";
 import type { ToolInfo } from "./bootstrap";
 import type { SessionStore } from "./session/store";
@@ -22,13 +22,6 @@ import { resumeExecutionBudget } from "./session/execution-budget";
 
 const API_PREFIX = "/api/";
 const SESSION_API_PREFIX = `${API_PREFIX}sessions/`;
-
-/** Minimal Bun.Server surface used by routes; Bun's server object is structurally compatible. */
-export type RouterServer = {
-  requestIP(req: Request): { address: string } | null;
-  port?: number;
-  upgrade?(req: Request, options: { data: unknown }): boolean;
-};
 
 export type HttpRouterDeps = {
   logger: Logger;
@@ -53,13 +46,13 @@ export type HttpRouterDeps = {
 };
 
 /** Single admin gate shared by every protected route. */
-export function requireAdmin(req: Request, srv: RouterServer, adminToken?: string, allowRemoteAdmin = false): Response | undefined {
-  return isAdminRequest(req, srv, adminToken, allowRemoteAdmin)
+export function requireAdmin(req: Request, ctx: Pick<HttpRequestContext, "ip">, adminToken?: string, allowRemoteAdmin = false): Response | undefined {
+  return isAdminRequest(req, ctx, adminToken, allowRemoteAdmin)
     ? undefined
     : Response.json({ error: "Forbidden" }, { status: 403 });
 }
 
-export function createHttpRouter(deps: HttpRouterDeps): (req: Request, srv: RouterServer) => Promise<Response | undefined> {
+export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: string }> {
   const { logger, sessionStore, taskQueue, taskEngine, taskSubmission, orchestrator, hookManager } = deps;
 
   async function handleTaskSubmit(req: Request): Promise<Response> {
@@ -98,94 +91,103 @@ export function createHttpRouter(deps: HttpRouterDeps): (req: Request, srv: Rout
     return createTaskHandler(taskSubmission, normalized);
   }
 
-  return async (req, srv) => {
-    const url = new URL(req.url);
-
-    // WebSocket upgrade for /ws/:sessionId
-    if (url.pathname.startsWith("/ws/")) {
+  return {
+    upgrade(req) {
+      const url = new URL(req.url);
+      if (!url.pathname.startsWith("/ws/")) return undefined;
       const sid = decodePathParam(url.pathname, "/ws/");
-      if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-      srv.upgrade?.(req, { data: { sessionId: sid } });
-      return; // handled by websocket handlers
-    }
+      if (!sid) return { response: Response.json({ error: "Invalid session ID" }, { status: 400 }) };
+      return { data: { sessionId: sid } };
+    },
 
-    const method = req.method;
+    async fetch(req, ctx) {
+      const url = new URL(req.url);
 
-    if (url.pathname === `${API_PREFIX}tui/attach` && method === "POST") {
-      const denied = requireAdmin(req, srv, deps.adminToken, deps.allowRemoteAdmin);
-      if (denied) return denied;
-      if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
-      let options: unknown;
-      try {
-        const body = await req.text();
-        options = body.trim() ? JSON.parse(body) : {};
-      } catch {
-        return Response.json({ error: "Invalid attach JSON" }, { status: 400 });
+      // Without an Upgrade request the transport cannot attach; never hang the client.
+      if (url.pathname.startsWith("/ws/")) {
+        return decodePathParam(url.pathname, "/ws/")
+          ? new Response("Upgrade Required", { status: 426 })
+          : Response.json({ error: "Invalid session ID" }, { status: 400 });
       }
-      if (!options || typeof options !== "object" || Array.isArray(options)
-        || ("continue" in options && typeof options.continue !== "boolean")) {
-        return Response.json({ error: "continue must be a boolean" }, { status: 400 });
+
+      const method = req.method;
+
+      if (url.pathname === `${API_PREFIX}tui/attach` && method === "POST") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
+        let options: unknown;
+        try {
+          const body = await req.text();
+          options = body.trim() ? JSON.parse(body) : {};
+        } catch {
+          return Response.json({ error: "Invalid attach JSON" }, { status: 400 });
+        }
+        if (!options || typeof options !== "object" || Array.isArray(options)
+          || ("continue" in options && typeof options.continue !== "boolean")) {
+          return Response.json({ error: "continue must be a boolean" }, { status: 400 });
+        }
+        const session = sessionStore.attachTui("continue" in options && options.continue === true);
+        const model = deps.runtime.getResolvedModel?.("balanced") ?? deps.fallbackModel;
+        return Response.json({ sessionId: session.sessionId, serverInfo: {
+          port: ctx.port, host: deps.host, sandbox: deps.sandbox, version: deps.version ?? "unknown", model: model.model,
+          tools: deps.allTools.map(t => t.name), toolInfos: deps.toolInfos, mcpServerInfos: deps.getMcpServerInfos(),
+          theme: deps.runtime.appConfig?.tui?.theme ?? "edex", thinking: model.thinking,
+          contextLimit: resolveContextLimit(`${model.provider}/${model.model}`, deps.runtime.appConfig?.providers?.[model.provider]?.contextLimit),
+        } });
       }
-      const session = sessionStore.attachTui("continue" in options && options.continue === true);
-      const model = deps.runtime.getResolvedModel?.("balanced") ?? deps.fallbackModel;
-      return Response.json({ sessionId: session.sessionId, serverInfo: {
-        port: srv.port, host: deps.host, sandbox: deps.sandbox, version: deps.version ?? "unknown", model: model.model,
-        tools: deps.allTools.map(t => t.name), toolInfos: deps.toolInfos, mcpServerInfos: deps.getMcpServerInfos(),
-        theme: deps.runtime.appConfig?.tui?.theme ?? "edex", thinking: model.thinking,
-        contextLimit: resolveContextLimit(`${model.provider}/${model.model}`, deps.runtime.appConfig?.providers?.[model.provider]?.contextLimit),
-      } });
-    }
-    if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
-    if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
+      if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
+      if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
 
-    if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
-      const denied = requireAdmin(req, srv, deps.adminToken, deps.allowRemoteAdmin);
-      if (denied) return denied;
-      if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
-      return Response.json(hookManager.list().filter(h => h.trigger.type.startsWith("time:")).map(({ prompt, ...summary }) => summary));
-    }
-
-    if (url.pathname === `${API_PREFIX}config` && method === "GET") {
-      const denied = requireAdmin(req, srv, deps.adminToken, deps.allowRemoteAdmin);
-      if (denied) return denied;
-      return configGetHandler(deps.runtime);
-    }
-    if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
-      const denied = requireAdmin(req, srv, deps.adminToken, deps.allowRemoteAdmin);
-      if (denied) return denied;
-      return configPatchHandler(deps.runtime, req);
-    }
-    if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
-      const denied = requireAdmin(req, srv, deps.adminToken, deps.allowRemoteAdmin);
-      if (denied) return denied;
-      return configResetHandler(deps.runtime);
-    }
-
-    if (url.pathname === `${API_PREFIX}tasks` && method === "POST") return handleTaskSubmit(req);
-
-    if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
-      const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
-      if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-      const session = sessionStore.load(sid);
-      return session
-        ? Response.json(session.messages)
-        : Response.json({ error: "Session not found" }, { status: 404 });
-    }
-    if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
-      const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
-      if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-      if (!sessionStore.delete(sid)) {
-        return Response.json({ error: "Session is active" }, { status: 409 });
+      if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
+        return Response.json(hookManager.list().filter(h => h.trigger.type.startsWith("time:")).map(({ prompt, ...summary }) => summary));
       }
-      return Response.json({ ok: true, sessionId: sid });
-    }
-    if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
-      const taskId = url.pathname.split("/").pop()!;
-      return taskCancelHandler(taskEngine, req, taskId);
-    }
-    if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
-      return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
-    }
-    return new Response("Not Found", { status: 404 });
+
+      if (url.pathname === `${API_PREFIX}config` && method === "GET") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        return configGetHandler(deps.runtime);
+      }
+      if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        return configPatchHandler(deps.runtime, req);
+      }
+      if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        return configResetHandler(deps.runtime);
+      }
+
+      if (url.pathname === `${API_PREFIX}tasks` && method === "POST") return handleTaskSubmit(req);
+
+      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
+        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
+        const session = sessionStore.load(sid);
+        return session
+          ? Response.json(session.messages)
+          : Response.json({ error: "Session not found" }, { status: 404 });
+      }
+      if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
+        const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
+        if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
+        if (!sessionStore.delete(sid)) {
+          return Response.json({ error: "Session is active" }, { status: 409 });
+        }
+        return Response.json({ ok: true, sessionId: sid });
+      }
+      if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
+        const taskId = url.pathname.split("/").pop()!;
+        return taskCancelHandler(taskEngine, req, taskId);
+      }
+      if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
+        return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
+      }
+      return new Response("Not Found", { status: 404 });
+    },
   };
 }

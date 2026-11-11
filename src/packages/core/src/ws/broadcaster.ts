@@ -1,23 +1,29 @@
-import type { ServerWebSocket } from "bun";
+/**
+ * Session-scoped WebSocket fan-out. Peers are opaque transport handles; the
+ * adapter is responsible for their readiness, broadcasting is protocol-only.
+ */
+import type { WebSocketPeer } from "@atom-neo/shared";
+
+type WsPeer = WebSocketPeer<unknown>;
 
 type Client = {
-  ws: ServerWebSocket<unknown>;
+  ws: WsPeer;
   sessionId: string;
 };
 
 export class Broadcaster {
-  #clients = new Map<ServerWebSocket<unknown>, Client>();
+  #clients = new Map<WsPeer, Client>();
   #seq = 0;
 
-  add(ws: ServerWebSocket<unknown>, sessionId: string): void {
+  add(ws: WsPeer, sessionId: string): void {
     this.#clients.set(ws, { ws, sessionId });
   }
 
-  remove(ws: ServerWebSocket<unknown>): void {
+  remove(ws: WsPeer): void {
     this.#clients.delete(ws);
   }
 
-  send(ws: ServerWebSocket<unknown>, type: string, payload: unknown): void {
+  send(ws: WsPeer, type: string, payload: unknown): void {
     try {
       this.#sendSerialized(ws, this.#serialize(type, payload));
     } catch {
@@ -68,7 +74,7 @@ export class Broadcaster {
     });
   }
 
-  #sendSerialized(ws: ServerWebSocket<unknown>, data: string): void {
+  #sendSerialized(ws: WsPeer, data: string): void {
     try {
       ws.send(data);
     } catch {

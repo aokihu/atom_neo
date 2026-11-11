@@ -1,4 +1,5 @@
 export { isAdminRequest } from "./utils/admin-auth";
+export type { AdminRequestContext } from "./utils/admin-auth";
 export { createChildProcessEnv } from "./utils/child-process-env";
 export { spawnProcess } from "./utils/process";
 export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
@@ -189,6 +190,20 @@ export type {
   ReplayStartPayload,
   ReplayEndPayload,
 } from "./protocol";
+
+// ── HTTP runtime ──
+export { resolveHttpRuntime } from "./http";
+export type {
+  HttpRuntime,
+  HttpRequestContext,
+  UpgradeDecision,
+  HttpRouter,
+  WebSocketPeer,
+  WebSocketHandlers,
+  HttpServerOptions,
+  HttpServerHandle,
+  HttpServer,
+} from "./http";
 
 // ── Log ──
 export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";

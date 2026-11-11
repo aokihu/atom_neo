@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `fc78eac` (v1.22.9)
-> **状态**: S9 已拆分；S9-A..E 尚未实施
+> **状态**: S9-A 已实施；S9-B..E 待实施
 > **目标**: Core/Gateway 在 Node 下正式启动，Bun 保持默认且行为不变
 
 ---
@@ -242,18 +242,74 @@ export function resolveHttpRuntime(explicit?: string): HttpRuntime {
 
 #### 3.5 验收 / DoD
 
-- [ ] spike 结论落盘（通过/失败、版本、命令）。
-- [ ] `HttpServer` / `WebSocketPeer` / `HttpRequestContext` 类型可从 shared 导入。
-- [ ] `rg -n 'ServerWebSocket|from "bun"' src/packages/core/src/ws` 无结果。
-- [ ] `rg -n 'requestIP' src` 只在 Bun 临时 ctx（`server.ts`、`gateway/server.ts`）出现。
-- [ ] Bun 现有 HTTP/WS 行为不变；全量测试通过。
-- [ ] `bun run typecheck` / `bun test` / `bun run build` / docs 检查通过。
+- [x] spike 结论落盘（通过/失败、版本、命令）。
+- [x] `HttpServer` / `WebSocketPeer` / `HttpRequestContext` 类型可从 shared 导入。
+- [x] `rg -n 'ServerWebSocket|from "bun"' src/packages/core/src/ws` 无结果。
+- [x] `rg -n 'requestIP' src` 只在 Bun 临时 ctx（`server.ts`、`gateway/server.ts`）出现。
+- [x] Bun 现有 HTTP/WS 行为不变；全量测试通过。
+- [x] `bun run typecheck` / `bun test` / `bun run build` / docs 检查通过。
 
 #### 3.6 风险 / 回滚
 
 - **风险**: 路由签名改动导致所有 admin 路由临时 403；peer 类型改动导致 WS 编译错误。
 - **回滚**: 单 commit revert；无新依赖，无传输变化。
 - **注意**: 本阶段不新增 `ws` 依赖，不改 Gateway 传输。
+
+#### 3.7 实施记录（2026-11-11）
+
+**状态**: 已完成（工作区改动，未提交）。
+
+**Spike（通过，方案 A 候选）**:
+
+- 版本：Bun 1.4.2（`bun --version`）、`ws` 8.22.2、Node 26.13.0（仅用于安装/对照）。
+- 依赖：`ws@8.22.2` 只安装在 `mktemp -d` 临时目录，未写入仓库 `package.json` / `bun.lock`。
+- 脚本：`scripts/spike/ws-on-bun.ts`（临时脚本，不进入生产路径）。
+- 命令：
+
+```bash
+SPIKE_DIR=$(mktemp -d) && cd "$SPIKE_DIR"
+npm init -y && npm install ws@8.22.2
+NODE_PATH="$SPIKE_DIR/node_modules" bun /path/to/atom_neo/scripts/spike/ws-on-bun.ts
+```
+
+- 实际输出：
+
+```text
+[spike] listening on 127.0.0.1:56669
+[spike] health 200 ok
+[spike] upgrade 101
+[spike] close code=1000 reason=spike-done text=true binary=true
+[spike] connections completed 50/50
+[spike] upgrade status 101
+[spike] remoteAddress 127.0.0.1
+[spike] closed cleanly
+EXIT=0
+```
+
+- 结论：`node:http` + `ws` 在 Bun 下可完成 upgrade、文本/二进制帧、close、50 次连接/断开与干净退出；`req.socket.remoteAddress` 可用。S9-E 可按方案 A 评估统一实现，Bun adapter 仍保留为回滚路径。
+
+**新增契约**:
+
+- `src/packages/shared/src/http/types.ts`：`HttpRuntime` / `HttpRequestContext` / `UpgradeDecision` / `HttpRouter` / `WebSocketPeer` / `WebSocketHandlers` / `HttpServerOptions` / `HttpServerHandle` / `HttpServer`。
+- `src/packages/shared/src/http/detect.ts`：`resolveHttpRuntime`（支持 `ATOM_HTTP_RUNTIME`，默认 Bun）。
+- `src/packages/shared/src/http/index.ts` 与 shared 根导出。
+
+**改造**:
+
+- `isAdminRequest(req, { ip }, token?, allowRemote?)`；Core/Gateway 均改为传 ctx。
+- 删除 `RouterServer`；`createHttpRouter` 返回 `{ fetch, upgrade }`；attach 端口取 `ctx.port`；无 Upgrade 的 `/ws/` 返回 400/426。
+- WS handler/broadcaster 使用 `WebSocketPeer`；消息先归一再 `JSON.parse`。
+- `server.ts` 仍在 Bun 边界内联构造 `HttpRequestContext`；`Bun.serve` 不变（仅对 `websocket` 做窄化类型断言）。
+
+**验证**:
+
+- `bun run typecheck`：6/6 通过。
+- `bun test --path-ignore-patterns='**/dist/**'`：975 pass / 21 skip / 0 fail（基线 969 pass）。
+- `bun test`：1729 pass / 21 skip / 0 fail（dist 重建后，含 dist 副本）。
+- `bun run build`：6/6 通过。
+- `bun run docs:check` / `bun run docs:typecheck`：通过。
+- `rg -n 'ServerWebSocket|from "bun"' src/packages/core/src/ws`：无结果。
+- `rg -n 'requestIP' src --glob '!**/dist/**'`：仅 `core/src/server.ts`、`gateway/src/server.ts`。
 
 ---
 
@@ -957,7 +1013,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 
 | 阶段 | 状态 | Commit | 备注 |
 |---|---|---|---|
-| S9-A | 未开始 | — | 契约/类型 + spike |
+| S9-A | 已完成 | — | 契约/类型 + spike；shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；`ws` on Bun spike 通过；源码 975 pass / 21 skip / 0 fail |
 | S9-B | 未开始 | — | Bun adapter |
 | S9-C | 未开始 | — | Node adapter |
 | S9-D | 未开始 | — | Node 入口 |
@@ -972,3 +1028,4 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | 日期 | 变更 |
 |---|---|
 | 2026-11-11 | 初始 S9 拆分计划：S9-A..E、spike、文件改动、测试、风险/回滚、DoD |
+| 2026-11-11 | S9-A 实施完成：新增 shared `http` 契约与运行时检测；admin 鉴权改用 `ctx.ip`；删除 `RouterServer`，router 拆为 `fetch`/`upgrade`；WS peer/消息归一；`node:http + ws` on Bun spike 通过（101/text/binary/close/50 连接/remoteAddress）；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后） |

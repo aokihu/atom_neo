@@ -83,8 +83,23 @@ export async function startCore(deps: CoreDeps): Promise<CoreHandle> {
     server = Bun.serve<unknown>({
       port,
       hostname: host,
-      fetch: router,
-      websocket: core.wsHandlers,
+      fetch(req, srv) {
+        const ctx = {
+          runtime: "bun" as const,
+          ip: srv.requestIP(req)?.address ?? "",
+          port: srv.port ?? port,
+        };
+        const decision = router.upgrade?.(req, ctx);
+        if (decision && "response" in decision) return decision.response;
+        if (decision) {
+          const upgraded = srv.upgrade(req, { data: decision.data });
+          return upgraded ? undefined : new Response("Upgrade Required", { status: 426 });
+        }
+        return router.fetch(req, ctx);
+      },
+      // Bun's peer carries `unknown` upgrade data while Core narrows it to WsData;
+      // runtime shapes are structurally compatible, so cast only at this boundary.
+      websocket: core.wsHandlers as Bun.WebSocketHandler<unknown>,
     });
   } catch (error) {
     await stop();
