@@ -82,7 +82,10 @@ atom_neo/
 │   │   └── env.ts               # .env 加载
 │   └── packages/
 │       ├── core/
-│       │   ├── server.ts         # startCore(deps)
+│       │   ├── server.ts         # startCore(deps): composition root + Bun.serve
+│       │   ├── bootstrap.ts      # Constructs services, tools, MCP, pipelines, WS handlers
+│       │   ├── pipeline-factory.ts / task-lifecycle.ts
+│       │   ├── http-router.ts / mcp-lifecycle.ts
 │       │   ├── task-engine.ts
 │       │   ├── task-queue.ts / task-factory.ts
 │       │   ├── pipeline/         # builder / registry / manager

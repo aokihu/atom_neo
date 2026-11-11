@@ -315,19 +315,26 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-ARCH-13`/`CR-STR-02`：拆为：
+- [x] `CR-ARCH-13`/`CR-STR-02`：拆为：
   - `bootstrap.ts`（构造）
   - `pipeline-factory.ts`（5 条 pipeline 的模型/Token/Context 解析）
   - `task-lifecycle.ts`（Completed/Failed/Committed、回滚）
   - `http-router.ts`（路由表 + `requireAdmin`）
   - `mcp-lifecycle.ts`（初始化/health/stop）
-- [ ] `startCore` 只保留组装与启停，目标 <200 行。
-- [ ] 保持 `Bun.serve` 不变（S9 再换）。
+- [x] `startCore` 只保留组装与启停，目标 <200 行。
+- [x] 保持 `Bun.serve` 不变（S9 再换）。
 
 **验收**：
 - 现有 server/continuation 测试行为不变。
 - 新增路由表与 Task.Completed 回滚测试。
 - `startCore` 行数目标达成。
+
+**实施记录（2026-11-11）**：
+
+- `server.ts` 由 853 行降至 102 行；新增 `bootstrap.ts`、`pipeline-factory.ts`、`task-lifecycle.ts`、`http-router.ts`、`mcp-lifecycle.ts`。
+- `startCore` 仅保留 router 组装、`Bun.serve`、启动/停止顺序；`Bun.serve` 未迁移。
+- 新增 `http-router.test.ts`（health/admin/任务提交/404）与 `task-lifecycle.test.ts`（checkpoint 回滚、chain/idle 调度）。
+- typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9。
 
 **风险/回滚**：高；纯搬移 + 小修，按模块拆 commit。
 
@@ -571,7 +578,7 @@ bun run scripts/check-file-headers.ts
 | S5 | 已完成 | — | 新增 `@atom-neo/tui-kit`：统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；两包删除副本；typecheck 6/6、build 6/6、测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |
 | S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
-| S8 | 未开始 | — | server 拆分 |
+| S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
 | S9 | 未开始 | — | Node HTTP/WS |
 | S10 | 未开始 | — | Node 构建/CI |
 | S11 | 未开始 | — | DI 收口 |

@@ -125,7 +125,12 @@ src/packages/core/
 ├── package.json
 ├── tsconfig.json
 ├── index.ts              # Barrel exports
-├── server.ts             # startCore(): HTTP + WebSocket server
+├── server.ts             # startCore(): composition root + Bun.serve + lifecycle
+├── bootstrap.ts          # Constructs bus/queue/session/tools/MCP/schedule/pipeline/WS
+├── pipeline-factory.ts   # Five pipeline builders + model/token/context resolution
+├── task-lifecycle.ts     # Task Activated/Completed/Failed + chain/idle scheduling
+├── http-router.ts        # /api/* + /ws/* route table and requireAdmin
+├── mcp-lifecycle.ts      # MCP init/fetch/health/close with stop guard
 ├── constants.ts          # Token/context defaults
 ├── task-engine.ts
 ├── task-queue.ts
@@ -329,7 +334,7 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.8",
+  "version": "1.22.9",
   "engines": { "node": ">=24", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
