@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `fc78eac` (v1.22.9)
-> **状态**: S9-A 已实施；S9-B..E 待实施
+> **状态**: S9-A/B 已实施；S9-C..E 待实施
 > **目标**: Core/Gateway 在 Node 下正式启动，Bun 保持默认且行为不变
 
 ---
@@ -257,7 +257,7 @@ export function resolveHttpRuntime(explicit?: string): HttpRuntime {
 
 #### 3.7 实施记录（2026-11-11）
 
-**状态**: 已完成（工作区改动，未提交）。
+**状态**: 已完成。
 
 **Spike（通过，方案 A 候选）**:
 
@@ -426,11 +426,11 @@ export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): P
 
 #### 4.4 验收 / DoD
 
-- [ ] `rg -n 'Bun\.serve|Bun\.Server' src --glob '!**/dist/**'` 只匹配 Bun adapter（fixture 除外，S9-E 清）。
-- [ ] Core/Gateway 均通过 `HttpServer` 启动/停止。
-- [ ] HTTP 路由、状态码、WS 消息、admin 行为与 `fc78eac` 一致。
-- [ ] 全量测试、build、docs 检查通过。
-- [ ] Bun 默认启动路径不变。
+- [x] `rg -n 'Bun\.serve|Bun\.Server' src --glob '!**/dist/**'` 只匹配 Bun adapter（fixture 除外，S9-E 清）。
+- [x] Core/Gateway 均通过 `HttpServer` 启动/停止。
+- [x] HTTP 路由、状态码、WS 消息、admin 行为与 `fc78eac` 一致。
+- [x] 全量测试、build、docs 检查通过。
+- [x] Bun 默认启动路径不变。
 
 #### 4.5 风险 / 回滚
 
@@ -438,6 +438,37 @@ export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): P
 - **风险**: `stop(false)` 的 Bun 语义与 Node 不同，先把 Core 的两阶段顺序保持不变。
 - **回滚**: 删除 adapter，`server.ts` 恢复内联 `Bun.serve`；单 commit revert。
 - **注意**: 不在此阶段改 Gateway logger（S9-D）。
+
+#### 4.6 实施记录（2026-11-11）
+
+**状态**: 已完成。
+
+**新增**:
+
+- `src/packages/shared/src/http/bun-http-server.ts`：`createBunHttpServer(): HttpServer`；`Bun.serve`、`requestIP`、upgrade 与两阶段 stop 全部收敛在该文件；WebSocket handler 只在边界做窄化类型断言，不包装 peer。
+- `src/packages/shared/src/http/create-http-server.ts`：`createHttpServer(runtime)`；Bun 分支动态加载 adapter，Node 分支暂抛 `Node HTTP runtime is not available until S9-C`。
+- `src/packages/shared/src/http/bun-http-server.test.ts`：5 个契约测试（`port: 0` / ctx、200/404、upgrade 101/400/426、`stop(false)`、`stop(true)`）。
+
+**改造**:
+
+- `src/packages/shared/src/http/index.ts`、`src/packages/shared/src/index.ts`：导出 `createHttpServer` / `createBunHttpServer`。
+- `src/packages/core/src/server.ts`：`startCore` 接受可选 `httpServer`，默认工厂；删除 `Bun.serve` / `Bun.Server` / 内联 ctx / 内联 upgrade；stop 顺序保持 `handle.stop(false)` → shutdown → `await handle.stop(true)`。
+- `src/packages/gateway/src/server.ts`：`GatewayOverrides` 接受可选 `httpServer`；删除 `Bun.serve`；admin 使用 `ctx.ip`；start/stop 与失败回滚顺序不变。
+
+**stop 语义**:
+
+- `stop(false)`：调用 `server.stop(false)` 后立即 resolve，不等长连接/WS。
+- `stop(true)`：先等待已发起的 graceful，再 `await server.stop(true)`；重复调用复用同一 Promise，force 可升级 graceful。
+
+**验证**:
+
+- `bun run typecheck`：6/6。
+- `bun test --path-ignore-patterns='**/dist/**'`：980 pass / 21 skip / 0 fail（基线 975）。
+- `bun test`：1734 pass / 21 skip / 0 fail（build 前）；dist 重建后 1739 pass / 21 skip / 0 fail。
+- `bun run build`：6/6。
+- `bun run docs:check` / `bun run docs:typecheck`：通过。
+- `rg -n 'Bun\.serve|Bun\.Server' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：仅 `src/packages/shared/src/http/bun-http-server.ts` 与 fixture `src/bootstrap/fixtures/gateway-client.ts`（S9-E 清理）。
+- `rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：仅 `src/packages/shared/src/http/bun-http-server.ts`。
 
 ---
 
@@ -1014,7 +1045,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | 阶段 | 状态 | Commit | 备注 |
 |---|---|---|---|
 | S9-A | 已完成 | — | 契约/类型 + spike；shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；`ws` on Bun spike 通过；源码 975 pass / 21 skip / 0 fail |
-| S9-B | 未开始 | — | Bun adapter |
+| S9-B | 已完成 | — | Bun adapter：`createBunHttpServer` / `createHttpServer`；Core/Gateway 改由 `HttpServer` 启停；源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass |
 | S9-C | 未开始 | — | Node adapter |
 | S9-D | 未开始 | — | Node 入口 |
 | S9-E | 未开始 | — | 双运行时验收 |
@@ -1029,3 +1060,4 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 |---|---|
 | 2026-11-11 | 初始 S9 拆分计划：S9-A..E、spike、文件改动、测试、风险/回滚、DoD |
 | 2026-11-11 | S9-A 实施完成：新增 shared `http` 契约与运行时检测；admin 鉴权改用 `ctx.ip`；删除 `RouterServer`，router 拆为 `fetch`/`upgrade`；WS peer/消息归一；`node:http + ws` on Bun spike 通过（101/text/binary/close/50 连接/remoteAddress）；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后） |
+| 2026-11-11 | S9-B 实施完成：新增 Bun `HttpServer` adapter 与工厂；Core/Gateway 删除 `Bun.serve`，改由注入/默认 `HttpServer` 启停；两阶段 stop 语义收敛到 adapter；新增 5 个 adapter 契约测试；typecheck/build 6/6，源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass；`Bun.serve`/`requestIP` 仅剩 adapter 与待清理 fixture |

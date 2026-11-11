@@ -192,7 +192,7 @@ export type {
 } from "./protocol";
 
 // ── HTTP runtime ──
-export { resolveHttpRuntime } from "./http";
+export { resolveHttpRuntime, createHttpServer, createBunHttpServer } from "./http";
 export type {
   HttpRuntime,
   HttpRequestContext,

@@ -1,8 +1,9 @@
 /**
- * Core composition root and Bun HTTP/WebSocket lifecycle.
- * Business logic lives in bootstrap/pipeline-factory/task-lifecycle/http-router/mcp-lifecycle.
+ * Core composition root and HTTP/WebSocket lifecycle.
+ * Transport details live behind the injected `HttpServer` adapter.
  */
-import { BusEvents } from "@atom-neo/shared";
+import { BusEvents, createHttpServer } from "@atom-neo/shared";
+import type { HttpServer, HttpServerHandle } from "@atom-neo/shared";
 import { createCoreBootstrap } from "./bootstrap";
 import type { CoreDeps } from "./bootstrap";
 import { createHttpRouter } from "./http-router";
@@ -19,8 +20,9 @@ type CoreHandle = {
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
-export async function startCore(deps: CoreDeps): Promise<CoreHandle> {
+export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): Promise<CoreHandle> {
   const { port, host, logger } = deps;
+  const httpServer = deps.httpServer ?? await createHttpServer();
   const stopping = { value: false };
   const isStopping = () => stopping.value;
   const core = createCoreBootstrap({ ...deps, isStopping });
@@ -46,14 +48,14 @@ export async function startCore(deps: CoreDeps): Promise<CoreHandle> {
     isStopping,
   });
 
-  let server: Bun.Server<unknown> | undefined;
+  let handle: HttpServerHandle | undefined;
   let stopPromise: Promise<void> | null = null;
   const stop = (): Promise<void> => {
     if (stopPromise) return stopPromise;
     stopPromise = (async () => {
       stopping.value = true;
       clearInterval(core.sessionSweepTimer);
-      server?.stop(false);
+      handle?.stop(false);
       core.hookManager.stop();
       core.scheduleService.stop();
       for (const task of core.taskQueue.getHookTasks()) core.taskEngine.cancel(task.id, task.sessionId);
@@ -71,7 +73,7 @@ export async function startCore(deps: CoreDeps): Promise<CoreHandle> {
       core.bus.emit(BusEvents.Context.CoreStopped, {});
       core.contextService.stop();
       await core.mcp.close();
-      await server?.stop(true);
+      await handle?.stop(true);
     })().catch(error => {
       stopPromise = null;
       throw error;
@@ -80,35 +82,21 @@ export async function startCore(deps: CoreDeps): Promise<CoreHandle> {
   };
 
   try {
-    server = Bun.serve<unknown>({
+    handle = await httpServer.serve({
       port,
-      hostname: host,
-      fetch(req, srv) {
-        const ctx = {
-          runtime: "bun" as const,
-          ip: srv.requestIP(req)?.address ?? "",
-          port: srv.port ?? port,
-        };
-        const decision = router.upgrade?.(req, ctx);
-        if (decision && "response" in decision) return decision.response;
-        if (decision) {
-          const upgraded = srv.upgrade(req, { data: decision.data });
-          return upgraded ? undefined : new Response("Upgrade Required", { status: 426 });
-        }
-        return router.fetch(req, ctx);
-      },
-      // Bun's peer carries `unknown` upgrade data while Core narrows it to WsData;
-      // runtime shapes are structurally compatible, so cast only at this boundary.
-      websocket: core.wsHandlers as Bun.WebSocketHandler<unknown>,
+      host,
+      fetch: router.fetch,
+      upgrade: router.upgrade,
+      websocket: core.wsHandlers,
     });
   } catch (error) {
     await stop();
     throw error;
   }
 
-  logger.info("core ready", { port: server.port, address: host });
+  logger.info("core ready", { port: handle.port, address: host });
   return {
-    port: server.port!,
+    port: handle.port,
     tools: core.allTools.map(t => t.name),
     toolInfos: core.toolInfos,
     mcpServerInfos: core.getMcpServerInfos(),
