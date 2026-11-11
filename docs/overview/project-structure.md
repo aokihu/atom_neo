@@ -344,7 +344,7 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.9",
+  "version": "1.22.10",
   "engines": { "node": ">=24", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
@@ -401,10 +401,12 @@ tui-kit/
 ```text
 scripts/node-smoke/
 ├── http-runtime.ts        # node:http + ws adapter contract smoke (S9-C)
-└── core-runtime.ts        # Core on Node: health/attach/WS/stop (S9-D)
+├── core-runtime.ts        # Core on Node: health/attach/WS/stop (S9-D)
+├── core-conversation.ts   # Node fake model -> conversation task completed (S9-E)
+└── cross-runtime.ts       # Bun client -> Node Core entry bundle (S9-E)
 ```
 
-Both scripts are bundled with `bun build --target node --external ws` and run under Node; commands are documented in [bootstrap.md](./bootstrap.md#http-运行时选择).
+The three Node scripts are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional).
 
 ## 10. Runtime Directories
 

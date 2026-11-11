@@ -1,18 +1,32 @@
 // Local-only process fixture. Never connects to external platforms.
-import { parseArgs } from "node:util";
+import { createServer } from "node:http";
 import { writeFileSync } from "node:fs";
+import { parseArgs } from "node:util";
 const { values } = parseArgs({ args: process.argv.slice(2), strict: false, options: {
   port: { type: "string" }, secret: { type: "string" }, "gateway-url": { type: "string" },
   record: { type: "string" },
 } });
-const server = Bun.serve({
-  hostname: "127.0.0.1", port: Number(values.port),
-  fetch(req) {
-    const path = new URL(req.url).pathname;
-    if (path === "/health") return Response.json({ ok: true, pid: process.pid });
-    if (req.headers.get("X-Gateway-Secret") !== values.secret) return new Response("Forbidden", { status: 403 });
-    return Response.json({ ok: true });
-  },
+const server = createServer((req, res) => {
+  const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+  if (path === "/health") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, pid: process.pid }));
+    return;
+  }
+  if (req.headers["x-gateway-secret"] !== values.secret) {
+    res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+    res.end("Forbidden");
+    return;
+  }
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify({ ok: true }));
 });
-if (values.record) writeFileSync(String(values.record), JSON.stringify({ pid: process.pid, port: server.port, secret: values.secret }));
-process.on("SIGTERM", () => { server.stop(true); process.exit(0); });
+server.listen(Number(values.port), "127.0.0.1", () => {
+  const address = server.address();
+  const port = typeof address === "object" ? address?.port : undefined;
+  if (values.record) writeFileSync(String(values.record), JSON.stringify({ pid: process.pid, port, secret: values.secret }));
+});
+process.on("SIGTERM", () => {
+  server.close(() => process.exit(0));
+  server.closeAllConnections?.();
+});

@@ -126,6 +126,44 @@ wscat -c ws://localhost:3100/ws/test-session
 
 ---
 
+### 7.1 Node runtime smoke (optional)
+
+Node >= 24 can run the same Core/Gateway transport through the `node:http` + `ws`
+adapter. The scripts bundle for Node and keep `ws` external; each command prints
+`PASS ...` lines and exits non-zero on failure.
+
+```bash
+# 1) Adapter contract: health, POST body, admin IP, WS ready/ping, two-stage stop
+mkdir -p /tmp/atom-node-http-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-http-smoke/node_modules/ws
+bun build scripts/node-smoke/http-runtime.ts --target node --external ws \
+  --outfile /tmp/atom-node-http-smoke/http-runtime.mjs
+node /tmp/atom-node-http-smoke/http-runtime.mjs
+
+# 2) Core on Node: health, TUI attach, WS session.ready/ping-pong, clean stop
+mkdir -p /tmp/atom-node-core-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-core-smoke/node_modules/ws
+bun build scripts/node-smoke/core-runtime.ts --target node --external ws \
+  --outfile /tmp/atom-node-core-smoke/core-runtime.mjs
+node /tmp/atom-node-core-smoke/core-runtime.mjs
+
+# 3) Fake conversation on Node: local fake model -> task completed -> assistant message
+mkdir -p /tmp/atom-node-conversation-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-conversation-smoke/node_modules/ws
+bun build scripts/node-smoke/core-conversation.ts --target node --external ws \
+  --outfile /tmp/atom-node-conversation-smoke/core-conversation.mjs
+node /tmp/atom-node-conversation-smoke/core-conversation.mjs
+
+# 4) Bun client -> Node Core entry bundle (cross-runtime attach + session.ready)
+bun scripts/node-smoke/cross-runtime.ts
+```
+
+The fake conversation smoke does not call any external provider: it starts a local
+OpenAI-compatible server that streams `<<<COMPLETE>>>`, so the conversation task
+must finish as `completed` and persist the assistant reply.
+
+---
+
 ## 8. Directory Structure After Setup
 
 ```text

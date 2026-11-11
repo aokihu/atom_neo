@@ -64,6 +64,8 @@ node /tmp/atom-node-core-smoke/core-runtime.mjs
 
 覆盖 runtime 检测（无 Bun 全局时默认 `node`）、`/api/health`、TUI attach（`serverInfo.port` 为真实端口）、WS `session.ready` / `ping` → `pong`、`core.stop()` 与临时 sandbox 清理。
 
+Fake conversation（本地 fake SSE 模型 → conversation `completed`）与 Bun → Node cross-runtime smoke 命令见 [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional)。
+
 ## 参数与配置
 
 保留 host、port、sandbox、config 和现有 log 参数。host/port 负责监听，core-server/core-port 负责连接。默认监听 3100；显式 `port=0` 由系统分配，连接端口必须为 1–65535；跨模式不适用参数在启动前拒绝。

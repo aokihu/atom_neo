@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `fc78eac` (v1.22.9)
 > **Scope**: Core/Gateway HTTP + WebSocket、admin IP 鉴权、Node 入口
-> **Status**: S9-A/B/C/D 已实施；S9-E 待实施
+> **Status**: S9-A/B/C/D/E 已实施（S9 完成；版本 1.22.10）
 > **Related**:
 > - [code-review-s9-graph-2026-11-11.md](./code-review-s9-graph-2026-11-11.md)
 > - [code-review-s9-plan-2026-11-11.md](./code-review-s9-plan-2026-11-11.md)
@@ -1064,6 +1064,8 @@ export type WebSocketHandlers<TData = unknown> = {
 | S9-D | `ATOM_HTTP_RUNTIME` 生效；Bun 默认不变；Node 入口可启动；Gateway logger 可注入 |
 | S9-E | 同一组 HTTP/WS 场景双运行时通过；残留检查通过；文档同步 |
 
+**S9-E 结果（2026-11-11）**：Node fake conversation smoke 11 项 PASS、Bun→Node cross-runtime smoke 7 项 PASS，既有 adapter/Core Node smoke 各 9 项 PASS；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；`Bun.serve`/`Bun.Server`/`requestIP` 仅 Bun adapter，`from "bun"`/`ServerWebSocket` 为 0；版本 1.22.10。Spike 通过但保留双 adapter，S10 再评估统一。
+
 ---
 
 ## 11. 禁区
@@ -1119,3 +1121,4 @@ rg -n 'Bun\.serve|Bun\.Server|ServerWebSocket|requestIP' src --glob '!**/dist/**
 | 2026-11-11 | S9-B 实施完成：新增 Bun `HttpServer` adapter（`bun-http-server.ts`）与工厂（`create-http-server.ts`）；Core/Gateway 删除 `Bun.serve` 并改由 `HttpServer` 启停，admin 使用 adapter 提供的 `ctx.ip`；两阶段 stop（`stop(false)` 立即返回 / `stop(true)` 强制关闭）收敛到 adapter；新增 5 个 adapter 契约测试；typecheck/build 6/6，源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass |
 | 2026-11-11 | S9-C 实施完成：新增 Node `node:http` + `ws` adapter（`node-http-server.ts`、`node-websocket-peer.ts`）；HTTP body/header/204/304/HEAD/Set-Cookie 桥接；upgrade 404/400/426/101；WeakMap peer、text/binary 归一、close-once；两阶段 stop；shared 新增 `ws`/`@types/ws` 并更新 lockfile；新增 12 个契约测试与真实 Node smoke（9 项 PASS）；typecheck/build 6/6，源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass |
 | 2026-11-11 | S9-D 实施完成：`resolveHttpRuntime` 显式参数优先、空 env 回退、非法值 fail-fast；`createHttpServer` 对缺失 Bun 全局/非法 runtime 明确报错；`main.ts` 统一解析运行时并向 Core/Gateway 注入同一 `HttpServer`，入口判断兼容 Node `fileURLToPath`；Gateway logger 改为注入、默认静默并移除模块级 logger；新增 `detect.test.ts`（7）与 `gateway/server.test.ts`（2），真实 Node Core smoke 9 项 PASS；bundle `main.ts --target node` 后 `--help` 正常；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |
+| 2026-11-11 | S9-E 实施完成（S9 完成）：新增 Node fake conversation smoke（本地 fake SSE model，conversation `completed` + assistant 消息，11 项 PASS）与 Bun→Node cross-runtime smoke（真实 Node 入口 bundle，attach + `session.ready` + SIGTERM，7 项 PASS）；fixture `gateway-client.ts` 改 `node:http`，Gateway 入口判断兼容 Node 24.0/24.1；`Bun.serve`/`Bun.Server`/`requestIP` 仅 Bun adapter，`from "bun"`/`ServerWebSocket` 为 0；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；保留双 adapter，S10 再评估统一 |

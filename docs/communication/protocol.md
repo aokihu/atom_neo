@@ -19,6 +19,12 @@
 - **Session Routing**: Task-scoped `event.transport.*` and `event.decision.updated` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
 - **Session Path Encoding**: Clients must encode `sessionId` with `encodeURIComponent()` before placing it in `/ws/:sessionId` or `/api/sessions/:sessionId`. Core treats it as one URL path segment and applies `decodeURIComponent()` exactly once before Session lookup. Empty IDs, malformed percent escapes, and unencoded extra path segments are rejected with `400`.
 
+> **Transport-agnostic**: this protocol is defined by HTTP routes/status codes and
+> WebSocket paths/events/payloads/envelopes, not by the server runtime. The Bun
+> (`Bun.serve`) and Node (`node:http` + `ws`) adapters only implement transport;
+> selecting one with `ATOM_HTTP_RUNTIME` must not change any route, status code,
+> event name, payload or envelope described below.
+
 ```typescript
 const encodedSessionId = encodeURIComponent(sessionId);
 const ws = new WebSocket(`${coreUrl}/ws/${encodedSessionId}`);

@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `fc78eac` (v1.22.9)
-> **状态**: S9-A/B/C/D 已实施；S9-E 待实施
+> **状态**: S9-A/B/C/D/E 已实施（S9 完成）
 > **目标**: Core/Gateway 在 Node 下正式启动，Bun 保持默认且行为不变
 
 ---
@@ -981,6 +981,8 @@ rg -n 'isAdminRequest\(' src --glob '!**/dist/**' --glob '!**/*.test.ts'
 
 **不强制删除 Bun adapter**：如果统一实现的性能、行为、测试都稳定，再在 S10 或后续版本删除；S9 以“可回滚”为优先。
 
+**S9-E 决策（2026-11-11）**：`ws` on Bun spike 通过（方案 A 候选），但 S9 不统一、不删除 Bun adapter。两个 adapter 至少保留一个版本（`1.22.10`），默认路径仍为 Bun；`ATOM_HTTP_RUNTIME=node` 为显式 Node 开关。是否统一推迟到 S10 评估。
+
 #### 7.4 文档
 
 | 文档 | 更新 |
@@ -994,13 +996,13 @@ rg -n 'isAdminRequest\(' src --glob '!**/dist/**' --glob '!**/*.test.ts'
 
 #### 7.5 验收 / DoD
 
-- [ ] Bun 全量测试通过（源码 + dist）。
-- [ ] Node smoke 全场景通过。
-- [ ] 跨运行时 attach / WS 通过。
-- [ ] 残留检查符合预期。
-- [ ] 文档同步，`docs:check` / `docs:typecheck` 通过。
-- [ ] 版本 `1.22.9 → 1.22.10`。
-- [ ] 形成 S10 handoff：Node 构建入口、CI 命令、`@opentui/*` external 清单。
+- [x] Bun 全量测试通过（源码 + dist）。
+- [x] Node smoke 全场景通过。
+- [x] 跨运行时 attach / WS 通过。
+- [x] 残留检查符合预期。
+- [x] 文档同步，`docs:check` / `docs:typecheck` 通过。
+- [x] 版本 `1.22.9 → 1.22.10`。
+- [x] 形成 S10 handoff：Node 构建入口、CI 命令、`@opentui/*` external 清单。
 
 #### 7.6 风险 / 回滚
 
@@ -1008,6 +1010,102 @@ rg -n 'isAdminRequest\(' src --glob '!**/dist/**' --glob '!**/*.test.ts'
 - **风险**: 跨运行时 attach 暴露 IP/端口问题；先测 loopback。
 - **风险**: 清理 `Bun.serve` 时误删 Bun 回滚路径；保留 adapter 直到 S10。
 - **回滚**: S9-E 只改测试/文档/清理，不影响运行时；可单独 revert。
+
+#### 7.7 实施记录（2026-11-11）
+
+**状态**: 已完成。S9 整体完成，版本 `1.22.9 → 1.22.10`。
+
+**新增 smoke**:
+
+- `scripts/node-smoke/core-conversation.ts`：`node:http` 启动本地 fake OpenAI-compatible 模型；`stream: true` 返回含 `<<<COMPLETE>>>`、`finish_reason: "stop"` 与 usage 的 SSE，非流式返回合法 chat-completion JSON。`startCore` 使用 Node adapter + fake runtime（`provider:"local"`、`protocol:"deepseek"`、`type:"llm"`、`baseUrl` 指向 fake server、`appConfig.providers.local.contextLimit=200000`），提交 conversation 任务并断言 `completed`、assistant 消息包含 `FAKE-REPLY`、收到 WS 任务终态事件。
+- `scripts/node-smoke/cross-runtime.ts`：Bun 入口。内部用 `bun build src/main.ts --target node --external ws` 构建真实 Node 入口，`ATOM_HTTP_RUNTIME=node` + 临时 sandbox 启动，Bun 全局 `fetch` 调 `/api/health`、`/api/tui/attach`，Bun 全局 `WebSocket` 收到 `session.ready`，SIGTERM 后 Node 进程 `exit=0`。
+
+**清理**:
+
+- `src/bootstrap/fixtures/gateway-client.ts`：`Bun.serve` → `node:http`；保留 `/health`、`X-Gateway-Secret` 403、`{pid,port,secret}` record、SIGTERM 关闭。Bun 源运行与 `bun build --compile` 二进制均实测通过（health 200 / secret 200 / 错误 secret 403 / SIGTERM exit 0）。
+- `src/packages/gateway/src/server.ts`：直接入口判断改为 `import.meta.main ?? process.argv[1] === fileURLToPath(import.meta.url)`，兼容 Node 24.0/24.1，保留 Bun 编译二进制行为。
+- Node adapter 强制关闭：实测 `stop(true)` 对“完成 101 但不响应 close handshake”的 raw WS 客户端约 1ms 完成，`server.closeAllConnections()` 已释放 upgraded socket；因此不额外添加超时 escalation。S10 若调整关闭顺序，需保留该检查。
+- 未删除/未统一 Bun adapter；`Bun.serve`、`Bun.Server`、`requestIP` 仅存在于 `bun-http-server.ts`。
+
+**Node fake conversation smoke（实际命令与输出）**:
+
+```bash
+mkdir -p /tmp/atom-node-conversation-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-conversation-smoke/node_modules/ws
+bun build scripts/node-smoke/core-conversation.ts --target node --external ws \
+  --outfile /tmp/atom-node-conversation-smoke/core-conversation.mjs
+node /tmp/atom-node-conversation-smoke/core-conversation.mjs
+```
+
+```text
+PASS fake-model-start
+PASS core-start
+PASS attach
+PASS ws-session-ready
+PASS task-submit
+PASS ws-task-event
+PASS task-completed
+PASS assistant-message
+PASS model-stream
+PASS core-stop
+PASS cleanup
+PASS all (11 checks)
+```
+
+**Cross-runtime smoke（实际命令与输出）**:
+
+```bash
+bun scripts/node-smoke/cross-runtime.ts
+```
+
+```text
+PASS node-bundle
+PASS node-core-start
+PASS health
+PASS attach
+PASS ws-session-ready
+PASS node-core-stop
+PASS cleanup
+PASS all (7 checks)
+```
+
+**三份既有 Node smoke 复跑**:
+
+- `http-runtime.ts`：9 项 PASS（health/post-json/admin-loopback/ws-ready/ws-ping-pong/ws-close/stop-graceful-with-active-ws/stop-force-closes-ws/stop-refuses-connections）。
+- `core-runtime.ts`：9 项 PASS（runtime-detection/core-start/health/attach/ws-ready/ws-ping-pong/ws-close/core-stop/cleanup）。
+- `core-conversation.ts`：11 项 PASS（见上）。
+
+**验证（基线 S9-D：源码 1001 pass / 全量 1781 pass）**:
+
+- `bun run typecheck`：6/6。
+- `bun test --path-ignore-patterns='**/dist/**'`：1001 pass / 21 skip / 0 fail（1022 tests，125 files）。
+- `bun test`：build 前 1781 pass / 21 skip / 0 fail（1802 tests，231 files）；build 后复跑仍为 1781 pass / 21 skip / 0 fail。
+- `bun run build`：6/6。
+- `bun run docs:check` / `bun run docs:typecheck`：通过。
+- S9-E 未新增/删除测试用例；计数与 S9-D 持平。
+
+**残留检查（实际结果）**:
+
+```text
+rg -n 'Bun\.serve|Bun\.Server' src --glob '!**/dist/**' --glob '!**/*.test.ts'
+# 仅 src/packages/shared/src/http/bun-http-server.ts
+
+rg -n 'ServerWebSocket|from "bun"' src --glob '!**/dist/**' --glob '!**/*.test.ts'
+# 0 matches
+
+rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/*.test.ts'
+# 仅 src/packages/shared/src/http/bun-http-server.ts
+
+rg -n 'from "ws"' src --glob '!**/dist/**'
+# 仅 node-http-server.ts / node-websocket-peer.ts / node-http-server.test.ts
+```
+
+**S10 handoff**:
+
+- Node 发布包、`dist/node`、`package.json#exports`、`tsconfig.node.json`、CI Node 24/26 矩阵仍未做。
+- 跨运行时 smoke 已验证 Bun 客户端 → Node Core 入口 bundle；S10 可把 `cross-runtime.ts` 纳入 CI，并复用 `core-conversation.ts` 作为 Node conversation 回归。
+- 已知边界：Node adapter 的 `stop(true)` 依赖 `server.closeAllConnections()` 释放 upgraded socket；`ws` 仍为 external；TUI 在 Node 下的完整渲染未验证。
+- 双 adapter 保留：默认 Bun，`ATOM_HTTP_RUNTIME=node` 显式选择；S10 再评估是否统一。
 
 ---
 
@@ -1192,7 +1290,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | S9-B | 已完成 | — | Bun adapter：`createBunHttpServer` / `createHttpServer`；Core/Gateway 改由 `HttpServer` 启停；源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass |
 | S9-C | 已完成 | — | Node adapter：`createNodeHttpServer` / `node-websocket-peer`；12 个契约测试 + 真实 Node smoke（9 项 PASS）；源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass |
 | S9-D | 已完成 | — | Node 入口：`ATOM_HTTP_RUNTIME` 检测/非法值 fail-fast；`main.ts` 注入共享 `HttpServer`；Gateway logger 注入（默认静默）；真实 Node Core smoke 9 项 PASS；源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |
-| S9-E | 未开始 | — | 双运行时验收 |
+| S9-E | 已完成 | — | 双运行时验收：Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime smoke（7 项 PASS）、既有 Node adapter/Core smoke 复跑（各 9 项）；清理 fixture `Bun.serve`、Gateway 直接入口兼容 Node 24.0/24.1；`Bun.serve`/`requestIP` 仅 Bun adapter，`from "bun"`/`ServerWebSocket` 为 0；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10 |
 
 > 每完成一个子阶段，更新本表、主计划 S9 行与 `code-review-s9-2026-11-11.md` 变更记录。
 
@@ -1207,3 +1305,4 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | 2026-11-11 | S9-B 实施完成：新增 Bun `HttpServer` adapter 与工厂；Core/Gateway 删除 `Bun.serve`，改由注入/默认 `HttpServer` 启停；两阶段 stop 语义收敛到 adapter；新增 5 个 adapter 契约测试；typecheck/build 6/6，源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass；`Bun.serve`/`requestIP` 仅剩 adapter 与待清理 fixture |
 | 2026-11-11 | S9-C 实施完成：新增 Node `node:http` + `ws` adapter 与 peer（WeakMap、帧归一、close-once）；HTTP Request/Response 桥接、raw upgrade 404/400/426、两阶段 stop；shared 新增 `ws`/`@types/ws` 并更新 `bun.lock`；新增 12 个契约测试与 Node smoke（9 项 PASS）；typecheck/build 6/6，源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass；`from "ws"` 仅 Node adapter/tests |
 | 2026-11-11 | S9-D 实施完成：`resolveHttpRuntime` 支持显式参数/环境变量、空值回退与非法值 fail-fast；`createHttpServer` 对缺失 Bun 全局和非法 runtime 抛明确错误；`main.ts` 统一创建并注入 `HttpServer`，Gateway 支持 logger 注入并移除模块级 logger；新增 9 个单测与真实 Node Core smoke（9 项 PASS）；bundle `main.ts --target node` 后 `--help` 正常；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |
+| 2026-11-11 | S9-E 实施完成（S9 完成）：新增 Node fake conversation smoke（fake SSE model → conversation `completed`，11 项 PASS）与 Bun→Node cross-runtime smoke（attach + `session.ready` + SIGTERM，7 项 PASS）；fixture `gateway-client.ts` 改用 `node:http`，Gateway 直接入口兼容 Node 24.0/24.1；残留检查仅 Bun adapter 保留 `Bun.serve`/`Bun.Server`/`requestIP`；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；spike 通过但保留双 adapter，S10 再评估统一 |
