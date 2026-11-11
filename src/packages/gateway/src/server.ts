@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { Logger, LogHub, StdoutSink, createHttpServer, isAdminRequest } from "@atom-neo/shared";
 import type { HttpServer } from "@atom-neo/shared";
 import { loadGatewayConfig } from "./config";
@@ -182,10 +181,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-const metaMain = (import.meta as ImportMeta & { main?: boolean }).main;
-const isMain = metaMain ?? process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMain) {
+if (import.meta.main) {
   const logHub = new LogHub();
   logHub.addSink(new StdoutSink());
   const logger = new Logger("info", (entry) => logHub.write(entry));

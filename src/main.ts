@@ -1,6 +1,5 @@
 import { localUrl, publishRuntimeFile, readRuntimeFile, readAttachToken } from "./bootstrap/runtime-file";
 import { statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink, createHttpServer, resolveHttpRuntime } from "@atom-neo/shared";
 import type { HttpServer, LogLevel } from "@atom-neo/shared";
 import { VERSION } from "./version";
@@ -238,9 +237,6 @@ async function attachTui(url: string, adminToken: string, continueSession: boole
   await startTui({ url, adminToken, historySandbox, sessionId: data.sessionId, serverInfo: data.serverInfo });
 }
 
-const metaMain = (import.meta as ImportMeta & { main?: boolean }).main;
-const isMain = metaMain ?? process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMain) {
+if (import.meta.main) {
   main().catch(error => { console.error(error instanceof Error ? error.message : error); process.exit(1); });
 }

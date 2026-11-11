@@ -27,7 +27,7 @@
 
 ### 版本基线
 
-- Node：`>= 24`（本机 Node 26 已验证 `import.meta.main`、`node:sqlite`、`fs.glob`）。
+- Node：`>= 26`（本机 Node 26 已验证 `import.meta.main`、`node:sqlite`、`fs.glob`）。
 - Bun：`>= 1.4`（本机 1.4.2）。
 - `ws`：`^8.22.2`（Node adapter 使用；Bun 是否复用由 spike 决定）。
 - `@types/ws`：`^8.18.2`（仅类型）。
@@ -774,11 +774,6 @@ PASS all (9 checks)
 **入口目标**:
 
 ```ts
-import { fileURLToPath } from "node:url";
-
-const metaMain = (import.meta as ImportMeta & { main?: boolean }).main;
-const isMain = metaMain ?? process.argv[1] === fileURLToPath(import.meta.url);
-
 const runtime = resolveHttpRuntime();
 const httpServer = await createHttpServer(runtime);
 
@@ -791,11 +786,15 @@ const gateway = await startGateway({
   logger,
   httpServer,
 });
+
+if (import.meta.main) {
+  main();
+}
 ```
 
 > `HttpServer` 是“可多次 `serve` 的工厂”：Core 与 Gateway 可以共用同一个实例，各自 `serve` 不同端口。适配器内部不得持有单例 server 状态。
 >
-> `import.meta.main` 在 Node 24.2+ 可用；24.0/24.1 走 `argv[1]` fallback。Bun 编译二进制仍由 `import.meta.main` 判定，S10 再固化打包入口。
+> `import.meta.main` 在 Node 26+ 与 Bun 均可用；Node 24 不再支持。Bun 编译二进制同样由 `import.meta.main` 判定，S10 再固化打包入口。
 
 **运行时规则**:
 
@@ -865,7 +864,7 @@ export async function startGateway(overrides?: GatewayOverrides) {
 
 - `src/main.ts` 在 Core/Core+Gateway/默认 TUI 启动路径中解析并记录运行时，创建一次无状态 `HttpServer`，同一实例注入 `startCore` / `startGateway`；适配器创建失败进入既有 `shutdown()` 回滚。
 - `--mode tui`、`--mode gateway` 控制、`--config`、`--wizard`、备份/导出/导入分支不创建适配器。
-- 入口判断改为 `import.meta.main ?? process.argv[1] === fileURLToPath(import.meta.url)`，保留 Bun 编译二进制行为，不新增 `main.node.ts`。
+- 入口判断使用 `import.meta.main`（Node 26+），保留 Bun 编译二进制行为，不新增 `main.node.ts`。
 
 **Gateway logger**:
 
@@ -1013,7 +1012,7 @@ rg -n 'isAdminRequest\(' src --glob '!**/dist/**' --glob '!**/*.test.ts'
 
 #### 7.7 实施记录（2026-11-11）
 
-**状态**: 已完成。S9 整体完成，版本 `1.22.9 → 1.22.10`。
+**状态**: 已完成。S9 整体完成（1.22.10）；Node 支持下限在 1.22.11 调整为 26。
 
 **新增 smoke**:
 
@@ -1023,7 +1022,7 @@ rg -n 'isAdminRequest\(' src --glob '!**/dist/**' --glob '!**/*.test.ts'
 **清理**:
 
 - `src/bootstrap/fixtures/gateway-client.ts`：`Bun.serve` → `node:http`；保留 `/health`、`X-Gateway-Secret` 403、`{pid,port,secret}` record、SIGTERM 关闭。Bun 源运行与 `bun build --compile` 二进制均实测通过（health 200 / secret 200 / 错误 secret 403 / SIGTERM exit 0）。
-- `src/packages/gateway/src/server.ts`：直接入口判断改为 `import.meta.main ?? process.argv[1] === fileURLToPath(import.meta.url)`，兼容 Node 24.0/24.1，保留 Bun 编译二进制行为。
+- `src/packages/gateway/src/server.ts`：直接入口判断使用 `import.meta.main`（Node 26+），保留 Bun 编译二进制行为。
 - Node adapter 强制关闭：实测 `stop(true)` 对“完成 101 但不响应 close handshake”的 raw WS 客户端约 1ms 完成，`server.closeAllConnections()` 已释放 upgraded socket；因此不额外添加超时 escalation。S10 若调整关闭顺序，需保留该检查。
 - 未删除/未统一 Bun adapter；`Bun.serve`、`Bun.Server`、`requestIP` 仅存在于 `bun-http-server.ts`。
 
@@ -1102,7 +1101,7 @@ rg -n 'from "ws"' src --glob '!**/dist/**'
 
 **S10 handoff**:
 
-- Node 发布包、`dist/node`、`package.json#exports`、`tsconfig.node.json`、CI Node 24/26 矩阵仍未做。
+- Node 发布包、`dist/node`、`package.json#exports`、`tsconfig.node.json`、CI Node 26 矩阵仍未做。
 - 跨运行时 smoke 已验证 Bun 客户端 → Node Core 入口 bundle；S10 可把 `cross-runtime.ts` 纳入 CI，并复用 `core-conversation.ts` 作为 Node conversation 回归。
 - 已知边界：Node adapter 的 `stop(true)` 依赖 `server.closeAllConnections()` 释放 upgraded socket；`ws` 仍为 external；TUI 在 Node 下的完整渲染未验证。
 - 双 adapter 保留：默认 Bun，`ATOM_HTTP_RUNTIME=node` 显式选择；S10 再评估是否统一。
@@ -1267,7 +1266,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 
 - Node 发布包、`dist/node`、`package.json#exports`。
 - `tsconfig.node.json` / 去掉 `@types/bun`。
-- CI Node 24/26 矩阵。
+- CI Node 26 矩阵。
 - TUI 在 Node 下的完整启动/渲染验证。
 - 删除 Bun adapter（除非 S9-E 证明统一实现完全稳定，且保留回滚开关）。
 - 全量 `bun:test` 迁移到 Node。
@@ -1290,7 +1289,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | S9-B | 已完成 | — | Bun adapter：`createBunHttpServer` / `createHttpServer`；Core/Gateway 改由 `HttpServer` 启停；源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass |
 | S9-C | 已完成 | — | Node adapter：`createNodeHttpServer` / `node-websocket-peer`；12 个契约测试 + 真实 Node smoke（9 项 PASS）；源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass |
 | S9-D | 已完成 | — | Node 入口：`ATOM_HTTP_RUNTIME` 检测/非法值 fail-fast；`main.ts` 注入共享 `HttpServer`；Gateway logger 注入（默认静默）；真实 Node Core smoke 9 项 PASS；源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |
-| S9-E | 已完成 | — | 双运行时验收：Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime smoke（7 项 PASS）、既有 Node adapter/Core smoke 复跑（各 9 项）；清理 fixture `Bun.serve`、Gateway 直接入口兼容 Node 24.0/24.1；`Bun.serve`/`requestIP` 仅 Bun adapter，`from "bun"`/`ServerWebSocket` 为 0；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10 |
+| S9-E | 已完成 | — | 双运行时验收：Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime smoke（7 项 PASS）、既有 Node adapter/Core smoke 复跑（各 9 项）；清理 fixture `Bun.serve`、Gateway 直接入口使用 Node 26 `import.meta.main`；`Bun.serve`/`requestIP` 仅 Bun adapter，`from "bun"`/`ServerWebSocket` 为 0；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10，1.22.11 起 Node >= 26 |
 
 > 每完成一个子阶段，更新本表、主计划 S9 行与 `code-review-s9-2026-11-11.md` 变更记录。
 
@@ -1305,4 +1304,5 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | 2026-11-11 | S9-B 实施完成：新增 Bun `HttpServer` adapter 与工厂；Core/Gateway 删除 `Bun.serve`，改由注入/默认 `HttpServer` 启停；两阶段 stop 语义收敛到 adapter；新增 5 个 adapter 契约测试；typecheck/build 6/6，源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass；`Bun.serve`/`requestIP` 仅剩 adapter 与待清理 fixture |
 | 2026-11-11 | S9-C 实施完成：新增 Node `node:http` + `ws` adapter 与 peer（WeakMap、帧归一、close-once）；HTTP Request/Response 桥接、raw upgrade 404/400/426、两阶段 stop；shared 新增 `ws`/`@types/ws` 并更新 `bun.lock`；新增 12 个契约测试与 Node smoke（9 项 PASS）；typecheck/build 6/6，源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass；`from "ws"` 仅 Node adapter/tests |
 | 2026-11-11 | S9-D 实施完成：`resolveHttpRuntime` 支持显式参数/环境变量、空值回退与非法值 fail-fast；`createHttpServer` 对缺失 Bun 全局和非法 runtime 抛明确错误；`main.ts` 统一创建并注入 `HttpServer`，Gateway 支持 logger 注入并移除模块级 logger；新增 9 个单测与真实 Node Core smoke（9 项 PASS）；bundle `main.ts --target node` 后 `--help` 正常；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |
-| 2026-11-11 | S9-E 实施完成（S9 完成）：新增 Node fake conversation smoke（fake SSE model → conversation `completed`，11 项 PASS）与 Bun→Node cross-runtime smoke（attach + `session.ready` + SIGTERM，7 项 PASS）；fixture `gateway-client.ts` 改用 `node:http`，Gateway 直接入口兼容 Node 24.0/24.1；残留检查仅 Bun adapter 保留 `Bun.serve`/`Bun.Server`/`requestIP`；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；spike 通过但保留双 adapter，S10 再评估统一 |
+| 2026-11-11 | S9-E 实施完成（S9 完成）：新增 Node fake conversation smoke（fake SSE model → conversation `completed`，11 项 PASS）与 Bun→Node cross-runtime smoke（attach + `session.ready` + SIGTERM，7 项 PASS）；fixture `gateway-client.ts` 改用 `node:http`，Gateway 直接入口使用 Node 26 `import.meta.main`；残留检查仅 Bun adapter 保留 `Bun.serve`/`Bun.Server`/`requestIP`；源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；spike 通过但保留双 adapter，S10 再评估统一 |
+| 2026-11-11 | Node 支持下限调整为 26：`engines.node` 改为 `>=26`，入口统一使用 `import.meta.main`；版本 1.22.11 |

@@ -15,6 +15,7 @@
 | 决策 | 结论 | 影响 |
 |---|---|---|
 | Node.js 支持 | **正式支持目标** | 需要运行时标准化、Node HTTP/WS、构建/CI |
+| Node 支持下限 | **Node >= 26** | Node 24 不再支持；入口统一使用 `import.meta.main` |
 | Web 文档 | **不保留现有 Web 页面**；需要 HTTP server 把 Markdown 渲染成 HTML | 删除旧 JSX 文档站 + React SSR，新增 `node:http` 渲染服务 |
 | 未实现 Element | **暂时不动** | 5 个兼容 Element、follow-up、Replay、PipelineRunner/Manager 保持原样 |
 | 多 Provider | **需要** | 新增 Provider 工厂、配置 protocol、Prompt 语言、Provider options |
@@ -22,7 +23,7 @@
 
 ### 版本基线
 
-- Node：建议 **>= 24 LTS**，CI 覆盖 24/26。
+- Node：**>= 26**；CI 覆盖 Node 26（Node 24 不再支持）。
 - Bun：建议 **>= 1.4**（`node:sqlite` / `fs.glob` / `child_process` 已在本机 1.4.2 验证）。
 - 本机已验证：
   - Node 26：`node:sqlite` + FTS5、`fs.glob`、`import.meta.main`、`@opentui/core` Node 导出可用。
@@ -79,7 +80,7 @@
 **任务清单**：
 
 - [ ] 记录 `bun run typecheck`、`bun test`、`bun run build` 基线（通过数/失败数/耗时）。
-- [ ] 添加 `engines`：`node >= 24`、`bun >= 1.4`。
+- [ ] 添加 `engines`：`node >= 26`、`bun >= 1.4`。
 - [ ] 验证 `node:http + ws` 在 Bun 下可用性：
   - 可用 → S9 采用统一实现（方案 A）。
   - 不可用 → S9 采用 Bun/Node 双实现端口（方案 B）。
@@ -387,7 +388,7 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
   - config、memory FTS5、shell、glob、schedule。
   - Core 启动 + health + WS 一次对话。
   - TUI 入口 import。
-- [ ] CI 矩阵：Bun 全量；Node 24/26 typecheck + build + smoke。
+- [ ] CI 矩阵：Bun 全量；Node 26 typecheck + build + smoke。
 
 **验收**：
 - `node dist/node/main.js` 可启动。
@@ -585,7 +586,7 @@ bun run scripts/check-file-headers.ts
 | S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
-| S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；保留双 adapter，S10 再评估统一 |
+| S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；1.22.11 起 Node 支持下限 26；保留双 adapter，S10 再评估统一 |
 | S10 | 未开始 | — | Node 构建/CI |
 | S11 | 未开始 | — | DI 收口 |
 | S12 | 未开始 | — | 结构重构 |

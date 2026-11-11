@@ -1360,7 +1360,7 @@ async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
 | `Bun.serve` / `Bun.Server` | `core/server.ts:619,654`、`gateway/server.ts:102` | `HttpServer` 端口或统一 `node:http + ws` |
 | `ServerWebSocket` (type) | `core/ws/handler.ts:1`、`broadcaster.ts:1` | 自有 `WebSocketPeer` |
 | `srv.requestIP` | `shared/utils/admin-auth.ts:8` | `RequestContext.ip` |
-| `import.meta.main` | `main.ts:239`、`gateway/server.ts:180` | Node 24+ 与 Bun 均支持，保留 |
+| `import.meta.main` | `main.ts:239`、`gateway/server.ts:180` | Node 26+ 与 Bun 均支持，保留 |
 
 ### CR-RUN-01 — 统一 `writeFile` 与原子写
 
@@ -1522,10 +1522,10 @@ Bun 实现用 `Bun.serve`；Node 实现用 `node:http` + `ws`。`admin-auth.ts` 
 
 **目标**:
 - `main`/`exports` 指向 `dist`（或明确只支持源码运行）。
-- `engines`: `node >= 24`、`bun >= 1.4`。
+- `engines`: `node >= 26`、`bun >= 1.4`。
 - `tsconfig.node.json` 不包含 `types: ["bun"]`；Bun 适配层单独配置。
 - Node 产物：`bun build --target node` 或 esbuild；`@opentui/*` 等原生模块 external。
-- CI：Bun 全量；Node 24/26 smoke。
+- CI：Bun 全量；Node 26 smoke。
 
 ---
 
@@ -1796,3 +1796,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-11 | S9 专项文档完成：拆分 S9-A..E，新增问题清单、关系图与实施计划三份文档；未改动 `src/`，S9-A..E 待实施 |
 | 2026-11-11 | S9-A 实施完成：新增 `shared/src/http` 契约/检测；admin 鉴权改用 `ctx.ip`；删除 `RouterServer`，router 拆为 `fetch`/`upgrade`；WS 改用 `WebSocketPeer` 并归一消息；`ws` on Bun spike 通过（101/text/binary/close/50 连接/remoteAddress，`EXIT=0`）；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后） |
 | 2026-11-11 | S9-B..E 实施完成（S9 完成）：Bun/Node 双 adapter、`ATOM_HTTP_RUNTIME` 运行时选择、Node 入口与 Gateway logger 注入；S9-E 新增 Node fake conversation smoke（11 项 PASS）与 Bun→Node cross-runtime smoke（7 项 PASS），fixture `gateway-client.ts` 清理为 `node:http`；残留检查仅 Bun adapter 保留 `Bun.serve`/`Bun.Server`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；spike 通过但保留双 adapter，S10 再评估统一 |
+| 2026-11-11 | Node 支持下限调整为 26：`engines.node` 改为 `>=26`，入口统一使用 `import.meta.main`；版本 1.22.11 |

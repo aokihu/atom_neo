@@ -3,7 +3,7 @@
  *
  * Serves the Markdown tree under docs/ as HTML using only Node standard APIs
  * (node:http, node:fs, node:path, node:url) plus marked, marked-highlight and
- * highlight.js. Runs under both Bun and Node >= 24 (type stripping).
+ * highlight.js. Runs under both Bun and Node >= 26 (type stripping).
  *
  * Run:
  *   bun run docs/server.ts

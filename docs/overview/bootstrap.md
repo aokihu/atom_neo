@@ -52,7 +52,7 @@ Node 当前只是可选运行时；Node 构建入口、发布包与 CI 矩阵属
 
 `HttpServerHandle.stop(false)` 停止接收新连接并关闭空闲 keep-alive，保留正在处理的 HTTP 与 WebSocket；`stop(true)` 关闭 WebSocket 与活跃连接，并等待监听 socket 关闭。重复调用幂等，`stop(true)` 可升级已发起的 `stop(false)`。Core 与 Gateway 的 stop 顺序不变。
 
-Node 源码 smoke（Node >= 24，`ws` external）：
+Node 源码 smoke（Node >= 26，`ws` external）：
 
 ```bash
 mkdir -p /tmp/atom-node-core-smoke/node_modules

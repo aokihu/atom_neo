@@ -128,7 +128,7 @@ wscat -c ws://localhost:3100/ws/test-session
 
 ### 7.1 Node runtime smoke (optional)
 
-Node >= 24 can run the same Core/Gateway transport through the `node:http` + `ws`
+Node >= 26 can run the same Core/Gateway transport through the `node:http` + `ws`
 adapter. The scripts bundle for Node and keep `ws` external; each command prints
 `PASS ...` lines and exits non-zero on failure.
 
