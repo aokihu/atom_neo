@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `fc78eac` (v1.22.9)
-> **状态**: S9-A/B/C 已实施；S9-D..E 待实施
+> **状态**: S9-A/B/C/D 已实施；S9-E 待实施
 > **目标**: Core/Gateway 在 Node 下正式启动，Bun 保持默认且行为不变
 
 ---
@@ -837,12 +837,12 @@ export async function startGateway(overrides?: GatewayOverrides) {
 
 #### 6.4 验收 / DoD
 
-- [ ] Bun 默认启动不变（模式、端口、attach、TUI）。
-- [ ] `ATOM_HTTP_RUNTIME=node` 下 Core 可启动并完成 smoke。
-- [ ] Gateway 日志注入生效，import 无副作用。
-- [ ] 非法运行时值 fail-fast，错误信息明确。
-- [ ] 全量测试、build、docs 检查通过。
-- [ ] 文档更新：`bootstrap.md`、`gateway.md`、`project-structure.md`。
+- [x] Bun 默认启动不变（模式、端口、attach、TUI）。
+- [x] `ATOM_HTTP_RUNTIME=node` 下 Core 可启动并完成 smoke。
+- [x] Gateway 日志注入生效，import 无副作用。
+- [x] 非法运行时值 fail-fast，错误信息明确。
+- [x] 全量测试、build、docs 检查通过。
+- [x] 文档更新：`bootstrap.md`、`gateway.md`、`project-structure.md`。
 
 #### 6.5 风险 / 回滚
 
@@ -851,6 +851,83 @@ export async function startGateway(overrides?: GatewayOverrides) {
 - **风险**: Gateway logger 改为必填导致测试/调用点遗漏；保留显式默认但只在入口创建。
 - **回滚**: 删除环境变量分支与 `httpServer` 注入，恢复 `startCore`/`startGateway` 内部创建 Bun 传输。
 - **注意**: 不改变 `--mode` 分流、TUI attach、首启向导。
+
+#### 6.6 实施记录（2026-11-11）
+
+**状态**: 已完成。
+
+**运行时选择**:
+
+- `src/packages/shared/src/http/detect.ts`：显式参数优先于 `ATOM_HTTP_RUNTIME`；空值/未设置回退到 `typeof Bun !== "undefined" ? "bun" : "node"`；非法值抛 `Invalid ATOM_HTTP_RUNTIME "...": expected "bun" | "node".`，不再静默回退。
+- `src/packages/shared/src/http/create-http-server.ts`：Bun 分支在缺少 Bun 全局时抛出明确错误并提示 `ATOM_HTTP_RUNTIME=node`；Node 分支保持动态 import；非法 runtime 直接抛错。
+
+**入口**:
+
+- `src/main.ts` 在 Core/Core+Gateway/默认 TUI 启动路径中解析并记录运行时，创建一次无状态 `HttpServer`，同一实例注入 `startCore` / `startGateway`；适配器创建失败进入既有 `shutdown()` 回滚。
+- `--mode tui`、`--mode gateway` 控制、`--config`、`--wizard`、备份/导出/导入分支不创建适配器。
+- 入口判断改为 `import.meta.main ?? process.argv[1] === fileURLToPath(import.meta.url)`，保留 Bun 编译二进制行为，不新增 `main.node.ts`。
+
+**Gateway logger**:
+
+- 删除模块级 `logHub` / `StdoutSink` / `Logger`；`GatewayOverrides` 新增 `logger?: Logger`。
+- 未注入时使用静默 `new Logger("info", () => {})`；`if (import.meta.main)` 才创建 stdout logger；`main.ts` 传入自身 logger，`--log*` 生效。
+- 路由、鉴权、状态码、限流、stop 顺序与返回结构不变。
+
+**测试**:
+
+- `src/packages/shared/src/http/detect.test.ts`：7 个用例（显式 bun/node、显式覆盖 env、空 env 回退、非法 env/显式值、Node/Bun adapter 创建、非法 runtime）。
+- `src/packages/gateway/src/server.test.ts`：2 个用例（注入 fake `HttpServer` + silent logger、默认 silent logger 无 stdout、`stop(false) → stop(true)`）。
+- `scripts/node-smoke/core-runtime.ts`：真实 Node Core smoke（9 项 PASS：runtime-detection、core-start、health、attach、ws-ready、ws-ping-pong、ws-close、core-stop、cleanup）。
+
+**Node smoke（实际命令与输出）**:
+
+```bash
+mkdir -p /tmp/atom-node-core-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-core-smoke/node_modules/ws
+bun build scripts/node-smoke/core-runtime.ts --target node --external ws \
+  --outfile /tmp/atom-node-core-smoke/core-runtime.mjs
+node /tmp/atom-node-core-smoke/core-runtime.mjs
+```
+
+```text
+PASS runtime-detection
+PASS core-start
+PASS health
+PASS attach
+PASS ws-ready
+PASS ws-ping-pong
+PASS ws-close
+PASS core-stop
+PASS cleanup
+PASS all (9 checks)
+```
+
+> 实际 WS 协议常量为 `ping` / `pong`（`WsMessages.Control.Ping` / `Pong`）；S9 未改名、未改 payload。
+
+**Node 入口 bundle 检查**:
+
+- `bun build src/main.ts --target node --external ws --outfile /tmp/atom-node-core-smoke/main.mjs`：392 modules，5.69 MB。
+- `node /tmp/atom-node-core-smoke/main.mjs --help`：正常输出帮助，`EXIT=0`；未触发 Gateway 独立启动。
+- 非法值实测：临时 sandbox + `ATOM_HTTP_RUNTIME=wat node main.mjs --mode core` → stderr `Invalid ATOM_HTTP_RUNTIME "wat": expected "bun" | "node".`，`EXIT=1`。
+
+**验证**:
+
+- `bun run typecheck`：6/6。
+- `bun test --path-ignore-patterns='**/dist/**'`：1001 pass / 21 skip / 0 fail（1022 tests，125 files；基线 992 pass）。
+- `bun test`：build 前 1772 pass / 21 skip / 0 fail；build 后 1781 pass / 21 skip / 0 fail（1802 tests，231 files）。
+- `bun run build`：6/6。
+- `bun run docs:check` / `bun run docs:typecheck`：通过。
+- Node adapter smoke（S9-C）复跑：9 项 PASS。
+- Bun 默认 smoke：临时 sandbox 下 `bun run src/main.ts --mode core --port 0 --log=console` 输出 `http runtime selected {"runtime":"bun"}` 与 `core ready`，SIGTERM 后 `EXIT=0`。
+- `rg -n 'Bun\.serve|Bun\.Server' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：仅 Bun adapter 与待 S9-E 清理的 fixture。
+- `rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/*.test.ts'`：仅 Bun adapter。
+- `rg -n 'from "ws"' src --glob '!**/dist/**'`：仅 Node adapter/tests。
+
+**遗留 / S10**:
+
+- Node 发布包、`dist/node`、CI 矩阵、`tsconfig.node.json`、OpenTUI external 清单仍属 S10。
+- Node Core smoke 尚未提交任务或调用 LLM；fake conversation 属 S9-E。
+
 
 ---
 
@@ -1114,7 +1191,7 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | S9-A | 已完成 | — | 契约/类型 + spike；shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；`ws` on Bun spike 通过；源码 975 pass / 21 skip / 0 fail |
 | S9-B | 已完成 | — | Bun adapter：`createBunHttpServer` / `createHttpServer`；Core/Gateway 改由 `HttpServer` 启停；源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass |
 | S9-C | 已完成 | — | Node adapter：`createNodeHttpServer` / `node-websocket-peer`；12 个契约测试 + 真实 Node smoke（9 项 PASS）；源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass |
-| S9-D | 未开始 | — | Node 入口 |
+| S9-D | 已完成 | — | Node 入口：`ATOM_HTTP_RUNTIME` 检测/非法值 fail-fast；`main.ts` 注入共享 `HttpServer`；Gateway logger 注入（默认静默）；真实 Node Core smoke 9 项 PASS；源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |
 | S9-E | 未开始 | — | 双运行时验收 |
 
 > 每完成一个子阶段，更新本表、主计划 S9 行与 `code-review-s9-2026-11-11.md` 变更记录。
@@ -1129,3 +1206,4 @@ rg -n 'requestIP' src --glob '!**/dist/**' --glob '!**/node_modules/**' --glob '
 | 2026-11-11 | S9-A 实施完成：新增 shared `http` 契约与运行时检测；admin 鉴权改用 `ctx.ip`；删除 `RouterServer`，router 拆为 `fetch`/`upgrade`；WS peer/消息归一；`node:http + ws` on Bun spike 通过（101/text/binary/close/50 连接/remoteAddress）；typecheck/build 6/6，源码 975 pass / 21 skip / 0 fail，全量 1729 pass（dist 重建后） |
 | 2026-11-11 | S9-B 实施完成：新增 Bun `HttpServer` adapter 与工厂；Core/Gateway 删除 `Bun.serve`，改由注入/默认 `HttpServer` 启停；两阶段 stop 语义收敛到 adapter；新增 5 个 adapter 契约测试；typecheck/build 6/6，源码 980 pass / 21 skip / 0 fail，全量（build 后）1739 pass；`Bun.serve`/`requestIP` 仅剩 adapter 与待清理 fixture |
 | 2026-11-11 | S9-C 实施完成：新增 Node `node:http` + `ws` adapter 与 peer（WeakMap、帧归一、close-once）；HTTP Request/Response 桥接、raw upgrade 404/400/426、两阶段 stop；shared 新增 `ws`/`@types/ws` 并更新 `bun.lock`；新增 12 个契约测试与 Node smoke（9 项 PASS）；typecheck/build 6/6，源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass；`from "ws"` 仅 Node adapter/tests |
+| 2026-11-11 | S9-D 实施完成：`resolveHttpRuntime` 支持显式参数/环境变量、空值回退与非法值 fail-fast；`createHttpServer` 对缺失 Bun 全局和非法 runtime 抛明确错误；`main.ts` 统一创建并注入 `HttpServer`，Gateway 支持 logger 注入并移除模块级 logger；新增 9 个单测与真实 Node Core smoke（9 项 PASS）；bundle `main.ts --target node` 后 `--help` 正常；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass |

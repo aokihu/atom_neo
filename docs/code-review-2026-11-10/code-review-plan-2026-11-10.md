@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: S0–S8 已完成；S9-A/B/C 已完成；S9-D/E 待实施。
+> **状态**: S0–S8 已完成；S9-A/B/C/D 已完成；S9-E 待实施。
 
 ---
 
@@ -552,7 +552,7 @@ bun run scripts/check-file-headers.ts
 | S6 | 保留旧事件常量映射 | 双发/双读过渡 |
 | S7 | 配置 protocol 默认推断 | 旧配置不破坏 |
 | S8 | 纯搬移，按模块 revert | 行为不变 |
-| S9 | 保留旧 Bun 入口 | Node 入口独立 |
+| S9 | 保留 Bun adapter 与默认入口 | Node 通过 `ATOM_HTTP_RUNTIME=node` 可选 |
 | S10 | 保留 Bun 发布流程 | Node 构建独立 |
 | S11 | 按 registry/prompt/service/engine 拆分 | 风险最高 |
 | S12 | 单文件/单模块 revert | 特性测试先行 |
@@ -584,7 +584,7 @@ bun run scripts/check-file-headers.ts
 | S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
-| S9 | 进行中（S9-A/B/C 完成） | — | S9-A 契约/类型 + spike：shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；S9-B Bun adapter：Core/Gateway 删除 `Bun.serve`，统一经 `HttpServer` 启停，新增 5 个 adapter 契约测试；S9-C Node adapter：`node:http` + `ws`、Request/Response 桥接、upgrade 404/400/426、WeakMap peer、两阶段 stop，新增 12 个契约测试与 Node smoke（9 项 PASS）；typecheck/build 6/6，源码 992 pass / 21 skip / 0 fail，全量（build 后）1763 pass；S9-D/E 待实施 |
+| S9 | 进行中（S9-A/B/C/D 完成） | — | S9-A 契约/类型 + spike：shared `http` 契约、admin `ctx.ip`、router `fetch`/`upgrade`、WS `WebSocketPeer`；S9-B Bun adapter：Core/Gateway 删除 `Bun.serve`，统一经 `HttpServer` 启停，新增 5 个 adapter 契约测试；S9-C Node adapter：`node:http` + `ws`、Request/Response 桥接、upgrade 404/400/426、WeakMap peer、两阶段 stop，新增 12 个契约测试与 Node smoke（9 项 PASS）；S9-D Node 入口：`ATOM_HTTP_RUNTIME` 选择/非法值 fail-fast、`main.ts` 注入共享 `HttpServer`、Gateway logger 注入（默认静默）、真实 Node Core smoke（9 项 PASS）；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量（build 后）1781 pass；S9-E 待实施 |
 | S10 | 未开始 | — | Node 构建/CI |
 | S11 | 未开始 | — | DI 收口 |
 | S12 | 未开始 | — | 结构重构 |

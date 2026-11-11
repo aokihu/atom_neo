@@ -32,6 +32,38 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。
 
 Gateway 为短时控制进程，不是 Gateway Server 启动模式。动作使用 `--action start|stop`；`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
 
+## HTTP 运行时选择
+
+Core/Gateway 的业务层只依赖 `HttpServer` 契约，传输由 `ATOM_HTTP_RUNTIME` 选择：
+
+| 条件 | 结果 |
+|------|------|
+| 未设置，存在 Bun 全局 | Bun adapter（默认，行为不变） |
+| 未设置，无 Bun 全局（Node） | Node adapter（`node:http` + `ws`） |
+| `ATOM_HTTP_RUNTIME=bun` | 强制 Bun；Node 下缺少 Bun 全局时启动失败并提示改用 `node` |
+| `ATOM_HTTP_RUNTIME=node` | 强制 Node adapter（spike 已验证 Bun 下也可运行） |
+| 其他值 | 启动失败：`Invalid ATOM_HTTP_RUNTIME "...": expected "bun" \| "node".` |
+
+入口 `src/main.ts` 在 Core/Core+Gateway/默认 TUI 启动路径中解析一次运行时并创建一个无状态 `HttpServer`，同一实例注入 `startCore` 与 `startGateway`。`--mode tui`、`--mode gateway` 控制、`--config`、`--wizard`、备份/导出/导入分支不创建适配器，也不加载 `ws`。适配器创建失败会进入既有 `shutdown()`，回滚已启动服务。
+
+Node 当前只是可选运行时；Node 构建入口、发布包与 CI 矩阵属于 S10，S9 不承诺 Node 发布支持。
+
+### 两阶段关闭
+
+`HttpServerHandle.stop(false)` 停止接收新连接并关闭空闲 keep-alive，保留正在处理的 HTTP 与 WebSocket；`stop(true)` 关闭 WebSocket 与活跃连接，并等待监听 socket 关闭。重复调用幂等，`stop(true)` 可升级已发起的 `stop(false)`。Core 与 Gateway 的 stop 顺序不变。
+
+Node 源码 smoke（Node >= 24，`ws` external）：
+
+```bash
+mkdir -p /tmp/atom-node-core-smoke/node_modules
+ln -sfn "$PWD/src/packages/shared/node_modules/ws" /tmp/atom-node-core-smoke/node_modules/ws
+bun build scripts/node-smoke/core-runtime.ts --target node --external ws \
+  --outfile /tmp/atom-node-core-smoke/core-runtime.mjs
+node /tmp/atom-node-core-smoke/core-runtime.mjs
+```
+
+覆盖 runtime 检测（无 Bun 全局时默认 `node`）、`/api/health`、TUI attach（`serverInfo.port` 为真实端口）、WS `session.ready` / `ping` → `pong`、`core.stop()` 与临时 sandbox 清理。
+
 ## 参数与配置
 
 保留 host、port、sandbox、config 和现有 log 参数。host/port 负责监听，core-server/core-port 负责连接。默认监听 3100；显式 `port=0` 由系统分配，连接端口必须为 1–65535；跨模式不适用参数在启动前拒绝。
@@ -48,7 +80,8 @@ Gateway 为短时控制进程，不是 Gateway Server 启动模式。动作使�
   ├─ gateway → 发现已有 Gateway → 认证 → 单个/全部操作 → 返回
   └─ 默认 / core / core-gateway
        → env/config → 日志 → 配置检查 → sandbox 初始化
-       → RuntimeService → ServiceManager.startAll
+       → RuntimeService → 解析 ATOM_HTTP_RUNTIME → 创建 HttpServer
+       → ServiceManager.startAll
        → startCore（Session/工具/任务/HookManager/HTTP/WS）
        → 默认：startTui；core：常驻；core-gateway：startGateway
 ```

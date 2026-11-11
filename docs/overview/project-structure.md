@@ -43,6 +43,7 @@ atom_neo/
 │
 ├── clients/                  # Optional platform client reference implementations
 ├── scripts/                  # Maintenance scripts (check-docs.ts, release helpers)
+│   └── node-smoke/           # Real Node smoke for the HTTP adapter and Core
 │
 └── docs/                     # Markdown docs + local renderer
     ├── index.md              # Documentation index
@@ -101,6 +102,14 @@ src/packages/shared/
 │   └── constants.ts
 ├── prompts/               # Prompt Registry + language/model variants
 ├── protocol.ts            # WebSocket protocol types
+├── http/                  # HttpServer contract + Bun/Node adapters
+│   ├── index.ts
+│   ├── types.ts
+│   ├── detect.ts          # ATOM_HTTP_RUNTIME resolution
+│   ├── create-http-server.ts
+│   ├── bun-http-server.ts
+│   ├── node-http-server.ts
+│   └── node-websocket-peer.ts
 ├── log/                   # Logger / sinks
 └── utils/
     ├── index.ts
@@ -125,7 +134,7 @@ src/packages/core/
 ├── package.json
 ├── tsconfig.json
 ├── index.ts              # Barrel exports
-├── server.ts             # startCore(): composition root + Bun.serve + lifecycle
+├── server.ts             # startCore(): composition root + lifecycle; transport via HttpServer
 ├── bootstrap.ts          # Constructs bus/queue/session/tools/MCP/schedule/pipeline/WS
 ├── pipeline-factory.ts   # Five pipeline builders + model/token/context resolution
 ├── task-lifecycle.ts     # Task Activated/Completed/Failed + chain/idle scheduling
@@ -292,6 +301,7 @@ src/packages/gateway/
 ├── src/
 │   ├── index.ts
 │   ├── server.ts
+│   ├── server.test.ts
 │   ├── config.ts
 │   ├── auth/
 │   │   └── secret.ts
@@ -360,7 +370,8 @@ src/packages/tui/
 
 ```text
 shared/
-  Dependencies: zod, string-width
+  Dependencies: zod, string-width, ws (Node adapter, dynamically imported)
+  Dev dependencies: @types/ws
   Depended on by: core, gateway, config-tui, tui, tui-kit
 
 core/
@@ -384,6 +395,16 @@ tui-kit/
   Dependencies: shared, react, @opentui/core, @opentui/react
   Depended on by: config-tui, tui
 ```
+
+### Node smoke scripts
+
+```text
+scripts/node-smoke/
+├── http-runtime.ts        # node:http + ws adapter contract smoke (S9-C)
+└── core-runtime.ts        # Core on Node: health/attach/WS/stop (S9-D)
+```
+
+Both scripts are bundled with `bun build --target node --external ws` and run under Node; commands are documented in [bootstrap.md](./bootstrap.md#http-运行时选择).
 
 ## 10. Runtime Directories
 

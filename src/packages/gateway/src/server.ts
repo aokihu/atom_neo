@@ -6,10 +6,6 @@ import { SECRET_HEADER } from "./auth/secret";
 import { ClientManager } from "./client-manager";
 import type { ActiveClient } from "./client-manager";
 
-const logHub = new LogHub();
-logHub.addSink(new StdoutSink());
-const logger = new Logger("info", (entry) => logHub.write(entry));
-
 type InboundMessage = {
   type: "message";
   platform: string;
@@ -26,11 +22,13 @@ type InboundEvent = {
 
 export type GatewayOverrides = Partial<GatewayConfig> & {
   adminToken?: string;
+  logger?: Logger;
   httpServer?: HttpServer;
 };
 
 export async function startGateway(configOverrides?: GatewayOverrides): Promise<{ port: number; stop: () => Promise<void> }> {
   const config = loadGatewayConfig(configOverrides);
+  const logger = configOverrides?.logger ?? new Logger("info", () => {});
   const httpServer = configOverrides?.httpServer ?? await createHttpServer();
   const cm = new ClientManager(config, logger);
   let stopping = false;
@@ -184,5 +182,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 if (import.meta.main) {
-  startGateway();
+  const logHub = new LogHub();
+  logHub.addSink(new StdoutSink());
+  const logger = new Logger("info", (entry) => logHub.write(entry));
+  startGateway({ logger });
 }

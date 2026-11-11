@@ -1,7 +1,8 @@
 import { localUrl, publishRuntimeFile, readRuntimeFile, readAttachToken } from "./bootstrap/runtime-file";
 import { statSync } from "node:fs";
-import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
-import type { LogLevel } from "@atom-neo/shared";
+import { fileURLToPath } from "node:url";
+import { Logger, StdoutSink, LogHub, FileSink, PipeSink, createHttpServer, resolveHttpRuntime } from "@atom-neo/shared";
+import type { HttpServer, LogLevel } from "@atom-neo/shared";
 import { VERSION } from "./version";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
@@ -194,15 +195,18 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     }
   })();
   try {
+    const runtimeKind = resolveHttpRuntime();
+    logger.info("http runtime selected", { runtime: runtimeKind });
+    const httpServer: HttpServer = await createHttpServer(runtimeKind);
     await sm.startAll();
     const { startCore } = await import("@atom-neo/core");
-    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION });
+    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer });
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {
       const { startGateway } = await import("@atom-neo/gateway");
       const gatewayToken = crypto.randomUUID();
-      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken });
+      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken, logger, httpServer });
       cleanupFiles.push(publishRuntimeFile(args.sandbox, "gateway", { url: localUrl("127.0.0.1", gateway.port), token: gatewayToken, instanceId: crypto.randomUUID() }));
     }
     const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };
@@ -234,6 +238,9 @@ async function attachTui(url: string, adminToken: string, continueSession: boole
   await startTui({ url, adminToken, historySandbox, sessionId: data.sessionId, serverInfo: data.serverInfo });
 }
 
-if (import.meta.main) {
+const metaMain = (import.meta as ImportMeta & { main?: boolean }).main;
+const isMain = metaMain ?? process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMain) {
   main().catch(error => { console.error(error instanceof Error ? error.message : error); process.exit(1); });
 }

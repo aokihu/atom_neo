@@ -41,6 +41,15 @@ Gateway 向 Core 提交创建信息 initiator={type:gateway,clientId,platform}�
 - Client 和 Gateway 之间通过 **HTTP API + Secret** 双向通信
 - Gateway **仅监听 127.0.0.1**，仅供本机 Client 子进程访问
 
+### 1.1 传输与日志
+
+Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packages/shared/src/http`）：
+
+- `startGateway` 接受可选 `httpServer`；未注入时按 `ATOM_HTTP_RUNTIME` 创建（默认 Bun，Node 可选）。`--mode core-gateway` 下 `src/main.ts` 注入与 Core 相同的无状态实例，两者各自 `serve` 不同端口。
+- Gateway 只注册 HTTP `fetch`，不注册 `upgrade` / `websocket`；不提供 `/ws/*`，升级请求按普通 HTTP 返回 404。
+- 模块级 logger 已移除，import 无日志副作用。未注入 `logger` 时为静默 `Logger`；`--mode core-gateway` 传入 `main.ts` 的 logger，因此 `--log*` 对 Gateway 生效。`if (import.meta.main)` 独立启动时才创建 stdout logger。
+- 两阶段关闭与 Core 一致：`handle.stop(false)` 停止接收，Gateway 清理 Clients 后 `handle.stop(true)` 关闭连接。路由、鉴权、状态码与返回结构不变。
+
 ## 2. 路由
 
 当前实现仅暴露一类路由，仅供 Client 子进程使用；新增管理接口见上节：
@@ -151,7 +160,7 @@ Gateway 启动
 
 Gateway 关闭
   ├── POST /command {"action":"stop"} → Client
-  └── server.stop()
+  └── handle.stop(false) → ClientManager.stopAll → handle.stop(true)
 ```
 
 ## 6. Client 二进制规范
@@ -202,7 +211,7 @@ Gateway 关闭
 - `"ignore"`：丢弃 Client 输出，减少生产环境日志噪音
 - 注意：**不是** Client 的 CLI 参数，属于 Gateway 内部进程管理配置
 
-环境变量：`GATEWAY_PORT`, `CORE_URL`
+环境变量：`GATEWAY_PORT`, `CORE_URL`；HTTP 传输选择使用 `ATOM_HTTP_RUNTIME`（`bun` / `node`）。
 
 ## 8. 文件
 
@@ -211,6 +220,7 @@ src/packages/gateway/
   src/
     index.ts                        barrel exports
     server.ts                       HTTP Server + 路由分发 + 消息中转
+    server.test.ts                  HttpServer / logger 注入测试
     config.ts                       Gateway 配置
     auth/
       secret.ts                     Secret 生成与验证

@@ -9,9 +9,15 @@ import type { HttpRuntime, HttpServer } from "./types";
 
 export async function createHttpServer(runtime: HttpRuntime = resolveHttpRuntime()): Promise<HttpServer> {
   if (runtime === "bun") {
+    if (typeof Bun === "undefined") {
+      throw new Error('Bun HTTP runtime requested but the Bun global is unavailable. Set ATOM_HTTP_RUNTIME=node to use the Node adapter.');
+    }
     const { createBunHttpServer } = await import("./bun-http-server");
     return createBunHttpServer();
   }
-  const { createNodeHttpServer } = await import("./node-http-server");
-  return createNodeHttpServer();
+  if (runtime === "node") {
+    const { createNodeHttpServer } = await import("./node-http-server");
+    return createNodeHttpServer();
+  }
+  throw new Error(`Invalid HTTP runtime "${String(runtime)}": expected "bun" | "node".`);
 }
