@@ -100,3 +100,6 @@
 | [code-review-2026-11-10.md](./code-review-2026-11-10/code-review-2026-11-10.md) | 全量代码审查：问题 ID、文件位置、当前/目标代码片段、验收标准 | 实施整改前必读 |
 | [code-review-graph-2026-11-10.md](./code-review-2026-11-10/code-review-graph-2026-11-10.md) | 审查关系图：包依赖、运行时流程、重复源、Provider、Node 运行时、阶段依赖 | 理解影响面 |
 | [code-review-plan-2026-11-10.md](./code-review-2026-11-10/code-review-plan-2026-11-10.md) | 整改计划：S0–S12 阶段、风险、依赖、验收与进度追踪 | 按阶段实施 |
+| [code-review-s9-2026-11-11.md](./code-review-2026-11-10/code-review-s9-2026-11-11.md) | S9 专项审查：HTTP/WS 运行时问题、Bun/Node 契约、代码片段与验收 | 实施 S9 前必读 |
+| [code-review-s9-graph-2026-11-11.md](./code-review-2026-11-10/code-review-s9-graph-2026-11-11.md) | S9 关系图：请求/升级生命周期、双 adapter、阶段依赖、风险热区 | 理解 S9 影响面 |
+| [code-review-s9-plan-2026-11-11.md](./code-review-2026-11-10/code-review-s9-plan-2026-11-11.md) | S9 实施计划：S9-A..E、spike、文件改动、测试矩阵、回滚与 DoD | 实施 S9 时使用 |

@@ -344,6 +344,8 @@ graph LR
 
 ## 7. Node / Bun 运行时策略
 
+> S9 的完整关系图与阶段依赖见 [code-review-s9-graph-2026-11-11.md](./code-review-s9-graph-2026-11-11.md)；本节保留全局运行时策略摘要。
+
 ### 当前
 
 ```mermaid

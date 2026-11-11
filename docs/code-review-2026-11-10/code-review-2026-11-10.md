@@ -1464,6 +1464,8 @@ export class SqliteDatabase {
 
 ### CR-RUN-06 — HTTP/WebSocket 运行时
 
+> S9 已单独成文：[问题与契约](./code-review-s9-2026-11-11.md)、[关系图](./code-review-s9-graph-2026-11-11.md)、[实施计划](./code-review-s9-plan-2026-11-11.md)。本节保留原始问题摘要。
+
 **当前**:
 
 ```ts
@@ -1789,4 +1791,6 @@ bun run scripts/check-file-headers.ts
 | 2026-11-11 | S4 实施完成：删除 JSX 文档站，新增 `marked` Markdown → HTML 服务；records 归档；Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；测试 1612 pass / 21 skip / 0 fail（源码 916）；版本 1.22.5 |
 | 2026-11-11 | S5 实施完成：新增 `@atom-neo/tui-kit` 统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；`tui`/`config-tui` 删除副本；typecheck/build 6/6，测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |
 | 2026-11-11 | S6 实施完成：`EVENTS` 单一事件目录；`BusEvents`/`WsMessages`/事件映射/协议联合派生；`conversation.chain/idle` envelope 修复；新增 `TaskSubmissionService` 统一 HTTP/WS 提交；TUI 改为 typed `ServerEvent` 路由；`protocol.md`/`pipeline-dev.md` 对齐；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
-| 2026-11-11 | S8 实施完成：`server.ts` 拆为 `bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行，行为与路由/回滚/MCP 停止顺序不变；新增路由与 Task.Completed 回滚测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1717 pass / 21 skip / 0 fail（源码 969） |
+| 2026-11-11 | S7 实施完成：`protocol` 配置与 Provider 工厂、Provider options 策略、provider-aware Prompt 语言、AgentsCompiler 模型解析、API Key 隔离；四 Provider fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
+| 2026-11-11 | S8 实施完成：`server.ts` 拆为 `bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行，行为与路由/回滚/MCP 停止顺序不变；新增路由与 Task.Completed 回滚测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
+| 2026-11-11 | S9 专项文档完成：拆分 S9-A..E，新增问题清单、关系图与实施计划三份文档；未改动 `src/`，S9-A..E 待实施 |

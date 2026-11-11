@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: 计划已锁定，尚未实施源码改动。
+> **状态**: S0–S8 已完成；S9 已拆分并完成文档，S9-A..E 待实施。
 
 ---
 
@@ -54,7 +54,7 @@
 | S6 | 事件与任务提交统一 | 中 | 3–4 天 | S1 | CR-DUP-08, CR-COR-10, CR-ARCH-15 |
 | S7 | 多 Provider 抽象 | 中–高 | 4–6 天 | S3 | CR-PRO-01..06 |
 | S8 | 拆分 `server.ts` | 高 | 4–6 天 | S6/S7 | CR-ARCH-13, CR-STR-02 |
-| S9 | HTTP/WS 运行时统一 + Node 入口 | 极高 | 5–8 天 | S2/S8 | CR-RUN-06, CR-ARCH-04 |
+| S9 | HTTP/WS 运行时统一 + Node 入口 | 极高 | 6–9 天 | S2/S8 | CR-RUN-06, CR-ARCH-04 |
 | S10 | Node 构建/测试/发布 | 高 | 4–6 天 | S9 | CR-RUN-07 |
 | S11 | 全局状态/DI 收口 | 极高 | 5–8 天 | S3/S10 | CR-ARCH-01..09 |
 | S12 | 巨型文件与 TUI 结构重构 | 极高 | 8–12 天 | S7/S11 | CR-STR-01..11, CR-DUP-11/12 |
@@ -344,23 +344,28 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **目标**：Core/Gateway 在 Node 下正式启动，并保留 Bun 支持。
 
-**任务清单**：
+> **S9 已拆分并单独成文**：
+> - [code-review-s9-2026-11-11.md](./code-review-s9-2026-11-11.md) — 问题、当前/目标代码、契约
+> - [code-review-s9-graph-2026-11-11.md](./code-review-s9-graph-2026-11-11.md) — 运行时关系、双实现、阶段依赖、风险热区
+> - [code-review-s9-plan-2026-11-11.md](./code-review-s9-plan-2026-11-11.md) — S9-A..E 实施计划、测试、回滚、DoD
 
-- [ ] 定义自有类型：`HttpServer`、`WebSocketPeer`、`RequestContext`。
-- [ ] S0 方案 A：统一 `node:http` + `ws`。
-- [ ] S0 方案 B：Bun `Bun.serve` + Node `node:http/ws` 双实现。
-- [ ] 替换 `Bun.serve`、`srv.upgrade`、`srv.requestIP`、`ServerWebSocket`。
-- [ ] `shared/utils/admin-auth.ts` 使用 `RequestContext.ip`。
-- [ ] Gateway 使用同一 `HttpServer`（无 WS）。
-- [ ] 新增 Node 入口（`main.node.ts` 或运行时检测）。
-- [ ] 保持现有 WS 协议、断线、session 路由、admin token 行为。
+**子阶段**：
+
+| 子阶段 | 主题 | 风险 | 依赖 |
+|---|---|---|---|
+| S9-A | 契约/类型 + `ws` on Bun spike | 低 | S8 |
+| S9-B | Bun Adapter（行为不变） | 中 | S9-A |
+| S9-C | Node Adapter（Node 可选） | 高 | S9-A/B |
+| S9-D | Node 入口与运行时选择 | 中–高 | S9-C |
+| S9-E | 双运行时验收与清理 | 中 | S9-A..D |
 
 **验收**：
-- Bun/Node 同一组 WS 协议测试。
-- Node 启动 Core、health、attach、一次 fake conversation。
-- Gateway start/stop。
+- Bun/Node 同一组 HTTP/WS 契约测试通过。
+- Node 启动 Core、health、attach、一次 fake conversation；Gateway start/stop。
+- 不设 `ATOM_HTTP_RUNTIME` 时 Bun 默认行为不变。
+- HTTP 路由、状态码、WS 消息、admin token、Task/Event 契约不变。
 
-**风险/回滚**：极高；独立 PR，保留旧 `Bun.serve` 入口直到 Node 测试通过。
+**风险/回滚**：极高；每子阶段独立 commit；保留 Bun adapter 作为行为回滚点，Node 出问题不影响默认路径。
 
 ---
 
@@ -579,7 +584,7 @@ bun run scripts/check-file-headers.ts
 | S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
-| S9 | 未开始 | — | Node HTTP/WS |
+| S9 | 已拆分，待实施 | — | 文档完成：S9-A 契约/spike、S9-B Bun Adapter、S9-C Node Adapter、S9-D Node 入口、S9-E 双运行时验收；详见 `code-review-s9-2026-11-11.md` / `code-review-s9-graph-2026-11-11.md` / `code-review-s9-plan-2026-11-11.md` |
 | S10 | 未开始 | — | Node 构建/CI |
 | S11 | 未开始 | — | DI 收口 |
 | S12 | 未开始 | — | 结构重构 |
