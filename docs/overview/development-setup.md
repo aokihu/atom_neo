@@ -61,6 +61,9 @@ bun run typecheck
 # Node production-source typecheck (tsconfig.node.json, types: ["node"])
 bun run typecheck:node
 
+# Node platform + release artifact smokes (Node >= 26)
+bun run smoke:node
+
 # Run all tests
 bun test
 
@@ -212,9 +215,59 @@ Build details:
   creating the renderer: Bun registers the plugin, Node skips the import
   entirely. Importing the TUI modules under Node therefore no longer throws.
 
-CI is not wired in S10-A. S10-B owns the full Node smoke suite (config/memory/
-shell/glob/schedule/conversation), the CI matrix, release packaging, and the
-workspace publish strategy.
+S10-B1 adds the platform and release artifact smokes in section 7.3. CI is still
+not wired; S10-B2 owns the CI matrix, release packaging, `main`/`exports`/`bin`/
+`files`, the `workspace:*` publish strategy, and the version bump.
+
+---
+
+### 7.3 Node platform and release artifact smoke (S10-B1)
+
+`smoke:node` rebuilds `dist/node/main.js`, runs the S10-A build check, then runs
+the platform and release artifact smokes under actual Node >= 26. It finishes
+with the existing fake conversation smoke.
+
+```bash
+# Full sequence: build:node + build check + platform + release + conversation
+bun run smoke:node
+
+# Individual subsets
+bun run smoke:node:platform   # platform bundle only; does not need dist/node
+bun run smoke:node:release    # rebuilds dist/node, then checks the artifact
+```
+
+Platform coverage (`scripts/node-smoke/platform.ts`, bundled with
+`bun build --target node`):
+
+- **config**: writes `config.json`, `.env` and `.atom/runtime-config.json` into a
+  temp sandbox, calls the real `loadEnv`/`loadConfig` path, and asserts env
+  loading, default config creation, user/runtime overlay merge, effective
+  provider protocol/models and profile values.
+- **memory FTS5**: real `MemoryService` on `node:sqlite`, saves two nodes,
+  searches through FTS5 with hit and non-hit assertions, and verifies the
+  database handle is closed after `stop()`.
+- **shell**: real `BackgroundShellService` (`node:child_process`) runs `printf`,
+  asserts exit code 0 and stdout, then stops the service.
+- **glob**: real glob tool (`node:fs/promises` glob) matches files in a temp
+  sandbox and respects the tool's `path` scope.
+- **schedule**: real `ScheduleService` creates delay and cron tasks, asserts
+  list/persist/restore behavior, then stops both instances.
+
+Release coverage (`scripts/node-smoke/release.ts`):
+
+- Uses the built `dist/node/main.js`, never a source bundle.
+- Creates a temp sandbox with `config.json`, `.env`, `AGENTS.md` and
+  `.atom/installed`, then starts
+  `node dist/node/main.js --mode core --port 0 --host 127.0.0.1 --sandbox <temp>`
+  with `ATOM_HTTP_RUNTIME=node`.
+- Asserts `.atom/core-runtime.json`, `/api/health` 200, `/api/tui/attach` 200
+  with a session id and real `serverInfo.port`, WebSocket `session.ready` plus
+  `ping` → `pong`, SIGTERM exit code 0, runtime-file cleanup and temp cleanup.
+- Fails clearly when `dist/node/main.js` is missing; run `bun run build:node` or
+  `bun run smoke:node:release` first. The smoke itself never builds the artifact.
+
+The platform smoke has a 45 s watchdog and the release smoke a 60 s watchdog.
+Both print `PASS ...` lines and exit non-zero on the first failure.
 
 ---
 
@@ -320,8 +373,8 @@ git push origin feature/my-feature
 
 ## 12. CI Setup (GitHub Actions)
 
-> S10-A only prepares the local Node commands. The CI matrix below is the target
-> for S10-B and is not wired in this repository yet.
+> S10-A/S10-B1 prepare the local Node build and smoke commands. The CI matrix
+> below is the target for S10-B2 and is not wired in this repository yet.
 
 ```yaml
 # .github/workflows/ci.yml
@@ -343,6 +396,7 @@ jobs:
       - run: bun run build
       - run: bun run build:node
       - run: node dist/node/main.js --help
+      - run: bun run smoke:node
 ```
 
 ---

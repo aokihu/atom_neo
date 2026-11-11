@@ -368,6 +368,9 @@ src/packages/tui/
     "build": "bun run --workspaces build",
     "build:bin": "bun build ./src/main.ts --compile --outfile dist/atom --target bun",
     "build:node": "bun build ./src/main.ts --target node --outdir ./dist/node --external '@opentui/*'",
+    "smoke:node": "bun run scripts/node-smoke/run-all.ts",
+    "smoke:node:platform": "bun run scripts/node-smoke/run-all.ts platform",
+    "smoke:node:release": "bun run scripts/node-smoke/run-all.ts release",
     "docs": "bun run docs/server.ts",
     "docs:check": "bun run scripts/check-docs.ts",
     "docs:typecheck": "tsc -p tsconfig.docs.json"
@@ -430,10 +433,13 @@ scripts/node-smoke/
 ├── core-runtime.ts        # Core on Node: health/attach/WS/stop (S9-D)
 ├── core-conversation.ts   # Node fake model -> conversation task completed (S9-E)
 ├── cross-runtime.ts       # Bun client -> Node Core entry bundle (S9-E)
-└── build.ts               # S10-A: dist/node artifact + --help + bun-import + TUI import smoke
+├── build.ts               # S10-A: dist/node artifact + --help + bun-import + TUI import smoke
+├── platform.ts            # S10-B1: config/env + memory FTS5 + shell + glob + schedule
+├── release.ts             # S10-B1: built dist/node/main.js health/attach/WS/SIGTERM
+└── run-all.ts             # S10-B1: smoke:node orchestrator
 ```
 
-The three Node scripts are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. `build.ts` runs under Bun, executes its checks under Node, and requires `bun run build:node` first. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional) and [development-setup.md](./development-setup.md#72-node-build-and-tui-import-guard-s10-a).
+The S9 Node scripts (`http-runtime.ts`, `core-runtime.ts`, `core-conversation.ts`) are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. `build.ts` runs under Bun, executes its checks under Node, and requires `bun run build:node` first. `platform.ts` is bundled for Node and uses only temp sandboxes. `release.ts` runs under Bun but starts the built `dist/node/main.js` artifact under Node; it never builds the artifact itself. `run-all.ts` wires `smoke:node` (build check + platform + release + conversation), `smoke:node:platform` and `smoke:node:release`. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional), [development-setup.md](./development-setup.md#72-node-build-and-tui-import-guard-s10-a) and [development-setup.md](./development-setup.md#73-node-platform-and-release-artifact-smoke-s10-b1).
 
 ### Node build output
 
