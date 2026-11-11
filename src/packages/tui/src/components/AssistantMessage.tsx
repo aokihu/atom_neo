@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import type { Message } from "../types";
 import { SyntaxStyle } from "@opentui/core";
 import { fmtTime, formatDuration } from "./format";

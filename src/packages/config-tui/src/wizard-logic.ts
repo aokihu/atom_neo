@@ -5,7 +5,6 @@ import {
   DEFAULT_THEME,
   OPENROUTER_JEV,
   PROVIDERS,
-  THEME_NAMES,
   isThemeName,
   parseEnv,
   parsePortValue,
@@ -16,7 +15,6 @@ import type { DecisionModes, ProviderType, ThinkingMode } from "@atom-neo/shared
 
 export { DEFAULT_DECISION_MODES, DEFAULT_PROFILES, OPENROUTER_JEV, PROVIDERS } from "@atom-neo/shared";
 export type { DecisionModes, ProviderType, ThinkingMode } from "@atom-neo/shared";
-export const THEMES = THEME_NAMES;
 
 // ─── Types ────────────────────────────────────────────────────────────────
 

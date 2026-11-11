@@ -239,15 +239,15 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-DUP-01/02`：新建 `@atom-neo/tui-kit` 工作区包：
+- [x] `CR-DUP-01/02`：新建 `@atom-neo/tui-kit` 工作区包：
   - 主题清单 + `ThemeProvider/useTheme/ThemeContext`。
-  - `Modal`、`ModalActionBar`、`types`、`ListModal`、`SelectableRow`、`FieldInput`。
-- [ ] `tui` 与 `config-tui` 改为依赖 `tui-kit`，删除副本。
-- [ ] `CR-ARCH-05`：ThemeContext 从 `tui/components/App.tsx` 移出。
-- [ ] 修 Modal 状态 bug：`selectedIndex` 重置、Tab/←/→ 互斥。
-- [ ] `config-tui` `commit()` 保留未知 `tui` 字段。
-- [ ] 给 `@atom-neo/tui` 补 `zustand` 依赖。
-- [ ] 统一 Modal 术语、SelectableRow 模板。
+  - `Modal`、`ModalActionBar`、`types`、`SelectableRow`、`FieldInput`（`ListModal` 未新增，Modal 列表模式已覆盖）。
+- [x] `tui` 与 `config-tui` 改为依赖 `tui-kit`，删除副本。
+- [x] `CR-ARCH-05`：ThemeContext 从 `tui/components/App.tsx` 移出。
+- [x] 修 Modal 状态 bug：`selectedIndex` 重置、Tab/←/→ 互斥。
+- [x] `config-tui` `commit()` 保留未知 `tui` 字段。
+- [x] 给 `@atom-neo/tui` 补 `zustand` 依赖。
+- [x] 统一 Modal 术语、SelectableRow 模板。
 
 **验收**：
 - 两包交互/快照测试。
@@ -568,7 +568,7 @@ bun run scripts/check-file-headers.ts
 | S2 | 已完成 | — | CR-RUN-01..05（非 Server）全部处理；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；新增 `string-width`、`croner`；Node smoke 通过；版本 1.22.2；剩余 `Bun.serve`/`Bun.Server` 待 S9 |
 | S3 | 已完成 | — | 共享配置契约、env/原子写/helpers、类型收口；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
 | S4 | 已完成 | — | Markdown → HTML 服务；删除 JSX 文档站；records 归档与 Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；版本 1.22.5 |
-| S5 | 未开始 | — | TUI kit |
+| S5 | 已完成 | — | 新增 `@atom-neo/tui-kit`：统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；两包删除副本；typecheck 6/6、build 6/6、测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |
 | S6 | 未开始 | — | 事件/提交 |
 | S7 | 未开始 | — | Provider |
 | S8 | 未开始 | — | server 拆分 |

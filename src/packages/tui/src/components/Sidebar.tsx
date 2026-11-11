@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useKeyboard } from "@opentui/react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { useChatStore } from "../stores/chat";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { ScheduleBar } from "./ScheduleBar";
 import { EmptyState } from "./EmptyState";
 

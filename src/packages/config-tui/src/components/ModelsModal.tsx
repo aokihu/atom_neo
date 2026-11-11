@@ -2,8 +2,7 @@ import { useState } from "react";
 import { PROVIDER_TYPES } from "@atom-neo/shared";
 import { useKeyboard } from "@opentui/react";
 import { Modal } from "../modal";
-import { FieldInput } from "./FieldInput";
-import { useTheme } from "../theme";
+import { FieldInput, SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import { addModel, removeModelAt, parseContextLimit, isDecisionEndpoint } from "../wizard-logic";
 import type { ProviderEdit, ProviderType, ThinkingMode } from "../wizard-logic";
 
@@ -131,15 +130,9 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
         hint="↑/↓ select · Enter continue · Esc back"
       >
         <box flexDirection="column">
-          {THINKING_LABELS.map((t, i) => {
-            const isSelected = t.value === draftThinking;
-            return (
-              <box key={t.value} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>
-                <text fg={isSelected ? colors.text.bright : colors.text.secondary} width={2}>{isSelected ? "▸" : " "}</text>
-                <text fg={isSelected ? colors.accent.brand : colors.text.primary}>{t.label}</text>
-              </box>
-            );
-          })}
+          {THINKING_LABELS.map(t => (
+            <SelectableRow key={t.value} selected={t.value === draftThinking} label={t.label} />
+          ))}
         </box>
       </Modal>
     );
@@ -178,18 +171,14 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
       hint="↑/↓ select · Enter edit · d delete · Esc back"
     >
       <box flexDirection="column">
-        {items.map((m, i) => {
-          const isSelected = i === selected;
-          const isAdd = m === "__add__";
-          return (
-            <box key={m} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>
-              <text fg={isSelected ? colors.text.bright : colors.text.secondary} width={2}>{isSelected ? "▸" : " "}</text>
-              <text fg={isSelected ? colors.accent.brand : isAdd ? colors.text.muted : colors.text.primary}>
-                {isAdd ? "➕ Add model..." : m}
-              </text>
-            </box>
-          );
-        })}
+        {items.map((m, i) => (
+          <SelectableRow
+            key={m}
+            selected={i === selected}
+            label={m === "__add__" ? "➕ Add model..." : m}
+            muted={m === "__add__"}
+          />
+        ))}
       </box>
     </Modal>
   );

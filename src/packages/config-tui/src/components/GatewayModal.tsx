@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../modal";
-import { FieldInput } from "./FieldInput";
+import { FieldInput } from "@atom-neo/tui-kit";
 import { parsePort } from "../wizard-logic";
 
 export function GatewayModal({ port, onSubmit, onBack }: {

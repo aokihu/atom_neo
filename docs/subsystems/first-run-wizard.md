@@ -38,7 +38,8 @@ src/main.ts (主进程)
 ## 2. Package 结构
 
 > Provider 预设、默认模型档位与主题名清单由 `@atom-neo/shared` 的 `config/`
-> 统一提供；本包只保留向导 UI 与 pending 状态机。
+> 统一提供；主题、Modal 与表单/列表行原语来自 `@atom-neo/tui-kit`。
+> 本包只保留向导 UI 与 pending 状态机。
 
 ```
 src/packages/config-tui/
@@ -49,15 +50,9 @@ src/packages/config-tui/
     ├── app.tsx             # startWizard：渲染器生命周期 + Ctrl+C/D(EOF) 退出语义
     ├── wizard-logic.ts     # 单一文件：types + pending 状态机 + commit + load + 解析器
     ├── wizard-logic.test.ts
-    ├── theme.tsx           # 自持主题（8 套配色 + ThemeProvider/useTheme）
-    ├── modal/              # 自持 Modal 原语（列表导航 + 操作栏 + Esc 关闭）
-    │   ├── Modal.tsx
-    │   ├── ModalActionBar.tsx
-    │   ├── types.ts
-    │   └── index.ts
+    ├── modal/index.tsx     # 薄包装：tui-kit Modal + chrome="bordered"
     └── components/
         ├── WizardApp.tsx      # 编排：状态机 + 视图栈 + 退出确认（纯色背景）
-        ├── FieldInput.tsx     # Modal 内单行表单输入（Enter 提交 / Esc 取消）
         ├── MenuModal.tsx      # 一级菜单：左详情 + 右列表（describeSelection 纯函数）
         ├── ProvidersModal.tsx # provider 列表 + 新增
         ├── ApiKeyModal.tsx    # API Key（明文，仅写入 .env）

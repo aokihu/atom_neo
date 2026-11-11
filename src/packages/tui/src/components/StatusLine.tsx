@@ -1,6 +1,6 @@
 import { useTerminalDimensions } from "@opentui/react";
 import { BounceBarSpinner } from "./BounceBarSpinner";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { useChatStore } from "../stores/chat";
 
 interface StatusLineProps {

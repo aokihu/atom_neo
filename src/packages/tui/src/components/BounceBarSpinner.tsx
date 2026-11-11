@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 
 type RGB = [number, number, number];
 

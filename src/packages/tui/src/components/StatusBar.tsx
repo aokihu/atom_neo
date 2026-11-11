@@ -1,6 +1,6 @@
 import { useTerminalDimensions } from "@opentui/react";
 import type { ServerInfo } from "../types";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 
 interface StatusBarProps {
   serverInfo: ServerInfo;

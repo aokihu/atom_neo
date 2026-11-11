@@ -6,7 +6,7 @@
 
 ## 概览
 
-`Modal` 是位于 `src/packages/tui/src/components/modal/` 的可复用浮层组件，独立于 chat store，UI 状态由调用方（当前为 `components/App.tsx`）局部持有。它在屏幕上以绝对定位覆盖整个终端区域，并通过全局键盘订阅接管按键，打开期间底部 `InputBar` 释放焦点。
+`Modal` 是位于 `src/packages/tui-kit/src/modal/` 的可复用浮层组件，由 `@atom-neo/tui`（聊天界面）与 `@atom-neo/config-tui`（配置向导）共享。它独立于 chat store，UI 状态由调用方局部持有。它在屏幕上以绝对定位覆盖整个终端区域，并通过全局键盘订阅接管按键，打开期间底部 `InputBar` 释放焦点。
 
 ```
 ┌──────────────────────────────────────────────┐  ← 全屏 overlay (zIndex 1000)
@@ -25,12 +25,19 @@
 
 ## 组件构成
 
+实现位于 `src/packages/tui-kit/src/modal/`：
+
 | 文件 | 职责 |
 |------|------|
-| `types.ts` | 类型定义：`ModalProps` / `ModalAction` / `ModalPlacement` 等 |
-| `Modal.tsx` | 主组件：定位计算、键盘订阅、布局渲染 |
+| `types.ts` | 类型定义：`ModalProps` / `ModalAction` / `ModalPlacement` / `ModalChrome` 等 |
+| `Modal.tsx` | 主组件：定位计算、键盘订阅、布局渲染、`hint` / `chrome` |
 | `ModalActionBar.tsx` | 底部按钮条，按 `selectedIndex` 高亮当前选项 |
 | `index.ts` | 统一导出入口 |
+
+两个使用方只保留薄包装：
+
+- `src/packages/tui/src/components/modal/index.ts` 直接 re-export `@atom-neo/tui-kit`（兼容既有 `./modal` 导入）。
+- `src/packages/config-tui/src/modal/index.tsx` 包装 `Modal` 并固定 `chrome="bordered"`，保持向导的边框外观。
 
 ## API — `ModalProps`
 
@@ -56,6 +63,11 @@
 | `selectedListIndex` | `number?` | 列表模式：当前选中项下标（受控，默认 `0`） |
 | `onListNavigate` | `(index) => void` | 列表模式：↑/↓ 导航回调（已自动环绕） |
 | `onListActivate` | `(index) => void` | 列表模式：Enter 激活当前项回调 |
+| `interactive` | `boolean` | 默认 `true`；为 `false` 时忽略 Modal 键盘（表单自行处理按键） |
+| `titlePadding` | `number` | 标题内边距，默认 `1` |
+| `contentPaddingX` | `number` | 内容水平内边距，默认 `1` |
+| `hint` | `string?` | 在 ActionBar 下方渲染的灰色提示行 |
+| `chrome` | `"plain" \| "bordered"` | 默认 `plain`（聊天 TUI 无边框）；`bordered` 为配置向导的单线边框样式 |
 
 ### `ModalAction`
 
@@ -132,19 +144,23 @@ Modal 有两种交互模式，由是否传入 `listLength` 决定：
 | `Tab` / `→` | 选中下一个可用 Action（跳过 `disabled`） |
 | `←` | 选中上一个可用 Action |
 
-**列表模式（传入 `listLength` 时，命令面板等）**
+**列表模式（传入 `listLength` 时，菜单/选择器）**
 
 | 按键 | 行为 |
 |------|------|
 | `Esc` | 调用 `onClose` |
-| `↑` / `↓` | `onListNavigate(下标)`，自动环绕 |
-| `Enter` | `onListActivate(当前下标)` |
+| `↑` / `↓` | `onListNavigate(下标)`，自动环绕，并把焦点交回列表 |
+| `Enter` | 列表焦点时 `onListActivate(当前下标)`；ActionBar 焦点时 `onAction` |
+| `Tab` / `→` / `←` | 先把焦点移到 ActionBar，**不移动列表选择** |
+| ActionBar 已聚焦时 `←` / `→` / `Tab` | 循环 Action（跳过 `disabled`） |
 
-> 列表模式优先于 ActionBar：传入 `listLength` 后 ↑/↓/Enter 走列表回调；此时通常不再传 `actions`。
+> 列表模式与 ActionBar 可同时存在：首次 `Tab`/`←`/`→` 只切换焦点，之后左右键才在 Action 之间移动，避免一次按键同时改变列表与按钮选择。
 
 **焦点模型**：Modal 不依赖元素焦点，而是使用 `@opentui/react` 的全局 `useKeyboard` 钩子订阅按键。打开期间 `App` 给 `InputBar` 传入 `disabled`，使底部 `textarea` `focused={false}`，从而不抢按键、不响应提交。
 
-初始选中项规则（`findInitialIndex`，仅 ActionBar 模式）：`defaultActionKey` → 首个 `confirm`/`primary` → 首个未禁用项。
+**状态重置**：`open` 变为 `true`、`defaultActionKey` 变化或 Action 集合变化时，`selectedIndex` 会重置为 `findInitialIndex` 的结果；打开/关闭都会清除 ActionBar 焦点。
+
+初始选中项规则（`findInitialIndex`）：`defaultActionKey` → 首个 `confirm`/`primary` → 首个未禁用项。
 
 ## 命令面板（Command Palette）
 
@@ -184,6 +200,7 @@ const modalActions: ModalAction[] = [
 ## 设计约束
 
 - Modal 状态属 UI 状态，放在 `App.tsx` 局部，**不进 chat store**。
+- 主题、Modal、表单/列表行组件统一由 `@atom-neo/tui-kit` 提供；`tui` 与 `config-tui` 不再各自维护调色板或 Modal 实现。
 - **布局间距以 1 个单位为基准**：面板底部/两侧内边距为 1、`paddingTop={0}`（标题贴紧顶部边框）；标题用底部分隔线紧贴文字，内容无额外内边距，避免间距叠加。
 - 复用现有 `theme.colors`，不引入新颜色体系。
 - 当前命令菜单由 `InputBar` 内联复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。`CommandPalette` 尚未接线。

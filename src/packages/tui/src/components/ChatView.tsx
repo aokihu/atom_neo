@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useChatStore } from "../stores/chat";
 import { MessageBubble } from "./MessageBubble";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { ThinkingSpinner } from "./ThinkingSpinner";
 import type { Message, ToolGroupMessage } from "../types";
 

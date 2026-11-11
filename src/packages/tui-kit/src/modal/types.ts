@@ -17,6 +17,9 @@ export type ModalActionRole = "confirm" | "cancel" | "destructive";
 
 export type ModalActionVariant = "normal" | "primary" | "danger";
 
+/** `plain` is the chat TUI look; `bordered` is the config wizard look. */
+export type ModalChrome = "plain" | "bordered";
+
 export interface ModalAnchorRect {
   x: number;
   y: number;
@@ -58,7 +61,11 @@ export interface ModalProps {
   selectedListIndex?: number;
   onListNavigate?: (index: number) => void;
   onListActivate?: (index: number) => void;
+  /** When false, the modal ignores all keyboard input (forms drive keys via their textarea). */
   interactive?: boolean;
   titlePadding?: number;
   contentPaddingX?: number;
+  /** Optional helper line rendered below the action bar. */
+  hint?: string;
+  chrome?: ModalChrome;
 }

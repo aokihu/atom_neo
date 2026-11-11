@@ -3,11 +3,10 @@ import { TextAttributes } from "@opentui/core";
 import { DEFAULT_THEME, THEME_NAMES } from "@atom-neo/shared";
 import { Modal } from "./modal";
 import type { ModalAction } from "./modal";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import type { ServerInfo } from "../types";
 
 const PROFILE_LEVELS = ["advanced", "balanced", "basic", "fast"] as const;
-const THEMES = THEME_NAMES;
 const THINKING_OPTIONS = ["disabled", "enabled", "adaptive"];
 const MAX_TOKEN_OPTIONS = [2048, 4096, 8192, 16384];
 
@@ -99,7 +98,7 @@ export function SettingsModal({ open, url, adminToken, serverInfo, onSaved, onCl
         label: `MODEL (${level})`,
         options: level === "fast" ? modelOptions(config, true) : options,
       })),
-      { key: "theme" as RowKey, label: "TUI THEME", options: [...THEMES] },
+      { key: "theme" as RowKey, label: "TUI THEME", options: [...THEME_NAMES] },
       { key: "thinking" as RowKey, label: "THINKING", options: THINKING_OPTIONS },
       { key: "maxTokens" as RowKey, label: "MAX OUTPUT TOKENS", options: MAX_TOKEN_OPTIONS.map(String) },
     ];

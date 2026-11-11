@@ -1,4 +1,4 @@
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 
 export function PanelTitle({
   title,

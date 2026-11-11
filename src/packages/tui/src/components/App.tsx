@@ -1,11 +1,10 @@
-import { createContext, useContext, useMemo, useEffect, useCallback, useState } from "react";
+import { useMemo, useEffect, useCallback, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useChat } from "../hooks/useChat";
 import type { ChatClientError } from "../hooks/useChat";
 import { useChatStore } from "../stores/chat";
-import { getTheme } from "../theme";
-import type { ServerInfo, ThemeColors, Message, ToolGroupMessage } from "../types";
-import { SyntaxStyle } from "@opentui/core";
+import { ThemeProvider, getTheme } from "@atom-neo/tui-kit";
+import type { ServerInfo, Message, ToolGroupMessage } from "../types";
 import { StatusBar } from "./StatusBar";
 import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
@@ -51,12 +50,6 @@ const ERROR_MODAL_ACTIONS: ModalAction[] = [
 const TOOL_MODAL_ACTIONS: ModalAction[] = [
   { key: "close", label: "Close", role: "confirm", variant: "primary" },
 ];
-
-type ThemeCtx = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
-
-const ThemeContext = createContext<ThemeCtx>(getTheme());
-
-export function useTheme() { return useContext(ThemeContext); }
 
 const HELP_TEXT = `Available commands:
   /quit     Exit Atom Neo
@@ -124,7 +117,7 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
     : "";
 
   return (
-    <ThemeContext.Provider value={theme}>
+    <ThemeProvider value={theme}>
       <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
         <StatusBar serverInfo={serverInfo} />
         <box flexDirection="row" flexGrow={1} overflow="hidden">
@@ -207,6 +200,6 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
           onClose={closeModal}
         />
       </box>
-    </ThemeContext.Provider>
+    </ThemeProvider>
   );
 }

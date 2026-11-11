@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import type { KeyEvent } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useTheme } from "../App";
+import { useTheme } from "../theme";
 import { ModalActionBar } from "./ModalActionBar";
 import type { ModalAction, ModalAnchorPoint, ModalProps } from "./types";
 
@@ -36,6 +36,21 @@ function findInitialIndex(actions: ModalAction[], defaultActionKey?: string) {
   return firstEnabled >= 0 ? firstEnabled : 0;
 }
 
+const actionSignature = (actions: ModalAction[]) =>
+  actions.map(action => `${action.key}:${action.disabled ? 1 : 0}`).join("|");
+
+/**
+ * Shared Modal.
+ *
+ * Keymap:
+ * - always: Esc closes.
+ * - list mode (`listLength` > 0):
+ *   Up/Down navigate the list; Enter activates the list item;
+ *   Tab/Left/Right focus the action bar without moving the list selection;
+ *   once focused, Left/Right/Tab cycle actions and Enter triggers the action.
+ * - non-list mode:
+ *   Tab/Right select the next action, Left the previous one, Enter triggers it.
+ */
 export function Modal({
   open,
   title,
@@ -57,24 +72,36 @@ export function Modal({
   selectedListIndex = 0,
   onListNavigate,
   onListActivate,
-    interactive = true,
-    titlePadding = 1,
-    contentPaddingX = 1,
-  }: ModalProps) {
+  interactive = true,
+  titlePadding = 1,
+  contentPaddingX = 1,
+  hint,
+  chrome = "plain",
+}: ModalProps) {
   const { colors } = useTheme();
   const { width: screenWidth, height: screenHeight } = useTerminalDimensions();
+  const bordered = chrome === "bordered";
+  const isList = listLength != null && listLength > 0;
+  const actionsKey = useMemo(() => actionSignature(actions), [actions]);
 
-  const initialIndex = useMemo(
-    () => findInitialIndex(actions, defaultActionKey),
-    [actions, defaultActionKey],
-  );
-  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
+  const [selectedIndex, setSelectedIndex] = useState(() => findInitialIndex(actions, defaultActionKey));
   const [actionFocus, setActionFocus] = useState(false);
 
-  useEffect(() => { if (!open) setActionFocus(false); }, [open]);
+  // Reopening or changing the action set restores the configured default action.
+  useEffect(() => {
+    setActionFocus(false);
+    if (open) setSelectedIndex(findInitialIndex(actions, defaultActionKey));
+  }, [open, actionsKey, defaultActionKey]);
 
   const boxWidth = clamp(width, 20, Math.max(20, screenWidth - 4));
-  const boxHeight = height;
+  const centeredTop = bordered
+    ? Math.max(1, Math.floor(screenHeight / 4))
+    : Math.floor(screenHeight / 3);
+  const boxHeight = height == null
+    ? undefined
+    : bordered
+      ? clamp(height, 6, Math.max(6, screenHeight - centeredTop - 2))
+      : height;
   const offsetX = offset?.x ?? 0;
   const offsetY = offset?.y ?? 0;
 
@@ -100,10 +127,11 @@ export function Modal({
     }
 
     const fallbackX = Math.floor((screenWidth - panelWidth) / 2);
+    if (bordered) return { left: Math.max(0, fallbackX), top: centeredTop, width: panelWidth };
     if (placement === "top") return { left: fallbackX, top: 2, width: panelWidth };
     if (placement === "bottom") return { left: fallbackX, bottom: 2, width: panelWidth };
     return { left: fallbackX, top: Math.floor(screenHeight / 3), width: panelWidth };
-  }, [anchorRect, anchorPosition, modalPosition, matchAnchorWidth, offsetX, offsetY, placement, boxWidth, boxHeight, screenWidth, screenHeight]);
+  }, [anchorRect, anchorPosition, modalPosition, matchAnchorWidth, offsetX, offsetY, placement, boxWidth, boxHeight, bordered, centeredTop, screenWidth, screenHeight]);
 
   const moveSelection = useCallback((direction: 1 | -1) => {
     if (actions.length === 0) return;
@@ -131,37 +159,41 @@ export function Modal({
       return;
     }
 
-    if (listLength != null && listLength > 0) {
-      if (event.name === "up") {
+    if (isList) {
+      if (event.name === "up" || event.name === "down") {
         setActionFocus(false);
-        onListNavigate?.((selectedListIndex - 1 + listLength) % listLength);
+        const delta = event.name === "up" ? -1 : 1;
+        onListNavigate?.((selectedListIndex + delta + listLength) % listLength);
         return;
       }
-      if (event.name === "down") {
-        setActionFocus(false);
-        onListNavigate?.((selectedListIndex + 1) % listLength);
+      if (event.name === "return" || event.name === "enter") {
+        if (actionFocus) triggerSelected();
+        else onListActivate?.(selectedListIndex);
         return;
       }
-      if ((event.name === "return" || event.name === "enter") && !actionFocus) {
-        onListActivate?.(selectedListIndex);
-        return;
+      if (event.name === "tab" || event.name === "right" || event.name === "left") {
+        if (actions.length === 0) return;
+        if (!actionFocus) {
+          setActionFocus(true);
+          return;
+        }
+        moveSelection(event.name === "left" ? -1 : 1);
       }
+      return;
     }
 
     if (event.name === "tab" || event.name === "right") {
-      if (actions.length > 0) setActionFocus(true);
-      if (listLength == null || listLength === 0 || event.name === "right") moveSelection(1);
+      moveSelection(1);
       return;
     }
     if (event.name === "left") {
-      if (actions.length > 0) setActionFocus(true);
       moveSelection(-1);
       return;
     }
     if (event.name === "return" || event.name === "enter") {
       triggerSelected();
     }
-  }, [open, interactive, listLength, selectedListIndex, actionFocus, onListNavigate, onListActivate, actions.length, moveSelection, triggerSelected, onClose]);
+  }, [open, interactive, isList, listLength, selectedListIndex, actionFocus, onListNavigate, onListActivate, actions.length, moveSelection, triggerSelected, onClose]);
 
   useKeyboard(handleKeyDown);
 
@@ -181,13 +213,16 @@ export function Modal({
         {...layout}
         height={boxHeight}
         flexDirection="column"
+        border={bordered ? true : undefined}
+        borderStyle={bordered ? "single" : undefined}
+        borderColor={bordered ? colors.border.default : undefined}
         paddingTop={0}
         paddingBottom={1}
         paddingX={1}
         backgroundColor={colors.bg.popup}
       >
         {title && (
-          <box padding={titlePadding}>
+          <box {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
             <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>
               {title}
             </text>
@@ -199,8 +234,13 @@ export function Modal({
         <ModalActionBar
           actions={actions}
           selectedIndex={selectedIndex}
-          focused={listLength == null || listLength === 0 || actionFocus}
+          focused={!isList || actionFocus}
         />
+        {hint && (
+          <box paddingTop={1}>
+            <text fg={colors.text.muted}>{hint}</text>
+          </box>
+        )}
       </box>
     </box>
   );

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { THEME_NAMES } from "@atom-neo/shared";
 import { Modal } from "../modal";
-import { useTheme } from "../theme";
+import { SelectableRow, useTheme } from "@atom-neo/tui-kit";
 
 export function ThemeModal({ theme, onSubmit, onBack }: {
   theme: string;
@@ -24,16 +24,14 @@ export function ThemeModal({ theme, onSubmit, onBack }: {
       hint="↑/↓ select · Enter choose · Esc back"
     >
       <box flexDirection="column">
-        {THEME_NAMES.map((t, i) => {
-          const isSelected = i === selected;
-          return (
-            <box key={t} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>
-              <text fg={isSelected ? colors.text.bright : colors.text.secondary} width={2}>{isSelected ? "▸" : " "}</text>
-              <text fg={isSelected ? colors.accent.brand : colors.text.primary}>{t}</text>
-              {t === theme && <text fg={colors.text.muted}>  (current)</text>}
-            </box>
-          );
-        })}
+        {THEME_NAMES.map((t, i) => (
+          <SelectableRow
+            key={t}
+            selected={i === selected}
+            label={t}
+            trailing={t === theme ? <text fg={colors.text.muted}>  (current)</text> : undefined}
+          />
+        ))}
       </box>
     </Modal>
   );

@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { TextAttributes } from "@opentui/core";
 import type { KeyBinding, KeyEvent, TextareaRenderable } from "@opentui/core";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { useInputHistory } from "../stores/inputHistory";
 import { useChatStore } from "../stores/chat";
 import { CommandMenu, CMDS, matchCommands } from "./CommandMenu";

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { TextAttributes } from "@opentui/core";
 import type { ScrollBoxRenderable } from "@opentui/core";
 

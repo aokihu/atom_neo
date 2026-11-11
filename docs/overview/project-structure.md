@@ -28,7 +28,8 @@ atom_neo/
 │       ├── core/             # Core HTTP + WebSocket server, task engine, pipelines
 │       ├── config-tui/       # OpenTUI wizard: first-run setup + config editor
 │       ├── gateway/          # Platform client gateway (secret auth + client manager)
-│       └── tui/              # Terminal UI application (chat)
+│       ├── tui/              # Terminal UI application (chat)
+│       └── tui-kit/          # Shared theme + Modal + form/list primitives
 │
 ├── tests/                    # Cross-package/e2e tests
 ├── sandbox/                  # Runtime workspace directory (gitignored)
@@ -238,16 +239,16 @@ src/packages/config-tui/
     ├── index.ts              # export { startWizard }
     ├── app.tsx               # startWizard: OpenTUI renderer lifecycle
     ├── wizard-logic.ts       # Pending state machine / commit / load / parsers
-    ├── theme.tsx             # ThemeProvider + palettes
-    ├── modal/                # Self-contained Modal primitives
+    ├── modal/index.tsx       # Bordered wrapper over @atom-neo/tui-kit Modal
     └── components/           # WizardApp / Menu / Provider / Model / Theme / Confirm
 ```
 
 The wizard runs as a subprocess launched by `src/main.ts` (`--wizard` early-exit
 branch) and by `src/bootstrap/first-run.ts` via shared `spawnProcess`.
-It consumes shared config presets (`@atom-neo/shared`) but does not import the
-chat TUI or Core. It participates in the root `bun run --workspaces build`
-contract with `typecheck: tsc --noEmit` and `build: tsc`.
+It consumes shared config presets (`@atom-neo/shared`), shared theme/Modal
+primitives (`@atom-neo/tui-kit`), and does not import the chat TUI or Core.
+It participates in the root `bun run --workspaces build` contract with
+`typecheck: tsc --noEmit` and `build: tsc`.
 
 ### Workspace Dependency Version Policy
 
@@ -257,7 +258,25 @@ one compatible version line. The current baseline is `ai` 7.0.79 with
 Workspace manifests may declare these dependencies directly, but must not
 introduce a second major or minor line.
 
-## 5. Package: `gateway`
+## 5. Package: `tui-kit`
+
+```text
+src/packages/tui-kit/
+├── package.json
+├── tsconfig.json
+└── src/
+    ├── index.ts              # Theme, Modal, FieldInput, SelectableRow exports
+    ├── theme.tsx             # Single palette source + ThemeProvider/useTheme/getTheme
+    ├── modal/                # Modal / ModalActionBar / types
+    └── components/
+        ├── FieldInput.tsx    # Single-line modal form field
+        └── SelectableRow.tsx # Shared ▸ + selected-background list row
+```
+
+Shared by `@atom-neo/tui` and `@atom-neo/config-tui`. The package has no Core or
+runtime dependency; it only imports `@atom-neo/shared`, OpenTUI, and React.
+
+## 6. Package: `gateway`
 
 ```text
 src/packages/gateway/
@@ -273,7 +292,7 @@ src/packages/gateway/
 │       └── index.ts
 ```
 
-## 6. Package: `tui`
+## 7. Package: `tui`
 
 ```text
 src/packages/tui/
@@ -282,8 +301,7 @@ src/packages/tui/
 ├── src/
 │   ├── index.ts
 │   ├── app.tsx                 # TUI entrypoint / renderer lifecycle
-│   ├── theme.ts                # Theme palettes + syntax style
-│   ├── types.ts                # View-model types
+│   ├── types.ts                # View-model types (re-exports theme types)
 │   ├── client/
 │   │   └── ws-client.ts        # WebSocket event client
 │   ├── hooks/
@@ -300,23 +318,24 @@ src/packages/tui/
 │       ├── RuntimeSidebar.tsx
 │       ├── SettingsModal.tsx
 │       ├── ToolMessageBox.tsx
-│       └── modal/              # Modal / ModalActionBar / types
+│       └── modal/              # Local barrel re-exporting @atom-neo/tui-kit
 ```
 
-## 7. Workspace Root
+## 8. Workspace Root
 
 ```json
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.5",
+  "version": "1.22.6",
   "engines": { "node": ">=24", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
     "src/packages/config-tui",
     "src/packages/gateway",
-    "src/packages/tui"
+    "src/packages/tui",
+    "src/packages/tui-kit"
   ],
   "scripts": {
     "dev": "bun run src/main.ts --sandbox ./sandbox ...",
@@ -330,19 +349,19 @@ src/packages/tui/
 }
 ```
 
-## 8. Package Dependencies
+## 9. Package Dependencies
 
 ```text
 shared/
   Dependencies: zod, string-width
-  Depended on by: core, gateway, config-tui, tui
+  Depended on by: core, gateway, config-tui, tui, tui-kit
 
 core/
   Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/mcp, @toon-format/toon, croner, zod
   Depended on by: (none, loaded by main.ts)
 
 config-tui/
-  Dependencies: shared, @opentui/core, @opentui/react, react
+  Dependencies: shared, tui-kit, @opentui/core, @opentui/react, react
   Depended on by: (none, launched as subprocess/early-exit by main.ts)
 
 gateway/
@@ -350,11 +369,15 @@ gateway/
   Depended on by: (none, standalone service)
 
 tui/
-  Dependencies: shared, react, zustand, @opentui/core, @opentui/react
+  Dependencies: shared, tui-kit, react, zustand, @opentui/core, @opentui/react
   Depended on by: (none, standalone application)
+
+tui-kit/
+  Dependencies: shared, react, @opentui/core, @opentui/react
+  Depended on by: config-tui, tui
 ```
 
-## 9. Runtime Directories
+## 10. Runtime Directories
 
 ```text
 sandbox/                        # 工作目录（--sandbox 或默认 CWD）

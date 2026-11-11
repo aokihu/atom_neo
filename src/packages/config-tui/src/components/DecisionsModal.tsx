@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
-import { useTheme } from "../theme";
+import { useTheme } from "@atom-neo/tui-kit";
 import { DEFAULT_DECISION_MODES } from "../wizard-logic";
 import type { DecisionModes, WizardState } from "../wizard-logic";
 

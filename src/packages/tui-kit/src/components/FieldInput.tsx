@@ -19,8 +19,8 @@ export function FieldInput({ label, value, placeholder, error, onSubmit, onCance
   const taRef = useRef<TextareaRenderable>(null);
 
   useEffect(() => {
-    taRef.current?.setText(value);
-  }, []);
+    if (taRef.current && taRef.current.plainText !== value) taRef.current.setText(value);
+  }, [value]);
 
   const handleKeyDown = (event: KeyEvent) => {
     if (event.name === "escape") onCancel();

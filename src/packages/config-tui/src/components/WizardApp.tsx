@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
-import { ThemeProvider, useTheme } from "../theme";
+import { ThemeProvider, useTheme } from "@atom-neo/tui-kit";
 import { buildInitialState, beginEdit, beginNewProvider, updatePendingApiKey, finalizeEdit, collectModelIds, commit } from "../wizard-logic";
 import type { WizardMode, WizardState, PendingEdit, DecisionModes } from "../wizard-logic";
 import { MenuModal } from "./MenuModal";

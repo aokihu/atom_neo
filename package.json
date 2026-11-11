@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.22.5",
+  "version": "1.22.6",
   "engines": {
     "node": ">=24",
     "bun": ">=1.4"
@@ -10,7 +10,8 @@
     "src/packages/core",
     "src/packages/config-tui",
     "src/packages/gateway",
-    "src/packages/tui"
+    "src/packages/tui",
+    "src/packages/tui-kit"
   ],
   "scripts": {
     "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
@@ -35,6 +36,7 @@
     "@atom-neo/gateway": "workspace:*",
     "@atom-neo/shared": "workspace:*",
     "@atom-neo/tui": "workspace:*",
+    "@atom-neo/tui-kit": "workspace:*",
     "@heroui/react": "^3.2.4",
     "@heroui/styles": "^3.2.4",
     "@opentui/core": "0.5.8",

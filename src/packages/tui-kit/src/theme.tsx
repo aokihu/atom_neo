@@ -1,6 +1,24 @@
-import { SyntaxStyle, RGBA } from "@opentui/core";
-import { DEFAULT_THEME } from "@atom-neo/shared";
-import type { ThemeColors, ThemeName } from "./types";
+import { createContext, useContext, useMemo } from "react";
+import type { ReactNode } from "react";
+import { RGBA, SyntaxStyle } from "@opentui/core";
+import { DEFAULT_THEME, isThemeName } from "@atom-neo/shared";
+import type { ThemeName } from "@atom-neo/shared";
+
+export { DEFAULT_THEME };
+
+export type { ThemeName };
+
+export type ThemeColors = {
+  bg: { page: string; codeBlock: string; input: string; popup: string };
+  border: { default: string };
+  decoration: { subtle: string };
+  text: { muted: string; secondary: string; primary: string; bright: string; medium: string };
+  accent: { brand: string };
+  code: { red: string; cyan: string; blue: { light: string }; purple: string; orange: string };
+  status: { success: string; warning: string; error: string };
+};
+
+export type ThemeValue = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
 
 export const THEMES: Record<ThemeName, ThemeColors> = {
   "edex": {
@@ -77,9 +95,9 @@ export const THEMES: Record<ThemeName, ThemeColors> = {
   },
 };
 
-export function getTheme(name: ThemeName = DEFAULT_THEME): { colors: ThemeColors; syntaxStyle: SyntaxStyle } {
-  const c = THEMES[name] ?? THEMES[DEFAULT_THEME];
-  return { colors: c, syntaxStyle: buildSyntaxStyle(c) };
+export function getTheme(name: string = DEFAULT_THEME): ThemeValue {
+  const colors = isThemeName(name) ? THEMES[name] : THEMES[DEFAULT_THEME];
+  return { colors, syntaxStyle: buildSyntaxStyle(colors) };
 }
 
 function c(hex: string) { return RGBA.fromHex(hex); }
@@ -122,4 +140,23 @@ function buildSyntaxStyle(t: ThemeColors): SyntaxStyle {
     "punctuation.delimiter": { fg: c(t.text.medium) },
     default:               { fg: c(t.text.primary) },
   });
+}
+
+const ThemeContext = createContext<ThemeValue>(getTheme());
+
+type ThemeProviderProps =
+  | { theme: string; value?: never; children: ReactNode }
+  | { theme?: never; value: ThemeValue; children: ReactNode };
+
+/** Provide either a theme name (`theme`) or a precomputed TUI value (`value`). */
+export function ThemeProvider(props: ThemeProviderProps) {
+  const resolved = useMemo(
+    () => props.value ?? getTheme(props.theme ?? DEFAULT_THEME),
+    [props.value, props.theme],
+  );
+  return <ThemeContext.Provider value={resolved}>{props.children}</ThemeContext.Provider>;
+}
+
+export function useTheme(): ThemeValue {
+  return useContext(ThemeContext);
 }

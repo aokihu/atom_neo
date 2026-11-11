@@ -1,5 +1,5 @@
 import { Modal } from "../modal";
-import { FieldInput } from "./FieldInput";
+import { FieldInput } from "@atom-neo/tui-kit";
 
 export function ProjectModal({ value, onSubmit, onBack }: {
   value: string;

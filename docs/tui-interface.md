@@ -135,5 +135,5 @@ src/packages/tui/src/components/Sidebar.tsx
 src/packages/tui/src/components/ToolMessageBox.tsx
 src/packages/tui/src/components/InputBar.tsx
 src/packages/tui/src/components/StatusLine.tsx
-src/packages/tui/src/theme.ts
+src/packages/tui-kit/src/theme.tsx
 ```

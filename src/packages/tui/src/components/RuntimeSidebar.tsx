@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Message, ToolPhase } from "../types";
 import { useChatStore } from "../stores/chat";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { EmptyState } from "./EmptyState";
 import {
   buildNormalizedStreamActivity,

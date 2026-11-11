@@ -532,12 +532,12 @@ export interface ModalAnchorRect { x: number; y: number; width: number; height: 
 
 ### CR-DUP-02 — 8 套主题调色板与主题名列表重复 5 处
 
-**位置**:
-- `src/packages/tui/src/theme.ts:4-77`
-- `src/packages/config-tui/src/theme.tsx:12-77`
-- `src/packages/tui/src/types.ts:1-19`
-- `src/packages/tui/src/components/SettingsModal.tsx:9-12`
-- `src/packages/config-tui/src/wizard-logic.ts:80-89`
+**位置**（S5 后已收敛到 tui-kit）:
+- `src/packages/tui-kit/src/theme.tsx`（原 `tui/src/theme.ts`，唯一调色板来源）
+- config-tui 旧 `theme.tsx`（S5 已删除）
+- `src/packages/tui/src/types.ts`（改为 re-export）
+- `src/packages/tui/src/components/SettingsModal.tsx`（改用 `THEME_NAMES`）
+- `src/packages/config-tui/src/wizard-logic.ts`（主题名来自 `@atom-neo/shared`）
 
 **当前**:
 
@@ -1717,8 +1717,8 @@ const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "ll
 | `server.tsx` | ~280 | CR-DOC-01 | 删除/替换 |
 | `components/*` | — | CR-DOC-01 | 删除 |
 | `shared.ts` | — | CR-DOC-01 | 删除 |
-| `src/packages/tui/src/theme.ts` | ~150 | CR-DUP-02 | 移入 tui-kit |
-| `src/packages/config-tui/src/theme.tsx` | ~100 | CR-DUP-02 | 删除副本 |
+| `src/packages/tui-kit/src/theme.tsx` | ~150 | CR-DUP-02 | 已移入 tui-kit（S5） |
+| config-tui 旧 `theme.tsx` | ~100 | CR-DUP-02 | 已删除（S5） |
 | `src/packages/tui/src/components/modal/*` | ~300 | CR-DUP-01, CR-ARCH-05 | 移入 tui-kit |
 | `src/packages/config-tui/src/modal/*` | ~250 | CR-DUP-01 | 删除副本 |
 
@@ -1787,3 +1787,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-10 | S2 实施完成（非 Server）：CR-RUN-01..05；`Bun.write/env/argv/sleep/stringWidth/main/spawn/Glob/cron`、`bun:sqlite` 全部迁移；新增 `string-width`、`croner`；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；版本 1.22.2 |
 | 2026-11-11 | S3 实施完成：共享配置契约、env/原子写/helpers、Skill/MemoryKind/Todo 类型收口；`config-tui`/`gateway` 使用 shared；删除顶层 `theme`；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
 | 2026-11-11 | S4 实施完成：删除 JSX 文档站，新增 `marked` Markdown → HTML 服务；records 归档；Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；测试 1612 pass / 21 skip / 0 fail（源码 916）；版本 1.22.5 |
+| 2026-11-11 | S5 实施完成：新增 `@atom-neo/tui-kit` 统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；`tui`/`config-tui` 删除副本；typecheck/build 6/6，测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |

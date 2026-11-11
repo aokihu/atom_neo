@@ -1,6 +1,6 @@
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
-import { useTheme } from "../theme";
+import { useTheme } from "@atom-neo/tui-kit";
 import type { WizardState } from "../wizard-logic";
 import { describeDecisions } from "./DecisionsModal";
 

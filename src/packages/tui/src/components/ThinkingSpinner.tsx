@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { BounceBarSpinner } from "./BounceBarSpinner";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 
 export const ThinkingSpinner = memo(function ThinkingSpinner() {
   const { colors } = useTheme();
