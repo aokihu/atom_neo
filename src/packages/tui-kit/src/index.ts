@@ -15,3 +15,4 @@ export type {
 } from "./modal";
 export { FieldInput } from "./components/FieldInput";
 export { SelectableRow } from "./components/SelectableRow";
+export { ensureBunRuntimePluginSupport } from "./runtime-plugin-support";

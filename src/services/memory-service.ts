@@ -101,7 +101,7 @@ export class MemoryService extends BaseService {
 
     const candidates = [...ranks.keys()]
       .map((id) => this.#loadNode(id))
-      .filter(Boolean)
+      .filter((node): node is MemoryNode => node !== null)
       .filter((node) => !this.#isSuperseded(node.id))
       .filter((node) => {
         if (terms.length < 5) return true;

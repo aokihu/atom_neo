@@ -10,7 +10,8 @@
 ```text
 atom_neo/
 ├── package.json              # Workspace root
-├── tsconfig.json             # Base TypeScript config
+├── tsconfig.json             # Shared/base TypeScript config (no runtime types)
+├── tsconfig.node.json        # Node production-source typecheck (types: ["node"])
 ├── tsconfig.docs.json        # Docs-only typecheck config
 ├── .gitignore
 ├── .env.example              # Template for sandbox/.env
@@ -43,8 +44,8 @@ atom_neo/
 │
 ├── clients/                  # Optional platform client reference implementations
 ├── scripts/                  # Maintenance scripts (check-docs.ts, release helpers)
-│   └── node-smoke/           # Real Node smoke for the HTTP adapter and Core
-│
+│   ├── node-smoke/           # Real Node smoke: adapters, Core, TUI import, build
+│   └── types/                # Exact type shims for Bun-only modules (Node typecheck)
 └── docs/                     # Markdown docs + local renderer
     ├── index.md              # Documentation index
     ├── package.json          # Scope marker: type=module for Node ESM
@@ -107,7 +108,8 @@ src/packages/shared/
 │   ├── types.ts
 │   ├── detect.ts          # ATOM_HTTP_RUNTIME resolution
 │   ├── create-http-server.ts
-│   ├── bun-http-server.ts
+│   ├── bun-http-server.ts # Bun-only; Node typecheck uses bun-http-server.node.ts via moduleSuffixes
+│   ├── bun-http-server.node.ts # Type-only Node shim (excluded from shared build)
 │   ├── node-http-server.ts
 │   └── node-websocket-peer.ts
 ├── log/                   # Logger / sinks
@@ -282,6 +284,7 @@ src/packages/tui-kit/
 ├── tsconfig.json
 └── src/
     ├── index.ts              # Theme, Modal, FieldInput, SelectableRow exports
+    ├── runtime-plugin-support.ts # Bun-only OpenTUI plugin guard
     ├── theme.tsx             # Single palette source + ThemeProvider/useTheme/getTheme
     ├── modal/                # Modal / ModalActionBar / types
     └── components/
@@ -291,6 +294,8 @@ src/packages/tui-kit/
 
 Shared by `@atom-neo/tui` and `@atom-neo/config-tui`. The package has no Core or
 runtime dependency; it only imports `@atom-neo/shared`, OpenTUI, and React.
+It also owns `ensureBunRuntimePluginSupport()`, the guarded Bun-only OpenTUI
+runtime-plugin registration used by both TUI entrypoints.
 
 ## 6. Package: `gateway`
 
@@ -345,6 +350,7 @@ src/packages/tui/
 {
   "name": "atom-neo",
   "version": "1.22.11",
+  "type": "module",
   "engines": { "node": ">=26", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
@@ -358,13 +364,33 @@ src/packages/tui/
     "dev": "bun run src/main.ts --sandbox ./sandbox ...",
     "test": "bun test",
     "typecheck": "bun run --workspaces typecheck",
+    "typecheck:node": "tsc -p tsconfig.node.json",
     "build": "bun run --workspaces build",
+    "build:bin": "bun build ./src/main.ts --compile --outfile dist/atom --target bun",
+    "build:node": "bun build ./src/main.ts --target node --outdir ./dist/node --external '@opentui/*'",
     "docs": "bun run docs/server.ts",
     "docs:check": "bun run scripts/check-docs.ts",
     "docs:typecheck": "tsc -p tsconfig.docs.json"
   }
 }
 ```
+
+### TypeScript configurations
+
+| Config | Runtime types | Scope |
+|---|---|---|
+| `tsconfig.json` | none (shared base) | Base compiler options inherited by all configs |
+| `tsconfig.node.json` | `["node"]` | Production `src/**/*.ts(x)`; excludes tests, `dist`, and the Bun HTTP adapter |
+| `tsconfig.docs.json` | `["bun"]` | `docs/**/*.ts` + `scripts/check-docs.ts` |
+| `src/packages/*/tsconfig.json` | `["bun"]` | Per-workspace Bun typecheck/build |
+
+`tsconfig.node.json` deliberately does not weaken `types`. Bun-only production
+code is isolated by path instead: `bun-http-server.ts` resolves to the type-only
+`bun-http-server.node.ts` through `moduleSuffixes: [".node", ""]`, and the
+OpenTUI runtime-plugin entry maps to `scripts/types/opentui-runtime-plugin-support.d.ts`.
+This keeps both the Bun adapter and `@types/bun` out of the Node program.
+Runtime detection uses `hasBunRuntime()` from `@atom-neo/shared` instead of
+referencing the `Bun` global directly.
 
 ## 9. Package Dependencies
 
@@ -403,10 +429,23 @@ scripts/node-smoke/
 ├── http-runtime.ts        # node:http + ws adapter contract smoke (S9-C)
 ├── core-runtime.ts        # Core on Node: health/attach/WS/stop (S9-D)
 ├── core-conversation.ts   # Node fake model -> conversation task completed (S9-E)
-└── cross-runtime.ts       # Bun client -> Node Core entry bundle (S9-E)
+├── cross-runtime.ts       # Bun client -> Node Core entry bundle (S9-E)
+└── build.ts               # S10-A: dist/node artifact + --help + bun-import + TUI import smoke
 ```
 
-The three Node scripts are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional).
+The three Node scripts are bundled with `bun build --target node --external ws` and run under Node; `cross-runtime.ts` runs under Bun and builds the Node entry itself. `build.ts` runs under Bun, executes its checks under Node, and requires `bun run build:node` first. Commands are documented in [development-setup.md](./development-setup.md#71-node-runtime-smoke-optional) and [development-setup.md](./development-setup.md#72-node-build-and-tui-import-guard-s10-a).
+
+### Node build output
+
+```text
+dist/                           # gitignored
+├── atom                        # Bun compiled binary (`bun run build:bin`)
+└── node/
+    └── main.js                 # Node bundle (`bun run build:node`)
+```
+
+`build:node` keeps `@opentui/*` external and bundles `ws`; `build:bin` remains
+the Bun single-file compile path and is unchanged.
 
 ## 10. Runtime Directories
 

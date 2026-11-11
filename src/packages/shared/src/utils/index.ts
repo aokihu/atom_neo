@@ -12,3 +12,4 @@ export { writeFileAtomic } from "./fs";
 export type { WriteFileAtomicOptions } from "./fs";
 export { createId } from "./id";
 export { clamp, parsePortValue } from "./number";
+export { hasBunRuntime } from "./runtime";

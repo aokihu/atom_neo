@@ -210,7 +210,7 @@ export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";
 export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
-export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, stringWidth, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms, parseEnv, parseEnvEntries, parseEnvKeys, serializeEnv, upsertEnv, mergeEnv, writeFileAtomic, createId, clamp, parsePortValue } from "./utils";
+export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, stringWidth, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms, parseEnv, parseEnvEntries, parseEnvKeys, serializeEnv, upsertEnv, mergeEnv, writeFileAtomic, createId, clamp, parsePortValue, hasBunRuntime } from "./utils";
 export type { EnvEntry, WriteFileAtomicOptions } from "./utils";
 
 // ── Constants ──

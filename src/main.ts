@@ -1,5 +1,6 @@
 import { localUrl, publishRuntimeFile, readRuntimeFile, readAttachToken } from "./bootstrap/runtime-file";
 import { statSync } from "node:fs";
+import type { LogWarningsFunction } from "ai";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink, createHttpServer, resolveHttpRuntime } from "@atom-neo/shared";
 import type { HttpServer, LogLevel } from "@atom-neo/shared";
 import { VERSION } from "./version";
@@ -19,7 +20,7 @@ import { formatMenuCommand, MenuFlow } from "./bootstrap/menu-flow";
 import { readMenuHistory, saveMenuHistory } from "./bootstrap/menu-history";
 
 declare global {
-  var AI_SDK_LOG_WARNINGS: boolean;
+  var AI_SDK_LOG_WARNINGS: LogWarningsFunction | false | undefined;
 }
 
 function isFifo(path: string): boolean {

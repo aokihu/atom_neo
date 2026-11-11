@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: S0–S9 已完成；S10 待实施。
+> **状态**: S0–S9 已完成；S10-A（Node 构建/类型检查边界）已完成，S10-B 待实施。
 
 ---
 
@@ -395,6 +395,30 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 - CI 双运行时绿。
 - 发布包不含 `bun:` 导入。
 
+**S10-A 实施记录（2026-11-11，仅构建/类型检查边界）**：
+
+- [x] 根 `tsconfig.json` 保持共享基础配置（不含 `types`）；新增 `tsconfig.node.json`：
+  `types: ["node"]`、`noEmit`，仅生产源码，排除 `*.test.ts(x)`、`dist` 与
+  `shared/src/http/bun-http-server.ts`。Bun adapter 通过
+  `moduleSuffixes: [".node", ""]` 在 Node 配置中解析为
+  `bun-http-server.node.ts` 类型 shim；`@opentui/react/runtime-plugin-support`
+  映射到 `scripts/types/` shim。`tsc --listFiles` 确认 Node program 不含
+  `bun-types` 或真实 Bun adapter。
+- [x] 新增 `typecheck:node`；workspace `typecheck`（`types: ["bun"]`）不变。
+- [x] 新增 `build:node`：`bun build src/main.ts --target node --outdir dist/node --external '@opentui/*'`；
+  `ws` 选择 bundle；`build:bin` 不变。
+- [x] TUI/Config-TUI 的 `@opentui/react/runtime-plugin-support` 改为
+  `@atom-neo/tui-kit` 的 `ensureBunRuntimePluginSupport()` 守卫：Bun 注册插件，
+  Node 跳过导入。
+- [x] 新增 `scripts/node-smoke/build.ts`：`dist/node/main.js` 存在、`--help` 退出 0、
+  无静态 `bun:` 导入、TUI 入口在 Node 下可导入。
+- 验证：`typecheck` 6/6、`typecheck:node` 0 error、源码测试 1001 pass / 21 skip /
+  0 fail、全量 1781 pass / 21 skip / 0 fail、`build` 6/6、`build:node` 2.96 MB、
+  Node smoke 5/5 PASS、`docs:check`/`docs:typecheck` 通过；`build:bin` 与 Node 26
+  `--help` 复验通过。
+- [ ] S10-B：config/memory/shell/glob/schedule/conversation smoke、CI 矩阵、
+  发布包/`main`/`exports`、`workspace:*` 发布策略、版本 bump。
+
 **风险/回滚**：高；构建/发布独立，可先保留 Bun 发布。
 
 ---
@@ -587,7 +611,7 @@ bun run scripts/check-file-headers.ts
 | S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
 | S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；1.22.11 起 Node 支持下限 26；保留双 adapter，S10 再评估统一 |
-| S10 | 未开始 | — | Node 构建/CI |
+| S10 | 进行中（S10-A 完成） | — | S10-A：`tsconfig.node.json`/`typecheck:node`、`build:node` → `dist/node/main.js`、Node TUI import guard、Node build smoke；S10-B（完整 smoke/CI/发布）未开始 |
 | S11 | 未开始 | — | DI 收口 |
 | S12 | 未开始 | — | 结构重构 |
 

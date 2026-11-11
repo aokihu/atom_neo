@@ -1,13 +1,14 @@
-import "@opentui/react/runtime-plugin-support";
 import { createCliRenderer } from "@opentui/core";
 import type { KeyEvent } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import React from "react";
+import { ensureBunRuntimePluginSupport } from "@atom-neo/tui-kit";
 import { WizardApp } from "./components/WizardApp";
 import type { WizardMode } from "./wizard-logic";
 
 /** Launch the standalone OpenTUI wizard (first-run setup or config editor). */
-export function startWizard(sandboxPath: string, mode: WizardMode): Promise<boolean> {
+export async function startWizard(sandboxPath: string, mode: WizardMode): Promise<boolean> {
+  await ensureBunRuntimePluginSupport();
   return new Promise<boolean>((resolve, reject) => {
     let settled = false;
     let completed = false;

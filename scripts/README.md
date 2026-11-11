@@ -1,6 +1,7 @@
 # Scripts
 
 - `context-cache-smoke.ts`: existing context cache smoke test.
+- `node-smoke/build.ts`: S10-A Node build smoke (`dist/node/main.js`, `--help`, static Bun imports, TUI import under Node). Requires `bun run build:node`.
 - `continuation-evidence-experiment.ts`: fixed-corpus native JEV comparisons and parameter ablation; reads credentials from environment, records bounded business evidence and native choices without credentials. Supports --replay for frozen corpora, --holdout for screening and --gate for new scenarios.
 - `bump-prompt-version.ts`, `pre-commit`, `setup-git-hooks.sh`: prompt version and Git hook maintenance.
 
