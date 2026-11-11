@@ -9,10 +9,18 @@ const PLATFORM_PROMPTS: Record<string, PromptKey> = {
 
 export class ApplySourceContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #contextService: ContextService;
+  #providerModel: string;
 
-  constructor(params: { contextService: ContextService; name?: string; kind?: string; bus?: any }) {
+  constructor(params: {
+    contextService: ContextService;
+    providerModel?: string;
+    name?: string;
+    kind?: string;
+    bus?: any;
+  }) {
     super({ name: params.name ?? "apply-source-context", kind: "transform", bus: params.bus as any });
     this.#contextService = params.contextService;
+    this.#providerModel = params.providerModel ?? "deepseek/deepseek-v4-pro";
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
@@ -22,7 +30,7 @@ export class ApplySourceContextElement extends BaseElement<ConversationFlowState
     const key = PLATFORM_PROMPTS[platform];
     if (!key) return input;
 
-    const instructions = resolvePrompt(key);
+    const instructions = resolvePrompt(key, this.#providerModel);
     if (!instructions) return input;
 
     this.#contextService.put({

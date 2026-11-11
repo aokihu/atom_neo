@@ -156,7 +156,6 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   initAtomDir(args.sandbox);
   initAgentsMd(args.sandbox);
 
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
   // TUI-only admin token: config endpoints reject any caller without it (gateway/clients never receive it)
   const remoteAdminToken = process.env.ATOM_ADMIN_TOKEN?.trim();
   const adminToken = remoteAdminToken || crypto.randomUUID();
@@ -167,7 +166,6 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     port: args.port,
     host: args.host,
     sandbox: args.sandbox,
-    apiKey,
     config: loaded,
   });
 

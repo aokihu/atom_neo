@@ -1,5 +1,5 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
 import { callLLM } from "../../shared";
@@ -7,8 +7,11 @@ import { callLLM } from "../../shared";
 export class CompressSummarizeElement extends BaseElement<CompressFlowState, CompressFlowState> {
   #apiKey: string;
   #model: string;
+  #provider: string;
+  #protocol?: ProviderProtocol;
   #baseUrl?: string;
   #thinking?: string;
+  #options?: Record<string, unknown>;
 
   constructor(params: {
     name: string;
@@ -16,14 +19,20 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
     bus: PipelineEventBus<PipelineEventMap>;
     apiKey: string;
     model: string;
+    provider?: string;
+    protocol?: ProviderProtocol;
     baseUrl?: string;
     thinking?: string;
+    options?: Record<string, unknown>;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#provider = params.provider ?? "deepseek";
+    this.#protocol = params.protocol;
     this.#baseUrl = params.baseUrl;
     this.#thinking = params.thinking;
+    this.#options = params.options;
   }
 
   async doProcess(input: CompressFlowState): Promise<CompressFlowState> {
@@ -58,8 +67,11 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
       const summary = await callLLM({
         apiKey: this.#apiKey,
         model: this.#model,
+        provider: this.#provider,
+        protocol: this.#protocol,
         baseUrl: this.#baseUrl,
         thinking: this.#thinking,
+        options: this.#options,
         systemKey: PromptKey.COMPRESS_SUMMARIZE,
         prompt: input.summaryText,
         maxTokens: input.summaryMaxTokens || 600,

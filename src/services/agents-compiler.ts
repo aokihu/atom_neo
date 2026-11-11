@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { watch, readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { generateText } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
+import { createLanguageModel, providerOptionsFor } from "@atom-neo/core";
+import type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
 import compilerSystemPrompt from "@assets/prompts/agents_compiler_system_prompt.md";
 import type { RuntimeService } from "./runtime-service";
 
@@ -150,22 +151,27 @@ export class AgentsCompilerService extends BaseService {
     }
   }
 
+  /** Prefer an LLM profile; a JEV-only configuration cannot compile text. */
+  #compileModel(): ResolvedModel {
+    const levels: ProfileLevel[] = ["basic", "balanced", "advanced", "fast"];
+    for (const level of levels) {
+      const resolved = this.#runtime.getResolvedModel(level);
+      if (resolved.type !== "jev") return resolved;
+    }
+    throw new Error('AgentsCompiler requires an LLM provider profile; all configured profiles are type "jev"');
+  }
+
   async #compileWithLLM(raw: string): Promise<string> {
-    const provider = createDeepSeek({ apiKey: this.#runtime.apiKey });
-    const model = provider("deepseek-v4-flash");
-
-    const thinking = this.#runtime.appConfig?.providers?.deepseek?.thinking ?? "disabled";
-    const providerOptions = { deepseek: { thinking: { type: thinking } } };
-
+    const resolved = this.#compileModel();
     const result = await generateText({
-      model,
+      model: createLanguageModel(resolved),
       messages: [
         { role: "system" as const, content: compilerSystemPrompt },
         { role: "user" as const, content: raw },
       ],
       maxOutputTokens: 2048,
       allowSystemInMessages: true,
-      providerOptions,
+      providerOptions: providerOptionsFor(resolved),
     } as any);
 
     return result.text.trim();

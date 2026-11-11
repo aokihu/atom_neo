@@ -1,26 +1,18 @@
+import { inferProviderProtocol } from "@atom-neo/shared";
+import type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
 import type { Mode } from "./types";
 import {
   ConfigSchema, RuntimeConfigSchema, mergeConfig, saveRuntimeConfig, deleteRuntimeConfig,
 } from "../bootstrap/config";
 import type { AppConfig, LoadedConfig, RuntimeConfig } from "../bootstrap/config";
 
-export type ProfileLevel = "advanced" | "balanced" | "basic" | "fast";
-
-export type ResolvedModel = {
-  provider: string;
-  model: string;
-  type: "llm" | "jev";
-  apiKey: string;
-  baseUrl?: string;
-  thinking?: "enabled" | "disabled" | "adaptive";
-};
+export type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
 
 export type RuntimeParams = {
   mode: Mode;
   port: number;
   host: string;
   sandbox: string;
-  apiKey: string;
   config?: LoadedConfig;
 };
 
@@ -29,7 +21,6 @@ export class RuntimeService {
   readonly port: number;
   readonly host: string;
   #sandbox: string;
-  #apiKey: string;
   #userConfig: AppConfig;
   #runtimeConfig: RuntimeConfig;
   #effective: AppConfig;
@@ -39,7 +30,6 @@ export class RuntimeService {
     this.port = params.port;
     this.host = params.host;
     this.#sandbox = params.sandbox;
-    this.#apiKey = params.apiKey;
     this.#userConfig = params.config?.userConfig ?? ConfigSchema.parse({});
     this.#runtimeConfig = params.config?.runtimeConfig ?? {};
     this.#effective = params.config?.effective ?? this.#userConfig;
@@ -55,7 +45,6 @@ export class RuntimeService {
   get compiledPromptsDir(): string   { return `${this.atomDir}/compiled_prompts`; }
   get logsDir(): string              { return `${this.#sandbox}/logs`; }
   get metaPath(): string             { return `${this.atomDir}/agents_meta.json`; }
-  get apiKey(): string               { return this.#apiKey; }
 
   get appConfig(): AppConfig { return this.#effective; }
   get userConfig(): AppConfig { return this.#userConfig; }
@@ -92,8 +81,19 @@ export class RuntimeService {
     const providerConfig = this.#effective.providers?.[provider];
     const apiKeyEnv = providerConfig?.apiKeyEnv;
     const type = providerConfig?.type ?? "llm";
-    const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "llm" ? this.#apiKey : "");
+    // Only the configured provider's env var is used. Never fall back to
+    // another provider's key (see CR-PRO-06).
+    const apiKey = apiKeyEnv ? process.env[apiKeyEnv] ?? "" : "";
 
-    return { provider, model, type, apiKey, baseUrl: providerConfig?.baseUrl, thinking: providerConfig?.thinking };
+    return {
+      provider,
+      protocol: inferProviderProtocol(provider, providerConfig),
+      model,
+      type,
+      apiKey,
+      baseUrl: providerConfig?.baseUrl,
+      thinking: providerConfig?.thinking,
+      options: providerConfig?.options,
+    };
   }
 }

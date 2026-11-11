@@ -54,6 +54,14 @@ export {
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,
 } from "./tools/builtin/memory";
 
+// Provider / model factory
+export {
+  createLanguageModel,
+  providerOptionsFor,
+  deepSeekProviderOptions,
+} from "./pipelines/shared/model-provider";
+export type { ModelConfig, ProviderOptionsMap } from "./pipelines/shared/model-provider";
+
 // Pipeline Builder
 export { registerElement, resolveElement, getRegisteredNames, clearRegistry } from "./pipeline/registry";
 export { pipeline, PipelineBuilder } from "./pipeline/builder";

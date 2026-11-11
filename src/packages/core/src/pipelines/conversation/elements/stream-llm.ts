@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { BaseElement, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BaseElement, inferProviderProtocol, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
 import { streamText, tool, zodSchema, asSchema } from "ai";
 import type { ModelMessage } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
+import { createLanguageModel } from "../../shared/model-provider";
 import type { ToolContextInjection, ToolDefinition, ToolEffect, ToolResultMetadata, ToolsGroup } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
@@ -123,6 +123,8 @@ export function injectToolContext(params: {
 export class StreamLLMElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #apiKey: string;
   #model: string;
+  #provider: string;
+  #protocol: ProviderProtocol;
   #baseUrl?: string;
   #beforeCall?: (signal?: AbortSignal) => Promise<void>;
   #builtinTools: Record<string, any>;
@@ -151,6 +153,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     bus: PipelineEventBus<PipelineEventMap>;
     apiKey: string;
     model: string;
+    provider?: string;
+    protocol?: ProviderProtocol;
     baseUrl?: string;
     beforeCall?: (signal?: AbortSignal) => Promise<void>;
     tools: ToolDefinition[];
@@ -170,6 +174,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#provider = params.provider ?? "deepseek";
+    this.#protocol = params.protocol ?? inferProviderProtocol(this.#provider);
     this.#baseUrl = params.baseUrl;
     this.#beforeCall = params.beforeCall;
     this.#maxTokens = params.maxTokens ?? DEFAULT_MAX_TOKENS;
@@ -242,8 +248,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
       snapshotId: input.contextSnapshot?.id ?? "",
     });
 
-    const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
-    const model = provider(this.#model);
+    const model = createLanguageModel({
+      provider: this.#provider,
+      protocol: this.#protocol,
+      apiKey: this.#apiKey,
+      model: this.#model,
+      baseUrl: this.#baseUrl,
+    });
     this.#stepCounter.count = 0;
     let fullText = "";
     let reasoningText = "";

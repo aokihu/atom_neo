@@ -1,4 +1,4 @@
-import type { IntentPredictionResult } from "@atom-neo/shared";
+import type { IntentPredictionResult, ProviderProtocol } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { DecisionModel } from "../../../decision/choose";
@@ -27,8 +27,11 @@ export type PredictionPipelineDeps = {
   task: any;
   apiKey: string;
   model: string;
+  provider?: string;
+  protocol?: ProviderProtocol;
   baseUrl?: string;
   thinking?: string;
+  options?: Record<string, unknown>;
   decisionMode?: "legacy" | "jev";
   decisionModel?: DecisionModel;
   fallbackModel?: DecisionModel;

@@ -1,12 +1,22 @@
 import { generateText, Output } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { PromptKey, resolvePrompt } from "@atom-neo/shared";
+import type { ProviderProtocol } from "@atom-neo/shared";
+import { inferProviderProtocol, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import { z } from "zod";
 import { callJev } from "./jev-client";
 import type { JevQuestion } from "./jev-client";
-import { deepSeekProviderOptions } from "../pipelines/shared/llm";
+import { createLanguageModel, providerOptionsFor } from "../pipelines/shared/model-provider";
 
-export type DecisionModel = { type?: "llm" | "jev"; apiKey: string; model: string; baseUrl?: string; thinking?: string; beforeCall?: (signal?: AbortSignal) => Promise<void> };
+export type DecisionModel = {
+  type?: "llm" | "jev";
+  provider?: string;
+  protocol?: ProviderProtocol;
+  options?: Record<string, unknown>;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  thinking?: string;
+  beforeCall?: (signal?: AbortSignal) => Promise<void>;
+};
 export type ChoiceQuestions = Record<string, Extract<JevQuestion, { type: "choice" }>>;
 export type DecisionUsage = { inputTokens?: number; outputTokens?: number; totalTokens?: number; cost?: number };
 export type DecisionResult = { source: "jev" | "llm"; choices: DecisionChoices; usage?: DecisionUsage };
@@ -83,12 +93,21 @@ async function chooseDecisionOnce(params: DecisionParams): Promise<DecisionResul
     let answers: Record<string, string>;
     if (params.simulate) answers = await params.simulate(state, questions, abortSignal, model);
     else {
+      const provider = model.provider ?? "deepseek";
+      const protocol = model.protocol ?? inferProviderProtocol(provider);
       const result = await generateText({
-        model: createDeepSeek({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.model),
-        instructions: resolvePrompt(PromptKey.SIMULATE_JEV), prompt: JSON.stringify({ state, questions }),
+        model: createLanguageModel({
+          provider,
+          protocol,
+          apiKey: model.apiKey,
+          model: model.model,
+          baseUrl: model.baseUrl,
+        }),
+        instructions: resolvePrompt(PromptKey.SIMULATE_JEV, `${provider}/${model.model}`),
+        prompt: JSON.stringify({ state, questions }),
         output: Output.object({ schema: z.object({ answers: z.record(z.string(), z.string()) }) }),
         maxOutputTokens: params.maxTokens ?? 512, maxRetries: params.maxRetries, temperature: 0, abortSignal,
-        providerOptions: deepSeekProviderOptions(model.thinking),
+        providerOptions: providerOptionsFor({ protocol, thinking: model.thinking, options: model.options }),
       });
       answers = result.output.answers;
       usage = { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, totalTokens: result.usage.totalTokens };

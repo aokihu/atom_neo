@@ -253,8 +253,10 @@ It participates in the root `bun run --workspaces build` contract with
 ### Workspace Dependency Version Policy
 
 Dependencies shared by the root application and workspace packages must stay on
-one compatible version line. The current baseline is `ai` 7.0.79 with
-`@ai-sdk/deepseek` 3.0.32 and `@ai-sdk/mcp` 2.0.37, plus OpenTUI 0.5.8.
+one compatible version line. The current baseline is `ai` 7.0.169 with
+`@ai-sdk/deepseek` 3.0.84, `@ai-sdk/mcp` 2.0.96, and the matching
+`@ai-sdk/openai` / `@ai-sdk/anthropic` / `@ai-sdk/openai-compatible` releases,
+plus OpenTUI 0.5.8.
 Workspace manifests may declare these dependencies directly, but must not
 introduce a second major or minor line.
 
@@ -327,7 +329,7 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.7",
+  "version": "1.22.8",
   "engines": { "node": ">=24", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
@@ -357,7 +359,8 @@ shared/
   Depended on by: core, gateway, config-tui, tui, tui-kit
 
 core/
-  Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/mcp, @toon-format/toon, croner, zod
+  Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/openai, @ai-sdk/anthropic,
+                @ai-sdk/openai-compatible, @ai-sdk/mcp, @toon-format/toon, croner, zod
   Depended on by: (none, loaded by main.ts)
 
 config-tui/

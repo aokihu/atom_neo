@@ -1,5 +1,5 @@
-import { BaseElement, BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import { BaseElement, BusEvents, inferProviderProtocol, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
 import { chooseDecision } from "../../../decision/choose";
 import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "../../../decision/choose";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
@@ -13,12 +13,22 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
   #timeout: number;
 
   constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap>;
-    apiKey: string; model: string; baseUrl?: string; maxTokens?: number;
+    apiKey: string; model: string; provider?: string; protocol?: ProviderProtocol;
+    baseUrl?: string; options?: Record<string, unknown>; maxTokens?: number;
     decisionModel?: DecisionModel; fallbackModel?: DecisionModel; simulate?: SimulateDecision;
     fetchImpl?: (url: string, init: RequestInit) => Promise<Response>; timeoutMs?: number }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
-    this.#model = params.decisionModel ?? { apiKey: params.apiKey, model: params.model, baseUrl: params.baseUrl };
-    this.#fallback = params.fallbackModel ?? { apiKey: params.apiKey, model: params.model, baseUrl: params.baseUrl };
+    const provider = params.provider ?? "deepseek";
+    const model: DecisionModel = {
+      provider,
+      protocol: params.protocol ?? inferProviderProtocol(provider),
+      options: params.options,
+      apiKey: params.apiKey,
+      model: params.model,
+      baseUrl: params.baseUrl,
+    };
+    this.#model = params.decisionModel ?? model;
+    this.#fallback = params.fallbackModel ?? model;
     this.#simulate = params.simulate;
     this.#fetch = params.fetchImpl;
     this.#timeout = params.timeoutMs ?? 10_000;
@@ -28,7 +38,9 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
     if (input.mode !== "analyzing") return input;
     input.abortSignal?.throwIfAborted();
     if (!input.evidence || !input.budgetCheck) return { ...input, mode: "intervening", evaluation: FALLBACK_EVALUATOR };
-    const questions: ChoiceQuestions = { health: { type: "choice", instructions: resolvePrompt(PromptKey.EVALUATOR_ANALYZE),
+    const promptProvider = this.#model.provider ?? "deepseek";
+    const questions: ChoiceQuestions = { health: { type: "choice",
+      instructions: resolvePrompt(PromptKey.EVALUATOR_ANALYZE, `${promptProvider}/${this.#model.model}`),
       criteria: {
         healthy: "The provided window excerpts and real executions show concrete progress toward the ORIGINAL goal. This permits more execution, NOT overall acceptance. Distinct substantive sections with corresponding handoffs are progress even if a final validation item remains. TODO changes, length or claims alone are insufficient.",
         looping: "Repeated equivalent output or failed approaches without meaningful progress.",

@@ -8,15 +8,18 @@ import type { ContextService } from "../../../context/context-service";
 
 export class PostConversationFinalizeElement extends BaseElement<PostConversationFlowState, PipelineResult> {
   #contextService: ContextService;
+  #providerModel: string;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     contextService: ContextService;
+    providerModel?: string;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#contextService = params.contextService;
+    this.#providerModel = params.providerModel ?? "deepseek/deepseek-v4-pro";
   }
 
   async doProcess(input: PostConversationFlowState): Promise<PipelineResult> {
@@ -62,7 +65,7 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
           consumeOnCommit: true,
           content: [{
             role: "assistant",
-            content: `Post-check reference (unverified): ${resolvePrompt(PromptKey.GUIDANCE_RETRY)}`,
+            content: `Post-check reference (unverified): ${resolvePrompt(PromptKey.GUIDANCE_RETRY, this.#providerModel)}`,
           }],
         },
       });

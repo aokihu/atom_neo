@@ -9,6 +9,7 @@ import {
 } from "./elements";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { ContextService } from "../../context/context-service";
+import type { ProviderProtocol } from "@atom-neo/shared";
 
 export function registerFollowUpEvaluatorElements(): void {
   registerElement("evaluator-input", EvaluatorInputElement);
@@ -24,7 +25,10 @@ export function followUpEvaluatorPipeline(deps: {
   task: any;
   apiKey: string;
   model: string;
+  provider?: string;
+  protocol?: ProviderProtocol;
   baseUrl?: string;
+  options?: Record<string, unknown>;
   maxTokens?: number;
   orchestrator: InternalTaskOrchestrator;
   configContextLimit?: number;
@@ -36,7 +40,10 @@ export function followUpEvaluatorPipeline(deps: {
       decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel,
       apiKey: deps.apiKey,
       model: deps.model,
+      provider: deps.provider,
+      protocol: deps.protocol,
       baseUrl: deps.baseUrl,
+      options: deps.options,
       maxTokens: deps.maxTokens,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })

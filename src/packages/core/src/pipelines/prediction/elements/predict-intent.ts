@@ -1,12 +1,11 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import { BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
+import { BusEvents, inferProviderProtocol, PromptKey, resolvePrompt } from "@atom-neo/shared";
 import type { IntentPredictionResult } from "@atom-neo/shared";
 import { generateText, Output } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
 import { z } from "zod";
 import type { PredictionFlowState } from "./types";
-import { deepSeekProviderOptions } from "../../shared/llm";
+import { createLanguageModel, providerOptionsFor } from "../../shared/model-provider";
 
 const FALLBACK: IntentPredictionResult = {
   difficulty: "medium",
@@ -37,8 +36,11 @@ export function buildPredictionEnvelope(input: PredictionFlowState): Record<stri
 export class PredictIntentElement extends BaseElement<PredictionFlowState, PredictionFlowState> {
   #apiKey: string;
   #model: string;
+  #provider: string;
+  #protocol: ProviderProtocol;
   #baseUrl?: string;
   #thinking?: string;
+  #options?: Record<string, unknown>;
   #maxTokens: number;
 
   constructor(params: {
@@ -47,15 +49,21 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
     bus: PipelineEventBus<PipelineEventMap>;
     apiKey: string;
     model: string;
+    provider?: string;
+    protocol?: ProviderProtocol;
     baseUrl?: string;
     thinking?: string;
+    options?: Record<string, unknown>;
     maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#provider = params.provider ?? "deepseek";
+    this.#protocol = params.protocol ?? inferProviderProtocol(this.#provider);
     this.#baseUrl = params.baseUrl;
     this.#thinking = params.thinking;
+    this.#options = params.options;
     this.#maxTokens = params.maxTokens ?? 512;
   }
 
@@ -75,15 +83,25 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
 
     try {
       this.report(BusEvents.Element.Data, { step: "classifying", userMsgLen: text.length });
-      const provider = createDeepSeek({ apiKey: this.#apiKey, baseURL: this.#baseUrl });
+      const model = createLanguageModel({
+        provider: this.#provider,
+        protocol: this.#protocol,
+        apiKey: this.#apiKey,
+        model: this.#model,
+        baseUrl: this.#baseUrl,
+      });
       const result = await generateText({
-        model: provider(this.#model),
-        instructions: resolvePrompt(PromptKey.PREDICT_INTENT),
+        model,
+        instructions: resolvePrompt(PromptKey.PREDICT_INTENT, `${this.#provider}/${this.#model}`),
         prompt: JSON.stringify(buildPredictionEnvelope(input)),
         output: Output.object({ schema: IntentPredictionSchema }),
         maxOutputTokens: this.#maxTokens,
         temperature: 0,
-        providerOptions: deepSeekProviderOptions(this.#thinking),
+        providerOptions: providerOptionsFor({
+          protocol: this.#protocol,
+          thinking: this.#thinking,
+          options: this.#options,
+        }),
         abortSignal: input.abortSignal,
       });
       const prediction = result.output;

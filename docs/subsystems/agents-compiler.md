@@ -12,7 +12,7 @@
 AGENTS.md (用户文件)
     │
     ▼ (fs.watch + SHA-256 哈希)
-AgentsCompilerService (通过 DeepSeek LLM 无害化过滤)
+AgentsCompilerService (通过配置的 LLM Provider 无害化过滤)
     │
     ▼ getCompiledPrompt(): string
 Core Server (server.ts)
@@ -74,10 +74,13 @@ AGENTS.md 变更 → 计算 SHA-256
 
 | 参数 | 值 |
 |------|------|
-| 模型 | `deepseek-v4-flash`（固定） |
+| 模型 | `runtime.getResolvedModel()` 依次取 `basic` / `balanced` / `advanced` / `fast` 中第一个 `type: "llm"` 的档位 |
+| Provider / 协议 | 由 `createLanguageModel(resolved)` 按 `protocol` 选择（DeepSeek/OpenAI/Anthropic/OpenAI-compatible） |
 | System Prompt | `agents_compiler_system_prompt.md` |
 | maxTokens | `2048` |
-| thinking | 从 `config.json → providers.deepseek.thinking`（默认 `disabled`） |
+| thinking / options | 由 `providerOptionsFor(resolved)` 按 Provider 协议生成 |
+
+若所有档位都是 `type: "jev"`，编译会抛出明确配置错误，不会把文本生成请求发到 JEV 决策端点。
 
 ## 6. 元数据
 

@@ -20,7 +20,7 @@
 
 ```
 src/packages/shared/src/prompts/
-  index.ts              — resolvePrompt(key, provider, model): string
+  index.ts              — resolvePrompt(key, "provider/model"): string
   registry.ts           — PromptRegistry: 惰性合成 + Map 缓存
   keys.ts               — PromptKey 枚举
   model_profiles.ts     — LANGUAGE_MAP + MODEL_REFINEMENT_MAP
@@ -41,7 +41,7 @@ src/packages/shared/src/prompts/
 ### resolve() 流程
 
 ```
-resolvePrompt(BASE_SYSTEM, "deepseek", "deepseek-v4-pro")
+resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
 
   cacheKey = "BASE_SYSTEM:deepseek:deepseek-v4-pro"
   ↓ cache hit → 直接返回
@@ -63,7 +63,14 @@ resolvePrompt(BASE_SYSTEM, "deepseek", "deepseek-v4-pro")
 | `deepseek` | `zh` |
 | `openai` | `en` |
 | `anthropic` | `en` |
-| `*` (default) | `en` |
+| `openai-compatible` / 其他未知 id | `en` |
+| 未传 `providerModel`（默认 `openai/gpt-4o`） | `en` |
+
+所有生产调用都必须显式传入 `${provider}/${model}`：对话主链（LoadSystemPrompt / RecordContext /
+ApplySourceContext）、预测（PredictIntent）、决策回退（chooseDecision）、健康评估、上下文压缩与
+对话后分析/finalize。DeepSeek 因此继续拿到中文提示词；OpenAI / Anthropic / OpenAI-compatible
+拿到英文提示词。仅在单元测试等直接构造 Element 且未传 `providerModel` 时，才使用各 Element
+的兼容默认值。
 
 ### 精细化追加规则
 
@@ -95,11 +102,11 @@ server.ts 启动
          不计算、不缓存 ← 纯存储
 
 首次请求 (cache miss)
-  └─ resolvePrompt(BASE_SYSTEM, "deepseek", "deepseek-v4-pro")
+  └─ resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
       └─ base + append 合成 → cache.set()
 
 后续请求 (cache hit)
-  └─ resolvePrompt(BASE_SYSTEM, "deepseek", "deepseek-v4-pro")
+  └─ resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
       └─ cache.get() → O(1) 直接返回
 ```
 
@@ -224,7 +231,9 @@ src/packages/core/src/pipelines/post-conversation/elements/collect-input.ts   �
 src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluator-analyze.ts  改用 resolvePrompt()
 src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluate-finalize.ts  改用 resolvePrompt()
 src/packages/core/src/pipelines/context-compress/elements/compress-summarize.ts    改用 resolvePrompt()
+src/packages/core/src/pipelines/shared/model-provider.ts  Provider 模型/options 工厂
 src/packages/core/src/server.ts                      registerAllPrompts() 调用
+src/services/runtime-service.ts                      protocol/options 解析（不跨 Provider 回退密钥）
 src/assets/prompts/base_system_prompt.md             保留弃用标记（variants/lang/zh.ts 替代）
 src/packages/core/src/pipelines/conversation/index.ts 传递 providerModel 到 LoadSystemPrompt + CollectContext
 ```

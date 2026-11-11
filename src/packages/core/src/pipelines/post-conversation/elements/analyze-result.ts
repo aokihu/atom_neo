@@ -1,6 +1,6 @@
 import { getProgressFacts } from "../../shared/progress-evidence";
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
 import { FALLBACK_ANALYSIS } from "./types";
@@ -11,8 +11,11 @@ const NON_RETRY_TASK_INTENTS = new Set(["creative", "conversation"]);
 export class AnalyzeResultElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
   #apiKey: string;
   #model: string;
+  #provider: string;
+  #protocol?: ProviderProtocol;
   #baseUrl?: string;
   #thinking?: string;
+  #options?: Record<string, unknown>;
   #maxTokens: number;
 
   constructor(params: {
@@ -21,15 +24,21 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
     bus: PipelineEventBus<PipelineEventMap>;
     apiKey: string;
     model: string;
+    provider?: string;
+    protocol?: ProviderProtocol;
     baseUrl?: string;
     thinking?: string;
+    options?: Record<string, unknown>;
     maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#provider = params.provider ?? "deepseek";
+    this.#protocol = params.protocol;
     this.#baseUrl = params.baseUrl;
     this.#thinking = params.thinking;
+    this.#options = params.options;
     this.#maxTokens = params.maxTokens ?? 256;
   }
 
@@ -69,8 +78,11 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       const raw = await callLLM({
         apiKey: this.#apiKey,
         model: this.#model,
+        provider: this.#provider,
+        protocol: this.#protocol,
         baseUrl: this.#baseUrl,
         thinking: this.#thinking,
+        options: this.#options,
         systemKey: PromptKey.ANALYZE_RESULT,
         prompt,
         maxTokens: this.#maxTokens,

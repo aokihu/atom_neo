@@ -44,6 +44,8 @@ export type ConversationPipelineDeps = {
   task: any;
   apiKey?: string;
   model?: string;
+  provider?: string;
+  protocol?: import("@atom-neo/shared").ProviderProtocol;
   baseUrl?: string;
   beforeCall?: (signal?: AbortSignal) => Promise<void>;
   thinking?: string;
@@ -81,6 +83,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     })
     .transform("apply-source-context", {
       contextService: deps.contextService,
+      providerModel: deps.providerModel,
     })
     .transform("collect-context", {
       contextService: deps.contextService,
@@ -90,6 +93,8 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-v4-flash",
+      provider: deps.provider,
+      protocol: deps.protocol,
       baseUrl: deps.baseUrl,
       beforeCall: deps.beforeCall,
       tools: deps.tools ?? [],

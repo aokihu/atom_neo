@@ -290,14 +290,14 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-PRO-02`：配置增加 `providers[id].protocol`，默认按 id 推断。
-- [ ] `CR-PRO-01`：新增 `createLanguageModel(resolved)` 工厂。
-- [ ] 替换 5 处 `createDeepSeek`。
-- [ ] `CR-PRO-04`：ProviderOptionsStrategy（deepseek/openai/anthropic）。
-- [ ] `CR-PRO-03`：所有 `resolvePrompt` 传 provider/model；非 DeepSeek 默认英文。
-- [ ] `CR-PRO-05`：AgentsCompiler 注入模型 resolver。
-- [ ] `CR-PRO-06`：移除跨 Provider API Key 回退。
-- [ ] 增加 `@ai-sdk/openai`、`@ai-sdk/anthropic`、`@ai-sdk/openai-compatible` 依赖。
+- [x] `CR-PRO-02`：配置增加 `providers[id].protocol`，默认按 id 推断。
+- [x] `CR-PRO-01`：新增 `createLanguageModel(resolved)` 工厂。
+- [x] 替换 5 处 `createDeepSeek`。
+- [x] `CR-PRO-04`：ProviderOptionsStrategy（deepseek/openai/anthropic）。
+- [x] `CR-PRO-03`：所有 `resolvePrompt` 传 provider/model；非 DeepSeek 默认英文。
+- [x] `CR-PRO-05`：AgentsCompiler 注入模型 resolver。
+- [x] `CR-PRO-06`：移除跨 Provider API Key 回退。
+- [x] 增加 `@ai-sdk/openai`、`@ai-sdk/anthropic`、`@ai-sdk/openai-compatible` 依赖。
 
 **验收**：
 - 四种 provider 配置均能构造模型（fake）。
@@ -570,7 +570,7 @@ bun run scripts/check-file-headers.ts
 | S4 | 已完成 | — | Markdown → HTML 服务；删除 JSX 文档站；records 归档与 Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；版本 1.22.5 |
 | S5 | 已完成 | — | 新增 `@atom-neo/tui-kit`：统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；两包删除副本；typecheck 6/6、build 6/6、测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |
 | S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
-| S7 | 未开始 | — | Provider |
+| S7 | 已完成 | — | CR-PRO-01..06：protocol/工厂/options/prompt 语言/AgentsCompiler/API Key 隔离；四 Provider 构造与 fake 测试；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1701 pass / 21 skip / 0 fail（源码 961）；版本 1.22.8 |
 | S8 | 未开始 | — | server 拆分 |
 | S9 | 未开始 | — | Node HTTP/WS |
 | S10 | 未开始 | — | Node 构建/CI |

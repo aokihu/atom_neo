@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { ClientConfigSchema } from "./client";
-import { DEFAULT_PROFILES, PROVIDERS, ProviderDefinitionSchema, ProviderProfilesSchema } from "./providers";
+import {
+  DEFAULT_PROFILES,
+  PROVIDERS,
+  PROVIDER_PROTOCOLS,
+  ProviderDefinitionSchema,
+  ProviderProfilesSchema,
+  inferProviderProtocol,
+} from "./providers";
 import { ConfigSchema, RuntimeConfigSchema, mergeConfig, overlaySchema } from "./schema";
 import { DEFAULT_THEME, THEME_NAMES, isThemeName } from "./theme";
 
@@ -58,8 +65,31 @@ describe("theme contract", () => {
   test("exposes the wizard presets from one source", () => {
     expect(Object.keys(PROVIDERS).sort()).toEqual(["custom", "deepseek", "openai", "openrouter-jev"]);
     expect(PROVIDERS.deepseek.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
+    expect(PROVIDERS.deepseek.protocol).toBe("deepseek");
+    expect(PROVIDERS.openai.protocol).toBe("openai");
+    expect(PROVIDERS.custom.protocol).toBe("openai-compatible");
     expect(PROVIDERS["openrouter-jev"].type).toBe("jev");
+    expect(PROVIDERS["openrouter-jev"].protocol).toBeUndefined();
     expect(PROVIDERS.custom.models).toEqual([]);
+  });
+});
+
+describe("provider protocol", () => {
+  test("validates known protocols and rejects unknown values", () => {
+    for (const protocol of PROVIDER_PROTOCOLS) {
+      expect(ProviderDefinitionSchema.parse({ apiKeyEnv: "X", models: ["m"], protocol }).protocol).toBe(protocol);
+    }
+    expect(() => ProviderDefinitionSchema.parse({ apiKeyEnv: "X", models: ["m"], protocol: "gemini" })).toThrow();
+  });
+
+  test("explicit config wins; known ids infer; everything else is openai-compatible", () => {
+    expect(inferProviderProtocol("deepseek")).toBe("deepseek");
+    expect(inferProviderProtocol("openai")).toBe("openai");
+    expect(inferProviderProtocol("anthropic")).toBe("anthropic");
+    expect(inferProviderProtocol("custom", { protocol: "anthropic" })).toBe("anthropic");
+    expect(inferProviderProtocol("deepseek", { protocol: "openai-compatible" })).toBe("openai-compatible");
+    expect(inferProviderProtocol("volengine")).toBe("openai-compatible");
+    expect(inferProviderProtocol("deepseek", { protocol: "bogus" })).toBe("deepseek");
   });
 });
 

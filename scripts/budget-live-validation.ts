@@ -74,7 +74,7 @@ for (const [name, definition] of Object.entries(config.providers ?? {}) as Array
 }
 writeFileSync(join(sandbox, "config.json"), JSON.stringify(config));
 const runtime = new RuntimeService({ mode: "core", port: 0, host: "127.0.0.1", sandbox,
-  apiKey: process.env.DEEPSEEK_API_KEY ?? "", config: loadConfig(sandbox) });
+  config: loadConfig(sandbox) });
 const runtimeAdapter: any = { sandbox, maxTokens: runtime.maxTokens, appConfig: runtime.appConfig,
   getResolvedModel: (profile: any) => ({ ...runtime.getResolvedModel(profile), beforeCall: waitReady }) };
 const memory = new MemoryService({ dbPath: join(sandbox, ".atom/memory/memory.db") });

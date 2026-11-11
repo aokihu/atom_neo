@@ -4,6 +4,7 @@ import {
   DEFAULT_PROFILES,
   DEFAULT_THEME,
   OPENROUTER_JEV,
+  PROVIDER_PROTOCOLS,
   PROVIDERS,
   isThemeName,
   parseEnv,
@@ -11,10 +12,10 @@ import {
   upsertEnv,
   writeFileAtomic,
 } from "@atom-neo/shared";
-import type { DecisionModes, ProviderType, ThinkingMode } from "@atom-neo/shared";
+import type { DecisionModes, ProviderProtocol, ProviderType, ThinkingMode } from "@atom-neo/shared";
 
 export { DEFAULT_DECISION_MODES, DEFAULT_PROFILES, OPENROUTER_JEV, PROVIDERS } from "@atom-neo/shared";
-export type { DecisionModes, ProviderType, ThinkingMode } from "@atom-neo/shared";
+export type { DecisionModes, ProviderProtocol, ProviderType, ThinkingMode } from "@atom-neo/shared";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ export const CONVERSATION_LEVELS = ["advanced", "balanced", "basic"] as const;
 
 export type ProviderEdit = {
   type?: ProviderType;
+  protocol?: ProviderProtocol;
   apiKeyEnv: string;
   apiKey: string;
   models: string[];
@@ -243,6 +245,9 @@ export function buildInitialState(mode: WizardMode, sandboxPath: string): Wizard
     const apiKeyEnv = typeof p?.apiKeyEnv === "string" ? p.apiKeyEnv : "";
     editedProviders[id] = {
       ...(p?.type === "jev" || p?.type === "llm" ? { type: p.type } : {}),
+      ...(typeof p?.protocol === "string" && (PROVIDER_PROTOCOLS as readonly string[]).includes(p.protocol)
+        ? { protocol: p.protocol as ProviderProtocol }
+        : {}),
       apiKeyEnv,
       apiKey: envKeys[apiKeyEnv] ?? "",
       models: Array.isArray(p?.models) ? p.models : [],
@@ -287,6 +292,7 @@ function buildProviderEntry(prev: Record<string, any> | undefined, edit: Provide
   return {
     ...(prev ?? {}),
     ...(edit.type ? { type: edit.type } : {}),
+    ...(edit.protocol ? { protocol: edit.protocol } : {}),
     apiKeyEnv: edit.apiKeyEnv || prev?.apiKeyEnv || "",
     models: edit.models,
     ...(edit.baseUrl ? { baseUrl: edit.baseUrl } : {}),

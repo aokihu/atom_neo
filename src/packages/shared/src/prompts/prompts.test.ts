@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PromptKey } from "./keys";
+import { initPromptRegistry, resolvePrompt } from "./index";
 import { enBases } from "./variants/lang/en";
 import { zhBases } from "./variants/lang/zh";
 
@@ -75,6 +76,27 @@ describe("Memory discovery prompts", () => {
     expect(zhBases[PromptKey.ANALYZE_RESULT]).toContain("pending/in_progress");
     expect(enBases[PromptKey.ANALYZE_RESULT]).toContain("Response Head and Response Tail");
     expect(enBases[PromptKey.ANALYZE_RESULT]).toContain("pending/in_progress");
+  });
+});
+
+describe("Prompt language selection", () => {
+  test("deepseek resolves Chinese while other providers resolve English", () => {
+    initPromptRegistry();
+    expect(resolvePrompt(PromptKey.BASE_SYSTEM, "deepseek/some-model"))
+      .toBe(zhBases[PromptKey.BASE_SYSTEM]!);
+    for (const providerModel of [
+      "openai/some-model",
+      "anthropic/some-model",
+      "openai-compatible/some-model",
+      "custom/some-model",
+    ]) {
+      expect(resolvePrompt(PromptKey.BASE_SYSTEM, providerModel)).toBe(enBases[PromptKey.BASE_SYSTEM]!);
+    }
+  });
+
+  test("defaults to an English provider when no provider/model is supplied", () => {
+    initPromptRegistry();
+    expect(resolvePrompt(PromptKey.BASE_SYSTEM)).toContain(enBases[PromptKey.BASE_SYSTEM]!);
   });
 });
 

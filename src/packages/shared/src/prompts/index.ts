@@ -30,6 +30,6 @@ export function initPromptRegistry(): void {
 }
 
 export function resolvePrompt(key: PromptKey, providerModel?: string): string {
-  const [provider = "deepseek", model = "deepseek-v4-pro"] = (providerModel ?? "deepseek/deepseek-v4-pro").split("/");
+  const [provider = "openai", model = "gpt-4o"] = (providerModel ?? "openai/gpt-4o").split("/");
   return getRegistry().resolve(key, provider, model);
 }

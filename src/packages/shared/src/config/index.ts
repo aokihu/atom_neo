@@ -7,11 +7,21 @@ export {
   DEFAULT_DECISION_MODES,
   OPENROUTER_JEV,
   PROVIDER_TYPES,
+  PROVIDER_PROTOCOLS,
   THINKING_MODES,
   ProviderProfilesSchema,
   ProviderDefinitionSchema,
+  inferProviderProtocol,
 } from "./providers";
-export type { ProviderType, ProviderPreset, ThinkingMode, DecisionModes } from "./providers";
+export type {
+  ProviderType,
+  ProviderProtocol,
+  ProviderPreset,
+  ThinkingMode,
+  ProfileLevel,
+  ResolvedModel,
+  DecisionModes,
+} from "./providers";
 
 export { THEME_NAMES, DEFAULT_THEME, isThemeName } from "./theme";
 export type { ThemeName } from "./theme";

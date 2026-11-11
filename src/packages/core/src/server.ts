@@ -1,9 +1,9 @@
 import { PipelineEventBus } from "@atom-neo/shared";
-import type { ContinuationDecision, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
+import type { ContinuationDecision, ConversationContinuationAction, FullEventMap, NetworkServiceLike, ProviderProtocol } from "@atom-neo/shared";
 import type { ToolEffectSummary } from "./pipelines/conversation/elements/types";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
-import { BusEvents, TaskFailureCodes, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
+import { BusEvents, inferProviderProtocol, TaskFailureCodes, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import { initPromptRegistry } from "@atom-neo/shared";
 import { TaskSource, TaskState } from "@atom-neo/shared";
 import { createTaskItem } from "./task-factory";
@@ -36,7 +36,7 @@ import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./
 import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
 import { registerPostConversationElements, postConversationPipeline } from "./pipelines/post-conversation";
 import { registerSharedElements } from "./pipelines/shared";
-import { deepSeekProviderOptions } from "./pipelines/shared/llm";
+import { providerOptionsFor } from "./pipelines/shared/model-provider";
 import { conversationPipeline } from "./pipelines/conversation";
 import { predictionPipeline } from "./pipelines/prediction";
 import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
@@ -53,11 +53,18 @@ const LOG_OUTPUT_MAX_LEN = 200;
 
 interface RuntimeLike {
   sandbox: string;
-  apiKey: string;
   appConfig: Record<string, any>;
   maxTokens: number;
   getResolvedModel(level?: string): {
-    provider: string; model: string; type?: "llm" | "jev"; apiKey: string; baseUrl?: string; thinking?: string; beforeCall?: (signal?: AbortSignal) => Promise<void>;
+    provider: string;
+    protocol?: ProviderProtocol;
+    model: string;
+    type?: "llm" | "jev";
+    apiKey: string;
+    baseUrl?: string;
+    thinking?: string;
+    options?: Record<string, unknown>;
+    beforeCall?: (signal?: AbortSignal) => Promise<void>;
   };
   updateRuntimeConfig?(patch: unknown): Record<string, any>;
   resetRuntimeConfig?(): Record<string, any>;
@@ -110,9 +117,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   const { port, host, logger, sm, runtime, adminToken } = deps;
   const sandbox: string = runtime.sandbox ?? "";
   const resolved = runtime?.getResolvedModel?.("balanced") ?? {
-    provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
+    provider: "deepseek", protocol: "deepseek" as const, model: "deepseek-v4-flash", apiKey: "",
   };
-  const getModel = (level: string) => runtime?.getResolvedModel?.(level) ?? resolved;
+  // Fake runtimes may predate the protocol field; infer it from the provider id
+  // and configuration rather than assuming DeepSeek.
+  const normalizeModel = (model: typeof resolved) => ({
+    ...model,
+    protocol: model.protocol ?? inferProviderProtocol(model.provider, runtime?.appConfig?.providers?.[model.provider]),
+  });
+  const getModel = (level: string) => normalizeModel(runtime?.getResolvedModel?.(level) ?? resolved);
   const getContextLimit = (selected: typeof resolved) => resolveContextLimit(
     `${selected.provider}/${selected.model}`, runtime?.appConfig?.providers?.[selected.provider]?.contextLimit,
   );
@@ -121,8 +134,27 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     const fallback = getModel("basic");
     return {
       decisionMode: runtime.appConfig?.decisionMode?.[purpose],
-      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, beforeCall: selected.beforeCall },
-      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl, thinking: fallback.thinking, beforeCall: fallback.beforeCall },
+      decisionModel: {
+        type: selected.type ?? "llm",
+        provider: selected.provider,
+        protocol: selected.protocol,
+        options: selected.options,
+        apiKey: selected.apiKey,
+        model: selected.model,
+        baseUrl: selected.baseUrl,
+        thinking: selected.thinking,
+        beforeCall: selected.beforeCall,
+      },
+      fallbackModel: {
+        provider: fallback.provider,
+        protocol: fallback.protocol,
+        options: fallback.options,
+        apiKey: fallback.apiKey,
+        model: fallback.model,
+        baseUrl: fallback.baseUrl,
+        thinking: fallback.thinking,
+        beforeCall: fallback.beforeCall,
+      },
     };
   };
   const budgetLimits = () => ({
@@ -249,7 +281,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         maxGlobalRounds: budgetLimits().maxGlobalRounds,
         session,
         task,
-        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, maxTokens,
+        apiKey: selected.apiKey, model: selected.model, provider: selected.provider, protocol: selected.protocol,
+        baseUrl: selected.baseUrl, thinking: selected.thinking, options: selected.options, maxTokens,
         ...decisionDeps("prediction"),
         orchestrator,
         configContextLimit: getContextLimit(selected),
@@ -278,9 +311,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         ? "advanced"
         : DIFFICULTY_PROFILE[prediction.difficulty] ?? prediction.modelProfile;
 
-      const resolvedModel = runtime.getResolvedModel
+      const resolvedModel = normalizeModel(runtime.getResolvedModel
         ? runtime.getResolvedModel(effectiveProfile)
-        : resolved;
+        : resolved);
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
 
       return conversationPipeline({
@@ -289,11 +322,13 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey: resolvedModel.apiKey,
         model: resolvedModel.model,
+        provider: resolvedModel.provider,
+        protocol: resolvedModel.protocol,
         baseUrl: resolvedModel.baseUrl,
         beforeCall: resolvedModel.beforeCall,
         providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
         configContextLimit: getContextLimit(resolvedModel),
-        providerOptions: deepSeekProviderOptions(resolvedModel.thinking),
+        providerOptions: providerOptionsFor(resolvedModel),
         tools: allTools,
         mcpToolsRef,
         getCompiledPrompt,
@@ -319,7 +354,8 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         toolRecordStore: persistence.toolRecords,
         session,
         task,
-        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, maxTokens,
+        apiKey: selected.apiKey, model: selected.model, provider: selected.provider, protocol: selected.protocol,
+        baseUrl: selected.baseUrl, options: selected.options, maxTokens,
         orchestrator,
         configContextLimit: getContextLimit(selected),
         contextService,
@@ -334,8 +370,11 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
         task,
         apiKey: selected.apiKey,
         model: selected.model,
+        provider: selected.provider,
+        protocol: selected.protocol,
         baseUrl: selected.baseUrl,
         thinking: selected.thinking,
+        options: selected.options,
         orchestrator,
         sandbox,
         configContextLimit: getContextLimit(selected),
@@ -352,7 +391,9 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       return postConversationPipeline({
         session,
         task,
-        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, maxTokens,
+        apiKey: selected.apiKey, model: selected.model, provider: selected.provider, protocol: selected.protocol,
+        baseUrl: selected.baseUrl, thinking: selected.thinking, options: selected.options, maxTokens,
+        providerModel: `${selected.provider}/${selected.model}`,
         ...decisionDeps("postConversation"),
         configContextLimit: getContextLimit(selected),
         contextService,
