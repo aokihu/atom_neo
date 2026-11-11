@@ -1786,4 +1786,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-10 | S0/S1 实施完成：P0 CR-COR-01..11；typecheck/build 5/5，测试 1453 pass / 21 skip / 0 fail；版本 1.22.1 |
 | 2026-11-10 | S2 实施完成（非 Server）：CR-RUN-01..05；`Bun.write/env/argv/sleep/stringWidth/main/spawn/Glob/cron`、`bun:sqlite` 全部迁移；新增 `string-width`、`croner`；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；版本 1.22.2 |
 | 2026-11-11 | S3 实施完成：共享配置契约、env/原子写/helpers、Skill/MemoryKind/Todo 类型收口；`config-tui`/`gateway` 使用 shared；删除顶层 `theme`；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
-| 2026-11-11 | S4 实施完成：删除 JSX 文档站，新增 `marked` Markdown → HTML 服务；records 归档；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；测试 1612 pass / 21 skip / 0 fail（源码 916）；版本 1.22.4 |
+| 2026-11-11 | S4 实施完成：删除 JSX 文档站，新增 `marked` Markdown → HTML 服务；records 归档；Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；测试 1612 pass / 21 skip / 0 fail（源码 916）；版本 1.22.5 |

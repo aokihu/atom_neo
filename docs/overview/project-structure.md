@@ -10,26 +10,28 @@
 ```text
 atom_neo/
 ├── package.json              # Workspace root
-├── tsconfig.json              # Base TypeScript config
+├── tsconfig.json             # Base TypeScript config
+├── tsconfig.docs.json        # Docs-only typecheck config
 ├── .gitignore
-├── .env.example               # Template for sandbox/.env
+├── .env.example              # Template for sandbox/.env
 │
-├── src/                       # All source code
+├── src/                      # All source code
 │   ├── main.ts               # Application entry point
-│   ├── bootstrap/            # App startup layer
-│   ├── services/             # App-level services (Memory, Skill, Network)
+│   ├── version.ts            # App version
+│   ├── bootstrap/            # App startup layer (CLI/config/env/menu/backup)
+│   ├── services/             # App-level services (Memory, Skill, Network, Agents)
 │   │   └── network/          # Shared domain scheduling + WebFetch
 │   ├── assets/               # Static assets (bundled with app)
-│   │   └── prompts/
-│   │       └── base_system_prompt.md  # System safety prompt
+│   │   └── prompts/          # AGENTS.md compiler/template prompts
 │   └── packages/
-│       ├── shared/           # Shared types, pipeline core, log system
-│       ├── core/             # Core HTTP + WebSocket server, task engine
-│       ├── config-tui/       # OpenTUI wizard: first-run setup + config editor (subprocess)
+│       ├── shared/           # Config contract, types, pipeline core, log, utils
+│       ├── core/             # Core HTTP + WebSocket server, task engine, pipelines
+│       ├── config-tui/       # OpenTUI wizard: first-run setup + config editor
 │       ├── gateway/          # Platform client gateway (secret auth + client manager)
 │       └── tui/              # Terminal UI application (chat)
 │
-├── sandbox/                   # Runtime workspace directory (gitignored)
+├── tests/                    # Cross-package/e2e tests
+├── sandbox/                  # Runtime workspace directory (gitignored)
 │   ├── config.json           # Model/TUI/Gateway config
 │   ├── .env                  # API keys (gitignored)
 │   ├── .atom/                # Agent runtime data
@@ -38,23 +40,23 @@ atom_neo/
 │   │   └── compiled_prompts/ # Cached compiled prompts
 │   └── logs/                 # Log output
 │
-├── scripts/                   # Maintenance scripts (check-docs.ts, release helpers)
+├── clients/                  # Optional platform client reference implementations
+├── scripts/                  # Maintenance scripts (check-docs.ts, release helpers)
 │
-└── docs/                      # Markdown docs + local renderer
-    ├── index.md               # Documentation index
-    ├── package.json           # Scope marker: type=module for Node ESM
-    ├── server.ts              # Markdown → HTML HTTP server (Bun/Node)
-    ├── server.test.ts         # Render/resolve/server tests
+└── docs/                     # Markdown docs + local renderer
+    ├── index.md              # Documentation index
+    ├── package.json          # Scope marker: type=module for Node ESM
+    ├── server.ts             # Markdown → HTML HTTP server (Bun/Node)
+    ├── server.test.ts        # Render/resolve/server tests
     ├── assets/
-    │   └── docs.css           # Dark theme + highlight.js token styles
-    ├── records/               # Historical validation/experiment records
+    │   └── docs.css          # Dark theme + highlight.js token styles
+    ├── records/              # Historical validation/experiment records
     ├── overview/
     ├── standards/
     ├── subsystems/
     ├── core/
     ├── pipelines/
     ├── communication/
-    ├── clients/
     └── code-review-2026-11-10/
 ```
 
@@ -73,6 +75,8 @@ src/packages/shared/
 │   ├── providers.ts
 │   ├── client.ts
 │   └── theme.ts
+├── constants/
+│   └── events.ts         # BusEvents / WsMessages / failure codes
 ├── types/
 │   ├── index.ts
 │   ├── task.ts
@@ -81,33 +85,36 @@ src/packages/shared/
 │   ├── tool.ts
 │   ├── pipeline.ts
 │   ├── session.ts
+│   ├── skill.ts
+│   ├── context.ts
+│   ├── network.ts
+│   ├── schedule.ts
+│   ├── hook.ts
 │   └── primitive.ts
 ├── pipeline/
 │   ├── index.ts
 │   ├── base-element.ts
-│   ├── runner.ts
+│   ├── runner.ts          # exported but not wired into TaskEngine
 │   ├── event-bus.ts
 │   ├── types.ts
 │   └── constants.ts
-├── protocol.ts
-├── log/
-│   ├── index.ts
-│   ├── logger.ts
-│   ├── log-hub.ts
-│   ├── types.ts
-│   └── sinks/
-│       ├── stdout.ts
-│       ├── file.ts
-│       └── pipe.ts
+├── prompts/               # Prompt Registry + language/model variants
+├── protocol.ts            # WebSocket protocol types
+├── log/                   # Logger / sinks
 └── utils/
     ├── index.ts
     ├── error.ts
     ├── string.ts
+    ├── string-width.ts
     ├── timing.ts
+    ├── process.ts         # spawnProcess / ProcessHandle
     ├── env-file.ts        # .env parse/upsert/merge
     ├── fs.ts              # writeFileAtomic
     ├── id.ts              # createId
-    └── number.ts          # clamp/parsePortValue
+    ├── number.ts          # clamp/parsePortValue
+    ├── sanitize.ts
+    ├── memory-search.ts
+    └── admin-auth.ts
 ```
 
 ## 3. Package: `core`
@@ -118,78 +125,107 @@ src/packages/core/
 ├── tsconfig.json
 ├── index.ts              # Barrel exports
 ├── server.ts             # startCore(): HTTP + WebSocket server
+├── constants.ts          # Token/context defaults
+├── task-engine.ts
+├── task-queue.ts
+├── task-factory.ts
+├── url-path.ts
 │
 ├── api/
 │   ├── tasks.ts
 │   ├── health.ts
-│   └── middleware/
+│   └── config.ts
 │
 ├── ws/
 │   ├── handler.ts
-│   └── broadcaster.ts
-│
-├── task-engine.ts
-├── task-queue.ts
-├── task-factory.ts
+│   ├── broadcaster.ts
+│   ├── transport-bridge.ts
+│   └── decision-bridge.ts
 │
 ├── pipeline/
 │   ├── registry.ts
 │   ├── builder.ts
-│   ├── manager.ts
-│   └── runner.ts
+│   └── manager.ts
 │
 ├── session/
 │   ├── context.ts
-│   └── store.ts
+│   ├── store.ts
+│   ├── persistence-service.ts
+│   ├── execution-budget.ts
+│   ├── message-policy.ts
+│   └── types.ts
+│
+├── context/
+│   ├── compiler.ts
+│   └── context-service.ts
+│
+├── decision/
+│   ├── choose.ts
+│   └── jev-client.ts
+│
+├── hooks/
+│   └── hook-manager.ts
+│
+├── task/
+│   └── internal-task-orchestrator.ts
+│
+├── skills/
+│   └── types.ts
 │
 ├── tools/
 │   ├── registry.ts
 │   ├── executor.ts
 │   ├── permissions.ts
+│   ├── governance.ts
+│   ├── guard.ts
+│   ├── outcome.ts
 │   ├── bootstrap.ts
+│   ├── mcp-manager.ts
+│   ├── schedule-service.ts
+│   ├── tool-record-store.ts
 │   └── builtin/
 │       ├── fs.ts
 │       ├── shell.ts
-│       └── memory.ts
+│       ├── memory.ts
+│       ├── history.ts
+│       ├── intent.ts
+│       ├── schedule.ts
+│       ├── skill.ts
+│       ├── todowrite.ts
+│       ├── webfetch.ts
+│       ├── websearch.ts
+│       └── tool-records.ts
 │
 ├── replay/
-│   ├── recorder.ts
-│   └── player.ts
+│   ├── recorder.ts       # exported, not wired
+│   └── player.ts         # exported, not wired
 │
 └── pipelines/
     ├── index.ts
     ├── conversation/
     │   ├── index.ts
-    │   ├── types.ts
-    │   ├── elements/index.ts
-    │   │   /* 9 elements:
-    │   │    * collect-prompts (source)
-    │   │    * load-system-prompt (transform)
-    │   │    * fetch-agents-prompt (transform)
-    │   │    * collect-context (transform)
-    │   │    * format-system-messages (transform)
-    │   │    * format-user-messages (transform)
-    │   │    * stream-llm (transform)
-    │   │    * check-follow-up (boundary)
-    │   │    * finalize (sink)
-    │   │    */
-    ├── prediction/
-    │   └── index.ts
-    ├── follow-up/
-    │   ├── index.ts
     │   └── elements/
-    ├── follow-up-evaluator/
-    │   ├── index.ts
-    │   └── elements/
-    ├── context-compress/
-    │   ├── index.ts
-    │   └── elements/
-    ├── post-conversation/
-    │   ├── index.ts
-    │   └── elements/
-    └── shared/
-        ├── index.ts
-        └── token-ratio.ts
+    │       /* 当前主链 8 个：
+    │        * collect-prompts (source)
+    │        * record-context (transform)
+    │        * apply-source-context (transform)
+    │        * collect-context (transform)
+    │        * stream-llm (transform)
+    │        * token-ratio (boundary, from pipelines/shared)
+    │        * check-follow-up (boundary)
+    │        * finalize (sink)
+    │        *
+    │        * 兼容注册但不在主链：
+    │        * load-system-prompt / fetch-agents-prompt
+    │        * format-system-messages / format-user-messages
+    │        * inject-skill-context
+    │        */
+    ├── prediction/          # 3 elements
+    ├── follow-up/           # 2-element lightweight pipeline
+    ├── follow-up-evaluator/ # 3 elements
+    ├── context-compress/    # 4 elements (含 token-ratio)
+    ├── post-conversation/   # 3 elements
+    └── shared/              # jev-element / token-ratio / progress-* / trigram / llm
 ```
 
 ## 4. Package: `config-tui`
@@ -201,20 +237,17 @@ src/packages/config-tui/
 └── src/
     ├── index.ts              # export { startWizard }
     ├── app.tsx               # startWizard: OpenTUI renderer lifecycle
-    ├── wizard-logic.ts       # Single-file pure logic (types/pending state machine/commit/load/parsers)
-    ├── wizard-logic.test.ts
-    ├── theme.tsx             # Self-contained theme system (8 palettes + ThemeProvider)
-    ├── modal/                # Self-contained Modal primitives (list nav + action bar + Esc)
-    └── components/           # WizardApp / MenuModal (left menu + right details, 1:1) / Providers
-                              # ApiKey / Models / Profiles / Theme / Gateway / Project / Confirm
+    ├── wizard-logic.ts       # Pending state machine / commit / load / parsers
+    ├── theme.tsx             # ThemeProvider + palettes
+    ├── modal/                # Self-contained Modal primitives
+    └── components/           # WizardApp / Menu / Provider / Model / Theme / Confirm
 ```
 
-Launched by `src/main.ts` (`--wizard` early-exit branch) and by
-`src/bootstrap/first-run.ts` via shared `spawnProcess` for first-run detection.
-It does not import any code from `@atom-neo/tui` — the wizard UI is fully
-self-contained; responsibilities of the two packages stay independent.
-It participates in the root `bun run --workspaces build` contract with
-`typecheck: tsc --noEmit` and `build: tsc`.
+The wizard runs as a subprocess launched by `src/main.ts` (`--wizard` early-exit
+branch) and by `src/bootstrap/first-run.ts` via shared `spawnProcess`.
+It consumes shared config presets (`@atom-neo/shared`) but does not import the
+chat TUI or Core. It participates in the root `bun run --workspaces build`
+contract with `typecheck: tsc --noEmit` and `build: tsc`.
 
 ### Workspace Dependency Version Policy
 
@@ -230,13 +263,14 @@ introduce a second major or minor line.
 src/packages/gateway/
 ├── package.json
 ├── tsconfig.json
-├── index.ts
-├── server.ts
-├── config.ts
-├── auth/
-│   └── secret.ts
-└── client-manager/
-    └── index.ts
+├── src/
+│   ├── index.ts
+│   ├── server.ts
+│   ├── config.ts
+│   ├── auth/
+│   │   └── secret.ts
+│   └── client-manager/
+│       └── index.ts
 ```
 
 ## 6. Package: `tui`
@@ -245,19 +279,28 @@ src/packages/gateway/
 src/packages/tui/
 ├── package.json
 ├── tsconfig.json
-├── index.ts
-├── app.tsx
-├── client/
-│   └── ws-client.ts
-├── session/
-│   └── manager.ts
-├── renderer/
-│   ├── stream.ts
-│   └── tools.ts
-└── views/
-    ├── chat.tsx
-    ├── toolbar.tsx
-    └── status.tsx
+├── src/
+│   ├── index.ts
+│   ├── app.tsx                 # TUI entrypoint / renderer lifecycle
+│   ├── theme.ts                # Theme palettes + syntax style
+│   ├── types.ts                # View-model types
+│   ├── client/
+│   │   └── ws-client.ts        # WebSocket event client
+│   ├── hooks/
+│   │   └── useChat.ts          # Client → store bindings + send/cancel
+│   ├── stores/
+│   │   ├── chat.ts             # Zustand chat state
+│   │   ├── inputHistory.ts
+│   │   └── copied.ts
+│   └── components/
+│       ├── App.tsx             # Root layout / modal routing
+│       ├── ChatView.tsx
+│       ├── InputBar.tsx
+│       ├── Sidebar.tsx
+│       ├── RuntimeSidebar.tsx
+│       ├── SettingsModal.tsx
+│       ├── ToolMessageBox.tsx
+│       └── modal/              # Modal / ModalActionBar / types
 ```
 
 ## 7. Workspace Root
@@ -266,7 +309,8 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "private": true,
+  "version": "1.22.5",
+  "engines": { "node": ">=24", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",
     "src/packages/core",
@@ -275,11 +319,13 @@ src/packages/tui/
     "src/packages/tui"
   ],
   "scripts": {
-    "dev": "bun run --filter @atom-neo/core dev",
-    "dev:all": "bun run --workspaces dev",
+    "dev": "bun run src/main.ts --sandbox ./sandbox ...",
     "test": "bun test",
     "typecheck": "bun run --workspaces typecheck",
-    "build": "bun run --workspaces build"
+    "build": "bun run --workspaces build",
+    "docs": "bun run docs/server.ts",
+    "docs:check": "bun run scripts/check-docs.ts",
+    "docs:typecheck": "tsc -p tsconfig.docs.json"
   }
 }
 ```
@@ -288,23 +334,23 @@ src/packages/tui/
 
 ```text
 shared/
-  Dependencies: zod
-  Depended on by: core, gateway, tui
+  Dependencies: zod, string-width
+  Depended on by: core, gateway, config-tui, tui
 
 core/
-  Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/openai
+  Dependencies: shared, ai, @ai-sdk/deepseek, @ai-sdk/mcp, @toon-format/toon, croner, zod
   Depended on by: (none, loaded by main.ts)
 
 config-tui/
-  Dependencies: @opentui/core, @opentui/react, react
+  Dependencies: shared, @opentui/core, @opentui/react, react
   Depended on by: (none, launched as subprocess/early-exit by main.ts)
 
 gateway/
-  Dependencies: shared
+  Dependencies: shared, zod
   Depended on by: (none, standalone service)
 
 tui/
-  Dependencies: shared, react, react-dom
+  Dependencies: shared, react, zustand, @opentui/core, @opentui/react
   Depended on by: (none, standalone application)
 ```
 
@@ -327,11 +373,3 @@ sandbox/                        # 工作目录（--sandbox 或默认 CWD）
 ```
 
 **隔离规则**：Agent 所有操作默认限定在 SANDBOX 内。访问外部目录需用户授权。
-
-## 相关文档
-
-| 文档 | 说明 |
-|------|------|
-| [architecture.md](./architecture.md) | 模块在系统架构中的角色 |
-| [bootstrap.md](./bootstrap.md) | 入口点和启动顺序 |
-| [sandbox.md](../subsystems/sandbox.md) | 运行时目录结构 |

@@ -1,6 +1,6 @@
 # Skill System — 开发计划
 
-> **状态**：历史开发计划，已按阶段实施；当前实现与使用方式见 [skill-system.md](./skill-system.md)。
+> **状态**：历史开发计划，已按阶段实施；当前实现与使用方式见 [skill-system.md](../subsystems/skill-system.md)。
 >
 > **原则**：测试先行，每阶段先写测试（红），再实现（绿）。完成全部阶段后统一验证 typecheck。
 

@@ -5,6 +5,8 @@
 > 已采用静态普通文本与动态 TOON。实施与实测边界见 [缓存优化方案](./records/context-snapshot-cache-plan.md)。
 > 文档以 Markdown 为准，不再维护 HTML/Web 版本。
 
+**文档边界**：本文负责 Context 的分层所有权、Snapshot、生命周期与预算；Tool Result 的数据契约与防污染治理见 [context-outcome-governance.md](./context-outcome-governance.md)。历史缓存实验见 [records/context-snapshot-cache-plan.md](./records/context-snapshot-cache-plan.md)。
+
 ## 1. 核心原则
 
 Memory 是持久存储，Context 是当前工作集，ContextSnapshot 是一次模型推理实际接收的只读输入。

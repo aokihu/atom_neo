@@ -71,7 +71,6 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [agents-compiler.md](./subsystems/agents-compiler.md) | AGENTS.md 安全编译器 — LLM 无害化过滤 + SHA-256 缓存 | 理解安全过滤机制 |
-| [skill-system-plan.md](./subsystems/skill-system-plan.md) | Skill 系统开发计划（已实施；当前实现见 [skill-system.md](./subsystems/skill-system.md)） | 回顾设计与测试拆分 |
 | [skill-system.md](./subsystems/skill-system.md) | 可插拔 AI Agent 技能系统 — 三层加载、分段注入、自主卸载 | 实现 skill 功能 |
 
 双层执行预算：[窗口健康检查](pipelines/follow-up-evaluator.md)、[验收记录](records/continuation-validation.md)。
@@ -89,6 +88,10 @@
 | [records/continuation-validation.md](./records/continuation-validation.md) | 统一续写仲裁首次验收与已知限制 |
 | [records/progress-evidence-experiment.md](./records/progress-evidence-experiment.md) | Post/续写跟踪参数对照实验与最终选择 |
 | [records/code-review-telegram-bot.md](./records/code-review-telegram-bot.md) | Telegram Bot Client 历史代码审查报告 |
+| [records/startup-implementation-notes.md](./records/startup-implementation-notes.md) | 启动实现进度、设计记录与改造前基线 |
+| [records/startup-menu-changelog.md](./records/startup-menu-changelog.md) | Startup Menu 历史版本变更 |
+| [records/context-outcome-governance-plan.md](./records/context-outcome-governance-plan.md) | Tool Result / Context 治理实施阶段与完成标准 |
+| [records/skill-system-plan.md](./records/skill-system-plan.md) | Skill System 历史开发计划与测试拆分 |
 
 ## 代码审查
 

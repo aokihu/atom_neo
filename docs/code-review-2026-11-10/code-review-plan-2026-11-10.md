@@ -209,7 +209,10 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
   - 相对链接重写；路径穿越防护；静态 CSS。
   - `--watch` 未实现；刷新页面即可看到 Markdown 更新。
 - [x] `CR-DOC-02`：新建 `docs/records/`，移入验收/实验/计划记录。
-- [ ] `CR-DOC-03/04/05`：合并 Context、启动、Skill 重复文档。本轮仅完成归档、索引与状态清理，未合并正文。
+- [x] `CR-DOC-03/04/05`：收敛 Context、启动、Skill 文档：
+  - Context：`context-management.md`（所有权/生命周期）+ `context-outcome-governance.md`（Tool Result 契约）为当前文档；缓存方案与治理实施阶段归档到 records。
+  - 启动：`bootstrap.md`（启动契约）+ `startup-menu.md`（菜单）为当前文档；实现记录、版本变更、计划与验收归档到 records。
+  - Skill：`skill-system.md` 为当前文档；`skill-system-plan.md` 归档到 records。
 - [x] `CR-DOC-06..08`：修正 architecture/configuration/protocol 的失真声明（本轮为定向修正）。
 - [x] `CR-DOC-09/10`：修正失效 `src/` 路径、索引状态（本轮覆盖 `check-docs` 可验证范围）。
 - [x] 新增 `scripts/check-docs.ts`：Markdown 链接 + 反引号 `src/` 路径。
@@ -564,7 +567,7 @@ bun run scripts/check-file-headers.ts
 | S1 | 已完成 | — | CR-COR-01..11 全部处理；测试 1453 pass / 21 skip / 0 fail；新增 service-manager/index 测试 |
 | S2 | 已完成 | — | CR-RUN-01..05（非 Server）全部处理；源码测试 848 pass / 21 skip / 0 fail（`bun test` 含既有 dist 副本时 1492 pass）；新增 `string-width`、`croner`；Node smoke 通过；版本 1.22.2；剩余 `Bun.serve`/`Bun.Server` 待 S9 |
 | S3 | 已完成 | — | 共享配置契约、env/原子写/helpers、类型收口；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
-| S4 | 已完成 | — | Markdown → HTML 服务；删除 JSX 文档站；records 归档；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；版本 1.22.4 |
+| S4 | 已完成 | — | Markdown → HTML 服务；删除 JSX 文档站；records 归档与 Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；版本 1.22.5 |
 | S5 | 未开始 | — | TUI kit |
 | S6 | 未开始 | — | 事件/提交 |
 | S7 | 未开始 | — | Provider |

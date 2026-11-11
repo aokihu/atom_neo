@@ -14,6 +14,10 @@
 | [continuation-validation.md](./continuation-validation.md) | 统一续写仲裁的首次验收、真实会话证据与已知限制 |
 | [progress-evidence-experiment.md](./progress-evidence-experiment.md) | Post/续写跟踪参数完整方案、消融对照与最终选择 |
 | [code-review-telegram-bot.md](./code-review-telegram-bot.md) | Telegram Bot Client 的代码审查报告（历史快照） |
+| [startup-implementation-notes.md](./startup-implementation-notes.md) | 启动实现进度、设计记录与改造前基线 |
+| [startup-menu-changelog.md](./startup-menu-changelog.md) | Startup Menu 历史版本变更 |
+| [context-outcome-governance-plan.md](./context-outcome-governance-plan.md) | Tool Result / Context 治理实施阶段与完成标准 |
+| [skill-system-plan.md](./skill-system-plan.md) | Skill System 历史开发计划与测试拆分 |
 
 ## 使用约定
 
