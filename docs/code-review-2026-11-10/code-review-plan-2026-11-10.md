@@ -264,15 +264,15 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **任务清单**：
 
-- [ ] `CR-DUP-08`：`shared/src/constants/events.ts` 作为唯一事件源。
-- [ ] `WsMessages`、`PipelineEventMap`、`ServerEvent/ClientEvent` 由常量派生。
-- [ ] 修复 `conversation.chain` / `conversation.idle` envelope，移除 `as any`。
-- [ ] `CR-COR-10`/`CR-ARCH-15`：新增 `TaskSubmissionService`：
+- [x] `CR-DUP-08`：`shared/src/constants/events.ts` 作为唯一事件源。
+- [x] `WsMessages`、`PipelineEventMap`、`ServerEvent/ClientEvent` 由常量派生。
+- [x] 修复 `conversation.chain` / `conversation.idle` envelope，移除 `as any`。
+- [x] `CR-COR-10`/`CR-ARCH-15`：新增 `TaskSubmissionService`：
   - HTTP/WS 共用。
   - WS 使用 `payload.pipeline`。
   - Zod 校验。
-- [ ] TUI `ws-client.ts` 改判别联合 + 路由表。
-- [ ] `CR-DOC-08`：同步修正 `protocol.md`。
+- [x] TUI `ws-client.ts` 改判别联合 + 路由表。
+- [x] `CR-DOC-08`：同步修正 `protocol.md`。
 
 **验收**：
 - HTTP/WS 提交行为一致。
@@ -569,7 +569,7 @@ bun run scripts/check-file-headers.ts
 | S3 | 已完成 | — | 共享配置契约、env/原子写/helpers、类型收口；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
 | S4 | 已完成 | — | Markdown → HTML 服务；删除 JSX 文档站；records 归档与 Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；版本 1.22.5 |
 | S5 | 已完成 | — | 新增 `@atom-neo/tui-kit`：统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；两包删除副本；typecheck 6/6、build 6/6、测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |
-| S6 | 未开始 | — | 事件/提交 |
+| S6 | 已完成 | — | CR-DUP-08/CR-COR-10/CR-ARCH-15/CR-DOC-08：单一事件目录、TaskSubmissionService、typed protocol/TUI 路由；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
 | S7 | 未开始 | — | Provider |
 | S8 | 未开始 | — | server 拆分 |
 | S9 | 未开始 | — | Node HTTP/WS |

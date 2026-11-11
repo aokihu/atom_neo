@@ -284,31 +284,56 @@ export class PipelineEventBus<TEvents extends Record<string, any>> {
 
 ## 2. 事件类型映射
 
+事件名不再手写字符串，而是从 `src/packages/shared/src/constants/events.ts` 的
+`BusEvents` 计算键派生；新增事件必须先加入 `EVENTS`。
+
 ```typescript
+import { BusEvents } from "../constants/events";
+
+/** BaseElement.report 或直接 bus.emit 产生的包装 envelope。 */
+export type ReportedEvent<T> = { name: string; payload: T };
+export type ReportedTransportEvent<T extends Record<string, unknown>> = {
+  name: string;
+  payload: { sessionId: string; taskId: string } & T;
+};
+
 export type PipelineEventMap = {
-  "element.state-changed": { name: string; payload: { state: string } };
-  "pipeline.element.started": { pipelineName: string; elementName: string; elementKind: string };
-  "pipeline.element.finished": { pipelineName: string; elementName: string; elementKind: string; durationMs: number };
-  "pipeline.element.failed": { pipelineName: string; elementName: string; elementKind: string; durationMs: number; error: unknown };
-  "element.data": { name: string; payload: Record<string, unknown> };
+  [BusEvents.Element.StateChanged]: ReportedEvent<{ state: "READY" | "WORKING" | "DONE" | "FAILED" }>;
+  [BusEvents.Pipeline.ElementStarted]: { pipelineName: string; elementName: string; elementKind: string };
+  [BusEvents.Pipeline.ElementFinished]: { pipelineName: string; elementName: string; elementKind: string; durationMs: number };
+  [BusEvents.Pipeline.ElementFailed]: { pipelineName: string; elementName: string; elementKind: string; durationMs: number; error: unknown };
+  [BusEvents.Element.Data]: ReportedEvent<Record<string, unknown>>;
 };
 
 export type CoreEventMap = {
-  "task.enqueued": { task: TaskItem };
-  "task.activated": { task: TaskItem };
-  "task.completed": { task: TaskItem; result: PipelineResult };
-  "task.committed": { task: TaskItem; result: PipelineResult };
-  "task.failed": { task: TaskItem; error: unknown };
+  [BusEvents.Task.Enqueued]: { task: TaskItem };
+  [BusEvents.Task.Activated]: { task: TaskItem };
+  [BusEvents.Task.Completed]: { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Committed]: { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Failed]: { task: TaskItem; error: unknown };
+  [BusEvents.Pipeline.Result]: { task: TaskItem; result: PipelineResult };
 };
 
 export type DomainEventMap = {
-  "transport.delta": { textDelta: string };
-  "transport.tool.started": { toolName: string; toolCallId: string; input: unknown };
-  "transport.tool.finished": { toolName: string; toolCallId: string; result?: unknown };
+  [BusEvents.Transport.Delta]: ReportedTransportEvent<{ textDelta: string; offset: number }>;
+  [BusEvents.Transport.ToolStarted]: ReportedTransportEvent<{ toolName: string; toolCallId: string; input: unknown }>;
+  [BusEvents.Transport.ToolFinished]: ReportedTransportEvent<{ toolName: string; toolCallId: string; result?: unknown }>;
+  [BusEvents.Conversation.Chain]: ReportedEvent<{ sessionId: string; chatId: string; parentTaskId: string; action: ConversationChainAction }>;
+  [BusEvents.Conversation.Idle]: ReportedEvent<{ sessionId: string; chatId: string; parentTaskId: string }>;
+  [BusEvents.Context.TopicChanged]: { sessionId: string; previousTopicId?: string; topicId: string };
 };
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;
 ```
+
+**Envelope 约定**：
+
+| 事件组 | Envelope |
+|--------|----------|
+| `element.state-changed` / `element.data` | `{ name, payload }`（由 `BaseElement.report()` 生成） |
+| `conversation.chain` / `conversation.idle` | `{ name, payload }`（与 `BaseElement.report()` 的发送方约定一致） |
+| `pipeline.*` / `task.*` / `intent.*` / `session.*` / `context.*` / `replay.*` | 扁平 payload |
+| `transport.*` | `{ name, payload }`，payload 必须带 `sessionId` / `taskId` |
 
 ## 3. 自定义事件
 

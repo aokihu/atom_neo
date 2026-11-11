@@ -1,6 +1,5 @@
-import type { SessionInitiator } from "@atom-neo/shared";
 import { PipelineEventBus } from "@atom-neo/shared";
-import type { ContinuationDecision, ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
+import type { ContinuationDecision, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
 import type { ToolEffectSummary } from "./pipelines/conversation/elements/types";
 import type { Logger } from "@atom-neo/shared";
 import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
@@ -17,6 +16,8 @@ import { registerTransportBridge } from "./ws/transport-bridge";
 import { registerDecisionBridge } from "./ws/decision-bridge";
 import { healthHandler, metricsHandler } from "./api/health";
 import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
+import type { TaskRequestBody } from "./api/tasks";
+import { TaskSubmissionService } from "./task/task-submission-service";
 import { configGetHandler, configPatchHandler, configResetHandler, isAdminRequest } from "./api/config";
 import { ToolRegistry } from "./tools/registry";
 import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
@@ -64,14 +65,6 @@ interface RuntimeLike {
 
 interface CompilerLike {
   getCompiledPrompt(): string;
-}
-
-interface TaskRequestBody {
-  sessionId?: string;
-  chatId?: string;
-  initiator?: SessionInitiator;
-  platform?: string;
-  data?: { text?: string };
 }
 
 type CompletedResult = PipelineResult & {
@@ -154,11 +147,17 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   contextService.start();
   const persistence = new SessionPersistenceService(sandbox, contextService);
   const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx), undefined, persistence);
+  const taskSubmission = new TaskSubmissionService({
+    taskQueue,
+    bus,
+    sessionStore,
+    releaseTask: task => orchestrator.releaseTask(task),
+  });
   orchestrator.setReleaseGuard(task => prepareBudgetRelease({
     session: sessionStore.get(task.sessionId), task, limits: budgetLimits(),
     save: () => sessionStore.save(task.sessionId, "task_completed"),
     report: (step, data) => logger.debug(`execution budget: ${step}`, data),
-    notify: text => bus.emit(BusEvents.Transport.Delta as any, { name: "execution-budget", payload: {
+    notify: text => bus.emit(BusEvents.Transport.Delta, { name: "execution-budget", payload: {
       sessionId: task.sessionId, taskId: task.parentTaskId ?? task.id, textDelta: `\n\n${text}`, offset: 0,
     } }),
   }));
@@ -463,7 +462,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       });
       return;
     }
-    if (sid && result.budgetPauseText) bus.emit(BusEvents.Transport.Delta as any, { name: "execution-budget", payload: {
+    if (sid && result.budgetPauseText) bus.emit(BusEvents.Transport.Delta, { name: "execution-budget", payload: {
       sessionId: sid, taskId: p.task.id, textDelta: `\n\n${result.budgetPauseText}`, offset: 0,
     } });
     taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.COMPLETED, result });
@@ -478,16 +477,16 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       if (result.chainAction) {
         logger.debug("conversation completed: scheduling chain after persistence", { action: result.chainAction, sessionId: sid,
           taskId: p.task.id, parentTaskId: p.task.parentTaskId, rootTaskId: p.task.chainId, continuation: result.continuationDecision });
-        bus.emit(BusEvents.Conversation.Chain as any, {
+        bus.emit(BusEvents.Conversation.Chain, {
           name: "task-completed",
           payload: { ...payload, action: result.chainAction, continuation: result.continuationDecision },
-        } as any);
+        });
       } else if (p.task.pipeline === "conversation" && result.shouldPostCheck) {
         logger.debug("conversation completed: scheduling post-conversation after persistence", { sessionId: sid });
-        bus.emit(BusEvents.Conversation.Idle as any, {
+        bus.emit(BusEvents.Conversation.Idle, {
           name: "task-completed",
           payload,
-        } as any);
+        });
       }
     }
     const hasDownstreamTask = orchestrator.commitTask(p.task.id);
@@ -586,15 +585,15 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
   }
   logger.info("schedule tools registered", { count: scheduleTools.length, restored: hookManager.list().length });
 
-  sessionStore.onCreated((sid) => bus.emit(BusEvents.Session.Started as any, { sessionId: sid }));
+  sessionStore.onCreated((sid) => bus.emit(BusEvents.Session.Started, { sessionId: sid }));
   sessionStore.onClosed((sid) => {
     skillService?.clearScope?.(sid);
-    bus.emit(BusEvents.Session.Closed as any, { sessionId: sid });
+    bus.emit(BusEvents.Session.Closed, { sessionId: sid });
   });
   const sessionSweepTimer = setInterval(() => sessionStore.sweepIdle(), 60_000);
   sessionSweepTimer.unref?.();
 
-  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string; action: ConversationChainAction; continuation?: ContinuationDecision } }) => {
+  bus.on(BusEvents.Conversation.Chain, (e) => {
     const p = e.payload;
     const session = sessionStore.get(p.sessionId);
     logger.debug("conversation chain: handler entered", { sessionId: p.sessionId, action: p.action,
@@ -605,7 +604,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
       p.action === "continue_todo" ? "请继续执行当前 TODO；完成后更新 TODO 状态。" : undefined);
   });
 
-  bus.on(BusEvents.Conversation.Idle as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string } }) => {
+  bus.on(BusEvents.Conversation.Idle, (e) => {
     const p = e.payload;
     logger.debug("conversation idle: scheduling post-conversation check", { sessionId: p.sessionId });
     orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
@@ -633,6 +632,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     orchestrator,
     sessionStore,
     taskEngine,
+    taskSubmission,
     isStopping: () => stopping,
   });
 
@@ -747,11 +747,10 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
           const session = sessionStore.get(normalized.sessionId, origin ?? { type: "unknown" });
           if (origin?.type === "gateway" && session.initiator.type !== "unknown" && (session.initiator.type !== "gateway" || session.initiator.clientId !== origin.clientId || session.initiator.platform !== origin.platform)) return Response.json({ error: "Session initiator conflict" }, { status: 409 });
           if (body.platform === "tui" && session.initiator.type === "tui") session.lastTuiUsedAt = Date.now();
-          if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text,
-            /^(继续|continue)$/i.test(body.data.text) && session.executionBudget ? { controlRequest: "resume_budget" } : undefined)) {
-            return Response.json({ error: "Failed to persist session message" }, { status: 500 });
-          }
           if (/^(继续|continue)$/i.test(body.data?.text ?? "") && session.executionBudget && (session.executionBudget.pause || sessionStore.isActive(session.sessionId))) {
+            if (!sessionStore.checkpointUserMessage(normalized.sessionId, body.data?.text ?? "", { controlRequest: "resume_budget" })) {
+              return Response.json({ error: "Failed to persist session message" }, { status: 500 });
+            }
             if (!session.executionBudget.pause) return Response.json({
               taskId: session.executionBudget.releasedTaskIds.at(-1), state: "processing", reason: "already_running",
             });
@@ -766,7 +765,7 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
             orchestrator.releaseTask(task);
             return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
           }
-          return createTaskHandler(taskQueue, normalized, bus, undefined, task => orchestrator.releaseTask(task));
+          return createTaskHandler(taskSubmission, normalized);
         }
         if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
           const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);

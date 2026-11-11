@@ -122,7 +122,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     const event = input.contextSnapshotAccepted && !input.tokenOverflow
       ? BusEvents.Context.SnapshotCommit
       : BusEvents.Context.SnapshotRelease;
-    this.bus.emit(event as any, { snapshotId: input.contextSnapshot.id } as any);
+    this.emitDomain(event, { snapshotId: input.contextSnapshot.id });
     this.report(BusEvents.Element.Data, {
       step: event === BusEvents.Context.SnapshotCommit ? "snapshot-committed" : "snapshot-released",
       snapshotId: input.contextSnapshot.id,

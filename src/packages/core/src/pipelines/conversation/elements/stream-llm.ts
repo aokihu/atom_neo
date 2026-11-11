@@ -288,11 +288,11 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     let timeoutTimer = setTimeout(onTimeout, remainingTimeout);
 
     const completeStep = (stepNumber: number) => {
-      this.bus.emit(BusEvents.Context.StepCompleted as any, {
+      this.emitDomain(BusEvents.Context.StepCompleted, {
         sessionId: this.#session?.sessionId ?? input.task?.sessionId ?? "default",
         taskId: input.task?.id ?? "task",
         stepId: String(stepNumber),
-      } as any);
+      });
     };
 
     const refreshStepContext = () => {

@@ -153,10 +153,22 @@ export type {
 } from "./config";
 
 // ── Protocol ──
+export { CLIENT_EVENT_TYPES, SERVER_EVENT_TYPES, isClientEventType, isServerEventType } from "./protocol";
 export type {
   ClientEvent,
+  ClientEventType,
   ServerEvent,
+  ServerEventType,
+  ServerEventPayload,
   TaskSubmitPayload,
+  TaskCancelPayload,
+  CompactPayload,
+  SessionReadyPayload,
+  TaskCreatedPayload,
+  SessionTaskActivePayload,
+  MCPConnectedPayload,
+  MCPToolStatusPayload,
+  ControlErrorPayload,
   ElementStartedPayload,
   ElementFinishedPayload,
   DecisionUpdatePayload,
@@ -182,7 +194,7 @@ export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, s
 export type { EnvEntry, WriteFileAtomicOptions } from "./utils";
 
 // ── Constants ──
-export { BusEvents, TaskFailureCodes, WsMessages } from "./constants";
+export { BusEvents, EVENTS, TaskFailureCodes, WsMessages } from "./constants";
 
 // ── Prompts ──
 export { PromptKey, initPromptRegistry, resolvePrompt, getRegistry } from "./prompts";

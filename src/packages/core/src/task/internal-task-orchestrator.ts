@@ -155,7 +155,7 @@ export class InternalTaskOrchestrator {
       chainId: hasOwner ? this.#taskChains.get(opts.ownerTaskId!) : undefined,
     });
     const item = { task, onEnqueue: opts.onEnqueue };
-    this.#bus?.emit(BusEvents.Element.Data as any, { name: "orchestrator", payload: {
+    this.#bus?.emit(BusEvents.Element.Data, { name: "orchestrator", payload: {
       step: staged ? "task-staged" : "task-requested", sessionId: task.sessionId, taskId: task.id,
       parentTaskId: task.parentTaskId, rootTaskId: task.chainId, requestedByTaskId: opts.ownerTaskId ?? opts.parentTaskId,
       pipeline, continuation: task.payload.find(part => part.type === "continuation_request")?.data
@@ -173,7 +173,7 @@ export class InternalTaskOrchestrator {
     if (!task) return false;
     if (task === item.task) item.onEnqueue?.(task);
     this.#queue.enqueue(task);
-    this.#bus?.emit(BusEvents.Task.Enqueued as any, { task });
+    this.#bus?.emit(BusEvents.Task.Enqueued, { task });
     return true;
   }
 }

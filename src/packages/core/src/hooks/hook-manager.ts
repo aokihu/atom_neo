@@ -214,7 +214,7 @@ export class HookManager {
     if (this.#releaseTask) this.#releaseTask(taskItem);
     else {
       this.#queue.enqueue(taskItem);
-      this.#bus.emit(BusEvents.Task.Enqueued as any, { task: taskItem });
+      this.#bus.emit(BusEvents.Task.Enqueued, { task: taskItem });
     }
     hook.lastFiredAt = Date.now();
     this.#persist();
@@ -222,17 +222,17 @@ export class HookManager {
   }
 
   #subscribe(): void {
-    this.#bus.on(BusEvents.Task.Activated as any, (ev: { task: { sessionId: string } }) => {
+    this.#bus.on(BusEvents.Task.Activated, (ev) => {
       const sid = ev.task?.sessionId;
       if (sid) this.#lastActiveSessionId = sid;
     });
 
-    this.#bus.on(BusEvents.Session.Started as any, (ev: { sessionId: string }) => {
+    this.#bus.on(BusEvents.Session.Started, (ev) => {
       this.#lastActiveSessionId = ev.sessionId;
       this.#matchAndFire("session:start");
     });
 
-    this.#bus.on(BusEvents.Session.Closed as any, (ev: { sessionId: string }) => {
+    this.#bus.on(BusEvents.Session.Closed, (ev) => {
       const sid = ev.sessionId;
       if (this.#lastActiveSessionId === sid) {
         this.#lastActiveSessionId = null;
@@ -245,7 +245,7 @@ export class HookManager {
       this.#matchAndFire("session:end");
     });
 
-    this.#bus.on(BusEvents.Task.Committed as any, (ev: { task: { origin?: { type: string } } }) => {
+    this.#bus.on(BusEvents.Task.Committed, (ev) => {
       if (ev.task.origin?.type === "hook") return;
       this.#matchAndFire("task:completed");
     });

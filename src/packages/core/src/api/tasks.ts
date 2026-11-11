@@ -1,10 +1,9 @@
-import type { TaskQueue, TaskStatus } from "../task-queue";
-import type { PipelineEventBus } from "@atom-neo/shared";
-import type { CoreEventMap } from "@atom-neo/shared";
-import { TaskSource, TaskState, BusEvents } from "@atom-neo/shared";
-import { createTaskItem } from "../task-factory";
+import type { TaskQueue } from "../task-queue";
+import { TaskState, errorMessage } from "@atom-neo/shared";
+import type { SessionInitiator } from "@atom-neo/shared";
 import type { Pipeline } from "../pipeline/builder";
 import type { TaskEngine } from "../task-engine";
+import { TaskSubmissionError, type TaskSubmissionService } from "../task/task-submission-service";
 
 const pipelineMap = new Map<string, Pipeline>();
 
@@ -20,40 +19,35 @@ export function setPipeline(taskId: string, pipeline: Pipeline): void {
   pipelineMap.set(taskId, pipeline);
 }
 
+export type TaskRequestBody = {
+  sessionId?: string;
+  chatId?: string;
+  pipeline?: string;
+  initiator?: SessionInitiator;
+  platform?: string;
+  data?: { text?: string };
+};
+
 export async function createTaskHandler(
-  taskQueue: TaskQueue,
-  body: any,
-  bus?: PipelineEventBus<CoreEventMap>,
-  pipeline?: Pipeline,
-  releaseTask?: (task: import("@atom-neo/shared").TaskItem) => boolean,
+  taskSubmission: TaskSubmissionService,
+  body: TaskRequestBody,
 ): Promise<Response> {
   try {
-    const task = createTaskItem({
-      sessionId: body.sessionId,
+    const task = taskSubmission.submit({
+      sessionId: body.sessionId ?? "",
       chatId: body.chatId,
-      pipeline: body.pipeline ?? "prediction",
-      source: TaskSource.EXTERNAL,
-      payload: [{ type: "text", data: body.data?.text ?? "" }],
-      ...(body.platform ? { platform: body.platform } : {}),
+      pipeline: body.pipeline,
+      text: body.data?.text,
+      initiator: body.initiator,
+      platform: body.platform,
     });
-
-    if (pipeline) pipelineMap.set(task.id, pipeline);
-
-    if (releaseTask) {
-      releaseTask(task);
-      if (!taskQueue.getStatus(task.id)) {
-        task.state = TaskState.SUSPEND;
-        taskQueue.storeResult(task.id, { taskId: task.id, state: TaskState.SUSPEND });
-      }
-    }
-    else {
-      taskQueue.enqueue(task);
-      if (bus) bus.emit(BusEvents.Task.Enqueued as any, { task });
-    }
-
     return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
-  } catch (err) {
-    return Response.json({ error: String(err) }, { status: 400 });
+  } catch (error) {
+    if (error instanceof TaskSubmissionError) {
+      const status = error.code === "INVALID_INPUT" ? 400 : 500;
+      return Response.json({ error: error.message, code: error.code }, { status });
+    }
+    return Response.json({ error: errorMessage(error) }, { status: 500 });
   }
 }
 

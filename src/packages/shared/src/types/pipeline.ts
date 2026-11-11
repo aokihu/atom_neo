@@ -1,4 +1,5 @@
-import type { TaskItem } from "./task";
+import { BusEvents } from "../constants/events";
+import type { ContinuationDecision, TaskItem } from "./task";
 
 export enum PipelineResultType {
   Complete = "complete",
@@ -45,100 +46,112 @@ export type ReportedTransportEvent<T extends Record<string, unknown>> = {
   payload: TransportEventIdentity & T;
 };
 
+/**
+ * Envelope produced by `BaseElement.report()` and by elements that emit
+ * conversation control events directly through `bus.emit`.
+ */
+export type ReportedEvent<T> = {
+  name: string;
+  payload: T;
+};
+
+/**
+ * Event envelope audit:
+ * - element.state-changed / element.data: reported `{ name, payload }`
+ * - pipeline.* / task.* / intent.* / session.* / context.* / replay.*: flat payloads
+ * - transport.*: reported `{ name, payload }` with session/task identity
+ * - conversation.chain / conversation.idle: reported `{ name, payload }`
+ */
 export type PipelineEventMap = {
-  "element.state-changed": {
-    name: string;
-    payload: { state: "READY" | "WORKING" | "DONE" | "FAILED" };
-  };
-  "pipeline.element.started": {
+  [BusEvents.Element.StateChanged]: ReportedEvent<{ state: "READY" | "WORKING" | "DONE" | "FAILED" }>;
+  [BusEvents.Pipeline.ElementStarted]: {
     pipelineName: string;
     elementName: string;
     elementKind: string;
   };
-  "pipeline.element.finished": {
+  [BusEvents.Pipeline.ElementFinished]: {
     pipelineName: string;
     elementName: string;
     elementKind: string;
     durationMs: number;
   };
-  "pipeline.element.failed": {
+  [BusEvents.Pipeline.ElementFailed]: {
     pipelineName: string;
     elementName: string;
     elementKind: string;
     durationMs: number;
     error: unknown;
   };
-  "element.data": {
-    name: string;
-    payload: Record<string, unknown>;
-  };
+  [BusEvents.Element.Data]: ReportedEvent<Record<string, unknown>>;
 };
 
 export type CoreEventMap = {
-  "task.enqueued": { task: TaskItem };
-  "task.activated": { task: TaskItem };
-  "task.completed": { task: TaskItem; result: PipelineResult };
-  "task.committed": { task: TaskItem; result: PipelineResult };
-  "task.failed": { task: TaskItem; error: unknown };
-  "pipeline.result": { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Enqueued]: { task: TaskItem };
+  [BusEvents.Task.Activated]: { task: TaskItem };
+  [BusEvents.Task.Completed]: { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Committed]: { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Failed]: { task: TaskItem; error: unknown };
+  [BusEvents.Pipeline.Result]: { task: TaskItem; result: PipelineResult };
 };
 
 export type DomainEventMap = {
-  "intent.parsed": {
+  [BusEvents.Intent.Parsed]: {
     parsedCount: number;
     safeCount: number;
     rejectedCount: number;
   };
-  "transport.reason": ReportedTransportEvent<{ textDelta: string; offset: number }>;
-  "transport.delta": ReportedTransportEvent<{ textDelta: string; offset: number }>;
-  "transport.tool.started": ReportedTransportEvent<{
+  [BusEvents.Transport.Reason]: ReportedTransportEvent<{ textDelta: string; offset: number }>;
+  [BusEvents.Transport.Delta]: ReportedTransportEvent<{ textDelta: string; offset: number }>;
+  [BusEvents.Transport.ToolStarted]: ReportedTransportEvent<{
     toolName: string;
     toolCallId: string;
     input: unknown;
   }>;
-  "transport.tool.finished": ReportedTransportEvent<{
+  [BusEvents.Transport.ToolFinished]: ReportedTransportEvent<{
     toolName: string;
     toolCallId: string;
     result?: unknown;
     error?: unknown;
   }>;
-  "transport.tool.step-finished": ReportedTransportEvent<{
+  [BusEvents.Transport.ToolStepFinished]: ReportedTransportEvent<{
     stepNumber: number;
     total: number;
     success: number;
     failed: number;
     toolNames: string[];
   }>;
-  "transport.tool.group-complete": ReportedTransportEvent<{
+  [BusEvents.Transport.ToolGroupComplete]: ReportedTransportEvent<{
     total: number;
     success: number;
     failed: number;
     toolNames: string[];
   }>;
-  "transport.failed": { error: unknown };
-  "conversation.chain": {
+  [BusEvents.Transport.Failed]: { error: unknown };
+  [BusEvents.Conversation.Chain]: ReportedEvent<{
     sessionId: string;
     chatId: string;
     parentTaskId: string;
     ownerTaskId?: string;
     action: ConversationChainAction;
-    continuation?: import("./task").ContinuationDecision;
-  };
-  "conversation.idle": {
+    continuation?: ContinuationDecision;
+  }>;
+  [BusEvents.Conversation.Idle]: ReportedEvent<{
     sessionId: string;
     chatId: string;
     parentTaskId: string;
     ownerTaskId?: string;
-  };
-  "session.started": { sessionId: string };
-  "session.closed": { sessionId: string };
-  "context.core.stopped": Record<string, never>;
-  "context.workspace.changed": { workspaceId: string; previousWorkspaceId?: string };
-  "context.workspace.closed": { workspaceId: string };
-  "context.topic.changed": { sessionId: string; previousTopicId?: string; topicId: string };
-  "context.step.completed": { sessionId: string; taskId: string; stepId: string };
-  "context.snapshot.commit": { snapshotId: string };
-  "context.snapshot.release": { snapshotId: string };
+  }>;
+  [BusEvents.Session.Started]: { sessionId: string };
+  [BusEvents.Session.Closed]: { sessionId: string };
+  [BusEvents.Replay.Start]: { taskId: string; eventCount: number };
+  [BusEvents.Replay.End]: { taskId: string; durationMs: number };
+  [BusEvents.Context.CoreStopped]: Record<string, never>;
+  [BusEvents.Context.WorkspaceChanged]: { workspaceId: string; previousWorkspaceId?: string };
+  [BusEvents.Context.WorkspaceClosed]: { workspaceId: string };
+  [BusEvents.Context.TopicChanged]: { sessionId: string; previousTopicId?: string; topicId: string };
+  [BusEvents.Context.StepCompleted]: { sessionId: string; taskId: string; stepId: string };
+  [BusEvents.Context.SnapshotCommit]: { snapshotId: string };
+  [BusEvents.Context.SnapshotRelease]: { snapshotId: string };
 };
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;

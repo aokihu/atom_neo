@@ -327,7 +327,7 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.6",
+  "version": "1.22.7",
   "engines": { "node": ">=24", "bun": ">=1.4" },
   "workspaces": [
     "src/packages/shared",

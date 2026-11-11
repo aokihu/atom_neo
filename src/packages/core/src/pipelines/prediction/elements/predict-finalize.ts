@@ -58,11 +58,11 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     }
     if (effectiveTopic && effectiveTopic !== session.currentTopic) {
       this.report(BusEvents.Element.Data, { step: "topic-changed", from: session.currentTopic, to: effectiveTopic });
-      this.bus.emit(BusEvents.Context.TopicChanged as any, {
+      this.emitDomain(BusEvents.Context.TopicChanged, {
         sessionId: session.sessionId,
         ...(session.currentTopic ? { previousTopicId: session.currentTopic } : {}),
         topicId: effectiveTopic,
-      } as any);
+      });
       this.#skillService?.clearScope?.(session.sessionId);
       session.resetForNewTopic(effectiveTopic);
     }

@@ -1788,3 +1788,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-11 | S3 实施完成：共享配置契约、env/原子写/helpers、Skill/MemoryKind/Todo 类型收口；`config-tui`/`gateway` 使用 shared；删除顶层 `theme`；测试 1600 pass / 21 skip / 0 fail（源码 904）；版本 1.22.3；文件命名/文件头延后 S3b |
 | 2026-11-11 | S4 实施完成：删除 JSX 文档站，新增 `marked` Markdown → HTML 服务；records 归档；Context/启动/Skill 文档收敛；`docs:check`/`docs:typecheck` 通过；Bun/Node smoke 通过；测试 1612 pass / 21 skip / 0 fail（源码 916）；版本 1.22.5 |
 | 2026-11-11 | S5 实施完成：新增 `@atom-neo/tui-kit` 统一主题/Modal/FieldInput/SelectableRow；Modal 状态与键盘修复；`tui`/`config-tui` 删除副本；typecheck/build 6/6，测试 1624 pass / 21 skip / 0 fail（源码 922）；版本 1.22.6 |
+| 2026-11-11 | S6 实施完成：`EVENTS` 单一事件目录；`BusEvents`/`WsMessages`/事件映射/协议联合派生；`conversation.chain/idle` envelope 修复；新增 `TaskSubmissionService` 统一 HTTP/WS 提交；TUI 改为 typed `ServerEvent` 路由；`protocol.md`/`pipeline-dev.md` 对齐；typecheck/build 6/6，`docs:check`/`docs:typecheck` 通过；测试 1672 pass / 21 skip / 0 fail（源码 946）；版本 1.22.7 |
