@@ -3,6 +3,7 @@ import {
   buildToolStepInstruction,
   formatToolBatchBlock,
   projectToolMessages,
+  stringifyToolOutput,
   stripToolCallMarkup,
   toSchemaOnlyTools,
   validateToolCallBatch,
@@ -71,6 +72,15 @@ describe("Tool call batches", () => {
     expect(projected).toContain("memory-1");
     expect(projected).toContain("ls-1");
     expect(projected.match(/TOOL_BATCH_BLOCKED/g)).toHaveLength(2);
+  });
+});
+
+describe("Tool output stringification", () => {
+  test("keeps strings, empty undefined, JSON values, and unserializable fallbacks", () => {
+    expect(stringifyToolOutput("already text")).toBe("already text");
+    expect(stringifyToolOutput(undefined)).toBe("");
+    expect(stringifyToolOutput({ count: 1 })).toBe("{\"count\":1}");
+    expect(stringifyToolOutput(10n)).toBe("10");
   });
 });
 

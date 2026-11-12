@@ -3,13 +3,13 @@ import { describe, expect, test } from "bun:test";
 import {
   injectToolContext,
   resolveModelInput,
-  resolveMCPToolMetadata,
   resolveTokenMetrics,
   resolveCacheMetrics,
   shouldRecordToolResult,
   summarizeToolEffects,
-  wrapMCPAiTools,
-} from "./stream-llm";
+} from "./stream/stream-model-input";
+import { ToolStatusCollector, resolveMCPToolMetadata } from "./stream/tool-result-status";
+import { wrapMCPAiTools } from "./stream/tool-runtime-mcp";
 
 import { ContextService } from "../../../context/context-service";
 import { makeBus } from "../../test-helpers";
@@ -125,14 +125,14 @@ test("records only real Tool executions and excludes history query Tools", () =>
 });
 
 test("wrapMCPAiTools records success and failure for transport completion", async () => {
-  const statuses = new Map<string, any[]>();
+  const statuses = new ToolStatusCollector();
   const wrapped = wrapMCPAiTools({
     weather: { execute: async () => ({ temperature: 20 }) },
     broken: { execute: async () => { throw new Error("offline"); } },
   }, () => {}, { count: 0 }, statuses, { current: new ToolCallLedger({ maxExecutions: 10 }) });
 
   expect(await wrapped.weather.execute({})).toEqual({ temperature: 20 });
-  expect(statuses.get("weather")).toEqual([{
+  expect(statuses.peek("weather")).toEqual([{
     content: "{\"temperature\":20}",
     rawOutput: { temperature: 20 },
     metadata: { ok: true, effect: "reference" },
@@ -141,7 +141,7 @@ test("wrapMCPAiTools records success and failure for transport completion", asyn
   }]);
 
   expect(await wrapped.broken.execute({})).toBe("MCP tool error: offline");
-  expect(statuses.get("broken")).toEqual([{
+  expect(statuses.peek("broken")).toEqual([{
     content: "",
     metadata: { ok: false, effect: "none", error: "offline", errorSource: "tool" },
     startedAt: expect.any(Number),
@@ -160,7 +160,7 @@ test("resolveMCPToolMetadata uses MCP structure instead of natural-language gues
 
 test("wrapMCPAiTools blocks duplicate execution through the shared ledger", async () => {
   let executions = 0;
-  const statuses = new Map<string, any[]>();
+  const statuses = new ToolStatusCollector();
   const wrapped = wrapMCPAiTools({
     weather: { execute: async () => ({ temperature: ++executions }) },
   }, () => {}, { count: 0 }, statuses, { current: new ToolCallLedger({ maxExecutions: 10 }) });
@@ -169,7 +169,7 @@ test("wrapMCPAiTools blocks duplicate execution through the shared ledger", asyn
   expect(await wrapped.weather.execute({ city: "Hangzhou" }))
     .toContain("Do not repeat this tool call");
   expect(executions).toBe(1);
-  expect(statuses.get("weather")?.at(-1)?.metadata).toMatchObject({
+  expect(statuses.peek("weather").at(-1)?.metadata).toMatchObject({
     ok: false,
     error: "TOOL_GOVERNANCE_BLOCKED [duplicate_request]",
   });
