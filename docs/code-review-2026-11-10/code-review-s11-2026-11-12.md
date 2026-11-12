@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `ef7ff15` (v1.22.12, S10 complete)
 > **Scope**: CR-ARCH-01..09 中尚未收口的全局状态、构造方式与边界类型
-> **Status**: 仅规划，未改动 `src/`
+> **Status**: S11-A1–A11 与 S11-E 已实施；B/C/D/F/G/H 待实施
 > **Related**:
 > - [code-review-s11-graph-2026-11-12.md](./code-review-s11-graph-2026-11-12.md)
 > - [code-review-s11-plan-2026-11-12.md](./code-review-s11-plan-2026-11-12.md)
@@ -130,7 +130,7 @@ startGateway({ logger, httpServer })
 |---|---|---|---|---|
 | CR-ARCH-01 | 模块级 `registry = new Map()` | `src/packages/core/src/pipeline/registry.ts:5` | 两次 `startCore` 共享注册表；测试需 `clearRegistry()` | `ElementRegistry` 实例 |
 | CR-ARCH-02 | 模块级 `pipelineMap` | `src/packages/core/src/api/tasks.ts:8-20` | TaskEngine 依赖 HTTP 层；测试互相污染 | `PipelineInstanceStore` 注入 |
-| CR-ARCH-03 | 懒初始化 `_instance` | `src/packages/shared/src/prompts/index.ts:13-18` | 首次调用隐式构造；无法并行多实例 | `createPromptRegistry()` + `PromptResolver` |
+| CR-ARCH-03 | 已由 S11-A6–A11 删除；改为 per-Core registry + resolver | `src/packages/shared/src/prompts/index.ts` | 已消除 | `createPromptRegistry()` + `PromptResolver` |
 | CR-ARCH-04 | Gateway 模块级 Logger | 已在 S9-D 删除 | import 无副作用已满足 | 仅防回归测试 |
 | CR-ARCH-05 | ThemeContext 在 `App.tsx` | 已在 S5 移到 `tui-kit/src/theme.tsx` | 循环依赖已解除 | 仅 import 图防回归 |
 | CR-ARCH-06 | 字符串 ServiceManager | `src/services/service-manager.ts:18-20`、`bootstrap.ts:102-109` | `sm.get("memory")` 无类型；缺失服务延迟失败 | `CoreServices` + 显式注入 |
@@ -356,7 +356,7 @@ export class PipelineInstanceStore {
 
 ### CR-ARCH-03 — PromptRegistry 单例 + 懒初始化
 
-**级别**: P2 · **阶段**: S11-A · **当前状态**: 未解决
+**级别**: P2 · **阶段**: S11-A · **当前状态**: 已解决（S11-A6–A11）
 
 **位置**: `src/packages/shared/src/prompts/index.ts:13-34`、`src/packages/shared/src/prompts/registry.ts:7-46`。
 
@@ -431,6 +431,13 @@ export function createPromptResolver(registry: PromptRegistry): PromptResolver {
 - 两个 `PromptRegistry` 独立注册不同变体，互不污染。
 - `rg 'getRegistry\\(|initPromptRegistry\\(' src` 为 0（生产 + 测试）。
 - 同一 prompt key/provider/model 在迁移前后输出完全一致（快照/字符串比较）。
+
+**实施记录（S11-A6–A11）**:
+
+- `createPromptRegistry()` 在 `shared/src/prompts/index.ts` 注册全部语言/模型变体；`createPromptResolver()` 绑定单个 registry 并保留 `openai/gpt-4o` 默认与未知 provider 的 `en` fallback。
+- `_instance` / `getRegistry()` / `initPromptRegistry()` / 自由 `resolvePrompt()` 与旧 barrel 导出已删除。
+- `createCoreBootstrap` 每个实例创建 registry + resolver，传入 `createPipelineFactory`；pipeline deps、`chooseDecision`、`callLLM` 与 JEV 模拟均显式接收 resolver。
+- `prompts.test.ts` 覆盖双 registry 隔离、后续注册隔离、默认/显式/空 providerModel 与逐字一致输出。
 
 ---
 

@@ -139,8 +139,9 @@ src/packages/core/
 ├── tsconfig.json
 ├── index.ts              # Barrel exports
 ├── server.ts             # startCore(): composition root + lifecycle; transport via HttpServer
-├── bootstrap.ts          # Constructs bus/queue/session/tools/MCP/schedule/pipeline/WS
-├── pipeline-factory.ts   # Five pipeline builders + model/token/context resolution
+├── bootstrap.ts          # Constructs bus/queue/session/tools/MCP/prompt registry/schedule/pipeline/WS
+├── core-services.ts      # Typed CoreServices contract + startup validation
+├── pipeline-factory.ts   # Five pipeline builders + model/token/context/prompt resolver wiring
 ├── task-lifecycle.ts     # Task Activated/Completed/Failed + chain/idle scheduling
 ├── http-router.ts        # /api/* + /ws/* route table and requireAdmin
 ├── mcp-lifecycle.ts      # MCP init/fetch/health/close with stop guard
@@ -313,7 +314,14 @@ src/packages/gateway/
 │   ├── auth/
 │   │   └── secret.ts
 │   └── client-manager/
-│       └── index.ts
+│       ├── README.md
+│       ├── index.ts
+│       ├── runtime.ts
+│       ├── process-state.ts
+│       ├── restart-policy.ts
+│       ├── health-probe.ts
+│       ├── process-supervisor.ts
+│       └── test-helpers.ts
 ```
 
 ## 7. Package: `tui`

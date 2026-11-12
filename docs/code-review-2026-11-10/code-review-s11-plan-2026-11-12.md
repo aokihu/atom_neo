@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `ef7ff15` (v1.22.12, S10 complete)
-> **Status**: 已拆分，待实施（本文只做规划，不改源码）
+> **Status**: S11-A1–A11（CoreServices + Prompt DI）与 S11-E（ProcessSupervisor）已实施；B/C/D/F/G/H 待实施
 > **Scope**: CR-ARCH-01..09；CR-ARCH-04/05 已关闭，仅防回归
 
 ---
@@ -195,6 +195,8 @@ S11-F（Theme guard）随时可做
 - **回滚**: revert 单 commit；恢复 `sm?` 字段与 helper 分支。
 - **DoD**: `CoreDeps` 只接受 `services`；缺失必填服务 fail-fast。
 
+> **实施状态（A1–A5）**: 已完成（2026-11-12）。`CoreServices` / `resolveCoreServices` / `assertCoreServices` 已落地；`createCoreBootstrap` 与 `startCore` 只接收 `services`，`sm`/`ServiceProvider` 已从 Core 删除；`main.ts` 构造同一批 Memory/Network/Skill/Compiler 实例并注入；Node smoke、e2e、server-continuation 与 `budget-live-validation` 调用点已迁移。缺失 `memory/network` 在创建 HTTP server 前 fail-fast。验证：typecheck 6/6、typecheck:node 0 error、目标测试通过、全量测试通过。
+
 #### S11-A6 — 增加 `createPromptRegistry` 工厂
 
 - **复杂度**: 简单（1.5h）
@@ -287,6 +289,13 @@ S11-F（Theme guard）随时可做
 - **行为风险**: 中；测试需显式创建 registry。任何遗漏会在编译期暴露。
 - **回滚**: revert 单 commit；恢复旧导出与 `_instance`。
 - **DoD**: `rg 'getRegistry\\(|initPromptRegistry\\(' src` 为 0；prompt 测试全部用 `createPromptRegistry`。
+
+> **实施状态**: 已完成（2026-11-12）。`createPromptRegistry()` / `createPromptResolver()` 已落地；`_instance`、`getRegistry()`、`initPromptRegistry()`、自由 `resolvePrompt()` 与旧 barrel 导出已删除。`createCoreBootstrap` 每个 Core 实例创建一个 registry + resolver，经 `createPipelineFactory` 注入 conversation / prediction / follow-up-evaluator / context-compress / post-conversation；`chooseDecision`、`callLLM`、JEV 模拟路径均要求显式 resolver。Prompt 文本、语言 fallback、模型 refinement 顺序与缓存语义保持不变；`prompts.test.ts` 增加两个 registry 独立与逐字一致测试。
+>
+> - [x] `rg 'resolvePrompt|initPromptRegistry|getRegistry\(|_instance' src` 为 0。
+> - [x] 同一 key/provider/model 在 factory 与手工注册（原 `initPromptRegistry` 顺序）之间逐字一致。
+> - [x] 两个 registry 的后续注册、缓存与 resolver 互不影响。
+> - [x] 目标测试：shared + core 663 pass / 0 fail；全量 1874 pass / 21 skip / 0 fail。
 
 ---
 
@@ -540,6 +549,8 @@ S11-F（Theme guard）随时可做
 ---
 
 ### S11-E — ClientManager → ProcessSupervisor（20h）
+
+> **实施状态**: 已完成（2026-11-12）。`ClientManager` 仅保留 facade；`ProcessSupervisor`、状态机、RestartPolicy、HealthProbe、runtime 注入与 fake 测试均已落地。健康失败现在与异常退出共用重启入口（发布说明需标注）。Gateway 路由/鉴权/状态码、公开 API、端口/secret、重启上限与退避保持不变。
 
 #### S11-E1 — ClientManager 依赖可注入
 
@@ -1197,3 +1208,5 @@ rg -n 'let _instance|const pipelineMap|const registry = new Map' src/packages --
 | 日期 | 变更 |
 |---|---|
 | 2026-11-12 | 初始 S11 实施计划：拆分 A–H 共 49 个任务（20 简单 / 29 中等），基线 110h，关键路径 89h；给出测试矩阵、回滚矩阵、DoD、PR 拆分与验收命令；仅文档，未改源码 |
+| 2026-11-12 | S11-E 实施：新增 `client-manager/{runtime,process-state,restart-policy,health-probe,process-supervisor,test-helpers}.ts`，`ClientManager` 改为 facade；新增 5 个测试文件。Gateway 源码测试 7 → 44；健康失败进入统一重启路径 |
+| 2026-11-12 | S11-A6–A11 实施：新增 `createPromptRegistry()` / `PromptResolver` / `createPromptResolver()`；删除 prompt 单例与旧导出；6 条 pipeline、`chooseDecision`、`callLLM`、JEV 模拟全部显式注入 resolver；`prompts.test.ts` 增加双 registry 隔离与逐字一致测试。shared + core 663 pass；全量 1874 pass / 21 skip / 0 fail |

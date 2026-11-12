@@ -127,41 +127,74 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 
 Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。设计要求 Secret 与 Client 进程生命周期绑定；异常退出/重启路径现已撤销旧 Secret；验收记录见 [验收记录](../records/startup-validation.md)。
 
-## 5. Client Manager
+## 5. Client Manager / ProcessSupervisor
 
-### 5.1 启动
+`ClientManager` 保留原有公开 API（`startAll/stopAll/start/stop/list/getBySecret/getById`），内部为每个 Client 创建一个 `ProcessSupervisor`。状态机是进程生命周期的唯一来源；启动、停止、异常退出、健康失败和重启计时器不再各自维护并行状态。
+
+### 5.1 进程状态机
+
+```text
+idle --start--> starting --ready--> running --stop--> stopping --exit--> idle
+                     |                  |
+                     +--exit/error-----> failed --timer(desired)--> starting
+running --health_failed--> failed --timer(desired)--> starting
+failed --stop/give_up--> idle
+```
+
+| 状态 | 含义 |
+|---|---|
+| `idle` | 无进程、无重启计时器；`desired=false` |
+| `starting` | 已 spawn，等待 `/health` 就绪（100ms 轮询，10s 超时） |
+| `running` | 就绪；每 30s 健康检查 |
+| `stopping` | 手动停止或强杀中，禁止重启 |
+| `failed` | 异常退出/健康失败/启动失败；按策略等待重启或 give_up |
+
+所有 spawn/stop/restart 操作通过 supervisor 内部队列串行。手动 `stop` 会立即清除重启计时器并撤销 secret；`stopAll` 先清除期望状态和所有计时器，再并行停止，结束后不会再 spawn。
+
+### 5.2 启动与重启策略
 
 ```typescript
-// Gateway 内部
-const secret = crypto.randomUUID();
-const port = allocatePort();
-const proc = spawnProcess([
-  clientBinaryPath,
+// 生产默认值集中在 client-manager/runtime.ts
+const secret = generateSecret();
+const port = config.clientPortRangeStart + clientIndex;
+spawnProcess([
+  binary,
   "--secret", secret,
   "--port", String(port),
   "--gateway-url", `http://127.0.0.1:${config.port}`,
-], { onExit: () => restartClient(id) });
+  ...userArgs,
+], { onExit: (code, signal, error) => supervisor.onExit(code, signal, error) });
 ```
 
-### 5.2 生命周期
+- 重启上限 5 次，退避 `1s * 2^attempt`，上限 30s。
+- 异常退出和健康检查失败共用同一 `failed → starting` 重启入口；达到上限后 give_up 并记录 `client restart limit reached`。
+- 进程持续健康运行 ≥60s 后重置重启计数。
+- 手动 stop 不会被旧 exit 回调或旧 timer 复活。
+
+### 5.3 生命周期
 
 ```
 Gateway 启动
   ├── 读取 config.gateway.clients[]
   ├── 对每个 client:
-  │     ├── 生成 secret + 分配端口
+  │     ├── ProcessSupervisor 生成 secret + 使用分配端口
   │     ├── spawnProcess([二进制, "--secret", secret, "--port", port])
   │     └── 等待 Client HTTP server 就绪
   │
   └── 运行中:
         ├── 心跳: 每 30s GET /health
-        ├── 进程异常退出 → 自动重启 (新 secret)
+        ├── 健康失败 → 停止当前进程 → 按重启策略重启 (新 secret)
+        ├── 进程异常退出 → 按重启策略重启 (新 secret)
         └── 收到 inbound → 轮询 Core → 推送 result
 
 Gateway 关闭
   ├── POST /command {"action":"stop"} → Client
   └── handle.stop(false) → ClientManager.stopAll → handle.stop(true)
 ```
+
+> **行为变化（S11-E）**：健康检查失败过去只记录日志；现在进入与异常退出相同的重启策略。路由、鉴权、状态码、端口/secret 规则、重启上限与退避保持不变。
+>
+> 测试通过 `client-manager/runtime.ts` 注入 fake spawn/fetch/now/timer，不启动真实子进程。
 
 ## 6. Client 二进制规范
 
@@ -225,7 +258,14 @@ src/packages/gateway/
     auth/
       secret.ts                     Secret 生成与验证
     client-manager/
-      index.ts                      Client 子进程管理器
+      README.md                     目录摘要与生命周期说明
+      index.ts                      ClientManager facade
+      runtime.ts                    spawn/fetch/now/timer 生产默认值
+      process-state.ts              纯进程状态机
+      restart-policy.ts             重启上限/退避/reset
+      health-probe.ts               健康探测（200/非 2xx/超时/网络）
+      process-supervisor.ts         每 Client 的进程生命周期
+      test-helpers.ts               fake runtime/process/clock
 
 clients/
   telegram-bot/
