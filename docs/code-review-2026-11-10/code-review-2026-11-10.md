@@ -1728,22 +1728,26 @@ const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "ll
 
 ---
 
-## 10. 禁区 / 暂不修改
+## 10. 禁区 / 兼容保留
 
-以下内容在本次整改中**保持原样**：
+以下内容在本次整改中**不做行为变更、不新增主链接线、不删除**：
 
-1. 未实现的 5 个兼容 Element：
-   - `load-system-prompt.ts`
+1. 兼容 Element（保留注册）：
+   - `load-system-prompt.ts`：S11-A8 已做 `PromptResolver` 注入；输出与调用语义不变
+   - `format-user-messages.ts`：S12-E15 已做纯函数投影；消息顺序/过滤不变
    - `fetch-agents-prompt.ts`
    - `format-system-messages.ts`
-   - `format-user-messages.ts`
    - `inject-skill-context.ts`
+
+   > 这 5 个 Element 不删除、不接入新的主链行为；允许必要的类型收窄、依赖注入与纯函数化，不允许改变输出或隐式接线。
 2. `pipelines/follow-up/` 及其 Element。
 3. `PipelineRunner`、`PipelineManager`、`PipelineRecorder`、`PipelinePlayer`：暂不删除，不接线；只修正文档“已实现”的声明。
 4. `CommandPalette`、`useCopied`：暂不删除。
 5. 不对 `node:fs/path/crypto` 造抽象层。
 6. 不把全部 `bun:test` 迁移到 Node；Node 使用独立 smoke suite。
 7. 不引入 DI 容器；继续构造器/显式对象注入。
+
+> 2026-11-13 校正：原“5 个兼容 Element 暂不修改”的严格边界已被 S11-A8 / S12-E15 的行为保持改动替代。现状以本节为准。
 
 ---
 
@@ -1803,3 +1807,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-12 | S11 实施完成（S11 完成，v1.23.0）：CoreServices/Prompt DI、ElementRegistry、PipelineInstanceStore、TaskEngine 单循环/不可变 FlowState、ProcessSupervisor、Theme guard、Element 窄接口；新增同进程双 `startCore` 验收与全局残留 guard；H2/H3/H4 隔离与状态矩阵补齐；过渡符号 0 残留；workspace 包版本不变；更新 DI/启动/结构/任务执行/索引与 S11 文档；源码 1095 pass / 21 skip / 0 fail，全量 1968 pass / 21 skip / 0 fail，typecheck 6/6、typecheck:node 0 error、build 6/6、Node/package smoke 与 docs 检查通过 |
 | 2026-11-12 | S12 实施完成（S12 完成，v1.24.1）：stream-llm/memory/context/persistence/supervisor/continuation/compress/TUI chat/panels/App Modal/Wizard 结构拆分；新增 `check:size` AST 行数/函数 guard（78 targets + 0 exceptions）；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；`protocol.ts` 36 / `session/context.ts` 284 已纳入目标预算；workspace 包版本不变；源码 1363 pass / 21 skip / 0 fail，全量 2483 pass / 21 skip / 0 fail，typecheck 6/6、typecheck:node 0 error、build 6/6、`dist/atom` 75 MiB、`dist/node/main.js` 2.87 MiB、Node smoke 8 步、package smoke 11/11（576.9 KiB）、docs 检查通过 |
 | 2026-11-12 | S10 后续收尾：新增 `scripts/node-smoke/tui-render.ts`，用 OpenTUI test renderer 在 Node 下渲染并断言边框/文本；已接入 `smoke:node`（8 步）；无新增例外 |
+| 2026-11-13 | 禁区边界校正：兼容 Element 改为“不删除、不新增主线接线、不改行为”；`load-system-prompt`/`format-user-messages` 的行为保持注入/纯函数化纳入允许范围 |

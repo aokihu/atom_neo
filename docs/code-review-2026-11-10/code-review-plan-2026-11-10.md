@@ -685,9 +685,9 @@ bun run scripts/check-file-headers.ts
 
 ---
 
-## 9. 暂不做（与禁区一致）
+## 9. 暂不做（兼容保留）
 
-- 不删除未实现的 5 个兼容 Element。
+- 不删除 5 个兼容 Element；`load-system-prompt` / `format-user-messages` 已做行为保持的依赖注入/纯函数化，不新增主线接线。
 - 不删除 follow-up Element。
 - 不删除 Replay / PipelineRunner / PipelineManager / CommandPalette / useCopied。
 - 不为 `node:fs/path/crypto` 造抽象。
