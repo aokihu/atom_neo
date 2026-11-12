@@ -287,14 +287,14 @@ The root package is publishable as an npm tarball. `prepack` rebuilds
 ```bash
 # From the repository root; prepack runs `bun run build:node`
 npm pack
-# -> atom-neo-1.24.2.tgz
+# -> atom-neo-1.25.0.tgz
 #    ~0.56 MiB packed / ~2.87 MiB unpacked
 #    package/package.json + package/dist/node/main.js only
 
 # Install into a throwaway project
 mkdir /tmp/atom-neo-install && cd /tmp/atom-neo-install
 npm init -y
-npm install /path/to/atom-neo-1.24.2.tgz
+npm install /path/to/atom-neo-1.25.0.tgz
 
 # Entrypoint and bin
 node node_modules/atom-neo/dist/node/main.js --help
