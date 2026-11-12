@@ -89,15 +89,17 @@ atom_neo/
 │       │   ├── task-engine.ts
 │       │   ├── task-queue.ts / task-factory.ts
 │       │   ├── pipeline/         # builder / registry / manager
-│       │   ├── session/          # context / store
+│       │   ├── session/          # context / store / checkpoint / history / format / durable-fs
+│       │   ├── context/          # facade / bucket-store / snapshot-manager / codec / compiler
 │       │   ├── tools/            # registry / executor / builtin
 │       │   ├── replay/           # recorder / player
 │       │   ├── ws/               # handler / broadcaster
 │       │   ├── api/              # tasks / health
 │       │   └── pipelines/        # conversation / prediction / follow-up-evaluator / context-compress / post-conversation
+│       │       └── conversation/elements/stream/  # loop / step / tool-batch / runtime / reporting / finalize
 │       │
 │       ├── shared/               # types / pipeline-core / log / protocol / utils
-│       ├── gateway/              # secret auth / client-manager
+│       ├── gateway/              # secret auth / client-manager (supervisor / command / termination)
 │       └── tui/                  # OpenTUI React: App / ChatView / InputBar / Sidebar / hooks
 │
 ├── sandbox/                      # 运行时工作目录
@@ -105,6 +107,14 @@ atom_neo/
 │   └── .env                     # API Keys
 └── docs/
 ```
+
+**S12 结构边界（v1.24.0）**：Core 的四个巨型文件已按行为边界拆分，facade 保持原公共 API：
+`StreamLLMElement`（`stream-llm.ts`）只保留 shell，循环/step/工具/上报/finalize 位于
+`pipelines/conversation/elements/stream/`；`MemoryService` 委托 `memory/` 的 store/query/graph；
+`ContextService` 委托 `bucket-store` / `snapshot-manager`；`SessionPersistenceService` 委托
+`checkpoint-store` / `history-store` / `session-format` / `durable-fs`。
+TUI 的 store 由 slices 组合，面板/Modal/Wizard 只保留组合与渲染；Wizard 由 reducer 驱动。
+S12 只改变文件边界，事件顺序、DB schema、目录/JSONL 格式、HTTP/WS 路由与 Task/Event 契约不变。
 
 ---
 

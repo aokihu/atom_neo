@@ -1,6 +1,6 @@
 {
   "name": "atom-neo",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "type": "module",
   "main": "./dist/node/main.js",
   "exports": {
@@ -39,6 +39,7 @@
     "docs:check": "bun run scripts/check-docs.ts",
     "docs:typecheck": "tsc -p tsconfig.docs.json",
     "test": "bun test",
+    "check:size": "bun run scripts/check-code-size.ts",
     "typecheck": "bun run --workspaces typecheck",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "build": "bun run --workspaces build",

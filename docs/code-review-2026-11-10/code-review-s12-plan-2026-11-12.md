@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `e3b51f5` (v1.23.0, S11 complete)
-> **Status**: **S12 已拆分，待实施**。97 个任务全部为 **简单（S）** 或 **中等（M）**，无高/极高复杂度任务。
+> **Status**: **S12 已完成（v1.24.0，2026-11-12）**。97 个任务全部实施；H1–H4 验收通过。本文保留任务拆分与原始预算，最终数字见 H2/H4 与“实施结果”。
 > **Scope**: CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12；CR-STR-02/11 已关闭，CR-STR-06 仅残余收尾
 
 ---
@@ -32,6 +32,14 @@
 | `commit()` async | **不做** | S1 已改同步原子写；改 async 会改 `onComplete` 时序 |
 | 全仓库 ≤300 行 | **不承诺** | 只对 S12 目标文件；显式例外见问题文档第 5 节 |
 | 版本 | 子阶段不单独发版 | S12-H 完成后统一决定（建议 1.24.0） |
+
+### 实施结果（2026-11-12，v1.24.0）
+
+- **全部实施**：A–G 结构拆分与行为快照、H1–H4 验收完成；未改 HTTP/WS/Task/Event 行为，未触碰禁区。
+- **行数门禁**：`bun run check:size` 覆盖 76 个目标文件 + 2 个显式例外；全部通过，最长函数 98 行（`InputBar`），`stream-llm.doProcess` ≤100。
+- **测试**：source `1350 pass / 21 skip / 0 fail`；conversation 156、memory 46、context+session 160、supervisor 45、TUI 132、config-tui 79；全量与 Node/package smoke 见 H4。
+- **CR**：CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；CR-STR-02/11 保持关闭；CR-STR-06 已达标（supervisor 277/280）。
+- **残余例外**：仅 `protocol.ts` 313 行、`session/context.ts` 309 行；`ws-client.ts` 276 行已达标。
 
 ### 估算口径
 
@@ -1413,6 +1421,8 @@ S12-H 在 A..G 全部完成后
 
 ### S12-H — 行数与行为验收（11h）
 
+> **实施状态**：已完成（2026-11-12）。H1 新增 `scripts/check-code-size.ts` + 测试 + `check:size` + CI Bun job；H2 全部行为矩阵 0 fail；H3 文档/README/CR 关闭完成；H4 最终数字见文末。
+
 #### S12-H1 — 新增 `scripts/check-code-size.ts`
 
 - **复杂度**: 中等（3h）
@@ -1420,7 +1430,7 @@ S12-H 在 A..G 全部完成后
 - **文件**:
   - 新增 `scripts/check-code-size.ts`
   - 新增 `scripts/check-code-size.test.ts`
-  - 不改源码；实施时可在 `package.json` 增加 `check:size`（本规划不改）
+  - 不改源码；已在 `package.json` 增加 `check:size`，并在 CI Bun job 中执行
 - **依赖**: A..G
 - **行为快照/测试**: 对 fixture 文件断言 >300 行/>100 行函数失败；对当前目标文件通过；例外清单只含问题文档第 5 节文件。
 - **行为风险**: 低；只加工具。
@@ -1488,6 +1498,26 @@ S12-H 在 A..G 全部完成后
 - **行为风险**: 中；Node/build 可能暴露 import 边界。
 - **回滚**: 无源码改动；失败回到对应任务。
 - **DoD**: 全部通过；记录 pass/skip/fail、构建体积、目标文件行数；版本建议写入文档。
+
+**H4 最终数字（2026-11-12，v1.24.0）**：
+
+| 项 | 结果 |
+|---|---|
+| `bun run typecheck` | 6/6 workspace 通过 |
+| `bun run typecheck:node` | 0 error |
+| `bun test --path-ignore-patterns='**/dist/**'` | 1350 pass / 21 skip / 0 fail（1371 tests / 181 files） |
+| `bun test` | 2458 pass / 21 skip / 0 fail（2479 tests / 338 files） |
+| `bun run build` | 6/6 workspace 通过 |
+| `bun run check:size` | 76 targets pass / 2 exceptions / 0 fail；最长函数 98 行 |
+| `bun run build:bin` | `dist/atom` 75 MiB（Bun compiled） |
+| `bun run build:node` | `dist/node/main.js` 3,004,797 bytes（2.87 MiB） |
+| `bun run smoke:node` | all 7 steps 通过（build 5/5 + platform 15/15 + release 9/9 + conversation 11/11） |
+| `bun run smoke:node:package` | 11/11；`atom-neo-1.24.0.tgz` 576.9 KiB |
+| `bun run docs:check` | 通过（relative links / inline `src/` paths） |
+| `bun run docs:typecheck` | 通过 |
+| 版本 | 根 `package.json` / `src/version.ts` = 1.24.0；workspace 包版本不变 |
+
+版本建议：**1.24.0**（已实施）。
 
 ---
 
@@ -1877,7 +1907,7 @@ bun run docs:check
 bun run docs:typecheck
 
 # 行数/函数（H1 后）
-bun run scripts/check-code-size.ts
+bun run check:size
 
 # 目标测试（示例）
 bun test src/packages/core/src/pipelines/conversation
@@ -1910,3 +1940,4 @@ rg -n 'activeModal\.kind ===' src/packages/tui/src/components/App.tsx
 | 日期 | 变更 |
 |---|---|
 | 2026-11-12 | 初始 S12 实施计划：97 个任务（52 简单 / 45 中等），基线 237.5h；给出 A-H 子阶段、行为快照、测试矩阵、回滚矩阵、DoD、关键路径与 PR 拆分；仅文档，未改源码 |
+| 2026-11-12 | S12 实施完成（v1.24.0）：A-G 全部结构拆分与快照测试落地；H1 `check:size`（76 targets + 2 exceptions）、H2 行为矩阵 0 fail、H3 文档/CR 关闭、H4 最终门禁通过；源码 1350 pass / 21 skip / 0 fail，全量 2458 pass / 21 skip / 0 fail，Node/package smoke 与 docs 检查通过 |

@@ -246,7 +246,21 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 | `link_memory` | 建立记忆关联 |
 | `forget_memory` | 按 ID 删除指定记忆及关联边；支持 Context/搜索结果中的短 ID，不接受正文 |
 
-## 10. 相关文档
+## 10. 模块布局（v1.24.0）
+
+`MemoryService` 仍是唯一公开 facade（`src/services/memory-service.ts`），内部实现位于 `src/services/memory/`：
+
+| 文件 | 职责 |
+|------|------|
+| `memory-types.ts` | `MemoryNode` / `MemorySaveOptions` / `MemoryTraversalNode` / `MemoryKind` |
+| `memory-schema.ts` | DDL、列迁移、FTS5 trigger、legacy `.txt` 迁移 |
+| `memory-store.ts` | SQLite 生命周期、行映射、CRUD primitives、事务与 usage |
+| `memory-query.ts` | FTS5/短词候选、过滤、覆盖率、排序与 retrieval 记录 |
+| `memory-graph.ts` | BFS `traverse`、`link`、`countRelated`、邻居质量排序 |
+
+拆分不改变 SQL、FTS5 tokenizer、搜索结果顺序、BFS 规则或公共方法签名。
+
+## 11. 相关文档
 
 | 文档 | 说明 |
 |------|------|

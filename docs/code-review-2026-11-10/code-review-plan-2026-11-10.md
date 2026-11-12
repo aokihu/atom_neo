@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: S0–S11 已完成；S11（全局状态 / DI 收口）已于 2026-11-12 完成并发布 v1.23.0。S12（巨型文件 / TUI 结构重构）已于 2026-11-12 完成拆分，待实施。
+> **状态**: S0–S12 已完成；S11 于 2026-11-12 完成并发布 v1.23.0；S12（巨型文件 / TUI 结构重构）于 2026-11-12 完成并发布 v1.24.0。
 
 ---
 
@@ -531,7 +531,7 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **目标**：在 Provider/Runtime/DI 稳定后做纯结构拆分，不改行为、不改契约。
 
-> **S12 已拆分并单独成文（待实施，2026-11-12）**：
+> **S12 已拆分并单独成文（已完成，v1.24.0，2026-11-12）**：
 > - [code-review-s12-2026-11-12.md](./code-review-s12-2026-11-12.md) — CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12 问题、当前/目标结构、行为不变量与验收
 > - [code-review-s12-graph-2026-11-12.md](./code-review-s12-graph-2026-11-12.md) — 当前/目标模块图、stream/memory/context/persistence/TUI 序列、阶段 DAG、风险与回滚
 > - [code-review-s12-plan-2026-11-12.md](./code-review-s12-plan-2026-11-12.md) — A–H 子阶段、97 个 S/M 任务、测试矩阵、回滚与 DoD
@@ -540,14 +540,14 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 | 子阶段 | 主题 | 状态 | 任务数 | S/M | 预估 | 依赖 | 主要 CR |
 |---|---|---|---:|---:|---:|---|---|
-| S12-A | `stream-llm` 行为快照 + 模块提取 | 待实施 | 16 | 7/9 | 45h | — | CR-STR-01, CR-ARCH-12, CR-DUP-11 |
-| S12-B | `memory-service` 拆分 | 待实施 | 7 | 3/4 | 17.5h | — | CR-STR-03 |
-| S12-C | `context-service` 拆分 | 待实施 | 9 | 6/3 | 21.5h | — | CR-STR-04 |
-| S12-D | `persistence-service` 拆分 | 待实施 | 8 | 3/5 | 21.5h | — | CR-STR-05 |
-| S12-E | Core 纯函数 / ProcessSupervisor 残余 / DUP | 待实施 | 18 | 12/6 | 38.5h | E17←A3 | CR-STR-06/07, CR-DUP-11/12 |
-| S12-F | TUI chat store / useChat / ChatView | 待实施 | 10 | 6/4 | 23h | — | CR-STR-08 |
-| S12-G | TUI panels / App Modal / Wizard | 待实施 | 25 | 14/11 | 59.5h | F1/F6 后 | CR-STR-09/10, CR-ARCH-10/11 |
-| S12-H | 行数与行为验收 | 待实施 | 4 | 1/3 | 11h | A..G | 全部 |
+| S12-A | `stream-llm` 行为快照 + 模块提取 | 已完成 | 16 | 7/9 | 45h | — | CR-STR-01, CR-ARCH-12, CR-DUP-11 |
+| S12-B | `memory-service` 拆分 | 已完成 | 7 | 3/4 | 17.5h | — | CR-STR-03 |
+| S12-C | `context-service` 拆分 | 已完成 | 9 | 6/3 | 21.5h | — | CR-STR-04 |
+| S12-D | `persistence-service` 拆分 | 已完成 | 8 | 3/5 | 21.5h | — | CR-STR-05 |
+| S12-E | Core 纯函数 / ProcessSupervisor 残余 / DUP | 已完成 | 18 | 12/6 | 38.5h | E17←A3 | CR-STR-06/07, CR-DUP-11/12 |
+| S12-F | TUI chat store / useChat / ChatView | 已完成 | 10 | 6/4 | 23h | — | CR-STR-08 |
+| S12-G | TUI panels / App Modal / Wizard | 已完成 | 25 | 14/11 | 59.5h | F1/F6 后 | CR-STR-09/10, CR-ARCH-10/11 |
+| S12-H | 行数与行为验收 | 已完成 | 4 | 1/3 | 11h | A..G | 全部 |
 | **合计** | | | **97** | **52/45** | **237.5h** | | |
 
 **说明**：
@@ -555,23 +555,26 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 - 原“8–12 天”只覆盖 A+B+C 的主路径；细化后基线 **237.5h（约 29.7 工程师日）**，TUI 轨道 F+G 82.5h，Core 轨道 A-E 144h。建议按 **3–4 人、12–15 个工作日**排期；单人约 6–7 周。
 - **CR-STR-02 已由 S8 关闭**：`server.ts` 108 行，S12 不再触碰。
 - **CR-STR-11 已由 S5 关闭**：`@atom-neo/tui-kit` 已存在，S12 只消费其导出。
-- **CR-STR-06 已由 S11-E 缩减**：`ClientManager` 106 行；仅 `ProcessSupervisor` 411 → ≤280 的行数收尾，状态机/重启/健康语义不变。
+- **CR-STR-06 已由 S12 关闭**：`ClientManager` 106 行；`ProcessSupervisor` 411 → 277 行（≤280），状态机/重启/健康语义不变。
 - CR-ARCH-12 与 CR-STR-01 是同一工作，不重复实施。
-- 全仓库 ≤300 行**不是** S12 承诺：`protocol.ts` 313、`session/context.ts` 309 为显式例外；`ws-client.ts` 304 由 S12-F10 收尾。
+- 全仓库 ≤300 行**不是** S12 承诺：`protocol.ts` 313、`session/context.ts` 309 为显式例外；`ws-client.ts` 已由 S12-F10 从 304 降到 276 行，不再例外。
 - 任务规模、测试矩阵、回滚矩阵与 DoD 见 [S12 实施计划](./code-review-s12-plan-2026-11-12.md)，不在本文件重复。
 
 **验收**：
 
 - 拆分前后行为快照一致；事件顺序、DB/文件格式、HTTP/WS 路由与 Task/Event 契约不变。
-- S12 目标文件 ≤300 行、目标函数 ≤100 行；`stream-llm.ts` ≤220、`process-supervisor.ts` ≤280。
+- S12 目标文件 ≤300 行、目标函数 ≤100 行；`stream-llm.ts` 90 行、`process-supervisor.ts` 277 行；`check:size` 76 targets + 2 exceptions 全部通过。
 - 每个任务单 commit 可回滚；新增目录有 README。
 - 详见 S12 实施计划第 8 节。
+
+**实施结果**：S12-A–H 全部完成（v1.24.0）；源码 1350 pass / 21 skip / 0 fail，全量测试、typecheck 6/6、`typecheck:node` 0 error、build 6/6、Node/package smoke 与 docs 检查通过；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；仅 `protocol.ts` 313 / `session/context.ts` 309 为显式例外。
 
 **风险/回滚**：极高（仅回归影响面）；按 A–H 子阶段拆 PR，每任务单 commit；先快照后搬移，facade 保留到阶段末。
 
 **变更记录**：
 
 - 2026-11-12：S12 拆分完成，新增三份 S12 文档（问题/图/计划）；A–H 共 97 个任务均为 S/M；标注 CR-STR-02/11 已关闭、CR-STR-06 已缩减；仅文档，未实施、未改源码。
+- 2026-11-12：S12 全部完成（v1.24.0）：A stream-llm、B memory、C context、D persistence、E helpers/supervisor/DUP、F TUI chat、G panels/App/Wizard、H 行数与行为验收；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；源码 1350 pass / 21 skip / 0 fail，typecheck/build/Node smoke/docs 通过；最长为 `protocol.ts` 313 / `session/context.ts` 309 两个显式例外。
 
 ---
 
@@ -710,6 +713,6 @@ bun run scripts/check-file-headers.ts
 | S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；1.22.11 起 Node 支持下限 26；保留双 adapter，S10 再评估统一 |
 | S10 | 已完成 | — | S10-A：`tsconfig.node.json`/`typecheck:node`、`build:node` → `dist/node/main.js`、Node TUI import guard、Node build smoke；S10-B1：platform smoke（config/env/memory FTS5/shell/glob/schedule）、release artifact smoke（health/attach/WS/SIGTERM）、`smoke:node` 编排；S10-B2：`main`/`exports`/`bin`/`files`、`@atom-neo/*` 发布策略、`prepack`、tarball 安装 smoke（11/11）、CI 双 job、版本 1.22.12；TUI render 自动化列为后续 |
 | S11 | 已完成 | — | A–H 全部完成，v1.23.0：CoreServices/Prompt DI、ElementRegistry、PipelineInstanceStore、TaskEngine 单循环/不可变 FlowState、ProcessSupervisor、Theme guard、Element 窄接口；新增同进程双 `startCore` 验收与全局残留 guard；双 registry/prompt/store 隔离、TaskEngine/Supervisor 矩阵通过；过渡符号 0 残留；workspace 包版本不变；源码 1095 pass / 21 skip / 0 fail，全量 1968 pass / 21 skip / 0 fail，typecheck 6/6、typecheck:node 0 error、build 6/6，Node/package smoke 与 docs 检查通过 |
-| S12 | 已拆分，待实施 | — | 97 个 S/M 任务（52 简单 / 45 中等），237.5h；CR-STR-02/11 已关闭、CR-STR-06 已缩减；详见三份 S12 文档 |
+| S12 | 已完成 | — | A–H 全部完成，v1.24.0：stream/memory/context/persistence/helpers/supervisor/TUI chat/panels/Wizard 结构拆分；`check:size` 76 targets + 2 exceptions 通过，最长函数 98 行；源码 1350 pass / 21 skip / 0 fail，全量测试、typecheck 6/6、typecheck:node 0 error、build 6/6、Node/package smoke 与 docs 检查通过；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；workspace 包版本不变 |
 
 > 每完成一个阶段，更新本表与 `code-review-2026-11-10.md` 的变更记录。

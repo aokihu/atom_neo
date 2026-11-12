@@ -45,7 +45,7 @@ atom_neo/
 │   └── logs/                 # Log output
 │
 ├── clients/                  # Optional platform client reference implementations
-├── scripts/                  # Maintenance scripts (check-docs.ts, release helpers)
+├── scripts/                  # Maintenance scripts (check-docs.ts, check-code-size.ts, release helpers)
 │   ├── node-smoke/           # Real Node smoke: adapters, Core, TUI import, build
 │   └── types/                # Exact type shims for Bun-only modules (Node typecheck)
 └── docs/                     # Markdown docs + local renderer
@@ -179,13 +179,22 @@ src/packages/core/
 │   ├── element-session.ts  # PipelineSession / ElementTask / ElementMemory Element 边界
 │   ├── store.ts
 │   ├── persistence-service.ts
-│   ├── execution-budget.ts
+│   ├── session-format.ts   # manifest/JSONL 编解码与路径常量
+│   ├── durable-fs.ts       # fsync + atomic rename
+│   ├── checkpoint-store.ts # generation 写入/发布/清理
+│   ├── history-store.ts    # archive/search/read history
 │   ├── message-policy.ts
+│   ├── message-projection.ts
+│   ├── execution-budget.ts
 │   └── types.ts
 │
 ├── context/
 │   ├── compiler.ts
-│   └── context-service.ts
+│   ├── context-service.ts
+│   ├── context-types.ts
+│   ├── context-codec.ts
+│   ├── bucket-store.ts
+│   └── snapshot-manager.ts
 │
 ├── decision/
 │   ├── choose.ts
@@ -247,6 +256,11 @@ src/packages/core/
     │        * load-system-prompt / fetch-agents-prompt
     │        * format-system-messages / format-user-messages
     │        * inject-skill-context
+    │        *
+    │        * stream-llm 实现位于 elements/stream/：
+    │        * stream-run / loop / step / context / reporting / reporting-events /
+    │        * finalize / overflow / model-input / tool-batch(-block/-record) /
+    │        * tool-runtime(-mcp) / tool-governance-runtime / tool-result-status
     │        */
     ├── prediction/          # 3 elements
     ├── follow-up/           # 2-element lightweight pipeline
@@ -265,7 +279,8 @@ src/packages/config-tui/
 └── src/
     ├── index.ts              # export { startWizard }
     ├── app.tsx               # startWizard: OpenTUI renderer lifecycle
-    ├── wizard-logic.ts       # Pending state machine / commit / load / parsers
+    ├── wizard-logic.ts       # Public barrel over wizard/*
+    ├── wizard/               # state/prefill/edit/input/commit/reducer/views/overlays
     ├── modal/index.tsx       # Bordered wrapper over @atom-neo/tui-kit Modal
     └── components/           # WizardApp / Menu / Provider / Model / Theme / Confirm
 ```
@@ -329,6 +344,8 @@ src/packages/gateway/
 │       ├── restart-policy.ts
 │       ├── health-probe.ts
 │       ├── process-supervisor.ts
+│       ├── client-command.ts
+│       ├── process-termination.ts
 │       └── test-helpers.ts
 ```
 
@@ -343,20 +360,31 @@ src/packages/tui/
 │   ├── app.tsx                 # TUI entrypoint / renderer lifecycle
 │   ├── types.ts                # View-model types (re-exports theme types)
 │   ├── client/
-│   │   └── ws-client.ts        # WebSocket event client
+│   │   ├── ws-client.ts        # WebSocket event client
+│   │   └── ws-client-protocol.ts
 │   ├── hooks/
-│   │   └── useChat.ts          # Client → store bindings + send/cancel
+│   │   ├── useChat.ts          # lifecycle + send/cancel
+│   │   ├── chat-connection.ts  # TuiClient → store event routing
+│   │   ├── chat-messages.ts    # snapshot mapping + send error handling
+│   │   └── chat-errors.ts
 │   ├── stores/
-│   │   ├── chat.ts             # Zustand chat state
+│   │   ├── chat.ts             # Zustand chat store composition
+│   │   ├── chat/               # message/stream/tool/telemetry slices
 │   │   ├── inputHistory.ts
 │   │   └── copied.ts
 │   └── components/
-│       ├── App.tsx             # Root layout / modal routing
+│       ├── App.tsx             # Root layout / modal state
+│       ├── app/                # AppModal + modal config
 │       ├── ChatView.tsx
+│       ├── chat-view-model.ts
 │       ├── InputBar.tsx
+│       ├── input/              # command menu / history / escape hooks
 │       ├── Sidebar.tsx
+│       ├── sidebar/            # telemetry sections
 │       ├── RuntimeSidebar.tsx
+│       ├── runtime/            # runtime sections + step derivation
 │       ├── SettingsModal.tsx
+│       ├── settings/           # config model + loader hook
 │       ├── ToolMessageBox.tsx
 │       └── modal/              # Local barrel re-exporting @atom-neo/tui-kit
 ```
@@ -367,7 +395,7 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "type": "module",
   "main": "./dist/node/main.js",
   "exports": {
@@ -392,6 +420,7 @@ src/packages/tui/
   "scripts": {
     "dev": "bun run src/main.ts --sandbox ./sandbox ...",
     "test": "bun test",
+    "check:size": "bun run scripts/check-code-size.ts",
     "typecheck": "bun run --workspaces typecheck",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "build": "bun run --workspaces build",

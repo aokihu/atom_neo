@@ -405,6 +405,7 @@ send() resolve/reject → sessionBusy = false → 一切清空
 
 ```
 src/packages/tui/src/hooks/useChat.ts    sessionBusy state
+src/packages/tui/src/hooks/chat-connection.ts  TuiClient → chat store
 src/packages/tui/src/components/App.tsx  isProcessing → sessionBusy 驱动
 src/packages/core/src/session/context.ts SessionContext 数据模型
 ```
@@ -422,6 +423,22 @@ StatusBar 显示当前模型名称及 thinking 模式状态（始终显示 `[thi
 atom neo ▎ ● connected ▎ deepseek-v4-flash [thinking] ▎ v1.18.1
                                         ^^^^^^^^ 高亮/灰色 = 已启用/未启用
 ```
+
+---
+
+## 7. Persistence 模块布局（v1.24.0）
+
+| 文件 | 职责 |
+|---|---|
+| `persistence-service.ts` | facade：checkpoint/restore、history/remove、`toolRecords` |
+| `checkpoint-store.ts` | generation 写入/发布/解析/清理、`current` 指针 |
+| `history-store.ts` | `message-{n}.jsonl` 归档、archive 索引、history 搜索/读取 |
+| `session-format.ts` | manifest/JSONL 编解码、路径与 session id 编码 |
+| `durable-fs.ts` | 0o600 写入、文件/目录 fsync、临时文件 rename |
+| `message-projection.ts` | 纯消息投影（user append、reasoning keep/drop、visible 过滤） |
+
+拆分保持 generation 命名、`current`/兼容软链、JSONL 字段顺序、checkpoint 提交顺序与
+`restore` 写盘时机不变。
 
 ---
 

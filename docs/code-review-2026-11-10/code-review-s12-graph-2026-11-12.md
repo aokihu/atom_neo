@@ -1,7 +1,7 @@
 # Atom Neo Code Review Graph — S12 Giant Files / TUI Structure — 2026-11-12
 
 > **Baseline**: `code-review/2026-11-10` @ `e3b51f5` (v1.23.0, S11 complete)
-> **Status**: **S12 已拆分，待实施**。本图描述当前巨型文件依赖、目标模块边界、关键序列、阶段依赖、风险与回滚。
+> **Status**: **S12 已完成（v1.24.0，2026-11-12）**。A–H 全部落地；图中的“当前巨型文件”保留为实施前基线，实际模块已按目标边界拆分，最终行数/验收见第 16 节。
 > **Scope**: S12 的 Core 结构拆分与 TUI 结构拆分
 > **Related**:
 > - [code-review-s12-2026-11-12.md](./code-review-s12-2026-11-12.md)
@@ -966,3 +966,24 @@ graph TB
 - TUI 组件不订阅 `TuiClient`；只有 `chat-connection` 接收事件。
 - Wizard 组件不直接修改 wizard 字段；只 dispatch action。
 - 新增模块级可变状态视为失败（S11 DoD 延续）。
+
+---
+
+## 16. 实施结果（v1.24.0，2026-11-12）
+
+S12-A–H 已全部落地，目标模块图与禁止依赖边均已实现：
+
+| 阶段 | 结果 |
+|---|---|
+| A stream | `stream-llm.ts` 90 行；`stream/` 目录承载 run/loop/step/context/reporting/reporting-events/finalize/overflow/model-input/tool-batch(-block/-record)/runtime(-mcp)/governance/status；`stringifyToolOutput` 只剩 `tool-loop.ts` 一处，`#toolResults` 已改为 `ToolStatusCollector` |
+| B memory | `memory-service.ts` 74 行；store 248 / query 110 / graph 86 / types 39 / schema 123；SQL 与排序快照未变 |
+| C context | `context-service.ts` 198 行；bucket-store 194 / snapshot-manager 166 / codec 52 / types 81；lease/commit/dispose 快照未变 |
+| D persistence | `persistence-service.ts` 146 行；checkpoint 167 / history 165 / format 105 / durable-fs 39；目录/JSONL/软链快照未变 |
+| E helpers/supervisor | `process-supervisor.ts` 277 行 + command 93 / termination 48；continuation-rules 84 / arbitration 113；compress-commit 111 / resume 35；message-projection 51 |
+| F chat | `chat.ts` 15 行 + slices 37/83/96/43；`useChat.ts` 58；`chat-connection.ts` 150；`ChatView.tsx` 54 |
+| G panels/wizard | `Sidebar.tsx` 40 + sections；`RuntimeSidebar.tsx` 54 + sections；`SettingsModal.tsx` 88；`InputBar.tsx` 128 + hooks；`App.tsx` 139 + `AppModal.tsx` 33；`WizardApp.tsx` 46 + reducer 189 + views 139 |
+| H acceptance | `check:size` 76 targets pass / 2 exceptions；source 1350 pass / 21 skip / 0 fail；全量 2458 pass / 21 skip / 0 fail；build/Node/package smoke/docs 检查通过 |
+
+**残余例外**：`src/packages/shared/src/protocol.ts` 313 行、`src/packages/core/src/session/context.ts` 309 行；`ws-client.ts` 276 行已达标。最长函数 98 行（`InputBar`），`stream-llm.doProcess` ≤100。
+
+**依赖边核验**：`stream-llm` 不直接 `streamText`/执行 Tool；`memory-query` 不写 DDL；`snapshot-manager` 不反向依赖 `ContextService`；`history-store` 不解析 `current`；TUI 组件不订阅 `TuiClient`；Wizard 组件不直接改字段。全仓库无新增模块级可变状态。

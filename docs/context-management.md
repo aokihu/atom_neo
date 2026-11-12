@@ -252,3 +252,16 @@ ContextService 通过 Snapshot ID 保存 SnapshotState 与紧凑 Manifest；Pipe
 | 大型 Tool Artifact 引用 | ToolRecord 对详情设有上限，超大结果仍待外置 | 需要开发 |
 
 ContextBucket 负责管理，SnapshotState 负责追踪，ContextSnapshot 只负责给模型看。
+
+## 13. 模块布局（v1.24.0）
+
+| 文件 | 职责 |
+|---|---|
+| `context-service.ts` | facade：生命周期、Bus 订阅、Session 导出/恢复、公共方法委托 |
+| `bucket-store.ts` | Bucket/Entry CRUD、revision、过期、lease 与 dispose |
+| `snapshot-manager.ts` | Snapshot 创建/commit/release、refs/manifest/receipts、TTL 清扫 |
+| `context-codec.ts` | bucket/context id 编码、owner 过滤、冻结与 Entry 比较 |
+| `context-types.ts` | Mutable/Persisted 类型、scope retention 与默认 `expireOn` |
+| `compiler.ts` | 混合 Snapshot 编译与 token 估算 |
+
+拆分保持 `ContextService` 公共签名、事件订阅顺序、snapshot `refs/receipts/manifest/prefixHash/inputBudget` 与 `exportSessionState` JSON 不变。

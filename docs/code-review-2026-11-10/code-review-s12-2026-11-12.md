@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `e3b51f5` (v1.23.0, S11 complete)
 > **Scope**: CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12 中尚未收口的巨型文件与 TUI 结构问题
-> **Status**: **S12 已拆分，待实施**。本文只记录问题、当前代码、目标边界与验收；实施步骤见 [S12 实施计划](./code-review-s12-plan-2026-11-12.md)。
+> **Status**: **S12 已完成（v1.24.0，2026-11-12）**。A–H 全部实施并通过 H1–H4 验收；本文保留实施前问题与目标边界，最终行数、测试矩阵与残余例外见第 5/6/7 节。
 > **Related**:
 > - [code-review-s12-graph-2026-11-12.md](./code-review-s12-graph-2026-11-12.md)
 > - [code-review-s12-plan-2026-11-12.md](./code-review-s12-plan-2026-11-12.md)
@@ -13,7 +13,7 @@
 
 ## 0. 使用说明
 
-1. 本文只记录 S12 的**结构问题、当前代码、目标模块边界与行为不变量**；任务拆分、工时、测试矩阵与回滚见 [S12 实施计划](./code-review-s12-plan-2026-11-12.md)。
+1. 本文记录 S12 的**结构问题、实施前代码、目标模块边界与行为不变量**；任务拆分、工时、测试矩阵与回滚见 [S12 实施计划](./code-review-s12-plan-2026-11-12.md)。S12 已完成，最终数字见 5.1、6.4、7.3。
 2. 行号与行数以 `e3b51f5` 为准，后续会漂移；定位优先搜索类名、函数名、事件名与注释锚点。
 3. `当前` 是基线代码；`目标` 是方向性契约，不要求逐字照抄。
 4. S12 是**纯结构重构**：不改产品行为、不改 DB schema、不改文件格式、不改事件名/HTTP/WS 路由、不改 Task/Event 契约。
@@ -118,22 +118,22 @@ S12 必须拆成多条**可独立提交、可独立回滚**的小任务；不允
 
 | ID | 现状 | 当前实现 | S12 目标 |
 |---|---|---|---|
-| CR-STR-01 | **待办** | `stream-llm.ts` 1240 行；`doProcess` 约 700 行 | stream loop/step/tool/reporting/context/finalize 分层；Element ≤300 行，主函数 ≤100 行 |
+| CR-STR-01 | **已关闭（S12）** | `stream-llm.ts` 1240 行；`doProcess` 约 700 行 | stream loop/step/tool/reporting/context/finalize 分层；Element ≤300 行，主函数 ≤100 行 |
 | CR-STR-02 | **已关闭（S8）** | `src/packages/core/src/server.ts` 108 行；`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle` 已拆出 | 不再改；S12 只做防回归（不重新聚合） |
-| CR-STR-03 | **待办** | `memory-service.ts` 565 行；DB/迁移/搜索/图/生命周期同文件 | `memory-store` + `memory-query` + `memory-graph` + `memory-types` + facade |
-| CR-STR-04 | **待办** | `context-service.ts` 552 行；Bucket/Snapshot/生命周期/持久化同文件 | `bucket-store` + `snapshot-manager` + `context-codec` + `context-types` + facade |
-| CR-STR-05 | **待办** | `persistence-service.ts` 515 行；格式/checkpoint/history/durable IO 同文件 | `session-format` + `durable-fs` + `checkpoint-store` + `history-store` + facade |
-| CR-STR-06 | **已缩减（S11-E）** | `ClientManager` 106 行（facade）；`ProcessSupervisor` 411 行 | 仅把 `ProcessSupervisor` 的命令构造/终止流程拆出，目标 ≤300 行；状态机/重启/健康语义不变 |
-| CR-STR-07 | **待办** | `check-follow-up.ts` 188 行；规则/证据/LLM 仲裁同文件；`compress-finalize.ts` 247 行；写入/checkpoint/resume 同文件 | 规则、证据、仲裁、提交、恢复拆为纯函数/小模块 |
-| CR-STR-08 | **待办** | `chat.ts` 296 行；`useChat.ts` 175 行；`ChatView.tsx` 86 行 | store slices + `chat-connection` + `useChat` 组合 + view model |
-| CR-STR-09 | **待办** | `Sidebar` 219 行 5 个导出；`RuntimeSidebar` 208 行 5 段；`SettingsModal` 221 行；`InputBar` 256 行 | section 组件 + `settings-model` / `use-settings-config` + input hooks |
-| CR-STR-10 | **待办** | `WizardApp.tsx` 262 行，10 处 `!quitConfirm && view === ...`；`wizard-logic.ts` 391 行；`WizardState.step` 只写不读 | reducer + 判别联合路由；`wizard-logic` 拆 state/edit/commit + barrel |
+| CR-STR-03 | **已关闭（S12）** | `memory-service.ts` 565 行；DB/迁移/搜索/图/生命周期同文件 | `memory-store` + `memory-query` + `memory-graph` + `memory-types` + facade |
+| CR-STR-04 | **已关闭（S12）** | `context-service.ts` 552 行；Bucket/Snapshot/生命周期/持久化同文件 | `bucket-store` + `snapshot-manager` + `context-codec` + `context-types` + facade |
+| CR-STR-05 | **已关闭（S12）** | `persistence-service.ts` 515 行；格式/checkpoint/history/durable IO 同文件 | `session-format` + `durable-fs` + `checkpoint-store` + `history-store` + facade |
+| CR-STR-06 | **已关闭（S12）** | `ClientManager` 106 行（facade）；`ProcessSupervisor` 411 行 | 命令构造/终止流程拆出；`ProcessSupervisor` 277 行；状态机/重启/健康语义不变 |
+| CR-STR-07 | **已关闭（S12）** | `check-follow-up.ts` 188 行；规则/证据/LLM 仲裁同文件；`compress-finalize.ts` 247 行；写入/checkpoint/resume 同文件 | 规则、证据、仲裁、提交、恢复拆为纯函数/小模块 |
+| CR-STR-08 | **已关闭（S12）** | `chat.ts` 296 行；`useChat.ts` 175 行；`ChatView.tsx` 86 行 | store slices + `chat-connection` + `useChat` 组合 + view model |
+| CR-STR-09 | **已关闭（S12）** | `Sidebar` 219 行 5 个导出；`RuntimeSidebar` 208 行 5 段；`SettingsModal` 221 行；`InputBar` 256 行 | section 组件 + `settings-model` / `use-settings-config` + input hooks |
+| CR-STR-10 | **已关闭（S12）** | `WizardApp.tsx` 262 行，10 处 `!quitConfirm && view === ...`；`wizard-logic.ts` 391 行；`WizardState.step` 只写不读 | reducer + 判别联合路由；`wizard-logic` 拆 state/edit/commit + barrel |
 | CR-STR-11 | **已关闭（S5）** | `@atom-neo/tui-kit` 已存在，主题/Modal/FieldInput 已收敛 | 不再改；S12 只从 `tui-kit` 导入 |
-| CR-ARCH-10 | **待办** | `App.tsx` Modal 7 个三元表达式；title/width/height/actions/defaultAction/onAction/content 分别分支 | `ModalSpec` 配置表 + `AppModal` 组件 |
-| CR-ARCH-11 | **待办** | `WizardApp.tsx` 10 处 `!quitConfirm && view === "..."` | `useReducer` + 判别联合 view + 单一 route guard |
-| CR-ARCH-12 | **待办（与 CR-STR-01 同一工作）** | `stream-llm.ts` `doProcess` God Function | 同 CR-STR-01；不再单列实施 |
-| CR-DUP-11 | **待办** | 内置/MCP 工具各一套治理/执行/记录；`stringifyToolOutput` 在 `stream-llm.ts` 与 `tool-loop.ts` 各一份；`#toolResults` 侧信道 | 统一 `executeGovernedTool()`；状态显式返回；共用 `stringifyToolOutput` |
-| CR-DUP-12 | **待办** | `appendCurrentUserMessage` 变异输入；reasoning 保留策略分散；`isPromptEligibleMessage` 已存在但映射逻辑仍分散 | 纯函数投影 + 单一 reasoning 策略 + 复用 `message-policy` |
+| CR-ARCH-10 | **已关闭（S12）** | `App.tsx` Modal 7 个三元表达式；title/width/height/actions/defaultAction/onAction/content 分别分支 | `ModalSpec` 配置表 + `AppModal` 组件 |
+| CR-ARCH-11 | **已关闭（S12）** | `WizardApp.tsx` 10 处 `!quitConfirm && view === "..."` | `useReducer` + 判别联合 view + 单一 route guard |
+| CR-ARCH-12 | **已关闭（S12，与 CR-STR-01 同一工作）** | `stream-llm.ts` `doProcess` God Function | 同 CR-STR-01；不再单列实施 |
+| CR-DUP-11 | **已关闭（S12）** | 内置/MCP 工具各一套治理/执行/记录；`stringifyToolOutput` 在 `stream-llm.ts` 与 `tool-loop.ts` 各一份；`#toolResults` 侧信道 | 统一 `executeGovernedTool()`；状态显式返回；共用 `stringifyToolOutput` |
+| CR-DUP-12 | **已关闭（S12）** | `appendCurrentUserMessage` 变异输入；reasoning 保留策略分散；`isPromptEligibleMessage` 已存在但映射逻辑仍分散 | 纯函数投影 + 单一 reasoning 策略 + 复用 `message-policy` |
 
 ### 已关闭/缩减项说明
 
@@ -553,17 +553,35 @@ src/packages/config-tui/src/
 | Wizard | `wizard/wizard-commit.ts` | ≤120 |
 | Wizard | `wizard-logic.ts` | ≤50（barrel） |
 
+### 5.1 最终行数（v1.24.0，2026-11-12）
+
+`bun run check:size` 对 76 个目标文件与 2 个显式例外做 AST 检查；全部通过。关键文件最终行数：
+
+| 模块 | 最终行数 |
+|---|---|
+| stream | `stream-llm.ts` 90；`stream-run.ts` 214；`stream-loop.ts` 133；`stream-step.ts` 233；`stream-context.ts` 167；`stream-reporting.ts` 78；`stream-reporting-events.ts` 122；`stream-finalize.ts` 113；`stream-overflow.ts` 44；`stream-model-input.ts` 91；`tool-batch.ts` 152；`tool-batch-block.ts` 53；`tool-batch-record.ts` 84；`tool-runtime.ts` 195；`tool-runtime-mcp.ts` 47；`tool-governance-runtime.ts` 64；`tool-result-status.ts` 64；`types.ts` 172 |
+| memory | `memory-service.ts` 74；`memory-store.ts` 248；`memory-query.ts` 110；`memory-graph.ts` 86；`memory-types.ts` 39；`memory-schema.ts` 123 |
+| context | `context-service.ts` 198；`bucket-store.ts` 194；`snapshot-manager.ts` 166；`context-codec.ts` 52；`context-types.ts` 81；`compiler.ts` 181 |
+| persistence | `persistence-service.ts` 146；`checkpoint-store.ts` 167；`history-store.ts` 165；`session-format.ts` 105；`durable-fs.ts` 39；`message-projection.ts` 51 |
+| supervisor | `process-supervisor.ts` 277；`client-command.ts` 93；`process-termination.ts` 48 |
+| helpers | `check-follow-up.ts` 99；`continuation-rules.ts` 84；`continuation-arbitration.ts` 113；`compress-finalize.ts` 135；`compress-commit.ts` 111；`compress-resume.ts` 35 |
+| TUI chat | `stores/chat.ts` 15；slices 37/83/96/43；`useChat.ts` 58；`chat-connection.ts` 150；`chat-messages.ts` 58；`ChatView.tsx` 54；`chat-view-model.ts` 50 |
+| TUI panels | `Sidebar.tsx` 40；sidebar sections 17–61；`RuntimeSidebar.tsx` 54；runtime sections 20–45；`SettingsModal.tsx` 88；`settings-model.ts` 94；`use-settings-config.ts` 80；`InputBar.tsx` 128；input hooks 24–94；`App.tsx` 139；`AppModal.tsx` 33 |
+| Wizard | `WizardApp.tsx` 46；`wizard-reducer.ts` 189；`wizard-state.ts` 79；`wizard-prefill.ts` 80；`wizard-edit.ts` 115；`wizard-input.ts` 35；`wizard-commit.ts` 76；`WizardViews.tsx` 139；`wizard-logic.ts` 33 |
+
+最长函数为 `InputBar` 98 行（限制 100）；`stream-llm.doProcess` 远低于 100。未列入 section 5 的新实现文件（`stream-run.ts`、`stream/types.ts`、`memory-schema.ts`、`compiler.ts`、`chat-messages.ts`、`WizardViews.tsx` 等）均 ≤300 行，未新增例外。
+
 ### 无法在 S12 达到 300 行的例外
 
 以下文件 >300 行，但不属于 S12 的目标 CR；S12 **不假称**全仓库已达标：
 
 | 文件 | 当前行数 | 处理 |
 |---|---:|---|
-| `src/packages/shared/src/protocol.ts` | 313 | 协议类型派生，S6 已定契约；改动会触及事件契约，S12 不动 |
-| `src/packages/core/src/session/context.ts` | 309 | Session 内存状态，S11 已加窄接口；拆分会改 Element 生命周期，留待后续 |
-| `src/packages/tui/src/client/ws-client.ts` | 304 | S12-F10 只做协议解析/TuiTaskError 提取，目标 ≤280；不重写路由 |
+| `src/packages/shared/src/protocol.ts` | 313 | 协议类型派生，S6 已定契约；改动会触及事件契约，S12 不动；冻结为显式例外 |
+| `src/packages/core/src/session/context.ts` | 309 | Session 内存状态，S11 已加窄接口；拆分会改 Element 生命周期，留待后续；冻结为显式例外 |
 
-> 其余 >300 文件（`bootstrap.ts` 291、`backup.ts` 279、`cli.ts` 278、`shell.ts` 276、`hook-manager.ts` 275、`schedule-service.ts` 272、`fs.ts` 268、`node-http-server.ts` 271 等）均 ≤300 或不在 S12 CR 内，不列入 S12 验收。
+`src/packages/tui/src/client/ws-client.ts` 已由 S12-F10 从 304 行降到 276 行（目标 ≤280），不再属于例外。
+其余 >300 文件（`bootstrap.ts` 291、`backup.ts` 279、`cli.ts` 278、`shell.ts` 276、`hook-manager.ts` 275、`schedule-service.ts` 272、`fs.ts` 268、`node-http-server.ts` 271 等）均 ≤300 或不在 S12 CR 内，不列入 S12 验收。
 
 ---
 
@@ -633,32 +651,49 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 
 ---
 
+## 6.5 最终测试矩阵（v1.24.0）
+
+| 场景 | 命令/文件 | 结果 |
+|---|---|---|
+| stream 特征/边界/缓存/tool loop | `stream-characterization` + `stream-boundaries` + `stream-cache` + `tool-loop` | 29 pass / 0 fail |
+| conversation 全量 | `bun test src/packages/core/src/pipelines/conversation` | 156 pass / 0 fail |
+| memory schema/search/graph | `bun test src/services/memory-service.test.ts src/services/memory` | 46 pass / 0 fail |
+| context + persistence | `bun test src/packages/core/src/context src/packages/core/src/session` | 160 pass / 0 fail |
+| gateway supervisor | `bun test src/packages/gateway/src/client-manager` | 45 pass / 0 fail |
+| TUI chat/panels | `bun test src/packages/tui/src` | 132 pass / 0 fail |
+| wizard view/reducer | `bun test src/packages/config-tui/src` | 79 pass / 0 fail（wizard 子集 71） |
+| 全量 source | `bun test --path-ignore-patterns='**/dist/**'` | 1350 pass / 21 skip / 0 fail |
+| 全量含 dist | `bun test` | 2458 pass / 21 skip / 0 fail |
+| 行数/函数 guard | `bun run check:size` | 76 targets pass / 2 exceptions / 0 fail |
+
+没有新增 skip 或 only；所有矩阵项均有现有测试覆盖，未发现缺口。
+
 ## 7. 验收标准（S12 整体）
 
 ### 7.1 文件/函数
 
-- [ ] 第 5 节列出的**所有目标文件** ≤300 行（`stream-llm.ts` ≤220、`process-supervisor.ts` ≤280 等）。
-- [ ] 目标文件中所有**导出/成员函数** ≤100 行；`stream-llm.doProcess` ≤100 行。
-- [ ] 新增 `scripts/check-code-size.ts`：对 S12 目标文件做文件行数 + TS AST 函数体长度检查；允许显式例外清单，但 S12 目标文件不在例外中。
-- [ ] 第 5 节“无法达到 300 行的例外”保持原状；不得为了达标删除功能或合并职责。
-- [ ] 不新增模块级可变状态；不新增 `any`（拆分过程中必要的局部类型收口除外，且需注释）。
+- [x] 第 5 节列出的**所有目标文件** ≤300 行（`stream-llm.ts` ≤220、`process-supervisor.ts` ≤280 等）。
+- [x] 目标文件中所有**导出/成员函数** ≤100 行；`stream-llm.doProcess` ≤100 行。
+- [x] 新增 `scripts/check-code-size.ts`：对 S12 目标文件做文件行数 + TS AST 函数体长度检查；允许显式例外清单，但 S12 目标文件不在例外中。
+- [x] 第 5 节“无法达到 300 行的例外”保持原状；不得为了达标删除功能或合并职责。
+- [x] 不新增模块级可变状态；不新增 `any`（拆分过程中必要的局部类型收口除外，且需注释）。
 
 ### 7.2 行为
 
-- [ ] 每个阶段先有行为快照/特征测试，再做结构移动；快照断言事件顺序、结果字段、DB 行、目录布局、TUI state 转换。
-- [ ] pipeline 顺序、Task/Event 顺序、HTTP/WS 路由/事件名、DB schema、文件格式均不变。
-- [ ] `bun run typecheck` 6/6、`typecheck:node` 0 error。
-- [ ] `bun test --path-ignore-patterns='**/dist/**'` 0 fail；`bun test` 0 fail。
-- [ ] `bun run build` 6/6；`smoke:node`、`smoke:node:package` 通过。
-- [ ] `docs:check` / `docs:typecheck` 通过。
-- [ ] 每个任务单 commit 可回滚；回滚不影响已发布 Bun/Node 行为。
+- [x] 每个阶段先有行为快照/特征测试，再做结构移动；快照断言事件顺序、结果字段、DB 行、目录布局、TUI state 转换。
+- [x] pipeline 顺序、Task/Event 顺序、HTTP/WS 路由/事件名、DB schema、文件格式均不变。
+- [x] `bun run typecheck` 6/6、`typecheck:node` 0 error。
+- [x] `bun test --path-ignore-patterns='**/dist/**'` 0 fail；`bun test` 0 fail。
+- [x] `bun run build` 6/6；`smoke:node`、`smoke:node:package` 通过。
+- [x] `docs:check` / `docs:typecheck` 通过。
+- [x] 每个任务单 commit 可回滚；回滚不影响已发布 Bun/Node 行为。
 
 ### 7.3 文档
 
-- [ ] 每个新目录有 `README.md`（文件/职责/依赖方向/禁止事项）。
-- [ ] `docs/overview/project-structure.md`、`docs/overview/architecture.md`、`docs/tui-interface.md`、`docs/subsystems/memory-service.md`、`docs/context-management.md`、`docs/core/session.md` 中涉及的文件地图同步。
-- [ ] [S12 实施计划](./code-review-s12-plan-2026-11-12.md) 的进度表、最终数字、CR 关闭状态同步。
-- [ ] 主计划 S12 段落与 `docs/index.md` 链接同步。
+- [x] 每个新目录有 `README.md`（文件/职责/依赖方向/禁止事项）。
+- [x] `docs/overview/project-structure.md`、`docs/overview/architecture.md`、`docs/tui-interface.md`、`docs/subsystems/memory-service.md`、`docs/context-management.md`、`docs/core/session.md` 中涉及的文件地图同步。
+- [x] [S12 实施计划](./code-review-s12-plan-2026-11-12.md) 的进度表、最终数字、CR 关闭状态同步。
+- [x] 主计划 S12 段落与 `docs/index.md` 链接同步。
 
 ---
 
@@ -675,6 +710,10 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 | Wizard reducer 改变 view 顺序 | 中 | G18 先做 view 迁移表测试；G23/G24 只替换 dispatch |
 | 行数目标导致过度拆分/总 LOC 膨胀 | 中 | 按行为边界拆，不按行数硬切；目标文件预算允许 ±15% |
 | 与后续功能开发冲突 | 中 | S12 先合入结构改动；新功能在 S12 后基于新模块开发 |
+| 行数 guard 的 AST API 绑定 TypeScript 7 async API | 低 | `scripts/check-code-size.ts` 使用 `typescript/unstable/async`；TypeScript 升级需同步验证 guard |
+| `stream-step`/`process-supervisor`/`chat-connection` 接近预算 | 低 | `stream-step` 233/240、`process-supervisor` 277/280、`chat-connection` 150/150；再增加职责前先拆分 |
+
+> **残余例外**：仅 `src/packages/shared/src/protocol.ts`（313）与 `src/packages/core/src/session/context.ts`（309）冻结为 >300 行例外；`ws-client.ts` 已降到 276 行，不再是例外。其余 S12 目标文件均 ≤ 文件预算，最长函数 98 行。
 
 **假设**：
 
@@ -691,3 +730,4 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 | 日期 | 变更 |
 |---|---|
 | 2026-11-12 | 初始 S12 专项审查：基于 `e3b51f5` 盘点 CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12；标注 CR-STR-02/11 已关闭、CR-STR-06 已缩减；给出目标模块边界、行数预算、行为不变量与验收；仅文档，未改源码 |
+| 2026-11-12 | S12 完成（v1.24.0）：A–G 结构与行为快照落地，H1–H4 验收通过；76 个目标文件全部通过 `check:size`，最长函数 98 行；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；仅保留 `protocol.ts`/`session/context.ts` 两个显式例外 |

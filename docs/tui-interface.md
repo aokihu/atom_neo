@@ -6,6 +6,8 @@
 
 > v1.21.2：收紧 User 正文、分隔线与 Assistant 标题之间的空行。
 
+> v1.24.0：S12 结构重构，面板/输入/Modal/Wizard 拆分为组合组件与纯逻辑；视觉与交互不变。
+
 ## 1. 设计目标
 
 定时任务栏显示当前 Core 的全部时间任务（跨 session），使用 /api/schedules 每 2 秒读取真实摘要：总数、启用数、名称、session/global 范围、等待/完成/过期/停用状态、下次执行时间。栏位位于右侧 Telemetry 栏，随右侧栏显示；内容可滚动，无任务显示空态，断连显示不可用，不保留看似实时的旧数据。独立 attach 与默认 TUI 行为一致，不显示任务 prompt。
@@ -129,11 +131,22 @@ Wide
 
 ```text
 src/packages/tui/src/components/App.tsx
+src/packages/tui/src/components/app/AppModal.tsx
 src/packages/tui/src/components/StatusBar.tsx
 src/packages/tui/src/components/RuntimeSidebar.tsx
+src/packages/tui/src/components/runtime/*
 src/packages/tui/src/components/Sidebar.tsx
+src/packages/tui/src/components/sidebar/*
 src/packages/tui/src/components/ToolMessageBox.tsx
 src/packages/tui/src/components/InputBar.tsx
+src/packages/tui/src/components/input/*
+src/packages/tui/src/components/SettingsModal.tsx
+src/packages/tui/src/components/settings/*
 src/packages/tui/src/components/StatusLine.tsx
+src/packages/tui/src/stores/chat.ts + stores/chat/*
+src/packages/tui/src/hooks/useChat.ts + chat-connection.ts + chat-messages.ts
 src/packages/tui-kit/src/theme.tsx
 ```
+
+Wizard 的结构化 view/reducer 位于 `src/packages/config-tui/src/wizard/`，`WizardApp.tsx`
+只负责 state/reducer 编排与 view 组合。
