@@ -8,6 +8,16 @@ import type { ThemeValue } from "./theme";
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
+async function waitForFrame(setup: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
+  const until = Date.now() + 2_000;
+  while (Date.now() < until) {
+    await setup.renderOnce();
+    if (setup.captureCharFrame().includes(text)) return;
+    await Bun.sleep(10);
+  }
+  throw new Error(`Frame did not contain ${text}`);
+}
+
 test("ThemeProvider attaches a renderer-owned syntax style", async () => {
   const setup = await createTestRenderer({ width: 20, height: 4 });
   const root = createRoot(setup.renderer);
@@ -38,8 +48,7 @@ test("markdown renders with the provided syntax style", async () => {
   try {
     await act(async () => root.render(<ThemeProvider theme="edex"><Probe /></ThemeProvider>));
     await setup.renderOnce();
-    await Bun.sleep(50);
-    await setup.renderOnce();
+    await waitForFrame(setup, "MARKDOWN_OK");
     expect(setup.captureCharFrame()).toContain("MARKDOWN_OK");
   } finally {
     await act(async () => root.unmount());
