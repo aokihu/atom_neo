@@ -1809,3 +1809,4 @@ bun run scripts/check-file-headers.ts
 | 2026-11-12 | S10 后续收尾：新增 `scripts/node-smoke/tui-render.ts`，用 OpenTUI test renderer 在 Node 下渲染并断言边框/文本；已接入 `smoke:node`（8 步）；无新增例外 |
 | 2026-11-13 | 禁区边界校正：兼容 Element 改为“不删除、不新增主线接线、不改行为”；`load-system-prompt`/`format-user-messages` 的行为保持注入/纯函数化纳入允许范围 |
 | 2026-11-13 | 引入 `@core/*` 包内路径别名，迁移 core 内 3 层以上相对导入（82 文件）；`TodoItem` 等共享类型改用 `@atom-neo/shared`；编译 `dist/atom` 后以临时 sandbox 启动 Core，`/api/health` 200、SIGTERM 0，验证二进制运行正常 |
+| 2026-11-13 | 维护版本 v1.24.2：services 按 base/memory/network/runtime/skill/agents/storage 分组；`@core/*` 别名迁移；源码 1363 pass、全量 2483 pass，二进制运行验证通过 |
