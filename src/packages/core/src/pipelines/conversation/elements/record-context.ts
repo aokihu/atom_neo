@@ -11,7 +11,7 @@ import type { PipelineSession } from "../../../session/element-session";
 import { getTaskPayload } from "../../../session/element-session";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { ToolRecordStore } from "../../../tools/tool-record-store";
-import { appendCurrentUserMessage } from "./types";
+import { appendCurrentUserMessage, projectPipelineMessage } from "../../../session/message-projection";
 import type { ConversationFlowState } from "./types";
 
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
@@ -117,11 +117,12 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     putData("current-time", { time: new Date().toISOString() });
     this.#putText("task", taskOwner, "difficulty-rules", "prompt-registry", this.#buildTaskInstructions(), 700);
 
-    const userMessages = (input.prompts ?? [])
-      .filter(prompt => prompt.role !== "tool")
-      .map(prompt => ({ role: prompt.role, content: prompt.content,
-        ...(prompt.reasoning_content ? { reasoning_content: prompt.reasoning_content } : {}) }));
-    appendCurrentUserMessage(userMessages, getTaskPayload(input.task, "text"));
+    const userMessages = appendCurrentUserMessage(
+      (input.prompts ?? [])
+        .filter(prompt => prompt.role !== "tool")
+        .map(prompt => projectPipelineMessage(prompt)),
+      getTaskPayload(input.task, "text"),
+    );
     this.report(BusEvents.Element.Data, {
       step: "done",
       taskIntent: this.#taskIntent,

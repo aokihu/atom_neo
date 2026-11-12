@@ -20,14 +20,6 @@ export type ToolEffectSummary = {
   failed: number;
 };
 
-export const appendCurrentUserMessage = (messages: Message[], content?: string): Message[] => {
-  const latest = messages.at(-1);
-  if (content && (latest?.role !== "user" || latest.content !== content)) {
-    messages.push({ role: "user", content });
-  }
-  return messages;
-};
-
 export type ConversationFlowState = {
   mode: ConversationMode;
   task: ElementTask;

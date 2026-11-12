@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { selectPromptMessages } from "./collect-prompts";
+import { makeBus } from "../../test-helpers";
+import { CollectPromptsElement, selectPromptMessages } from "./collect-prompts";
 
 const messages = [
   { role: "user", content: "杭州天气" },
@@ -20,5 +21,31 @@ describe("selectPromptMessages", () => {
 
   test("keeps full history only for explicit continuation", () => {
     expect(selectPromptMessages(messages, "continuation")).toEqual(messages);
+  });
+});
+
+describe("CollectPromptsElement", () => {
+  test("projects visible session messages and keeps assistant reasoning", async () => {
+    const session = {
+      messages: [
+        { role: "user", content: "写世界文明史", timestamp: 1 },
+        { role: "assistant", content: "第一段", reasoningContent: "thinking", timestamp: 2 },
+        { role: "assistant", content: "hidden", timestamp: 3, visible: false },
+      ],
+    };
+    const element = new CollectPromptsElement({
+      name: "collect-prompts",
+      kind: "source",
+      bus: makeBus(),
+      session: session as any,
+      contextRelevance: "continuation",
+    });
+
+    const result = await element.doProcess({ mode: "initial", task: { id: "t1" } } as any);
+
+    expect(result.prompts).toEqual([
+      { role: "user", content: "写世界文明史" },
+      { role: "assistant", content: "第一段", reasoning_content: "thinking" },
+    ]);
   });
 });

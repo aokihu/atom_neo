@@ -196,6 +196,23 @@ describe("conversation context pipeline", () => {
     expect(result.userMessages?.map(message => message.content)).toEqual(["current request"]);
   });
 
+  test("projects prompts without mutating the input array", async () => {
+    const prompts = [{ role: "user", content: "previous request" }];
+    const input = {
+      mode: "streaming",
+      task: { id: "t1", payload: [{ type: "text", data: "current request" }] },
+      prompts,
+    };
+
+    const { result } = await buildSnapshot({ session: makeSession() }, input);
+
+    expect(prompts).toEqual([{ role: "user", content: "previous request" }]);
+    expect(result.userMessages?.map(message => message.content)).toEqual([
+      "previous request",
+      "current request",
+    ]);
+  });
+
   test("keeps historical Assistant reasoning for a continuation", async () => {
     const { result } = await buildSnapshot({ session: makeSession() }, {
       mode: "streaming",

@@ -1,14 +1,13 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { ContinuationDecision, PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import type { ContinuationDecision, ContextCompressRequest, PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import type { ContextEntry } from "@atom-neo/shared";
 import type { SessionPersistenceService } from "../../../session/persistence-service";
-import type { CheckpointSession, PipelineMessage } from "../../../session/element-session";
+import type { ElementTask } from "../../../session/element-session";
 import type { CompressFlowState } from "./types";
 import type { ContextService } from "../../../context/context-service";
-import { estimateTokenCount } from "../../../context/compiler";
-import type { ElementTask } from "../../../session/element-session";
+import { commitCompression } from "./compress-commit";
+import { resumeAfterCompress } from "./compress-resume";
 
 type CompressResult = {
   type: typeof PipelineResultType.Complete;
@@ -63,134 +62,57 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Comp
     });
 
     if (input.archiveError) {
-      session.compressing = false;
-      this.report(BusEvents.Element.Data, { step: "completed", trigger: request.trigger, target: "context+messages", status: "archive_failed", resumeConversation: false });
-      return {
-        type: PipelineResultType.Complete,
-        task: input.task,
-        output: `compress: archive failed — ${input.archiveError}`,
-      };
+      return this.#complete(input, request, "archive_failed", `compress: archive failed — ${input.archiveError}`);
     }
-
     if (input.archiveMessages.length === 0) {
-      session.compressing = false;
-      this.report(BusEvents.Element.Data, { step: "completed", trigger: request.trigger, target: "context+messages", status: "nothing_to_archive", resumeConversation: false });
-      return {
-        type: PipelineResultType.Complete,
-        task: input.task,
-        output: "compress: nothing to archive",
-      };
+      return this.#complete(input, request, "nothing_to_archive", "compress: nothing to archive");
     }
-
     if (input.summaryMessages.length > 0 && (!input.summary?.trim() || input.summaryError)) {
-      session.compressing = false;
-      this.report(BusEvents.Element.Data, { step: "completed", trigger: request.trigger, target: "context+messages", status: "summary_failed", resumeConversation: false, error: input.summaryError ?? "empty summary" });
-      return {
-        type: PipelineResultType.Complete,
-        task: input.task,
-        output: `compress: summary failed — ${input.summaryError ?? "empty summary"}`,
-      };
+      const message = input.summaryError ?? "empty summary";
+      return this.#complete(input, request, "summary_failed", `compress: summary failed — ${message}`, { error: message });
     }
 
-    const previousSummary = this.#contextService.get("session", { sessionId }, "conversation-summary");
-    const previousIndex = this.#contextService.get("session", { sessionId }, "history-archive-index");
-
-    if (input.summary) {
-      const label = "[对话历史摘要]";
-      this.#contextService.put({
-        scope: "session",
-        owner: { sessionId },
-        entry: {
-          key: "conversation-summary",
-          source: "context-compress",
-          channel: "messages",
-          trust: "untrusted",
-          priority: 700,
-          content: [{ role: "assistant", content: `${label}\n${input.summary}` }],
-        },
-      });
+    const commit = commitCompression({
+      session,
+      sessionId,
+      summary: input.summary,
+      archiveMessages: input.archiveMessages,
+      archiveReceipt: input.archiveReceipt,
+      contextService: this.#contextService,
+      persistence: this.#persistence,
+      workspaceId: this.#workspaceId,
+      inputBudget: this.#inputBudget,
+    });
+    if (!commit.ok) {
+      this.report(BusEvents.Element.Data, { step: "checkpoint failed", level: "warn", trigger: request.trigger, target: "context+messages", error: commit.error });
+      return { type: PipelineResultType.Complete, task: input.task, output: `compress: checkpoint failed — ${commit.error}` };
     }
-    if (input.archiveReceipt) {
-      this.#contextService.put({
-        scope: "session",
-        owner: { sessionId },
-        entry: {
-          key: "history-archive-index",
-          source: "session-history",
-          channel: "runtime",
-          trust: "trusted",
-          priority: 500,
-          content: this.#persistence.getArchiveIndex(sessionId),
-        },
-      });
-    }
-
-    const archivedSeqs = input.archiveMessages.flatMap(message =>
-      message.seq === undefined ? [] : [message.seq]);
-    const archived = new Set(archivedSeqs);
-    const remainingMessages = (session.messages ?? []).filter((message: { seq?: number }) =>
-      message.seq === undefined || !archived.has(message.seq));
-    const previousContextTokens = session.contextTokens ?? 0;
-    const tokenEstimate = this.#estimateContextTokens(session, remainingMessages);
-    session.setContextTokens?.(tokenEstimate.total);
-    try {
-      this.#persistence.checkpoint(session, "compressed", remainingMessages);
-    } catch (error) {
-      this.#restoreEntry(sessionId, "conversation-summary", previousSummary);
-      this.#restoreEntry(sessionId, "history-archive-index", previousIndex);
-      session.setContextTokens?.(previousContextTokens);
-      session.compressing = false;
-      const message = error instanceof Error ? error.message : String(error);
-      this.report(BusEvents.Element.Data, { step: "checkpoint failed", level: "warn", trigger: request.trigger, target: "context+messages", error: message });
-      return { type: PipelineResultType.Complete, task: input.task, output: `compress: checkpoint failed — ${message}` };
-    }
-
-    const removed = typeof session.removeMessages === "function"
-      ? session.removeMessages(archivedSeqs)
-      : 0;
 
     this.report(BusEvents.Element.Data, {
       step: "checkpoint committed",
       trigger: request.trigger,
       target: "context+messages",
       archiveId: input.archiveReceipt?.archiveId,
-      removedMessages: removed,
-      remainingMessages: remainingMessages.length,
+      removedMessages: commit.removed,
+      remainingMessages: commit.remainingMessages.length,
       contextSummaryUpdated: !!input.summary,
       contextArchiveIndexUpdated: !!input.archiveReceipt,
       summaryLen: input.summary?.length ?? 0,
-      previousContextTokens,
-      snapshotTokens: tokenEstimate.snapshot,
-      messageTokens: tokenEstimate.messages,
-      contextTokens: tokenEstimate.total,
+      previousContextTokens: commit.previousContextTokens,
+      snapshotTokens: commit.tokenEstimate.snapshot,
+      messageTokens: commit.tokenEstimate.messages,
+      contextTokens: commit.tokenEstimate.total,
       resumeConversation: request.resumeConversation,
     });
 
     input.session.compressing = false;
+    const output = `compress: trigger=${request.trigger}, archived=${input.archiveMessages.length}, removed=${commit.removed}, summaryLen=${input.summary?.length ?? 0}, resumeConversation=${request.resumeConversation}`;
 
     if (request.resumeConversation) {
-      this.report(BusEvents.Element.Data, {
-        step: "conversation resume scheduled",
-        trigger: request.trigger,
-        sessionId,
-        parentTaskId: input.task.parentTaskId,
-      });
-      if (request.resumeTask) {
-        this.#orchestrator.releaseTask(request.resumeTask, input.task.id);
-      } else if (request.continuation && request.trigger === "token-overflow") {
-        // Core grants the recovery slot only after this compression checkpoint commits.
-        return { type: PipelineResultType.Complete, task: input.task,
-          output: "compress: saved, continuation awaiting chain governance",
-          chainAction: "follow_up", continuationDecision: request.continuation };
-      } else if (request.continuation) {
-        this.#orchestrator.scheduleContinuation(sessionId, input.task.chatId ?? "chat",
-          input.task.parentTaskId ?? input.task.id, input.task.id, request.continuation);
-      } else {
-        this.#orchestrator.scheduleConversation(sessionId, input.task.chatId ?? "chat",
-          input.task.parentTaskId ?? input.task.id,
-          [{ type: "text", data: "请根据对话摘要和最近消息，从被截断处继续；不要重复已经完成的内容。" }],
-          undefined, input.task.id);
-      }
+      const resume = resumeAfterCompress({ request, sessionId, task: input.task, report: payload => this.report(BusEvents.Element.Data, payload),
+        orchestrator: this.#orchestrator });
+      if (resume) return { type: PipelineResultType.Complete, task: input.task,
+        output: "compress: saved, continuation awaiting chain governance", ...resume };
     } else {
       this.report(BusEvents.Element.Data, {
         step: "completed without conversation resume",
@@ -201,47 +123,13 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Comp
       });
     }
 
-    return {
-      type: PipelineResultType.Complete,
-      task: input.task,
-      output: `compress: trigger=${request.trigger}, archived=${input.archiveMessages.length}, removed=${removed}, summaryLen=${input.summary?.length ?? 0}, resumeConversation=${request.resumeConversation}`,
-    };
+    return { type: PipelineResultType.Complete, task: input.task, output };
   }
 
-  #restoreEntry(sessionId: string, key: string, previous?: Readonly<ContextEntry>): void {
-    if (!previous) {
-      this.#contextService.remove("session", { sessionId }, key);
-      return;
-    }
-    const { revision: _revision, ...entry } = previous;
-    this.#contextService.put({ scope: "session", owner: { sessionId }, entry });
-  }
-
-  #estimateContextTokens(session: CheckpointSession, messages: readonly PipelineMessage[]): {
-    snapshot: number;
-    messages: number;
-    total: number;
-  } {
-    const snapshot = this.#contextService.createSnapshot({
-      workspaceId: this.#workspaceId,
-      sessionId: session.sessionId ?? "default",
-      ...(session.currentTopic ? { topicId: session.currentTopic } : {}),
-      inputBudget: this.#inputBudget,
-    });
-    const snapshotTokens = this.#contextService.inspectSnapshot(snapshot.id)?.estimatedTokens ?? 0;
-    this.#contextService.releaseSnapshot(snapshot.id);
-    const visibleMessages = messages
-      .filter(message => message.visible !== false)
-      .map(message => ({
-        role: message.role,
-        content: message.content,
-        ...(message.reasoningContent ? { reasoning_content: message.reasoningContent } : {}),
-      }));
-    const messageTokens = visibleMessages.length > 0 ? estimateTokenCount(visibleMessages) : 0;
-    return {
-      snapshot: snapshotTokens,
-      messages: messageTokens,
-      total: snapshotTokens + messageTokens,
-    };
+  #complete(input: CompressFlowState, request: ContextCompressRequest, status: string, output: string,
+    extra?: Record<string, unknown>): CompressResult {
+    input.session.compressing = false;
+    this.report(BusEvents.Element.Data, { step: "completed", trigger: request.trigger, target: "context+messages", status, resumeConversation: false, ...extra });
+    return { type: PipelineResultType.Complete, task: input.task, output };
   }
 }

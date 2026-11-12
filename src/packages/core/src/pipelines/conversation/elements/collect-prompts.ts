@@ -2,7 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
-import { isPromptEligibleMessage } from "../../../session/message-policy";
+import { projectPipelineMessage, selectPromptEligibleMessages } from "../../../session/message-projection";
 import type { PipelineSession } from "../../../session/element-session";
 
 export function selectPromptMessages<T extends { role: string }>(
@@ -37,15 +37,11 @@ export class CollectPromptsElement extends BaseElement<ConversationFlowState, Co
     if (input.mode !== "initial") return input;
 
     const allMsgs = this.#session.messages ?? [];
-    const visibleMsgs = allMsgs.filter((m: any) => isPromptEligibleMessage(m));
+    const visibleMsgs = selectPromptEligibleMessages(allMsgs);
     this.report(BusEvents.Element.Data, { step: "session-state", totalMsgs: allMsgs.length, visibleMsgs: visibleMsgs.length, contextRelevance: this.#contextRelevance });
     const limitedMsgs = selectPromptMessages(visibleMsgs, this.#contextRelevance);
 
-    const messages = limitedMsgs.map((m: any) => {
-      const msg: any = { role: m.role, content: m.content };
-      if (m.reasoningContent) msg.reasoning_content = m.reasoningContent;
-      return msg;
-    });
+    const messages = limitedMsgs.map(message => projectPipelineMessage(message));
 
     this.report(BusEvents.Element.Data, { step: "done", messageCount: messages.length });
     return { mode: "streaming", task: input.task, prompts: messages };

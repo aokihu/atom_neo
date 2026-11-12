@@ -1,53 +1,21 @@
 /** Per-client process lifecycle: spawn, readiness, health, stop and restart. */
-import { createChildProcessEnv } from "@atom-neo/shared";
-import type { Logger, ProcessHandle, SpawnProcessOptions } from "@atom-neo/shared";
+import type { Logger, ProcessHandle } from "@atom-neo/shared";
 import { generateSecret } from "../auth/secret";
 import type { ClientConfig } from "../config";
+import { buildClientCommand, buildSpawnOptions, waitUntilReady } from "./client-command";
+import type { ActiveClient, ProcessSupervisorDeps } from "./client-command";
 import type { HealthProbe } from "./health-probe";
 import { nextProcessState } from "./process-state";
 import type { ProcessEvent, ProcessState } from "./process-state";
+import { terminateProcess } from "./process-termination";
 import type { RestartPolicy } from "./restart-policy";
 import type { ClientManagerRuntime, TimerHandle } from "./runtime";
 
-const RESERVED_ARGS = new Set(["secret", "port", "gateway-url"]);
-const READINESS_POLL_MS = 100;
-const READINESS_TIMEOUT_MS = 10_000;
-const READINESS_PROBE_TIMEOUT_MS = 500;
+export { buildClientArgs } from "./client-command";
+export type { ActiveClient, ProcessSupervisorDeps } from "./client-command";
+
 const HEALTH_PROBE_TIMEOUT_MS = 5_000;
 const HEALTH_RESET_UPTIME_MS = 60_000;
-const KILL_GRACE_TIMEOUT = 5_000;
-const KILL_FORCE_TIMEOUT = 3_000;
-
-export type ActiveClient = {
-  id: string;
-  platform: string;
-  secret: string;
-  port: number;
-  url: string;
-};
-
-export type ProcessSupervisorDeps = {
-  id: string;
-  config: ClientConfig;
-  port: number;
-  gatewayPort: number;
-  logger: Logger;
-  runtime: ClientManagerRuntime;
-  probe: HealthProbe;
-  policy: RestartPolicy;
-};
-
-export function buildClientArgs(clientArgs?: Record<string, string>): string[] {
-  if (!clientArgs) return [];
-  const args: string[] = [];
-  for (const [key, value] of Object.entries(clientArgs)) {
-    if (RESERVED_ARGS.has(key)) {
-      throw new Error(`clientArgs.${key} is reserved and managed by Gateway`);
-    }
-    args.push(`--${key}`, value);
-  }
-  return args;
-}
 
 export class ProcessSupervisor {
   #id: string;
@@ -80,21 +48,13 @@ export class ProcessSupervisor {
     this.#policy = deps.policy;
   }
 
-  get state(): ProcessState {
-    return this.#state;
-  }
+  get state(): ProcessState { return this.#state; }
 
-  get desired(): boolean {
-    return this.#desired;
-  }
+  get desired(): boolean { return this.#desired; }
 
-  get active(): ActiveClient | undefined {
-    return this.#active ?? undefined;
-  }
+  get active(): ActiveClient | undefined { return this.#active ?? undefined; }
 
-  get isRunning(): boolean {
-    return this.#proc !== null && this.#proc.exitCode === null;
-  }
+  get isRunning(): boolean { return this.#proc !== null && this.#proc.exitCode === null; }
 
   start(): Promise<void> {
     this.#desired = true;
@@ -104,10 +64,7 @@ export class ProcessSupervisor {
     this.#clearRestartTimer();
     const pending = this.#enqueue(() => this.#startProcess(false));
     this.#pendingStart = pending;
-    void pending.then(
-      () => this.#settlePendingStart(pending),
-      () => this.#settlePendingStart(pending),
-    );
+    void pending.then(() => this.#settlePendingStart(pending), () => this.#settlePendingStart(pending));
     return pending;
   }
 
@@ -180,33 +137,23 @@ export class ProcessSupervisor {
     this.#generation += 1;
     const generation = this.#generation;
     const secret = generateSecret();
-    const client: ActiveClient = {
-      id: this.#id,
-      platform: this.#config.platform,
-      secret,
-      port: this.#port,
-      url: `http://127.0.0.1:${this.#port}`,
-    };
+    const client: ActiveClient = { id: this.#id, platform: this.#config.platform, secret, port: this.#port, url: `http://127.0.0.1:${this.#port}` };
 
     const stdio = this.#config.stdio ?? "inherit";
-    this.#logger.info("spawning client", {
-      id: this.#id,
-      platform: client.platform,
-      port: client.port,
-      binary: this.#config.binary,
-      stdio,
-    });
+    this.#logger.info("spawning client", { id: this.#id, platform: client.platform, port: client.port, binary: this.#config.binary, stdio });
 
     let proc: ProcessHandle | undefined;
     try {
-      proc = this.#runtime.spawn(this.#command(client), this.#spawnOptions(generation, stdio));
+      proc = this.#runtime.spawn(buildClientCommand(this.#config, client, this.#gatewayPort),
+        buildSpawnOptions(stdio, (exitCode, signalCode, error) => this.#handleExit(generation, exitCode, signalCode, error)));
       this.#proc = proc;
       this.#active = client;
       this.#startedAt = this.#runtime.now();
       this.#setState({ type: "spawned" });
       this.#logger.debug("client process started", { id: this.#id, pid: proc.pid });
 
-      await this.#waitUntilReady(proc, client);
+      await waitUntilReady(proc, client, { id: this.#id, probe: this.#probe, runtime: this.#runtime,
+        isCurrent: candidate => !this.#stopping && this.#desired && this.#proc === candidate && candidate.exitCode === null });
       if (!this.#desired || this.#stopping || this.#proc !== proc) {
         throw new Error(`Client ${this.#id} stopped before ready`);
       }
@@ -224,57 +171,7 @@ export class ProcessSupervisor {
     }
   }
 
-  async #waitUntilReady(proc: ProcessHandle, client: ActiveClient): Promise<void> {
-    const deadline = this.#runtime.now() + READINESS_TIMEOUT_MS;
-    while (true) {
-      this.#assertStarting(proc);
-      const remaining = deadline - this.#runtime.now();
-      if (remaining <= 0) break;
-
-      const result = await this.#probe.check(`${client.url}/health`, READINESS_PROBE_TIMEOUT_MS);
-      if (result.healthy) return;
-      this.#assertStarting(proc);
-
-      const delay = Math.min(READINESS_POLL_MS, deadline - this.#runtime.now());
-      if (delay <= 0) break;
-      await this.#runtime.sleep(delay);
-    }
-    throw new Error(`Client ${this.#id} health check timed out`);
-  }
-
-  #assertStarting(proc: ProcessHandle): void {
-    if (this.#stopping || !this.#desired || this.#proc !== proc || proc.exitCode !== null) {
-      throw new Error(`Client ${this.#id} stopped before ready`);
-    }
-  }
-
-  #spawnOptions(generation: number, stdio: "inherit" | "ignore"): SpawnProcessOptions {
-    return {
-      env: createChildProcessEnv(),
-      stdin: "ignore",
-      stdout: stdio,
-      stderr: stdio,
-      onExit: (exitCode, signalCode, error) => this.#handleExit(generation, exitCode, signalCode, error),
-    };
-  }
-
-  #command(client: ActiveClient): string[] {
-    const { binary, clientArgs } = this.#config;
-    return [
-      binary,
-      "--secret", client.secret,
-      "--port", String(client.port),
-      "--gateway-url", `http://127.0.0.1:${this.#gatewayPort}`,
-      ...buildClientArgs(clientArgs),
-    ];
-  }
-
-  #handleExit(
-    generation: number,
-    exitCode: number | null,
-    signalCode: NodeJS.Signals | null,
-    error?: Error,
-  ): void {
+  #handleExit(generation: number, exitCode: number | null, signalCode: NodeJS.Signals | null, error?: Error): void {
     this.#logger.warn("client exited", {
       id: this.#id,
       platform: this.#config.platform,
@@ -353,40 +250,9 @@ export class ProcessSupervisor {
       return;
     }
 
-    const { pid } = proc;
     this.#proc = null;
     this.#active = null;
-
-    if (proc.exitCode === null) proc.kill();
-    const exited = await this.#waitForExit(proc.exited, KILL_GRACE_TIMEOUT);
-
-    if (exited) {
-      this.#logger.info("client terminated gracefully", { id: this.#id, pid, exitCode: proc.exitCode });
-      return;
-    }
-
-    this.#logger.warn("client did not exit gracefully, force killing", { id: this.#id, pid });
-    proc.kill("SIGKILL");
-    const forceExited = await this.#waitForExit(proc.exited, KILL_FORCE_TIMEOUT);
-    if (forceExited) {
-      this.#logger.info("client killed", { id: this.#id, pid, exitCode: proc.exitCode });
-      return;
-    }
-    throw new Error(`Failed to kill client ${this.#id} (${pid})`);
-  }
-
-  async #waitForExit(exited: Promise<number>, timeoutMs: number): Promise<boolean> {
-    let timer: TimerHandle | undefined;
-    try {
-      return await Promise.race([
-        exited.then(() => true),
-        new Promise<boolean>((resolve) => {
-          timer = this.#runtime.setTimeout(() => resolve(false), timeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timer !== undefined) this.#runtime.clearTimeout(timer);
-    }
+    await terminateProcess(proc, { id: this.#id, logger: this.#logger, runtime: this.#runtime });
   }
 
   #clearRestartTimer(): void {
