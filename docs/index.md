@@ -106,3 +106,6 @@
 | [code-review-s11-2026-11-12.md](./code-review-2026-11-10/code-review-s11-2026-11-12.md) | S11 专项审查：CR-ARCH-01..09、全局状态盘点、目标契约、兼容不变量（S11 已完成，v1.23.0） | 实施 S11 前必读 |
 | [code-review-s11-graph-2026-11-12.md](./code-review-2026-11-10/code-review-s11-graph-2026-11-12.md) | S11 关系图：当前/目标 DI、registry/prompt/task 序列、状态机、风险与回滚（S11 已完成，v1.23.0） | 理解 S11 影响面 |
 | [code-review-s11-plan-2026-11-12.md](./code-review-2026-11-10/code-review-s11-plan-2026-11-12.md) | S11 实施计划：A–H 子阶段、49 个 S/M 任务、测试矩阵、回滚与 DoD（S11 已完成，v1.23.0） | 实施 S11 时使用 |
+| [code-review-s12-2026-11-12.md](./code-review-2026-11-10/code-review-s12-2026-11-12.md) | S12 专项审查：CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12、目标模块边界、行为不变量与验收（S12 已拆分，待实施） | 实施 S12 前必读 |
+| [code-review-s12-graph-2026-11-12.md](./code-review-2026-11-10/code-review-s12-graph-2026-11-12.md) | S12 关系图：当前/目标模块、stream/memory/context/persistence/TUI 序列、阶段 DAG、风险与回滚（S12 已拆分，待实施） | 理解 S12 影响面 |
+| [code-review-s12-plan-2026-11-12.md](./code-review-2026-11-10/code-review-s12-plan-2026-11-12.md) | S12 实施计划：A–H 子阶段、97 个 S/M 任务、测试矩阵、回滚与 DoD（S12 已拆分，待实施） | 实施 S12 时使用 |
