@@ -382,6 +382,10 @@ sequenceDiagram
 - `drain()` 仍轮询 `queue.size`，超时返回 false。
 - FlowState 每次展开为新对象；Element 不修改上游对象。
 
+**实施状态（2026-11-12，S11-D）**: 已按上述序列落地。`task/wakeup.ts` 与
+`task/task-runner.ts` 新增；`TaskEngine` 无递归重入、无 `#processing`/`#processNext`，
+队列顺序、取消、drain、事件顺序与预算/链行为保持。
+
 ---
 
 ## 7. PipelineInstanceStore 生命周期

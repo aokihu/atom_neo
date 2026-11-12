@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `ef7ff15` (v1.22.12, S10 complete)
-> **Status**: S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-E（ProcessSupervisor）与 S11-F（Theme import guard）已实施；D/G/H 待实施
+> **Status**: S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-D（TaskEngine 单循环 + 不可变 FlowState）、S11-E（ProcessSupervisor）与 S11-F（Theme import guard）已实施；G/H 待实施
 > **Scope**: CR-ARCH-01..09；CR-ARCH-04/05 已关闭，仅防回归
 
 ---
@@ -546,7 +546,7 @@ S11-F（Theme guard）随时可做
 - **测试**: Activated/Completed/Failed 顺序；`Pipeline.Result` 只在成功；drain 超时；stop 不 abort 当前任务。
 - **行为风险**: 高；事件顺序是 WS/TUI 契约。先写失败测试。
 - **回滚**: revert 单 commit。
-- **DoD**: 事件序列快照与基线一致；`drain` 在 30s 超时返回 false 并停止。
+- **DoD**: 事件序列快照与基线一致；`drain` 在 30s 超时返回 false 并停止等待（仅队列清空时停止引擎）。
 
 #### S11-D7 — 删除旧重入代码与死字段
 
@@ -559,6 +559,16 @@ S11-F（Theme guard）随时可做
 - **行为风险**: 低；纯清理。
 - **回滚**: revert 单 commit。
 - **DoD**: 单循环是唯一调度源；无递归调用。
+
+> **实施状态（D1–D7）**: 已完成（2026-11-12）。新增 `task/wakeup.ts`（notify-before-wait、可重复 notify、无 timer/轮询）与 `task/task-runner.ts`（pipeline 解析/缓存、逐元素执行、`{ ...current, abortSignal }`、最终剥离 signal）；`TaskEngine.start()` 只启动一个 `#runLoop`，`Task.Enqueued` 仅 `wake.notify()`；递归 `#onTaskEnqueued` 调度、`#processing`、`#processNext` 与未使用 `#timeoutMs` 已删除。取消 queued/processing 收敛到 `#applyCancellation`，`TaskCancelledError`、`Task.Failed`、chain discard 与 store 清理保持不变；`stop()` 只置位并唤醒、不 abort 当前 Task，`drain()` 轮询/超时语义与事件顺序不变。
+>
+> - [x] `maxProcessing === 1`；并发 enqueue、优先级顺序、start 幂等、stop 后重新 start 均通过。
+> - [x] `rg '#processing|#processNext' src/packages/core/src/task-engine.ts` 为 0；`#onTaskEnqueued` 只调用 `wake.notify()`，无递归。
+> - [x] 事件顺序：成功 `Activated → Completed → Pipeline.Result`；失败 `Activated → Failed`（无 Result）；queued 取消只发 `Failed`。
+> - [x] queued/processing/跨 session 取消、chain discard、预算/链（server-continuation）行为不变；drain 空队列 true、未启动队列 false、超时 false。
+> - [x] FlowState：Element 收到新对象，上游对象在调用后仍无 `abortSignal`，连续元素不共享引用；最终结果无 `abortSignal`。
+> - [x] 目标测试：wakeup + task-runner + task-engine + task-queue 36 pass / 0 fail；server-continuation + ws/api 25 pass / 0 fail；`bun run typecheck` 6/6、`typecheck:node` 0 error、`build` 6/6。
+> - [x] 全量 `bun test`：1946 pass / 21 skip / 0 fail（新增 18 个 D 用例）；`docs:check` / `docs:typecheck` 通过。
 
 ---
 
@@ -1235,3 +1245,4 @@ rg -n 'let _instance|const pipelineMap|const registry = new Map' src/packages --
 | 2026-11-12 | S11-A6–A11 实施：新增 `createPromptRegistry()` / `PromptResolver` / `createPromptResolver()`；删除 prompt 单例与旧导出；6 条 pipeline、`chooseDecision`、`callLLM`、JEV 模拟全部显式注入 resolver；`prompts.test.ts` 增加双 registry 隔离与逐字一致测试。shared + core 663 pass；全量 1874 pass / 21 skip / 0 fail |
 | 2026-11-12 | S11-B1–B7 实施：新增 `ElementRegistry` / `createElementRegistry()`；7 个注册函数、`PipelineBuilder` / `pipeline()`、pipeline factory 与 bootstrap 全部显式透传 registry；删除模块级 registry 与旧自由函数。`registry.test.ts` 增加双实例同名隔离；`server-continuation` 移除全局表保存/恢复 |
 | 2026-11-12 | S11-C1–C3 实施：新增 `PipelineInstanceStore` 并注入 `TaskEngine`；删除 `api/tasks.ts` 的 `pipelineMap` 与三个自由函数；成功/失败/取消/drain 清理与双 store 隔离测试补齐。源码 1066 pass / 21 skip / 0 fail；全量 1902 pass / 21 skip / 0 fail |
+| 2026-11-12 | S11-D1–D7 实施：新增 `task/wakeup.ts` 与 `task/task-runner.ts`；`TaskEngine` 改为单一 `#runLoop`，`Task.Enqueued` 只唤醒；删除递归重入、`#processing`、`#processNext`、`#timeoutMs`；FlowState 改为逐元素新对象并剥离 `abortSignal`；取消路径收敛到 `#applyCancellation`。补充事件顺序、优先级、start 幂等、stop/drain、queued/processing/跨 session 取消与 FlowState 测试；目标测试 36 pass、全量 1946 pass / 21 skip / 0 fail、typecheck 6/6、build 6/6 |

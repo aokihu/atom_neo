@@ -146,10 +146,16 @@ src/packages/core/
 ├── http-router.ts        # /api/* + /ws/* route table and requireAdmin
 ├── mcp-lifecycle.ts      # MCP init/fetch/health/close with stop guard
 ├── constants.ts          # Token/context defaults
-├── task-engine.ts
+├── task-engine.ts        # Single run loop + queue scheduling/events/cancellation
 ├── task-queue.ts
 ├── task-factory.ts
 ├── url-path.ts
+│
+├── task/
+│   ├── wakeup.ts         # notify-before-wait primitive for the run loop
+│   ├── task-runner.ts    # Single-task pipeline execution + immutable FlowState
+│   ├── internal-task-orchestrator.ts
+│   └── task-submission-service.ts
 │
 ├── api/
 │   ├── tasks.ts

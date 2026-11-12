@@ -45,7 +45,7 @@ bootstrap()
   │
   ├── pipelineStore = new PipelineInstanceStore()
   │
-  ├── taskEngine = new TaskEngine({ bus, taskQueue, pipelineStore, pipelineBuilders })
+  ├── taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineStore, pipelineBuilders })
   │     └── taskEngine.start()
   │
   └── server = Bun.serve({ ... })
@@ -126,6 +126,21 @@ new TaskEngine({ bus, queue, pipelineStore, pipelineBuilders });
 `finally` deletes the entry after success, failure or cancellation, and queued
 cancellation deletes it before execution. Two engines with two stores never share
 pipeline instances for the same task id. There is no TTL or capacity policy.
+
+### TaskEngine Boundary
+
+`TaskEngine` owns a single run loop and delegates one task to `TaskRunner`:
+
+```typescript
+const engine = new TaskEngine({ bus, queue, pipelineStore, pipelineBuilders });
+engine.start(); // idempotent; Task.Enqueued only calls wake.notify()
+```
+
+`TaskRunner` receives the store and builders, builds or reuses one pipeline per task,
+and passes `{ ...state, abortSignal }` to every element. The `Wakeup` primitive retains
+a notify that arrives before `wait()`, so the scheduler needs no timer or polling.
+`stop()` never aborts the current task; `drain()` still polls `queue.size` and returns
+`false` on timeout.
 
 ---
 

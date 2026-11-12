@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `ef7ff15` (v1.22.12, S10 complete)
 > **Scope**: CR-ARCH-01..09 中尚未收口的全局状态、构造方式与边界类型
-> **Status**: S11-A1–A11 与 S11-E 已实施；B/C/D/F/G/H 待实施
+> **Status**: S11-A1–A11、B/C/D/E/F 已实施；G/H 待实施
 > **Related**:
 > - [code-review-s11-graph-2026-11-12.md](./code-review-s11-graph-2026-11-12.md)
 > - [code-review-s11-plan-2026-11-12.md](./code-review-s11-plan-2026-11-12.md)
@@ -116,7 +116,7 @@ startGateway({ logger, httpServer })
 | 事项 | S11 | S12 |
 |---|---|---|
 | Element 注册表全局 | 实例化并注入 | 不再改构造 |
-| TaskEngine 事件重入 | 单循环 + 唤醒 | 可继续拆 `TaskRunner` 文件 |
+| TaskEngine 事件重入 | 单循环 + 唤醒 + `TaskRunner` | 不改调度语义 |
 | ClientManager | 拆 `ProcessSupervisor` | 可继续缩短 `index.ts` |
 | `any` | 仅 Element 边界窄接口 | 全量清理与类型收口 |
 | 巨型文件 | 不动 | 按文件拆分 |
@@ -698,9 +698,11 @@ export type ElementTask = import("@atom-neo/shared").TaskItem;
 
 ### CR-ARCH-08 — TaskEngine 事件重入 + 变异输入
 
-**级别**: P2 · **阶段**: S11-D · **当前状态**: 未解决
+**级别**: P2 · **阶段**: S11-D · **当前状态**: 已解决（2026-11-12，S11-D）
 
-**位置**: `src/packages/core/src/task-engine.ts:91-100,142-167`。
+**实施**: `TaskEngine` 改为单一 `#runLoop` + `Wakeup`（notify-before-wait，无 timer/轮询）；`Task.Enqueued` 只唤醒；单任务执行抽到 `TaskRunner`，每个 Element 收到 `{ ...current, abortSignal }` 新对象，最终结果剥离 `abortSignal`；递归 `#onTaskEnqueued`、`#processing`、`#processNext` 与未使用 `#timeoutMs` 已删除。
+
+**位置**: `src/packages/core/src/task-engine.ts`、`src/packages/core/src/task/task-runner.ts`。
 
 **当前**:
 
@@ -804,7 +806,7 @@ for (const element of pipeline.elements) {
 - 保持任务顺序：active 队列优先、同优先级 active 取最新（`TaskQueue.dequeue` 不变）。
 - 保持事件顺序：`Activated` → `Completed`/`Failed`；`Pipeline.Result` 仅在成功时发出。
 - 保持取消语义：同 session 同 chain 的 queued + processing；`TaskCancelledError` 文案/code 不变。
-- `drain()` 仍轮询到 `queue.size === 0`，超时返回 false 并停止引擎。
+- `drain()` 仍轮询到 `queue.size === 0`；超时返回 false 并停止等待，不停止引擎，调用方可重试。
 - 不新增任务超时；`#timeoutMs` 暂保留或在本阶段末尾删除（需单独任务，避免行为变化）。
 
 **验收**:

@@ -114,21 +114,33 @@ atom_neo/
 
 ```typescript
 class TaskEngine {
-  constructor(bus: PipelineEventBus) {
-    bus.on("task.enqueued", (task) => this.onTaskEnqueued(task));
-    bus.on("pipeline.finished", (result) => this.onPipelineFinished(result));
-    bus.on("pipeline.failed", (error) => this.onPipelineFailed(error));
+  #running = false;
+  #wake = new Wakeup();
+
+  constructor(bus: PipelineEventBus, queue: TaskQueue) {
+    bus.on("task.enqueued", () => this.#wake.notify());
   }
 
-  private onTaskEnqueued(task: TaskItem) {
-    if (!this.running) {
-      this.runNext();
+  start() {
+    if (this.#running) return;
+    this.#running = true;
+    void this.#runLoop();
+  }
+
+  async #runLoop() {
+    while (this.#running) {
+      const task = this.#queue.dequeue();
+      if (!task) {
+        await this.#wake.wait();
+        continue;
+      }
+      await this.#runTask(task);
     }
   }
 }
 ```
 
-**优势：** 无空转等待，任务到达即处理，天然支持并发 pipeline。
+**优势：** 无空转等待、无 timer/轮询；任务严格串行执行；`Task.Enqueued` 只负责唤醒循环。
 
 ### 3.2 Per-Session 上下文隔离
 

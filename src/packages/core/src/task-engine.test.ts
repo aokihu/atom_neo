@@ -20,6 +20,18 @@ const createTask = (id: string): TaskItem => ({
   updatedAt: Date.now(),
 });
 
+const waitFor = async (predicate: () => boolean): Promise<void> => {
+  for (let i = 0; i < 200; i++) {
+    if (predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  throw new Error("condition not met");
+};
+
+const passthroughPipeline = {
+  elements: [{ process: async (input: unknown) => input }],
+} as any;
+
 describe("TaskEngine", () => {
   test("drains queued and processing tasks before stopping", async () => {
     const bus = new PipelineEventBus<FullEventMap>();
@@ -199,6 +211,198 @@ describe("TaskEngine", () => {
     expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
     expect(failed).toBe(true);
     expect(store.size).toBe(0);
+  });
+
+  test("emits Activated, Completed and Pipeline.Result in order", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const events: string[] = [];
+    bus.on(BusEvents.Task.Activated, () => events.push("activated"));
+    bus.on(BusEvents.Task.Completed, () => events.push("completed"));
+    bus.on(BusEvents.Task.Failed, () => events.push("failed"));
+    bus.on(BusEvents.Pipeline.Result, () => events.push("result"));
+    const task = { ...createTask("ordered"), pipeline: "ok" };
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: new PipelineInstanceStore(),
+      pipelineBuilders: { ok: () => passthroughPipeline },
+    });
+    queue.enqueue(task);
+    engine.start();
+    bus.emit(BusEvents.Task.Enqueued, { task });
+
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(events).toEqual(["activated", "completed", "result"]);
+  });
+
+  test("emits Activated then Failed without Pipeline.Result when an element throws", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const events: string[] = [];
+    bus.on(BusEvents.Task.Activated, () => events.push("activated"));
+    bus.on(BusEvents.Task.Completed, () => events.push("completed"));
+    bus.on(BusEvents.Task.Failed, ({ task }) => events.push(`failed:${task.state}`));
+    bus.on(BusEvents.Pipeline.Result, () => events.push("result"));
+    const task = { ...createTask("failing"), pipeline: "failing" };
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: new PipelineInstanceStore(),
+      pipelineBuilders: {
+        failing: () => ({ elements: [{ process: async () => { throw new Error("boom"); } }] } as any),
+      },
+    });
+    queue.enqueue(task);
+    engine.start();
+    bus.emit(BusEvents.Task.Enqueued, { task });
+
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(events).toEqual(["activated", `failed:${TaskState.FAILED}`]);
+  });
+
+  test("emits only Failed when a queued task is cancelled", () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const events: string[] = [];
+    bus.on(BusEvents.Task.Activated, () => events.push("activated"));
+    bus.on(BusEvents.Task.Failed, ({ task }) => events.push(`failed:${task.state}`));
+    bus.on(BusEvents.Pipeline.Result, () => events.push("result"));
+    const task = createTask("queued-cancel");
+    const engine = new TaskEngine({ bus, queue, pipelineStore: new PipelineInstanceStore() });
+    queue.enqueue(task);
+
+    expect(engine.cancel(task.id, task.sessionId)).toBe(true);
+    expect(events).toEqual([`failed:${TaskState.CANCELLED}`]);
+  });
+
+  test("processes enqueued tasks in TaskQueue priority order", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const completed: string[] = [];
+    bus.on(BusEvents.Task.Completed, ({ task }) => completed.push(task.id));
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: new PipelineInstanceStore(),
+      pipelineBuilders: { ok: () => passthroughPipeline },
+    });
+    const external = (id: string) => ({ ...createTask(id), pipeline: "ok" });
+    const internal = (id: string) => ({
+      ...createTask(id),
+      pipeline: "ok",
+      source: TaskSource.INTERNAL,
+      priority: 50,
+    });
+    queue.enqueue(external("external-1"));
+    queue.enqueue(external("external-2"));
+    queue.enqueue(internal("active-1"));
+    queue.enqueue(internal("active-2"));
+    engine.start();
+
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(completed).toEqual(["active-2", "active-1", "external-1", "external-2"]);
+  });
+
+  test("start is idempotent and keeps a single processing loop", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    let processing = 0;
+    let maxProcessing = 0;
+    let completed = 0;
+    bus.on(BusEvents.Task.Completed, () => { completed++; });
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: new PipelineInstanceStore(),
+      pipelineBuilders: {
+        slow: () => ({
+          elements: [{
+            process: async (input: unknown) => {
+              processing++;
+              maxProcessing = Math.max(maxProcessing, processing);
+              await new Promise(resolve => setTimeout(resolve, 2));
+              processing--;
+              return input;
+            },
+          }],
+        } as any),
+      },
+    });
+    engine.start();
+    engine.start();
+    for (let i = 0; i < 5; i++) queue.enqueue({ ...createTask(`task-${i}`), pipeline: "slow" });
+
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(maxProcessing).toBe(1);
+    expect(completed).toBe(5);
+  });
+
+  test("stop does not abort the current task and a later start resumes the loop", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const completed: string[] = [];
+    let activated = false;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let signal: AbortSignal | undefined;
+    bus.on(BusEvents.Task.Activated, () => { activated = true; });
+    bus.on(BusEvents.Task.Completed, ({ task }) => completed.push(task.id));
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: new PipelineInstanceStore(),
+      pipelineBuilders: {
+        blocking: () => ({
+          elements: [{
+            process: async (input: { abortSignal: AbortSignal }) => {
+              signal = input.abortSignal;
+              await gate;
+              return input;
+            },
+          }],
+        } as any),
+        ok: () => passthroughPipeline,
+      },
+    });
+    queue.enqueue({ ...createTask("first"), pipeline: "blocking" });
+    engine.start();
+    await waitFor(() => activated);
+
+    engine.stop();
+    expect(signal?.aborted).toBe(false);
+    release();
+    await waitFor(() => completed.length === 1);
+    expect(completed).toEqual(["first"]);
+
+    queue.enqueue({ ...createTask("second"), pipeline: "ok" });
+    engine.start();
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(completed).toEqual(["first", "second"]);
+  });
+
+  test("drain returns false when the engine is not running and keeps queued work", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const task = createTask("pending");
+    const engine = new TaskEngine({ bus, queue, pipelineStore: new PipelineInstanceStore() });
+    queue.enqueue(task);
+
+    expect(await engine.drain({ timeoutMs: 0 })).toBe(false);
+    expect(queue.size).toBe(1);
+
+    engine.start();
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+  });
+
+  test("drain returns true for an empty queue and stops the loop", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const engine = new TaskEngine({ bus, queue, pipelineStore: new PipelineInstanceStore() });
+    engine.start();
+
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(queue.size).toBe(0);
   });
 
   test("two engines with separate stores do not share pipeline instances", async () => {
