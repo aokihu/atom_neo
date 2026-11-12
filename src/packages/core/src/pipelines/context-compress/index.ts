@@ -1,5 +1,5 @@
 import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import type { ElementRegistry } from "../../pipeline/registry";
 import {
   CompressInputElement,
   CompressArchiveElement,
@@ -12,14 +12,15 @@ import type { SessionPersistenceService } from "../../session/persistence-servic
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
 
-export function registerContextCompressElements(): void {
-  registerElement("compress-input", CompressInputElement);
-  registerElement("compress-archive", CompressArchiveElement);
-  registerElement("compress-summarize", CompressSummarizeElement);
-  registerElement("compress-finalize", CompressFinalizeElement);
+export function registerContextCompressElements(registry: ElementRegistry): void {
+  registry.register("compress-input", CompressInputElement);
+  registry.register("compress-archive", CompressArchiveElement);
+  registry.register("compress-summarize", CompressSummarizeElement);
+  registry.register("compress-finalize", CompressFinalizeElement);
 }
 
 export function contextCompressPipeline(deps: {
+  elementRegistry: ElementRegistry;
   session: any;
   task: any;
   promptResolver: PromptResolver;
@@ -37,7 +38,7 @@ export function contextCompressPipeline(deps: {
   contextService: ContextService;
   persistence: SessionPersistenceService;
 }) {
-  return pipeline("context-compress")
+  return pipeline("context-compress", deps.elementRegistry)
     .source("compress-input", { session: deps.session, contextService: deps.contextService })
     .transform("compress-archive", { persistence: deps.persistence })
     .transform("compress-summarize", {

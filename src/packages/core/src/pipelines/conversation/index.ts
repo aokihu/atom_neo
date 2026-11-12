@@ -1,5 +1,5 @@
 import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import type { ElementRegistry } from "../../pipeline/registry";
 import {
   CollectPromptsElement,
   LoadSystemPromptElement,
@@ -22,22 +22,23 @@ import type { ContextService } from "../../context/context-service";
 import type { ToolRecordStore } from "../../tools/tool-record-store";
 import type { PromptResolver } from "@atom-neo/shared";
 
-export function registerConversationElements(): void {
-  registerElement("collect-prompts", CollectPromptsElement);
-  registerElement("load-system-prompt", LoadSystemPromptElement);
-  registerElement("fetch-agents-prompt", FetchAgentsPromptElement);
-  registerElement("collect-context", CollectContextElement);
-  registerElement("record-context", RecordContextElement);
-  registerElement("format-system-messages", FormatSystemMessagesElement);
-  registerElement("format-user-messages", FormatUserMessagesElement);
-  registerElement("stream-llm", StreamLLMElement);
-  registerElement("check-follow-up", CheckFollowUpElement);
-  registerElement("finalize", FinalizeElement);
-  registerElement("inject-skill-context", InjectSkillContextElement);
-  registerElement("apply-source-context", ApplySourceContextElement);
+export function registerConversationElements(registry: ElementRegistry): void {
+  registry.register("collect-prompts", CollectPromptsElement);
+  registry.register("load-system-prompt", LoadSystemPromptElement);
+  registry.register("fetch-agents-prompt", FetchAgentsPromptElement);
+  registry.register("collect-context", CollectContextElement);
+  registry.register("record-context", RecordContextElement);
+  registry.register("format-system-messages", FormatSystemMessagesElement);
+  registry.register("format-user-messages", FormatUserMessagesElement);
+  registry.register("stream-llm", StreamLLMElement);
+  registry.register("check-follow-up", CheckFollowUpElement);
+  registry.register("finalize", FinalizeElement);
+  registry.register("inject-skill-context", InjectSkillContextElement);
+  registry.register("apply-source-context", ApplySourceContextElement);
 }
 
 export type ConversationPipelineDeps = {
+  elementRegistry: ElementRegistry;
   promptResolver: PromptResolver;
   decisionMode?: "jev" | "rules";
   decisionModel?: import("../../decision/choose").DecisionModel;
@@ -70,7 +71,7 @@ export type ConversationPipelineDeps = {
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
-  return pipeline("conversation")
+  return pipeline("conversation", deps.elementRegistry)
     .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
     .transform("record-context", {
       contextService: deps.contextService,

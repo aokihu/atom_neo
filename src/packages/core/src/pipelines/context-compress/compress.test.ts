@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { registerContextCompressElements, contextCompressPipeline } from "../index";
 import { registerSharedElements } from "../shared";
-import { clearRegistry, resolveElement } from "../../pipeline/registry";
+import { createElementRegistry } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator, makePromptResolver } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
 import { SessionContext } from "../../session/context";
@@ -18,10 +18,11 @@ function makeContextService(bus: ReturnType<typeof makeBus>) {
   return service;
 }
 
+const registry = createElementRegistry();
+
 beforeAll(() => {
-  clearRegistry();
-  registerContextCompressElements();
-  registerSharedElements();
+  registerContextCompressElements(registry);
+  registerSharedElements(registry);
 });
 
 describe("compress-input", () => {
@@ -87,7 +88,7 @@ describe("compress-input", () => {
       })),
     };
 
-    const Ctor = resolveElement("compress-input");
+    const Ctor = registry.resolve("compress-input");
     const contextService = makeContextService(bus);
     const el = new Ctor({ name: "compress-input", kind: "source", bus, session, contextService });
     const result = await (el as any).doProcess({ mode: "initial", task: { id: "t1" } });
@@ -107,7 +108,7 @@ describe("compress-input", () => {
       messages: [{ role: "user", content: longContent, timestamp: Date.now() }],
     };
 
-    const Ctor = resolveElement("compress-input");
+    const Ctor = registry.resolve("compress-input");
     const contextService = makeContextService(bus);
     const el = new Ctor({ name: "compress-input", kind: "source", bus, session, contextService });
     await (el as any).doProcess({ mode: "initial", task: { id: "t1" } });
@@ -123,7 +124,7 @@ describe("compress-input", () => {
       ],
     };
 
-    const Ctor = resolveElement("compress-input");
+    const Ctor = registry.resolve("compress-input");
     const contextService = makeContextService(bus);
     const el = new Ctor({ name: "compress-input", kind: "source", bus, session, contextService });
     const result = await (el as any).doProcess({ mode: "initial", task: { id: "t1" } });
@@ -135,7 +136,7 @@ describe("compress-input", () => {
 describe("compress-summarize", () => {
   test("falls back on empty apiKey", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("compress-summarize");
+    const Ctor = registry.resolve("compress-summarize");
     const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, promptResolver: makePromptResolver(), apiKey: "", model: "test" });
     const result = await (el as any).doProcess({
       mode: "summarizing", task: {}, session: null,
@@ -148,7 +149,7 @@ describe("compress-summarize", () => {
 
   test("falls back on empty text", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("compress-summarize");
+    const Ctor = registry.resolve("compress-summarize");
     const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, promptResolver: makePromptResolver(), apiKey: "sk-test", model: "test" });
     const result = await (el as any).doProcess({
       mode: "summarizing", task: {}, session: null,
@@ -166,7 +167,7 @@ describe("compress-archive", () => {
     bus.on(BusEvents.Element.Data, event => events.push(event.payload));
     const archiveMessages = [{ role: "user", content: "raw", timestamp: 1, seq: 1 }];
     const archiveMessagesFn = mock(() => ({ archiveId: "message-000001", segment: 1, fromSeq: 1, toSeq: 1, count: 1 }));
-    const Ctor = resolveElement("compress-archive");
+    const Ctor = registry.resolve("compress-archive");
     const el = new Ctor({
       name: "compress-archive",
       kind: "transform",
@@ -193,7 +194,7 @@ describe("compress-archive", () => {
   test("passes through a state that is not ready for archiving", async () => {
     const bus = makeBus();
     const archiveMessages = mock(() => null);
-    const Ctor = resolveElement("compress-archive");
+    const Ctor = registry.resolve("compress-archive");
     const el = new Ctor({
       name: "compress-archive",
       kind: "transform",
@@ -208,7 +209,7 @@ describe("compress-archive", () => {
 
   test("keeps the failure in flow state", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("compress-archive");
+    const Ctor = registry.resolve("compress-archive");
     const el = new Ctor({
       name: "compress-archive",
       kind: "transform",
@@ -246,7 +247,7 @@ describe("compress-finalize", () => {
     const archiveMessages = [...session.messages.slice(0, 25)];
     const archiveReceipt = persistence.archiveMessages("s1", archiveMessages)!;
 
-    const Ctor = resolveElement("compress-finalize");
+    const Ctor = registry.resolve("compress-finalize");
     const el = new Ctor({
       name: "compress-finalize", kind: "sink", bus,
       orchestrator: makeMockOrchestrator(capture) as any,
@@ -291,7 +292,7 @@ describe("compress-finalize", () => {
     }
     const archiveMessages = [...session.messages.slice(0, 2)];
     const archiveReceipt = persistence.archiveMessages("s1", archiveMessages)!;
-    const Ctor = resolveElement("compress-finalize");
+    const Ctor = registry.resolve("compress-finalize");
     const el = new Ctor({
       name: "compress-finalize", kind: "sink", bus,
       orchestrator: makeMockOrchestrator(capture) as any,
@@ -347,7 +348,7 @@ describe("compress-finalize", () => {
       session.addMessage({ role: "assistant", content: `msg ${i}`, timestamp: i, visible: true });
     }
     const archiveMessages = [...session.messages.slice(0, 2)];
-    const Ctor = resolveElement("compress-finalize");
+    const Ctor = registry.resolve("compress-finalize");
     const el = new Ctor({
       name: "compress-finalize",
       kind: "sink",
@@ -385,7 +386,7 @@ describe("compress-finalize", () => {
     const checkpoint = mock(() => {});
     const session = new SessionContext("s1");
     session.compressing = true;
-    const Ctor = resolveElement("compress-finalize");
+    const Ctor = registry.resolve("compress-finalize");
     const el = new Ctor({
       name: "compress-finalize",
       kind: "sink",
@@ -421,7 +422,7 @@ describe("compress-finalize", () => {
     session.addMessage({ role: "user", content: "important", timestamp: 1 });
     session.compressing = true;
     const archiveMessages = [...session.messages];
-    const Ctor = resolveElement("compress-finalize");
+    const Ctor = registry.resolve("compress-finalize");
     const el = new Ctor({
       name: "compress-finalize",
       kind: "sink",
@@ -459,6 +460,7 @@ describe("context-compress DSL", () => {
     const root = mkdtempSync(resolve(tmpdir(), "atom-compress-dsl-"));
     const persistence = new SessionPersistenceService(root, contextService);
     const pipeline = contextCompressPipeline({
+      elementRegistry: registry,
       promptResolver: makePromptResolver(),
       session: { sessionId: "s1" },
       task: { id: "t1" },

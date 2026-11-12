@@ -1,6 +1,6 @@
 import type { BaseElement, PipelineEventBus, PipelineEventMap } from "@atom-neo/shared";
 import type { PipelineElementKind } from "@atom-neo/shared";
-import { resolveElement } from "./registry";
+import type { ElementRegistry } from "./registry";
 
 type ElementDef = {
   name: string;
@@ -15,10 +15,12 @@ export type Pipeline = {
 
 export class PipelineBuilder {
   #name: string;
+  #registry: ElementRegistry;
   #elements: ElementDef[] = [];
 
-  constructor(name: string) {
+  constructor(name: string, registry: ElementRegistry) {
     this.#name = name;
+    this.#registry = registry;
   }
 
   source(elementName: string, deps: Record<string, unknown> = {}): this {
@@ -65,7 +67,7 @@ export class PipelineBuilder {
       }
       names.add(def.name);
 
-      const Ctor = resolveElement(def.name);
+      const Ctor = this.#registry.resolve(def.name);
       const instance = new Ctor({ ...def.deps, bus, name: def.name, kind: def.kind });
       elements.push(instance);
     }
@@ -74,6 +76,6 @@ export class PipelineBuilder {
   }
 }
 
-export function pipeline(name: string): PipelineBuilder {
-  return new PipelineBuilder(name);
+export function pipeline(name: string, registry: ElementRegistry): PipelineBuilder {
+  return new PipelineBuilder(name, registry);
 }

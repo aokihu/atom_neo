@@ -139,7 +139,7 @@ src/packages/core/
 ├── tsconfig.json
 ├── index.ts              # Barrel exports
 ├── server.ts             # startCore(): composition root + lifecycle; transport via HttpServer
-├── bootstrap.ts          # Constructs bus/queue/session/tools/MCP/prompt registry/schedule/pipeline/WS
+├── bootstrap.ts          # Constructs bus/queue/session/tools/MCP/prompt+element registries/pipeline store/schedule/pipeline/WS
 ├── core-services.ts      # Typed CoreServices contract + startup validation
 ├── pipeline-factory.ts   # Five pipeline builders + model/token/context/prompt resolver wiring
 ├── task-lifecycle.ts     # Task Activated/Completed/Failed + chain/idle scheduling
@@ -163,8 +163,9 @@ src/packages/core/
 │   └── decision-bridge.ts
 │
 ├── pipeline/
-│   ├── registry.ts
+│   ├── registry.ts       # ElementRegistry (per-Core)
 │   ├── builder.ts
+│   ├── instance-store.ts # PipelineInstanceStore (per-Core task cache)
 │   └── manager.ts
 │
 ├── session/

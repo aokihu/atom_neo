@@ -1,30 +1,37 @@
-import type { BaseElement, PipelineEventBus, PipelineEventMap } from "@atom-neo/shared";
+import type { BaseElement } from "@atom-neo/shared";
 
 export type ElementConstructor = new (...args: any[]) => BaseElement;
 
-const registry = new Map<string, ElementConstructor>();
+/** Per-Core element constructor registry. No module-level state. */
+export class ElementRegistry {
+  #elements = new Map<string, ElementConstructor>();
 
-export function registerElement(name: string, ctor: ElementConstructor): void {
-  if (registry.has(name)) {
-    throw new Error(`Element "${name}" already registered`);
+  register(name: string, ctor: ElementConstructor): void {
+    if (this.#elements.has(name)) {
+      throw new Error(`Element "${name}" already registered`);
+    }
+    this.#elements.set(name, ctor);
   }
-  registry.set(name, ctor);
-}
 
-export function resolveElement(name: string): ElementConstructor {
-  const ctor = registry.get(name);
-  if (!ctor) {
-    throw new Error(
-      `Element "${name}" not found. Registered: [${[...registry.keys()].join(", ")}]`,
-    );
+  resolve(name: string): ElementConstructor {
+    const ctor = this.#elements.get(name);
+    if (!ctor) {
+      throw new Error(
+        `Element "${name}" not found. Registered: [${this.names().join(", ")}]`,
+      );
+    }
+    return ctor;
   }
-  return ctor;
+
+  names(): string[] {
+    return [...this.#elements.keys()];
+  }
+
+  clear(): void {
+    this.#elements.clear();
+  }
 }
 
-export function getRegisteredNames(): string[] {
-  return [...registry.keys()];
-}
-
-export function clearRegistry(): void {
-  registry.clear();
+export function createElementRegistry(): ElementRegistry {
+  return new ElementRegistry();
 }

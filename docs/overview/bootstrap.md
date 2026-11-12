@@ -85,7 +85,7 @@ Fake conversation（本地 fake SSE 模型 → conversation `completed`）与 Bu
        → RuntimeService → 解析 ATOM_HTTP_RUNTIME → 创建 HttpServer
        → 构造 Memory/Skill/Network/Compiler，注册到 ServiceManager
        → ServiceManager.startAll
-       → startCore({ services })
+       → startCore({ services })：每实例创建 PromptRegistry / ElementRegistry / PipelineInstanceStore
        → 默认：startTui；core：常驻；core-gateway：startGateway
 ```
 

@@ -2,8 +2,8 @@ import { TaskState, BusEvents } from "@atom-neo/shared";
 import type { TaskItem, CoreEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
 import type { TaskQueue } from "./task-queue";
-import { getPipeline, removePipeline, setPipeline } from "./api/tasks";
 import type { Pipeline } from "./pipeline/builder";
+import type { PipelineInstanceStore } from "./pipeline/instance-store";
 
 type PipelineBuilder = (task: TaskItem) => Pipeline | undefined;
 
@@ -23,18 +23,21 @@ export class TaskEngine {
   #processing = false;
   #timeoutMs: number;
   #pipelineBuilders: Record<string, PipelineBuilder>;
+  #pipelineStore: PipelineInstanceStore;
   #abortControllers = new Map<string, AbortController>();
   #discardChain?: (chainId: string, sessionId: string) => void;
 
   constructor(params: {
     bus: PipelineEventBus<CoreEventMap>;
     queue: TaskQueue;
+    pipelineStore: PipelineInstanceStore;
     pipelineBuilders?: Record<string, PipelineBuilder>;
     timeoutMs?: number;
     discardChain?: (chainId: string, sessionId: string) => void;
   }) {
     this.#bus = params.bus;
     this.#queue = params.queue;
+    this.#pipelineStore = params.pipelineStore;
     this.#pipelineBuilders = params.pipelineBuilders ?? {};
     this.#timeoutMs = params.timeoutMs ?? 120_000;
     this.#discardChain = params.discardChain;
@@ -66,7 +69,7 @@ export class TaskEngine {
         state: TaskState.CANCELLED,
         error: error.message,
       });
-      removePipeline(task.id);
+      this.#pipelineStore.delete(task.id);
       this.#bus.emit(BusEvents.Task.Failed, { task, error });
     }
 
@@ -135,18 +138,18 @@ export class TaskEngine {
       });
     } finally {
       this.#abortControllers.delete(task.id);
-      removePipeline(task.id);
+      this.#pipelineStore.delete(task.id);
     }
   }
 
   async #executeTask(task: TaskItem, abortSignal: AbortSignal): Promise<any> {
-    let pipeline = getPipeline(task.id);
+    let pipeline = this.#pipelineStore.get(task.id);
 
     if (!pipeline && task.pipeline) {
       const builder = this.#pipelineBuilders[task.pipeline];
       if (builder) {
         pipeline = builder(task);
-        if (pipeline) setPipeline(task.id, pipeline);
+        if (pipeline) this.#pipelineStore.set(task.id, pipeline);
       }
     }
 

@@ -1,23 +1,8 @@
 import type { TaskQueue } from "../task-queue";
 import { TaskState, errorMessage } from "@atom-neo/shared";
 import type { SessionInitiator } from "@atom-neo/shared";
-import type { Pipeline } from "../pipeline/builder";
 import type { TaskEngine } from "../task-engine";
 import { TaskSubmissionError, type TaskSubmissionService } from "../task/task-submission-service";
-
-const pipelineMap = new Map<string, Pipeline>();
-
-export function getPipeline(taskId: string): Pipeline | undefined {
-  return pipelineMap.get(taskId);
-}
-
-export function removePipeline(taskId: string): void {
-  pipelineMap.delete(taskId);
-}
-
-export function setPipeline(taskId: string, pipeline: Pipeline): void {
-  pipelineMap.set(taskId, pipeline);
-}
 
 export type TaskRequestBody = {
   sessionId?: string;

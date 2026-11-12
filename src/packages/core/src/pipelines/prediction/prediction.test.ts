@@ -1,16 +1,17 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { registerPredictionElements, predictionPipeline } from "../index";
 import { registerSharedElements } from "../shared";
-import { clearRegistry, resolveElement } from "../../pipeline/registry";
+import { createElementRegistry } from "../../pipeline/registry";
 import { makeBus, makeMockOrchestrator, makePromptResolver } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
 import { buildPredictionEnvelope, IntentPredictionSchema } from "./elements/predict-intent";
 import { resolveEffectiveTopic } from "./elements/predict-finalize";
 
+const registry = createElementRegistry();
+
 beforeAll(() => {
-  clearRegistry();
-  registerPredictionElements();
-  registerSharedElements();
+  registerPredictionElements(registry);
+  registerSharedElements(registry);
 });
 
 describe("prediction pipeline elements", () => {
@@ -61,7 +62,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-input preserves the exact user message from task payload", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("predict-input");
+    const Ctor = registry.resolve("predict-input");
     const el = new Ctor({
       name: "predict-input",
       kind: "source",
@@ -88,7 +89,7 @@ describe("prediction pipeline elements", () => {
       ],
     };
 
-    const Ctor = resolveElement("predict-input");
+    const Ctor = registry.resolve("predict-input");
     const el = new Ctor({
       name: "predict-input",
       kind: "source",
@@ -116,7 +117,7 @@ describe("prediction pipeline elements", () => {
         { role: "assistant", content: assistant },
       ],
     };
-    const Ctor = resolveElement("predict-input");
+    const Ctor = registry.resolve("predict-input");
     const el = new Ctor({ name: "predict-input", kind: "source", bus, session, task: {} });
 
     const result = await el.process({ mode: "initial", task: { payload: [{ data: "follow up" }] } });
@@ -144,7 +145,7 @@ describe("prediction pipeline elements", () => {
         },
       ],
     };
-    const Ctor = resolveElement("predict-input");
+    const Ctor = registry.resolve("predict-input");
     const el = new Ctor({ name: "predict-input", kind: "source", bus, session, task: {} });
 
     const result = await el.process({ mode: "initial", task: { payload: [{ data: "之前成功了吗" }] } });
@@ -154,7 +155,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-input handles empty payload", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("predict-input");
+    const Ctor = registry.resolve("predict-input");
     const el = new Ctor({
       name: "predict-input",
       kind: "source",
@@ -172,7 +173,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-intent falls back when no apiKey", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("predict-intent");
+    const Ctor = registry.resolve("predict-intent");
     const el = new Ctor({
       name: "predict-intent",
       kind: "transform",
@@ -196,7 +197,7 @@ describe("prediction pipeline elements", () => {
 
   test("predict-intent falls back on empty message", async () => {
     const bus = makeBus();
-    const Ctor = resolveElement("predict-intent");
+    const Ctor = registry.resolve("predict-intent");
     const el = new Ctor({
       name: "predict-intent",
       kind: "transform",
@@ -221,7 +222,7 @@ describe("prediction pipeline elements", () => {
     const session = { todoState: [], sessionId: "s1", messages: [{ role: "user", content: "hello" }], currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
-    const Ctor = resolveElement("predict-finalize");
+    const Ctor = registry.resolve("predict-finalize");
     const el = new Ctor({
       name: "predict-finalize",
       kind: "sink",
@@ -251,7 +252,7 @@ describe("prediction pipeline elements", () => {
     const session = { todoState: [], messages: [], sessionId: "s1", currentTopic: null, pendingPrediction: undefined as any, resetForNewTopic: () => {} };
     const capture = { enqueued: null as any };
 
-    const Ctor = resolveElement("predict-finalize");
+    const Ctor = registry.resolve("predict-finalize");
     const el = new Ctor({
       name: "predict-finalize",
       kind: "sink",
@@ -281,7 +282,7 @@ describe("prediction pipeline elements", () => {
       pendingPrediction: undefined as any,
       resetForNewTopic: (topic: string) => resetTopics.push(topic),
     };
-    const Ctor = resolveElement("predict-finalize");
+    const Ctor = registry.resolve("predict-finalize");
     const el = new Ctor({
       name: "predict-finalize",
       kind: "sink",
@@ -323,7 +324,7 @@ describe("prediction pipeline elements", () => {
         content: "old",
       },
     });
-    const Ctor = resolveElement("predict-finalize");
+    const Ctor = registry.resolve("predict-finalize");
     const el = new Ctor({
       name: "predict-finalize",
       kind: "sink",
@@ -349,6 +350,7 @@ describe("prediction pipeline DSL", () => {
   test("predictionPipeline builds without errors", () => {
     const bus = makeBus();
     const pipeline = predictionPipeline({
+      elementRegistry: registry,
       promptResolver: makePromptResolver(),
       session: { sessionId: "s1" },
       task: { id: "t1", payload: [{ data: "test" }] },
@@ -375,7 +377,7 @@ test("standalone request in the same Topic initializes a fresh goal budget", asy
   session.executionBudget!.globalUsed = 50;
   session.setTodoState([{ content: "old plan", status: "pending", priority: "medium" }]);
   session.addMessage({ role: "user", content: "new goal", timestamp: 1 });
-  const Ctor = resolveElement("predict-finalize");
+  const Ctor = registry.resolve("predict-finalize");
   await new Ctor({ name: "predict-finalize", kind: "sink", bus: makeBus(), orchestrator: makeMockOrchestrator(null), maxGlobalRounds: 100 }).process({
     session, task: { id: "new-root", chainId: "new-root", chatId: "c", payload: [{ type: "text", data: "new goal" }] },
     prediction: { topic: "knowledge.general.other", contextRelevance: "standalone", difficulty: "medium", modelProfile: "basic", intent: "question" },

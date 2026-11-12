@@ -34,16 +34,18 @@ bootstrap()
   │
   ├── bus = new PipelineEventBus<PipelineEventMap>()
   │
-  ├── elementRegistry = new Map()
-  │     ├── elementRegistry.set("collect-prompts", CollectPromptsElement)
-  │     └── elementRegistry.set("stream-llm", StreamLLMElement)
+  ├── elementRegistry = new ElementRegistry()
+  │     ├── elementRegistry.register("collect-prompts", CollectPromptsElement)
+  │     └── elementRegistry.register("stream-llm", StreamLLMElement)
   │
-  ├── pipelineManager = new PipelineManager(elementRegistry)
-  │     └── registerPipelines(pipelineManager, { toolRegistry, bus })
+  ├── pipelineManager = new PipelineManager()
+  │     └── registerPipelines(pipelineManager, { elementRegistry, toolRegistry, bus })
   │
   ├── taskQueue = new TaskQueue()
   │
-  ├── taskEngine = new TaskEngine({ bus, taskQueue, pipelineManager, sessionStore })
+  ├── pipelineStore = new PipelineInstanceStore()
+  │
+  ├── taskEngine = new TaskEngine({ bus, taskQueue, pipelineStore, pipelineBuilders })
   │     └── taskEngine.start()
   │
   └── server = Bun.serve({ ... })
@@ -90,6 +92,40 @@ instance; `createPromptResolver()` keeps the `openai/gpt-4o` default and the
 English fallback for unknown providers. Elements and `callLLM` / `chooseDecision`
 receive the resolver explicitly. Tests construct their own registry/resolver
 instead of relying on bootstrap initialization.
+
+### ElementRegistry Boundary
+
+Element constructors are resolved through a per-Core `ElementRegistry`. There is
+no module-level `Map`, `registerElement()`, `resolveElement()`, `getRegisteredNames()`
+or `clearRegistry()`:
+
+```typescript
+const elementRegistry = createElementRegistry();       // independent per Core
+registerConversationElements(elementRegistry);         // all 7 register*Elements take it
+registerSharedElements(elementRegistry);
+
+createPipelineFactory({ elementRegistry, ... });       // each pipeline() call receives it
+// PipelineBuilder(name, elementRegistry).build(bus)
+```
+
+Duplicate names still throw `Element "<name>" already registered`; missing names
+still throw `Element "<name>" not found. Registered: [...]`. Two registries can
+hold the same names without interfering.
+
+### PipelineInstanceStore Boundary
+
+`TaskEngine` caches each built pipeline for the lifetime of one task through an
+injected `PipelineInstanceStore`; `api/tasks.ts` no longer owns pipeline state:
+
+```typescript
+const pipelineStore = new PipelineInstanceStore();     // independent per Core
+new TaskEngine({ bus, queue, pipelineStore, pipelineBuilders });
+// get(taskId) / set(taskId, pipeline) / delete(taskId) / size / clear
+```
+
+`finally` deletes the entry after success, failure or cancellation, and queued
+cancellation deletes it before execution. Two engines with two stores never share
+pipeline instances for the same task id. There is no TTL or capacity policy.
 
 ---
 

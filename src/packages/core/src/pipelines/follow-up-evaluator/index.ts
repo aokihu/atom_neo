@@ -1,7 +1,7 @@
 import type { DecisionModel } from "../../decision/choose";
 import type { ToolRecordStore } from "../../tools/tool-record-store";
 import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import type { ElementRegistry } from "../../pipeline/registry";
 import {
   EvaluatorInputElement,
   EvaluatorAnalyzeElement,
@@ -11,13 +11,14 @@ import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestr
 import type { ContextService } from "../../context/context-service";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 
-export function registerFollowUpEvaluatorElements(): void {
-  registerElement("evaluator-input", EvaluatorInputElement);
-  registerElement("evaluator-analyze", EvaluatorAnalyzeElement);
-  registerElement("evaluate-finalize", EvaluateFinalizeElement);
+export function registerFollowUpEvaluatorElements(registry: ElementRegistry): void {
+  registry.register("evaluator-input", EvaluatorInputElement);
+  registry.register("evaluator-analyze", EvaluatorAnalyzeElement);
+  registry.register("evaluate-finalize", EvaluateFinalizeElement);
 }
 
 export function followUpEvaluatorPipeline(deps: {
+  elementRegistry: ElementRegistry;
   decisionModel?: DecisionModel;
   fallbackModel?: DecisionModel;
   toolRecordStore?: ToolRecordStore;
@@ -35,7 +36,7 @@ export function followUpEvaluatorPipeline(deps: {
   configContextLimit?: number;
   contextService: ContextService;
 }) {
-  return pipeline("follow-up-evaluator")
+  return pipeline("follow-up-evaluator", deps.elementRegistry)
     .source("evaluator-input", { session: deps.session, toolRecordStore: deps.toolRecordStore })
     .transform("evaluator-analyze", {
       decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel,

@@ -2,6 +2,7 @@ import type { IntentPredictionResult, PromptResolver, ProviderProtocol } from "@
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { DecisionModel } from "../../../decision/choose";
+import type { ElementRegistry } from "../../../pipeline/registry";
 
 export type PredictionMode = "initial" | "predicting" | "routing";
 
@@ -23,6 +24,7 @@ export type PredictionFlowState = {
 };
 
 export type PredictionPipelineDeps = {
+  elementRegistry: ElementRegistry;
   session: any;
   task: any;
   promptResolver: PromptResolver;

@@ -10,11 +10,11 @@
 | `jev-element.ts` | 可选 JevElement（kind: transform）— Prediction/Post-Conversation 限定选择 |
 | `progress-evidence.ts` | 任务关联、真实结束原因、正文引用与裁剪范围；事实对象不重复正文 |
 | `progress-questions.ts` | JEV 内容状态、续写范围、诊断原因和证据引用的限定判断 |
-| `index.ts` | `registerSharedElements()` 统一注册 |
+| `index.ts` | `registerSharedElements(registry)` 统一注册 |
 
 ## Token Ratio
 
-TokenRatioElement 通过 `registerSharedElements()` 挂载到 5 条 pipeline：
+TokenRatioElement 通过 `registerSharedElements(registry)` 挂载到 5 条 pipeline：
 conversation / prediction / follow-up-evaluator / context-compress / post-conversation。
 
 计算公式：`ratio = contextTokens / (configContextLimit - maxTokens)`。`tokenUsage.total` 是累计模型消费，不能用于 Context 压缩阈值。

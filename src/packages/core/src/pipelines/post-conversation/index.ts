@@ -1,5 +1,5 @@
 import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import type { ElementRegistry } from "../../pipeline/registry";
 import {
   CollectInputElement,
   AnalyzeResultElement,
@@ -9,13 +9,14 @@ import type { ContextService } from "../../context/context-service";
 import type { DecisionModel } from "../../decision/choose";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 
-export function registerPostConversationElements(): void {
-  registerElement("post-collect-input", CollectInputElement);
-  registerElement("post-analyze-result", AnalyzeResultElement);
-  registerElement("post-finalize", PostConversationFinalizeElement);
+export function registerPostConversationElements(registry: ElementRegistry): void {
+  registry.register("post-collect-input", CollectInputElement);
+  registry.register("post-analyze-result", AnalyzeResultElement);
+  registry.register("post-finalize", PostConversationFinalizeElement);
 }
 
 export function postConversationPipeline(deps: {
+  elementRegistry: ElementRegistry;
   session: any;
   task: any;
   promptResolver: PromptResolver;
@@ -34,7 +35,7 @@ export function postConversationPipeline(deps: {
   configContextLimit?: number;
   contextService: ContextService;
 }) {
-  return pipeline("post-conversation")
+  return pipeline("post-conversation", deps.elementRegistry)
     .source("post-collect-input", { session: deps.session })
     .transform(deps.decisionMode === "jev" ? "jev-decision" : "post-analyze-result", deps.decisionMode === "jev"
       ? { purpose: "post-conversation", model: deps.decisionModel, fallback: deps.fallbackModel, promptResolver: deps.promptResolver, maxTokens: deps.maxTokens }

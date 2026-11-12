@@ -2,11 +2,13 @@ import { buildAssistantReview } from "../post-conversation/elements/collect-inpu
 import { describe, expect, test } from "bun:test";
 import { makeBus, makePromptResolver } from "../test-helpers";
 import { JevElement, composeTopic, TOPIC_CHOICES } from "./jev-element";
-import { clearRegistry } from "../../pipeline/registry";
+import { createElementRegistry } from "../../pipeline/registry";
 import { predictionPipeline, registerPredictionElements } from "../prediction";
 import { postConversationPipeline, registerPostConversationElements } from "../post-conversation";
 import { registerSharedElements } from ".";
 import { BusEvents } from "@atom-neo/shared";
+
+const elementRegistry = createElementRegistry();
 
 const choose = (questions: Record<string, { criteria: Record<string, unknown> }>, selected: Record<string, string>) =>
   Object.fromEntries(Object.entries(questions).map(([id, question]) => [id, {
@@ -18,18 +20,19 @@ const choose = (questions: Record<string, { criteria: Record<string, unknown> }>
 
 describe("JevElement", () => {
   test("both pipelines select JevElement independently and preserve legacy transforms", () => {
-    clearRegistry();
-    registerPredictionElements();
-    registerPostConversationElements();
-    registerSharedElements();
+    registerPredictionElements(elementRegistry);
+    registerPostConversationElements(elementRegistry);
+    registerSharedElements(elementRegistry);
     const decision = { type: "jev" as const, apiKey: "key", model: "typesafe/jev-1.13" };
     const fallback = { apiKey: "llm-key", model: "deepseek-v4-flash" };
     const predictionDeps = {
+      elementRegistry,
       session: {}, task: {}, promptResolver: makePromptResolver(),
       apiKey: "llm-key", model: "deepseek-v4-flash", orchestrator: {} as any,
       decisionModel: decision, fallbackModel: fallback,
     };
     const postDeps = {
+      elementRegistry,
       session: {}, task: {}, promptResolver: makePromptResolver(),
       apiKey: "llm-key", model: "deepseek-v4-flash", contextService: {} as any,
       decisionModel: decision, fallbackModel: fallback,

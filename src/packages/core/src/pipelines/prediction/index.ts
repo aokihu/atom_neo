@@ -1,5 +1,5 @@
 import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import type { ElementRegistry } from "../../pipeline/registry";
 import {
   PredictInputElement,
   PredictIntentElement,
@@ -7,14 +7,14 @@ import {
 } from "./elements";
 import type { PredictionPipelineDeps } from "./elements";
 
-export function registerPredictionElements(): void {
-  registerElement("predict-input", PredictInputElement);
-  registerElement("predict-intent", PredictIntentElement);
-  registerElement("predict-finalize", PredictFinalizeElement);
+export function registerPredictionElements(registry: ElementRegistry): void {
+  registry.register("predict-input", PredictInputElement);
+  registry.register("predict-intent", PredictIntentElement);
+  registry.register("predict-finalize", PredictFinalizeElement);
 }
 
 export function predictionPipeline(deps: PredictionPipelineDeps) {
-  return pipeline("prediction")
+  return pipeline("prediction", deps.elementRegistry)
     .source("predict-input", { session: deps.session, task: deps.task })
     .transform(deps.decisionMode === "jev" ? "jev-decision" : "predict-intent", deps.decisionMode === "jev"
       ? { purpose: "prediction", model: deps.decisionModel, fallback: deps.fallbackModel, promptResolver: deps.promptResolver, maxTokens: deps.maxTokens }

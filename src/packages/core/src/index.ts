@@ -63,9 +63,11 @@ export {
 export type { ModelConfig, ProviderOptionsMap } from "./pipelines/shared/model-provider";
 
 // Pipeline Builder
-export { registerElement, resolveElement, getRegisteredNames, clearRegistry } from "./pipeline/registry";
+export { ElementRegistry, createElementRegistry } from "./pipeline/registry";
+export type { ElementConstructor } from "./pipeline/registry";
 export { pipeline, PipelineBuilder } from "./pipeline/builder";
 export type { Pipeline } from "./pipeline/builder";
+export { PipelineInstanceStore } from "./pipeline/instance-store";
 export { PipelineManager } from "./pipeline/manager";
 
 // Pipelines

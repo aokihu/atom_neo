@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { Logger } from "@atom-neo/shared";
-import { clearRegistry, getRegisteredNames, resolveElement, registerElement } from "./pipeline/registry";
 import { startCore } from "./server";
 import { SessionContext } from "./session/context";
 import { SessionPersistenceService } from "./session/persistence-service";
@@ -77,8 +76,6 @@ async function scenario(kind: "reconcile" | "limit" | "checkpoint_failure" | "co
     decisionMode: { prediction: "jev", postConversation: "jev", continuation: "jev" }, providers: {} },
     getResolvedModel(profile: string) { return { provider: "local", model: "local", apiKey: "local-test",
       type: profile === "fast" ? "jev" : "llm", baseUrl: modelServer.url.toString(), thinking: "disabled" }; } };
-  const registered = getRegisteredNames().map(name => [name, resolveElement(name)] as const);
-  clearRegistry();
   const services: CoreServices = {
     memory: {
       search: async () => [],
@@ -127,7 +124,6 @@ async function scenario(kind: "reconcile" | "limit" | "checkpoint_failure" | "co
       renameSync(join(sessionPath, ".checkpoints-backup"), join(sessionPath, ".checkpoints"));
     }
     await core.stop(); modelServer.stop(true); rmSync(sandbox, { recursive: true, force: true });
-    clearRegistry(); for (const [name, ctor] of registered) registerElement(name, ctor);
   }
 }
 

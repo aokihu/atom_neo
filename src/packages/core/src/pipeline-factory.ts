@@ -18,6 +18,7 @@ import type { SessionPersistenceService } from "./session/persistence-service";
 import type { SessionStore } from "./session/store";
 import type { SkillServiceLike } from "./skills/types";
 import type { Pipeline } from "./pipeline/builder";
+import type { ElementRegistry } from "./pipeline/registry";
 
 /** Local extension of the shared model shape: fake runtimes may omit protocol/type. */
 export type ResolvedModel = Omit<SharedResolvedModel, "protocol" | "type"> & {
@@ -57,6 +58,7 @@ export function budgetLimitsFor(runtime: RuntimeLike): BudgetLimits {
 
 export type PipelineFactoryDeps = {
   runtime: RuntimeLike;
+  elementRegistry: ElementRegistry;
   promptResolver: PromptResolver;
   fallbackModel: ResolvedModel;
   bus: PipelineEventBus<FullEventMap>;
@@ -125,6 +127,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return predictionPipeline({
+        elementRegistry: deps.elementRegistry,
         promptResolver: deps.promptResolver,
         maxGlobalRounds: budgetLimits().maxGlobalRounds,
         session,
@@ -165,6 +168,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
 
       return conversationPipeline({
+        elementRegistry: deps.elementRegistry,
         promptResolver: deps.promptResolver,
         ...decisionDeps("continuation"),
         session,
@@ -199,6 +203,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return followUpEvaluatorPipeline({
+        elementRegistry: deps.elementRegistry,
         promptResolver: deps.promptResolver,
         ...decisionDeps("continuation"),
         toolRecordStore: persistence.toolRecords,
@@ -216,6 +221,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const session = sessionStore.get(task.sessionId);
       const selected = getModel("basic");
       return contextCompressPipeline({
+        elementRegistry: deps.elementRegistry,
         promptResolver: deps.promptResolver,
         session,
         task,
@@ -240,6 +246,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return postConversationPipeline({
+        elementRegistry: deps.elementRegistry,
         promptResolver: deps.promptResolver,
         session,
         task,

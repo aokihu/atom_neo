@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `ef7ff15` (v1.22.12, S10 complete)
-> **Status**: S11-A1–A11（CoreServices + Prompt DI）与 S11-E（ProcessSupervisor）已实施；B/C/D/F/G/H 待实施
+> **Status**: S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-E（ProcessSupervisor）与 S11-F（Theme import guard）已实施；D/G/H 待实施
 > **Scope**: CR-ARCH-01..09；CR-ARCH-04/05 已关闭，仅防回归
 
 ---
@@ -406,6 +406,13 @@ S11-F（Theme guard）随时可做
 - **回滚**: revert 单 commit；恢复 B2 包装。
 - **DoD**: 模块级 registry 完全删除；`clearRegistry` 仅测试 helper 可不存在。
 
+> **实施状态（B1–B7）**: 已完成（2026-11-12）。新增 `ElementRegistry` 类与 `createElementRegistry()`（`register/resolve/names/clear`，重复与缺失错误文案不变）；7 个 `register*Elements`、`PipelineBuilder` 与 `pipeline()` 均要求显式 registry；`createPipelineFactory` 与 `createCoreBootstrap` 每个 Core 创建并透传独立实例；模块级 registry 与旧自由函数已删除。测试覆盖注册/重复/缺失/顺序/clear、双 registry 同名隔离、Builder 仅解析注入实例；`server-continuation` 不再保存/恢复全局表。
+>
+> - [x] `rg 'registerElement\(|resolveElement\(|getRegisteredNames\(|clearRegistry' src --glob '!**/dist/**'` 为 0。
+> - [x] 两个 registry 可注册同名元素，`names/clear` 互不影响；两个 bootstrap 的 registry/store 相互独立。
+> - [x] 6 条 pipeline 构造测试与 `server-continuation` 全绿；元素顺序、缺失错误文案不变。
+> - [x] 目标测试：pipeline/shared/prediction/compress + TaskEngine + bootstrap isolation 202 pass / 0 fail；`server-continuation` 8 pass / 0 fail。
+
 ---
 
 ### S11-C — PipelineInstanceStore（4h）
@@ -450,6 +457,13 @@ S11-F（Theme guard）随时可做
 - **行为风险**: 低；无其他调用点。
 - **回滚**: revert 单 commit。
 - **DoD**: `api/tasks.ts` 只保留 HTTP handler。
+
+> **实施状态（C1–C3）**: 已完成（2026-11-12）。新增 `PipelineInstanceStore`（`get/set/delete/size/clear`，无 TTL/容量逻辑）；`TaskEngine` 构造注入 store，删除对 `api/tasks` 的 import；bootstrap 每个 Core 创建一个 store；`api/tasks.ts` 仅保留 HTTP handler，`pipelineMap` 与三个自由函数已删除。成功/失败/取消/drain 均由 `finally` 清理，双 engine/store 隔离测试覆盖。
+>
+> - [x] `rg 'pipelineMap|getPipeline\(|setPipeline\(|removePipeline\(' src --glob '!**/dist/**'` 为 0。
+> - [x] TaskEngine 成功/失败/取消/drain 后 `store.size === 0`。
+> - [x] 两个 TaskEngine + 两个 store 使用相同 taskId 时不共享 pipeline 实例。
+> - [x] 目标测试：TaskEngine + instance-store 等 202 pass / 0 fail；全量结果见 H6。
 
 ---
 
@@ -663,6 +677,15 @@ S11-F（Theme guard）随时可做
 - **行为风险**: 低；S5 已完成迁移，预期仅加测试。
 - **回滚**: revert 单 commit。
 - **DoD**: 测试通过；若失败，最小修复为把残留 `ThemeContext`/`useTheme` 移回 `tui-kit`，不扩大 TUI 重构。
+
+> **实施状态（F1）**: 已完成（2026-11-12）。新增 `src/packages/tui/src/components/theme-imports.test.ts`，静态扫描 `tui/src` 非测试文件与 `tui-kit/src`，未发现残留 `useTheme`/`ThemeContext` 违规，因此未改动 TUI 实现。
+>
+> - [x] 非测试 TUI 文件不从 `App`（含任意相对路径）导入 `useTheme`/`ThemeContext`/`ThemeProvider`。
+> - [x] `useTheme` import 只来自 `@atom-neo/tui-kit`，且每个 `useTheme()` 调用所在文件均有该 import。
+> - [x] 17 个已知组件（AssistantMessage…UserMessage）的正向清单与扫描结果一致。
+> - [x] `ThemeContext` 只在 `tui-kit/src/theme.tsx` 定义；`tui/src` 无引用。
+> - [x] `tui-kit` 的 `package.json` 与源码均不依赖 `tui`。
+> - [x] 目标测试 7 pass / 0 fail；TUI + tui-kit 测试 71 pass / 0 fail；TUI `typecheck` 通过。
 
 ---
 
@@ -1210,3 +1233,5 @@ rg -n 'let _instance|const pipelineMap|const registry = new Map' src/packages --
 | 2026-11-12 | 初始 S11 实施计划：拆分 A–H 共 49 个任务（20 简单 / 29 中等），基线 110h，关键路径 89h；给出测试矩阵、回滚矩阵、DoD、PR 拆分与验收命令；仅文档，未改源码 |
 | 2026-11-12 | S11-E 实施：新增 `client-manager/{runtime,process-state,restart-policy,health-probe,process-supervisor,test-helpers}.ts`，`ClientManager` 改为 facade；新增 5 个测试文件。Gateway 源码测试 7 → 44；健康失败进入统一重启路径 |
 | 2026-11-12 | S11-A6–A11 实施：新增 `createPromptRegistry()` / `PromptResolver` / `createPromptResolver()`；删除 prompt 单例与旧导出；6 条 pipeline、`chooseDecision`、`callLLM`、JEV 模拟全部显式注入 resolver；`prompts.test.ts` 增加双 registry 隔离与逐字一致测试。shared + core 663 pass；全量 1874 pass / 21 skip / 0 fail |
+| 2026-11-12 | S11-B1–B7 实施：新增 `ElementRegistry` / `createElementRegistry()`；7 个注册函数、`PipelineBuilder` / `pipeline()`、pipeline factory 与 bootstrap 全部显式透传 registry；删除模块级 registry 与旧自由函数。`registry.test.ts` 增加双实例同名隔离；`server-continuation` 移除全局表保存/恢复 |
+| 2026-11-12 | S11-C1–C3 实施：新增 `PipelineInstanceStore` 并注入 `TaskEngine`；删除 `api/tasks.ts` 的 `pipelineMap` 与三个自由函数；成功/失败/取消/drain 清理与双 store 隔离测试补齐。源码 1066 pass / 21 skip / 0 fail；全量 1902 pass / 21 skip / 0 fail |

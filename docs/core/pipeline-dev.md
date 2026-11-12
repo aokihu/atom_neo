@@ -176,14 +176,15 @@ test("processes and transitions on matching mode", async () => {
 ## 1. API
 
 ```typescript
-export function pipeline(name: string): PipelineBuilder;
+export function pipeline(name: string, registry: ElementRegistry): PipelineBuilder;
 
 class PipelineBuilder {
+  constructor(name: string, registry: ElementRegistry);
   source(elementName: string, deps?: ElementDeps): this;
   transform(elementName: string, deps?: ElementDeps): this;
   boundary(elementName: string, deps?: ElementDeps): this;
   sink(elementName: string, deps?: ElementDeps): this;
-  build(): Pipeline;
+  build(bus: PipelineEventBus<PipelineEventMap>): Pipeline;
 }
 ```
 
@@ -191,7 +192,7 @@ class PipelineBuilder {
 
 ```typescript
 export const conversationPipeline = (deps: ConversationPipelineDeps) =>
-  pipeline("conversation")
+  pipeline("conversation", deps.elementRegistry)
     .source("collect-prompts", { session: deps.session })
     .transform("load-system-prompt", {})
     .transform("fetch-agents-prompt", { getCompiledPrompt: deps.getCompiledPrompt })
@@ -201,25 +202,36 @@ export const conversationPipeline = (deps: ConversationPipelineDeps) =>
     .transform("stream-llm", { apiKey: deps.apiKey, model: deps.model, tools: deps.tools })
     .boundary("check-follow-up", {})
     .sink("finalize", {})
-    .build();
+    .build(bus);
 ```
 
 ## 3. Element Registry
 
 ```typescript
-const elementRegistry = new Map<string, ElementConstructor>();
+export class ElementRegistry {
+  #elements = new Map<string, ElementConstructor>();
 
-export function registerElement(name: string, ctor: ElementConstructor): void {
-  if (elementRegistry.has(name)) throw new Error(`Element "${name}" already registered`);
-  elementRegistry.set(name, ctor);
+  register(name: string, ctor: ElementConstructor): void {
+    if (this.#elements.has(name)) throw new Error(`Element "${name}" already registered`);
+    this.#elements.set(name, ctor);
+  }
+
+  resolve(name: string): ElementConstructor {
+    const ctor = this.#elements.get(name);
+    if (!ctor) throw new Error(`Element "${name}" not found. Registered: [${this.names().join(", ")}]`);
+    return ctor;
+  }
+
+  names(): string[] { ... }
+  clear(): void { ... }
 }
 
-export function resolveElement(name: string): ElementConstructor {
-  const ctor = elementRegistry.get(name);
-  if (!ctor) throw new Error(`Element "${name}" not found`);
-  return ctor;
-}
+export function createElementRegistry(): ElementRegistry;
 ```
+
+每个 Core 通过 `createCoreBootstrap` 创建一个独立实例，传给 7 个
+`register*Elements(registry)` 与 `createPipelineFactory({ elementRegistry })`。
+不存在模块级 registry/自由函数，测试直接构造自己的实例。
 
 ## 4. Pipeline Manager
 
@@ -248,9 +260,9 @@ export class PipelineManager {
 1. 创建 src/packages/core/src/pipelines/<name>/
 2. 定义 types.ts (Mode enum + FlowState)
 3. 定义 elements/*.ts (每个 Element 一个文件)
-4. 注册所有 elements
-5. 定义 pipeline builder (index.ts)
-6. 注册 builder 到 PipelineManager
+4. 在 `register*Elements(registry)` 中注册所有 elements
+5. 定义 pipeline builder (index.ts)，`pipeline(name, deps.elementRegistry)`
+6. 在 `pipeline-factory.ts` 的 builder 中注入 `elementRegistry`
 7. 写测试
 ```
 

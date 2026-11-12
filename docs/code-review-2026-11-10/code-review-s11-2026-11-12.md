@@ -166,7 +166,9 @@ export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): P
 
 ### CR-ARCH-01 — ElementRegistry 是模块级全局
 
-**级别**: P2 · **阶段**: S11-B · **当前状态**: 未解决
+**级别**: P2 · **阶段**: S11-B · **当前状态**: 已解决（2026-11-12，S11-B）
+
+**实施**: 模块级 Map 与旧自由函数已删除；每个 Core 使用独立 `ElementRegistry`，7 个注册函数与 `PipelineBuilder`/`pipeline()` 显式接收实例。
 
 **位置**: `src/packages/core/src/pipeline/registry.ts:5-30`；注册调用分布在
 `src/packages/core/src/pipelines/{conversation,prediction,follow-up,follow-up-evaluator,context-compress,post-conversation,shared}/index.ts`。
@@ -264,7 +266,9 @@ export function createElementRegistry(): ElementRegistry {
 
 ### CR-ARCH-02 — `pipelineMap` 全局且造成分层倒置
 
-**级别**: P2 · **阶段**: S11-C · **当前状态**: 未解决
+**级别**: P2 · **阶段**: S11-C · **当前状态**: 已解决（2026-11-12，S11-C）
+
+**实施**: `pipelineMap` 与三个自由函数已删除；`TaskEngine` 注入 `PipelineInstanceStore`，bootstrap 每个 Core 创建一个实例，任务结束/取消后清理。
 
 **位置**: `src/packages/core/src/api/tasks.ts:8-20`、`src/packages/core/src/task-engine.ts:5,69,138,143-150`。
 
@@ -1126,3 +1130,4 @@ rg -n 'from "\\.\\./App"|from "\\./App"' src/packages/tui/src --glob '!**/*.test
 | 日期 | 变更 |
 |---|---|
 | 2026-11-12 | 初始 S11 专项审查：基于 `ef7ff15` 盘点 CR-ARCH-01..09，标注 04/05 已关闭；给出 ElementRegistry / PipelineInstanceStore / CoreServices / PromptRegistry / TaskEngine / ProcessSupervisor / PipelineSession 目标契约与兼容不变量；仅文档，未改源码 |
+| 2026-11-12 | S11-B/C 实施：ElementRegistry 与 PipelineInstanceStore 已实例化并注入；CR-ARCH-01/02 关闭，旧全局 registry/自由函数与 `pipelineMap` 删除 |

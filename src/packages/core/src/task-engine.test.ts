@@ -3,6 +3,7 @@ import { BusEvents, PipelineEventBus, TaskSource, TaskState } from "@atom-neo/sh
 import type { FullEventMap, TaskItem } from "@atom-neo/shared";
 import { TaskEngine } from "./task-engine";
 import { TaskQueue } from "./task-queue";
+import { PipelineInstanceStore } from "./pipeline/instance-store";
 
 const createTask = (id: string): TaskItem => ({
   id,
@@ -27,11 +28,13 @@ describe("TaskEngine", () => {
     bus.on(BusEvents.Task.Completed, ({ task }) => completed.push(task.id));
     queue.enqueue(createTask("first"));
     queue.enqueue(createTask("second"));
-    const engine = new TaskEngine({ bus, queue });
+    const store = new PipelineInstanceStore();
+    const engine = new TaskEngine({ bus, queue, pipelineStore: store });
     engine.start();
 
     expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
     expect(queue.size).toBe(0);
+    expect(store.size).toBe(0);
     expect(completed).toEqual(["first", "second"]);
   });
 
@@ -43,6 +46,7 @@ describe("TaskEngine", () => {
     const engine = new TaskEngine({
       bus,
       queue,
+      pipelineStore: new PipelineInstanceStore(),
       pipelineBuilders: {
         test: () => ({
           elements: [{
@@ -79,6 +83,7 @@ describe("TaskEngine", () => {
     const engine = new TaskEngine({
       bus,
       queue,
+      pipelineStore: new PipelineInstanceStore(),
       pipelineBuilders: {
         blocking: () => ({
           elements: [{
@@ -110,7 +115,7 @@ describe("TaskEngine", () => {
     const task = createTask("queued");
     let failedTask: TaskItem | undefined;
     bus.on(BusEvents.Task.Failed, ({ task: failed }) => { failedTask = failed; });
-    const engine = new TaskEngine({ bus, queue });
+    const engine = new TaskEngine({ bus, queue, pipelineStore: new PipelineInstanceStore() });
     queue.enqueue(task);
 
     expect(engine.cancel(task.id, task.sessionId)).toBe(true);
@@ -134,9 +139,11 @@ describe("TaskEngine", () => {
     });
     bus.on(BusEvents.Task.Failed, ({ task }) => failed.push(task.id));
     bus.on(BusEvents.Task.Completed, ({ task }) => completed.push(task.id));
+    const store = new PipelineInstanceStore();
     const engine = new TaskEngine({
       bus,
       queue,
+      pipelineStore: store,
       discardChain: (chainId, sessionId) => discarded.push(`${sessionId}:${chainId}`),
       pipelineBuilders: {
         blocking: () => ({
@@ -165,5 +172,80 @@ describe("TaskEngine", () => {
     expect(queue.getStatus(queued.id)?.state).toBe(TaskState.CANCELLED);
     expect(discarded).toEqual(["session:chain"]);
     expect(completed).toEqual(["unrelated"]);
+    expect(store.size).toBe(0);
+  });
+
+  test("removes the cached pipeline after a failed task", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const store = new PipelineInstanceStore();
+    const task = { ...createTask("failing"), pipeline: "failing" };
+    let failed = false;
+    bus.on(BusEvents.Task.Failed, ({ task: failedTask }) => { failed = failedTask.id === task.id; });
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: store,
+      pipelineBuilders: {
+        failing: () => ({
+          elements: [{ process: async () => { throw new Error("boom"); } }],
+        } as any),
+      },
+    });
+    queue.enqueue(task);
+    engine.start();
+    bus.emit(BusEvents.Task.Enqueued, { task });
+
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(failed).toBe(true);
+    expect(store.size).toBe(0);
+  });
+
+  test("two engines with separate stores do not share pipeline instances", async () => {
+    const createEngine = (tag: string) => {
+      const bus = new PipelineEventBus<FullEventMap>();
+      const queue = new TaskQueue();
+      const store = new PipelineInstanceStore();
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const engine = new TaskEngine({
+        bus,
+        queue,
+        pipelineStore: store,
+        pipelineBuilders: {
+          shared: () => ({
+            name: tag,
+            elements: [{ process: async (input: unknown) => { await gate; return input; } }],
+          } as any),
+        },
+      });
+      return { bus, queue, store, engine, release };
+    };
+    const first = createEngine("first");
+    const second = createEngine("second");
+    const firstTask = { ...createTask("same-task"), pipeline: "shared" };
+    const secondTask = { ...createTask("same-task"), pipeline: "shared" };
+
+    first.queue.enqueue(firstTask);
+    second.queue.enqueue(secondTask);
+    first.engine.start();
+    second.engine.start();
+    first.bus.emit(BusEvents.Task.Enqueued, { task: firstTask });
+    second.bus.emit(BusEvents.Task.Enqueued, { task: secondTask });
+    while (first.store.size === 0 || second.store.size === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    expect(first.store).not.toBe(second.store);
+    expect(first.store.get("same-task")).not.toBe(second.store.get("same-task"));
+    expect(first.store.get("same-task")?.name).toBe("first");
+    expect(second.store.get("same-task")?.name).toBe("second");
+
+    first.release();
+    second.release();
+    expect(await first.engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(await second.engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(first.store.size).toBe(0);
+    expect(second.store.size).toBe(0);
   });
 });

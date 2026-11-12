@@ -38,6 +38,9 @@ import { createMcpLifecycle } from "./mcp-lifecycle";
 import type { McpLifecycle, McpServerInfo } from "./mcp-lifecycle";
 import { resolveCoreServices } from "./core-services";
 import type { CoreServices } from "./core-services";
+import { createElementRegistry } from "./pipeline/registry";
+import type { ElementRegistry } from "./pipeline/registry";
+import { PipelineInstanceStore } from "./pipeline/instance-store";
 
 export type CoreDeps = {
   port: number;
@@ -84,6 +87,8 @@ export type CoreBootstrap = {
   pipelineBuilders: PipelineBuilders;
   promptRegistry: PromptRegistry;
   promptResolver: PromptResolver;
+  elementRegistry: ElementRegistry;
+  pipelineStore: PipelineInstanceStore;
   getMcpServerInfos: () => McpServerInfo[];
 };
 
@@ -93,6 +98,8 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
   const { memory, network, skill: skillService, compiler } = resolveCoreServices({ services: options.services });
   const promptRegistry = createPromptRegistry();
   const promptResolver = createPromptResolver(promptRegistry);
+  const elementRegistry = createElementRegistry();
+  const pipelineStore = new PipelineInstanceStore();
   const sandbox: string = runtime.sandbox ?? "";
   const fallbackModel = resolveInitialModel(runtime);
   const budgetLimits = () => budgetLimitsFor(runtime);
@@ -156,6 +163,7 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
 
   const pipelineBuilders = createPipelineFactory({
     runtime,
+    elementRegistry,
     promptResolver,
     fallbackModel,
     bus,
@@ -175,13 +183,13 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
   registerBuiltinTools(toolRegistry, toolDependencies);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
-  registerConversationElements();
-  registerPredictionElements();
-  registerFollowUpElements();
-  registerFollowUpEvaluatorElements();
-  registerContextCompressElements();
-  registerPostConversationElements();
-  registerSharedElements();
+  registerConversationElements(elementRegistry);
+  registerPredictionElements(elementRegistry);
+  registerFollowUpElements(elementRegistry);
+  registerFollowUpEvaluatorElements(elementRegistry);
+  registerContextCompressElements(elementRegistry);
+  registerPostConversationElements(elementRegistry);
+  registerSharedElements(elementRegistry);
 
   const sessionRef: { current: { sessionId: string; chatId: string } | null } = { current: null };
   registerTaskLifecycle({ bus, logger, taskQueue, orchestrator, sessionStore, broadcaster, sessionRef });
@@ -230,6 +238,7 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
   const taskEngine = new TaskEngine({
     bus,
     queue: taskQueue,
+    pipelineStore,
     pipelineBuilders,
     discardChain: (chainId, sessionId) => orchestrator.discardChain(chainId, sessionId),
   });
@@ -275,6 +284,8 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
     pipelineBuilders,
     promptRegistry,
     promptResolver,
+    elementRegistry,
+    pipelineStore,
     getMcpServerInfos: () => mcp.getServerInfos(),
   };
 }
