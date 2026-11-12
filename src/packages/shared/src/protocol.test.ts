@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { WsMessages } from "./constants/events";
+import * as sharedApi from "./index";
+import * as protocolBarrel from "./protocol";
 import {
   CLIENT_EVENT_TYPES,
   SERVER_EVENT_TYPES,
@@ -8,9 +10,24 @@ import {
   type ClientEvent,
   type ClientEventType,
   type ServerEvent,
+  type ServerEventPayload,
   type ServerEventType,
 } from "./protocol";
 import { TaskState } from "./types/task";
+
+const CANONICAL_CLIENT_EVENT_TYPES: ClientEventType[] = [...Object.values(WsMessages.Client), WsMessages.Control.Ping];
+const CANONICAL_SERVER_EVENT_TYPES: ServerEventType[] = [
+  ...Object.values(WsMessages.Server),
+  WsMessages.Control.Pong,
+  WsMessages.Control.Error,
+];
+
+const taskFailedPayload: ServerEventPayload<typeof WsMessages.Server.TaskFailed> = {
+  taskId: "t1",
+  rootTaskId: "t1",
+  code: "TASK_FAILED",
+  error: "failed",
+};
 
 type Assert<T extends true> = T;
 type MissingServerEventType = Exclude<(typeof WsMessages.Server)[keyof typeof WsMessages.Server], ServerEventType>;
@@ -111,6 +128,34 @@ describe("protocol union coverage", () => {
     expect(isServerEventType("event.unknown")).toBe(false);
     expect(isClientEventType("event.unknown")).toBe(false);
     expect(isServerEventType(undefined)).toBe(false);
+  });
+
+  test("guards reject cross-channel event strings and non-strings", () => {
+    expect(isClientEventType(WsMessages.Server.SessionReady)).toBe(false);
+    expect(isServerEventType(WsMessages.Client.TaskSubmit)).toBe(false);
+    expect(isClientEventType("")).toBe(false);
+    expect(isServerEventType(null)).toBe(false);
+  });
+
+  test("event type catalogs preserve canonical wire strings and order", () => {
+    expect<ClientEventType[]>([...CLIENT_EVENT_TYPES]).toEqual(CANONICAL_CLIENT_EVENT_TYPES);
+    expect<ServerEventType[]>([...SERVER_EVENT_TYPES]).toEqual(CANONICAL_SERVER_EVENT_TYPES);
+  });
+
+  test("protocol and shared-package barrels re-export identical values", () => {
+    expect(protocolBarrel.CLIENT_EVENT_TYPES).toBe(CLIENT_EVENT_TYPES);
+    expect(protocolBarrel.SERVER_EVENT_TYPES).toBe(SERVER_EVENT_TYPES);
+    expect(protocolBarrel.isClientEventType).toBe(isClientEventType);
+    expect(protocolBarrel.isServerEventType).toBe(isServerEventType);
+    expect(sharedApi.CLIENT_EVENT_TYPES).toBe(CLIENT_EVENT_TYPES);
+    expect(sharedApi.SERVER_EVENT_TYPES).toBe(SERVER_EVENT_TYPES);
+    expect(sharedApi.isClientEventType).toBe(isClientEventType);
+    expect(sharedApi.isServerEventType).toBe(isServerEventType);
+  });
+
+  test("ServerEventPayload extracts the event-specific payload", () => {
+    expect(taskFailedPayload.code).toBe("TASK_FAILED");
+    expect(taskFailedPayload.error).toBe("failed");
   });
 
   test("compile-time coverage assertions are reachable", () => {

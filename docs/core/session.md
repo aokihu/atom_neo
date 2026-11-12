@@ -426,7 +426,7 @@ atom neo ▎ ● connected ▎ deepseek-v4-flash [thinking] ▎ v1.18.1
 
 ---
 
-## 7. Persistence 模块布局（v1.24.0）
+## 7. Persistence 模块布局（v1.24.1）
 
 | 文件 | 职责 |
 |---|---|

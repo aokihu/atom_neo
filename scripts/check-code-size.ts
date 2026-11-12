@@ -2,9 +2,8 @@
  * S12 code-size guard.
  *
  * Checks the S12 target files from docs/code-review-2026-11-10/code-review-s12-2026-11-12.md
- * section 5 for file line budgets and function body budgets. Only the two documented
- * exceptions (protocol.ts and core session/context.ts) are allowed to exceed the
- * normal 300-line limit.
+ * section 5 for file line budgets and function body budgets. No file is exempt:
+ * the former protocol/context exceptions were split below 300 lines.
  *
  * The compiler AST comes from the TypeScript 7 async API because the TypeScript 7
  * package no longer exposes the legacy in-process compiler API.
@@ -152,13 +151,12 @@ export const S12_TARGETS: readonly SizeTarget[] = [
   { file: "src/packages/config-tui/src/wizard/wizard-edit.ts", maxLines: 130 },
   { file: "src/packages/config-tui/src/wizard/wizard-commit.ts", maxLines: 120 },
   { file: "src/packages/config-tui/src/wizard-logic.ts", maxLines: 50 },
+  { file: "src/packages/shared/src/protocol.ts", maxLines: 300 },
+  { file: "src/packages/core/src/session/context.ts", maxLines: 300 },
 ];
 
-/** Documented >300-line exceptions from S12 section 5. Frozen, not targets. */
-export const S12_EXCEPTIONS: readonly SizeTarget[] = [
-  { file: "src/packages/shared/src/protocol.ts", maxLines: 313, exception: true },
-  { file: "src/packages/core/src/session/context.ts", maxLines: 309, exception: true },
-];
+/** No frozen exceptions remain after the protocol/session split. */
+export const S12_EXCEPTIONS: readonly SizeTarget[] = [];
 
 export function countFileLines(source: string): number {
   if (source.length === 0) return 0;

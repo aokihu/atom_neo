@@ -246,7 +246,7 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 | `link_memory` | 建立记忆关联 |
 | `forget_memory` | 按 ID 删除指定记忆及关联边；支持 Context/搜索结果中的短 ID，不接受正文 |
 
-## 10. 模块布局（v1.24.0）
+## 10. 模块布局（v1.24.1）
 
 `MemoryService` 仍是唯一公开 facade（`src/services/memory-service.ts`），内部实现位于 `src/services/memory/`：
 

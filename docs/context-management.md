@@ -253,7 +253,7 @@ ContextService 通过 Snapshot ID 保存 SnapshotState 与紧凑 Manifest；Pipe
 
 ContextBucket 负责管理，SnapshotState 负责追踪，ContextSnapshot 只负责给模型看。
 
-## 13. 模块布局（v1.24.0）
+## 13. 模块布局（v1.24.1）
 
 | 文件 | 职责 |
 |---|---|

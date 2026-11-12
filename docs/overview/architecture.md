@@ -108,7 +108,7 @@ atom_neo/
 └── docs/
 ```
 
-**S12 结构边界（v1.24.0）**：Core 的四个巨型文件已按行为边界拆分，facade 保持原公共 API：
+**S12 结构边界（v1.24.1）**：Core 的四个巨型文件已按行为边界拆分，facade 保持原公共 API：
 `StreamLLMElement`（`stream-llm.ts`）只保留 shell，循环/step/工具/上报/finalize 位于
 `pipelines/conversation/elements/stream/`；`MemoryService` 委托 `memory/` 的 store/query/graph；
 `ContextService` 委托 `bucket-store` / `snapshot-manager`；`SessionPersistenceService` 委托

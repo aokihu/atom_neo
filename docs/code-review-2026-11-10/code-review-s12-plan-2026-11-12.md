@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `e3b51f5` (v1.23.0, S11 complete)
-> **Status**: **S12 已完成（v1.24.0，2026-11-12）**。97 个任务全部实施；H1–H4 验收通过。本文保留任务拆分与原始预算，最终数字见 H2/H4 与“实施结果”。
+> **Status**: **S12 已完成（v1.24.1，2026-11-12）**。97 个任务全部实施；H1–H4 验收通过。本文保留任务拆分与原始预算，最终数字见 H2/H4 与“实施结果”。
 > **Scope**: CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12；CR-STR-02/11 已关闭，CR-STR-06 仅残余收尾
 
 ---
@@ -30,16 +30,16 @@
 | Wizard | reducer + 判别联合 view | 不改 view 顺序/first-run/config |
 | `WizardState.step` | **删除** | 只写不读；测试同步 |
 | `commit()` async | **不做** | S1 已改同步原子写；改 async 会改 `onComplete` 时序 |
-| 全仓库 ≤300 行 | **不承诺** | 只对 S12 目标文件；显式例外见问题文档第 5 节 |
-| 版本 | 子阶段不单独发版 | S12-H 完成后统一决定（建议 1.24.0） |
+| 全仓库 ≤300 行 | **不承诺** | 只对 78 个 S12 目标文件；当前 0 例外 |
+| 版本 | 子阶段不单独发版 | S12-H 完成后统一决定（建议 1.24.1） |
 
-### 实施结果（2026-11-12，v1.24.0）
+### 实施结果（2026-11-12，v1.24.1）
 
 - **全部实施**：A–G 结构拆分与行为快照、H1–H4 验收完成；未改 HTTP/WS/Task/Event 行为，未触碰禁区。
-- **行数门禁**：`bun run check:size` 覆盖 76 个目标文件 + 2 个显式例外；全部通过，最长函数 98 行（`InputBar`），`stream-llm.doProcess` ≤100。
-- **测试**：source `1350 pass / 21 skip / 0 fail`；conversation 156、memory 46、context+session 160、supervisor 45、TUI 132、config-tui 79；全量与 Node/package smoke 见 H4。
+- **行数门禁**：`bun run check:size` 覆盖 78 个目标文件、0 例外；全部通过，最长函数 98 行（`InputBar`），`stream-llm.doProcess` ≤100。
+- **测试**：source `1363 pass / 21 skip / 0 fail`；conversation 156、memory 46、context+session 160、supervisor 45、TUI 132、config-tui 79；全量与 Node/package smoke 见 H4。
 - **CR**：CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；CR-STR-02/11 保持关闭；CR-STR-06 已达标（supervisor 277/280）。
-- **残余例外**：仅 `protocol.ts` 313 行、`session/context.ts` 309 行；`ws-client.ts` 276 行已达标。
+- **行数例外**：无；`protocol.ts` 36 行、`session/context.ts` 284 行，`ws-client.ts` 276 行，全部纳入目标预算。
 
 ### 估算口径
 
@@ -927,7 +927,7 @@ S12-H 在 A..G 全部完成后
 #### S12-E18 — Core 残余行数检查
 
 - **复杂度**: 简单（1.5h）
-- **目标**: 检查 E 阶段目标文件行数/函数长度；记录 residual（`session/context.ts` 309 等）到问题文档；不硬拆范围外文件。
+- **目标**: 检查 E 阶段目标文件行数/函数长度；记录 residual（`session/context.ts` 284 等）到问题文档；不硬拆范围外文件。
 - **文件**:
   - 不改源码；更新 `docs/code-review-2026-11-10/code-review-s12-2026-11-12.md`（实施阶段）
 - **依赖**: E1..E17
@@ -1499,25 +1499,25 @@ S12-H 在 A..G 全部完成后
 - **回滚**: 无源码改动；失败回到对应任务。
 - **DoD**: 全部通过；记录 pass/skip/fail、构建体积、目标文件行数；版本建议写入文档。
 
-**H4 最终数字（2026-11-12，v1.24.0）**：
+**H4 最终数字（2026-11-12，v1.24.1）**：
 
 | 项 | 结果 |
 |---|---|
 | `bun run typecheck` | 6/6 workspace 通过 |
 | `bun run typecheck:node` | 0 error |
-| `bun test --path-ignore-patterns='**/dist/**'` | 1350 pass / 21 skip / 0 fail（1371 tests / 181 files） |
-| `bun test` | 2458 pass / 21 skip / 0 fail（2479 tests / 338 files） |
+| `bun test --path-ignore-patterns='**/dist/**'` | 1363 pass / 21 skip / 0 fail（1384 tests / 182 files） |
+| `bun test` | 2483 pass / 21 skip / 0 fail（2504 tests / 340 files） |
 | `bun run build` | 6/6 workspace 通过 |
-| `bun run check:size` | 76 targets pass / 2 exceptions / 0 fail；最长函数 98 行 |
+| `bun run check:size` | 78 targets pass / 0 exceptions / 0 fail；最长函数 98 行 |
 | `bun run build:bin` | `dist/atom` 75 MiB（Bun compiled） |
 | `bun run build:node` | `dist/node/main.js` 3,004,797 bytes（2.87 MiB） |
 | `bun run smoke:node` | all 7 steps 通过（build 5/5 + platform 15/15 + release 9/9 + conversation 11/11） |
-| `bun run smoke:node:package` | 11/11；`atom-neo-1.24.0.tgz` 576.9 KiB |
+| `bun run smoke:node:package` | 11/11；`atom-neo-1.24.1.tgz` 576.9 KiB |
 | `bun run docs:check` | 通过（relative links / inline `src/` paths） |
 | `bun run docs:typecheck` | 通过 |
-| 版本 | 根 `package.json` / `src/version.ts` = 1.24.0；workspace 包版本不变 |
+| 版本 | 根 `package.json` / `src/version.ts` = 1.24.1；workspace 包版本不变 |
 
-版本建议：**1.24.0**（已实施）。
+版本建议：**1.24.1**（已实施）。
 
 ---
 
@@ -1752,7 +1752,7 @@ S12-H 在 A..G 全部完成后
 - [ ] `bun run smoke:node`、`smoke:node:package` 通过。
 - [ ] `docs:check` / `docs:typecheck` 通过。
 - [ ] 每个 Core/新目录有 README；项目结构文档同步。
-- [ ] 显式例外（`protocol.ts`、`session/context.ts`）未被伪装成达标。
+- [x] `protocol.ts` / `session/context.ts` 已降至 300 行以下并纳入目标预算；例外清单为空。
 
 ---
 
@@ -1941,3 +1941,4 @@ rg -n 'activeModal\.kind ===' src/packages/tui/src/components/App.tsx
 |---|---|
 | 2026-11-12 | 初始 S12 实施计划：97 个任务（52 简单 / 45 中等），基线 237.5h；给出 A-H 子阶段、行为快照、测试矩阵、回滚矩阵、DoD、关键路径与 PR 拆分；仅文档，未改源码 |
 | 2026-11-12 | S12 实施完成（v1.24.0）：A-G 全部结构拆分与快照测试落地；H1 `check:size`（76 targets + 2 exceptions）、H2 行为矩阵 0 fail、H3 文档/CR 关闭、H4 最终门禁通过；源码 1350 pass / 21 skip / 0 fail，全量 2458 pass / 21 skip / 0 fail，Node/package smoke 与 docs 检查通过 |
+| 2026-11-12 | S12 例外收尾（v1.24.1）：`protocol.ts` 313→36，`session/context.ts` 309→284；`check:size` 78 targets / 0 exceptions；源码 1363 pass / 21 skip / 0 fail，全量 2483 pass / 21 skip / 0 fail；Node/package smoke 通过 |

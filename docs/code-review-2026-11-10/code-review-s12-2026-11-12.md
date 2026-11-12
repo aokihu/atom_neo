@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `e3b51f5` (v1.23.0, S11 complete)
 > **Scope**: CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12 中尚未收口的巨型文件与 TUI 结构问题
-> **Status**: **S12 已完成（v1.24.0，2026-11-12）**。A–H 全部实施并通过 H1–H4 验收；本文保留实施前问题与目标边界，最终行数、测试矩阵与残余例外见第 5/6/7 节。
+> **Status**: **S12 已完成（v1.24.1，2026-11-12）**。A–H 全部实施并通过 H1–H4 验收；本文保留实施前问题与目标边界，最终行数、测试矩阵与行数目标见第 5/6/7 节。
 > **Related**:
 > - [code-review-s12-graph-2026-11-12.md](./code-review-s12-graph-2026-11-12.md)
 > - [code-review-s12-plan-2026-11-12.md](./code-review-s12-plan-2026-11-12.md)
@@ -109,7 +109,7 @@ S12 必须拆成多条**可独立提交、可独立回滚**的小任务；不允
 - `tui-kit` 抽取（CR-STR-11 已由 S5 关闭）；S12 只消费 `tui-kit`，不改主题/Modal 契约。
 - 未实现 Element、`follow-up`、Replay、`PipelineRunner` / `PipelineManager` / `PipelineRecorder`（禁区）。
 - 全量 `any` 清理；只清理拆分过程中新文件需要的类型边界。
-- 把全仓库所有文件压到 300 行：S12 只对**目标文件**负责，残余例外见第 7 节。
+- 把全仓库所有文件压到 300 行：S12 只对**78 个目标文件**负责；当前目标无例外，非目标文件不在承诺内。
 - 删除重复的 Provider/Prompt/DI 抽象；S7/S11 已稳定。
 
 ---
@@ -553,9 +553,9 @@ src/packages/config-tui/src/
 | Wizard | `wizard/wizard-commit.ts` | ≤120 |
 | Wizard | `wizard-logic.ts` | ≤50（barrel） |
 
-### 5.1 最终行数（v1.24.0，2026-11-12）
+### 5.1 最终行数（v1.24.1，2026-11-12）
 
-`bun run check:size` 对 76 个目标文件与 2 个显式例外做 AST 检查；全部通过。关键文件最终行数：
+`bun run check:size` 对 78 个目标文件（0 例外）做 AST 检查；全部通过。关键文件最终行数：
 
 | 模块 | 最终行数 |
 |---|---|
@@ -571,16 +571,16 @@ src/packages/config-tui/src/
 
 最长函数为 `InputBar` 98 行（限制 100）；`stream-llm.doProcess` 远低于 100。未列入 section 5 的新实现文件（`stream-run.ts`、`stream/types.ts`、`memory-schema.ts`、`compiler.ts`、`chat-messages.ts`、`WizardViews.tsx` 等）均 ≤300 行，未新增例外。
 
-### 无法在 S12 达到 300 行的例外
+### 行数目标与例外
 
-以下文件 >300 行，但不属于 S12 的目标 CR；S12 **不假称**全仓库已达标：
+S12 目标文件已全部达标；此前的两个显式例外已消除：
 
 | 文件 | 当前行数 | 处理 |
 |---|---:|---|
-| `src/packages/shared/src/protocol.ts` | 313 | 协议类型派生，S6 已定契约；改动会触及事件契约，S12 不动；冻结为显式例外 |
-| `src/packages/core/src/session/context.ts` | 309 | Session 内存状态，S11 已加窄接口；拆分会改 Element 生命周期，留待后续；冻结为显式例外 |
+| `src/packages/shared/src/protocol.ts` | **36** | 拆为 `protocol/{client-events,server-events,payloads,guards}.ts`，barrel 保持导出面 |
+| `src/packages/core/src/session/context.ts` | **284** | TODO/session 纯 helper 移到 `session/todo.ts`，`SessionContext` 保留 |
 
-`src/packages/tui/src/client/ws-client.ts` 已由 S12-F10 从 304 行降到 276 行（目标 ≤280），不再属于例外。
+`src/packages/tui/src/client/ws-client.ts` 已由 S12-F10 从 304 行降到 276 行（目标 ≤280）。
 其余 >300 文件（`bootstrap.ts` 291、`backup.ts` 279、`cli.ts` 278、`shell.ts` 276、`hook-manager.ts` 275、`schedule-service.ts` 272、`fs.ts` 268、`node-http-server.ts` 271 等）均 ≤300 或不在 S12 CR 内，不列入 S12 验收。
 
 ---
@@ -651,7 +651,7 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 
 ---
 
-## 6.5 最终测试矩阵（v1.24.0）
+## 6.5 最终测试矩阵（v1.24.1）
 
 | 场景 | 命令/文件 | 结果 |
 |---|---|---|
@@ -662,9 +662,9 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 | gateway supervisor | `bun test src/packages/gateway/src/client-manager` | 45 pass / 0 fail |
 | TUI chat/panels | `bun test src/packages/tui/src` | 132 pass / 0 fail |
 | wizard view/reducer | `bun test src/packages/config-tui/src` | 79 pass / 0 fail（wizard 子集 71） |
-| 全量 source | `bun test --path-ignore-patterns='**/dist/**'` | 1350 pass / 21 skip / 0 fail |
-| 全量含 dist | `bun test` | 2458 pass / 21 skip / 0 fail |
-| 行数/函数 guard | `bun run check:size` | 76 targets pass / 2 exceptions / 0 fail |
+| 全量 source | `bun test --path-ignore-patterns='**/dist/**'` | 1363 pass / 21 skip / 0 fail |
+| 全量含 dist | `bun test` | 2483 pass / 21 skip / 0 fail |
+| 行数/函数 guard | `bun run check:size` | 78 targets pass / 0 exceptions / 0 fail |
 
 没有新增 skip 或 only；所有矩阵项均有现有测试覆盖，未发现缺口。
 
@@ -713,7 +713,7 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 | 行数 guard 的 AST API 绑定 TypeScript 7 async API | 低 | `scripts/check-code-size.ts` 使用 `typescript/unstable/async`；TypeScript 升级需同步验证 guard |
 | `stream-step`/`process-supervisor`/`chat-connection` 接近预算 | 低 | `stream-step` 233/240、`process-supervisor` 277/280、`chat-connection` 150/150；再增加职责前先拆分 |
 
-> **残余例外**：仅 `src/packages/shared/src/protocol.ts`（313）与 `src/packages/core/src/session/context.ts`（309）冻结为 >300 行例外；`ws-client.ts` 已降到 276 行，不再是例外。其余 S12 目标文件均 ≤ 文件预算，最长函数 98 行。
+> **行数目标**：`bun run check:size` 覆盖 78 个目标文件、0 例外；此前 `protocol.ts` 313 与 `session/context.ts` 309 两个例外已分别降至 36 / 284，最长函数 98 行。
 
 **假设**：
 
@@ -730,4 +730,5 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 | 日期 | 变更 |
 |---|---|
 | 2026-11-12 | 初始 S12 专项审查：基于 `e3b51f5` 盘点 CR-STR-01..11、CR-ARCH-10/11/12、CR-DUP-11/12；标注 CR-STR-02/11 已关闭、CR-STR-06 已缩减；给出目标模块边界、行数预算、行为不变量与验收；仅文档，未改源码 |
-| 2026-11-12 | S12 完成（v1.24.0）：A–G 结构与行为快照落地，H1–H4 验收通过；76 个目标文件全部通过 `check:size`，最长函数 98 行；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭；仅保留 `protocol.ts`/`session/context.ts` 两个显式例外 |
+| 2026-11-12 | S12 完成（v1.24.0）：A–G 结构与行为快照落地，H1–H4 验收通过；CR-STR-01/03/04/05/06/07/08/09/10、CR-ARCH-10/11/12、CR-DUP-11/12 关闭 |
+| 2026-11-12 | S12 例外收尾（v1.24.1）：`protocol.ts` 313→36（client/server/payload/guards），`session/context.ts` 309→284（TODO helper 拆分）；`check:size` 78 targets / 0 exceptions；源码 1363 pass、全量 2483 pass |

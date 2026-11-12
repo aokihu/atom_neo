@@ -6,8 +6,8 @@
  * - message-projection.ts 51, collect-prompts.ts 49, record-context.ts 186,
  *   format-user-messages.ts 26, types.ts 62, tool-loop.ts 119,
  *   stream/tool-runtime.ts 195, message-policy.ts 23.
- * - Remaining Core file above 300 lines: session/context.ts 309 (out of S12-E scope,
- *   intentionally not split here). All other S12-E target files are within budget.
+ * - Core files above 300 lines: none; session/context.ts is now 284 lines with
+ *   pure TODO helpers extracted to session/todo.ts (29 lines).
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";

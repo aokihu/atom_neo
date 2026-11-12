@@ -91,11 +91,15 @@ describe("checkCodeSize", () => {
 });
 
 describe("documented exceptions", () => {
-  test("only protocol.ts and session/context.ts are frozen exceptions", () => {
-    expect(S12_EXCEPTIONS).toEqual([
-      { file: "src/packages/shared/src/protocol.ts", maxLines: 313, exception: true },
-      { file: "src/packages/core/src/session/context.ts", maxLines: 309, exception: true },
-    ]);
+  test("no frozen exceptions remain", () => {
+    expect(S12_EXCEPTIONS).toEqual([]);
+  });
+
+  test("protocol and session context are normal 300-line targets", () => {
+    expect(S12_TARGETS).toEqual(expect.arrayContaining([
+      { file: "src/packages/shared/src/protocol.ts", maxLines: 300 },
+      { file: "src/packages/core/src/session/context.ts", maxLines: 300 },
+    ]));
   });
 
   test("no S12 target is marked as an exception", () => {
