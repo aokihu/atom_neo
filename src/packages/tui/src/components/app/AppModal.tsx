@@ -1,10 +1,13 @@
+import type { Ref } from "react";
+import type { BoxRenderable } from "@opentui/core";
 import { Modal } from "../modal";
 import { modalSpec } from "./app-modal-config";
 import type { ActiveModal } from "./app-modal-config";
 
-export function AppModal({ modal, textColor, onClose, onClearMessages, onQuit }: {
+export function AppModal({ modal, textColor, focusRef, onClose, onClearMessages, onQuit }: {
   modal: ActiveModal;
   textColor: string;
+  focusRef?: Ref<BoxRenderable>;
   onClose: () => void;
   onClearMessages: () => void;
   onQuit?: () => void;
@@ -20,6 +23,7 @@ export function AppModal({ modal, textColor, onClose, onClearMessages, onQuit }:
       height={spec.height}
       actions={spec.actions}
       defaultActionKey={spec.defaultActionKey}
+      focusRef={focusRef}
       onClose={onClose}
       onAction={key => spec.onAction(modal, key, {
         close: onClose,

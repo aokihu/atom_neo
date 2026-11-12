@@ -1,4 +1,5 @@
 import type React from "react";
+import type { BoxRenderable } from "@opentui/core";
 
 export type ModalPlacement = "center" | "top" | "bottom";
 
@@ -55,6 +56,8 @@ export interface ModalProps {
   defaultActionKey?: string;
   children?: React.ReactNode;
   zIndex?: number;
+  /** Optional focus target; when set, the modal panel becomes a focusable renderable. */
+  focusRef?: React.Ref<BoxRenderable>;
   onAction?: (key: string, action: ModalAction) => void;
   onClose?: () => void;
   listLength?: number;

@@ -42,3 +42,7 @@ Modes are selected by whether `listLength > 0`.
 
 `chrome="plain"` (default) is the chat TUI look; `chrome="bordered"` adds the config
 wizard border. `hint` renders a muted helper line below the action bar.
+
+`focusRef` is optional. When supplied, the modal panel becomes a focusable renderable so
+the host can move OpenTUI focus into the modal while it is open and restore it afterwards.
+Callers that use form fields (for example `config-tui`) leave it unset.

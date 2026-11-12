@@ -127,6 +127,14 @@ Wide
 - `Esc` 关闭菜单；Session busy 时双击 `Esc` 取消 Task。
 - 面板折叠功能必须提供键盘路径，不能只绑定 `onMouseUp`。
 
+### 焦点管理
+
+- 焦点优先级固定为：顶层 Modal > InputBar > 其他可聚焦区域；任意时刻只有一个 focused renderable。
+- 终端重新激活时，若无 Modal，App 显式调用输入框 `focus()`；OpenTUI 的终端焦点事件不会自动恢复组件焦点。
+- Modal 打开时输入框 `blur()`，Modal 面板通过 `focusRef` 成为焦点承载点；关闭后焦点回到输入框。
+- Modal 打开期间后台全局快捷键不响应；Modal 内的列表项或 ActionBar 高亮表示当前焦点。
+- 打开或关闭 Modal 不清空输入框草稿；只有发送消息或执行命令后才清空。
+
 ## 7. 实现文件
 
 ```text

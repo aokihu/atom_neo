@@ -1,4 +1,5 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback } from "react";
+import type { RefObject } from "react";
 import { TextAttributes } from "@opentui/core";
 import type { KeyBinding, TextareaRenderable } from "@opentui/core";
 import { useTheme } from "@atom-neo/tui-kit";
@@ -15,6 +16,7 @@ const keyBindings: KeyBinding[] = [
 ];
 
 interface InputBarProps {
+  inputRef?: RefObject<TextareaRenderable | null>;
   onSend: (text: string) => void;
   onQuit?: () => void;
   onHelp?: () => void;
@@ -28,17 +30,16 @@ interface InputBarProps {
 
 export { isDoubleEscape } from "./input/use-double-escape";
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onSettings, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
+export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact, onSettings, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
-  const taRef = useRef<TextareaRenderable>(null);
+  const internalRef = useRef<TextareaRenderable>(null);
+  const taRef = inputRef ?? internalRef;
   const { content, showMenu, cmdMatches, menuSelected, push, clearInput, handleContentChange, handleMenuKey, handleHistoryKey } =
     useCommandMenu({ textarea: taRef, disabled });
   const { handleEscape } = useDoubleEscape({ busy: sessionBusy, onCancelTask, onCancelHint });
 
   const borderColor = sessionBusy ? colors.status.warning : colors.decoration.subtle;
-
-  useEffect(() => { if (disabled) taRef.current?.setText(""); }, [disabled]);
 
   const doCommand = useCallback((cmd: Command) => {
     dispatchCommand(cmd.name, { onQuit, onHelp, onClear, onCompact, onSettings });
@@ -70,7 +71,7 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onSetting
 
   return (
     <box flexShrink={0}>
-      {showMenu && cmdMatches.length > 0 && (
+      {!disabled && showMenu && cmdMatches.length > 0 && (
         <box
           position="absolute"
           bottom={6}

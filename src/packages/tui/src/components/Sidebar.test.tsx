@@ -5,6 +5,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { RoundsSection, Sidebar, TodoSection } from "./Sidebar";
 import { useChatStore } from "../stores/chat";
+import { ModalOpenProvider } from "./app/modal-focus-context";
 import type { Message, TodoItem } from "../types";
 
 const todos = (active: number, count = 10): TodoItem[] => Array.from({ length: count }, (_, index) => ({
@@ -154,6 +155,29 @@ test("TODO follows wrapped active rows, preserves manual scroll, and supports ke
     await act(async () => useChatStore.setState({ todoItems: todos(2, 5) }));
     await setup.renderOnce();
     expect(setup.renderer.root.findDescendantById("todo-scroll")).toBeUndefined();
+  } finally {
+    await act(async () => root.unmount());
+    setup.renderer.destroy();
+  }
+});
+
+test("TODO ignores background shortcuts while a modal is open", async () => {
+  const setup = await createTestRenderer({ width: 30, height: 30 });
+  const root = createRoot(setup.renderer);
+  try {
+    useChatStore.setState({ telemetryOnline: true, todoItems: todos(8) });
+    await act(async () => root.render(
+      <ModalOpenProvider value>
+        <box width="100%"><TodoSection /></box>
+      </ModalOpenProvider>,
+    ));
+    await setup.renderOnce();
+    await setup.renderOnce();
+    const scroll = setup.renderer.root.findDescendantById("todo-scroll") as ScrollBoxRenderable;
+    const before = scroll.scrollTop;
+    setup.mockInput.pressKey("ARROW_DOWN", { meta: true });
+    await setup.renderOnce();
+    expect(scroll.scrollTop).toBe(before);
   } finally {
     await act(async () => root.unmount());
     setup.renderer.destroy();

@@ -5,6 +5,7 @@ import { useChatStore } from "../../stores/chat";
 import { useTheme } from "@atom-neo/tui-kit";
 import { EmptyState } from "../EmptyState";
 import { TelemetrySection } from "./TelemetrySection";
+import { useModalOpen } from "../app/modal-focus-context";
 
 const TODO_ICON: Record<string, string> = {
   pending: "○",
@@ -15,6 +16,7 @@ const TODO_ICON: Record<string, string> = {
 
 export function TodoSection() {
   const { colors } = useTheme();
+  const modalOpen = useModalOpen();
   const items = useChatStore(state => state.todoItems);
   const online = useChatStore(state => state.telemetryOnline);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
@@ -27,6 +29,7 @@ export function TodoSection() {
     scrollRef.current?.requestRender();
   }, [activeKey, scrolling]);
   useKeyboard(key => {
+    if (modalOpen) return;
     if (!(key.meta || key.option) || key.ctrl || !scrolling) return;
     if (key.name === "up" || key.name === "down") scrollRef.current?.scrollBy(key.name === "up" ? -3 : 3);
   });

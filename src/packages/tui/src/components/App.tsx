@@ -16,6 +16,8 @@ import { AppModal } from "./app/AppModal";
 import type { ActiveModal } from "./app/app-modal-config";
 import { useInputHistory } from "../stores/inputHistory";
 import { SettingsModal } from "./SettingsModal";
+import { useTuiFocus } from "../hooks/use-tui-focus";
+import { ModalOpenProvider } from "./app/modal-focus-context";
 
 const TELEMETRY_MIN_WIDTH = 100;
 const RUNTIME_MIN_WIDTH = 150;
@@ -55,6 +57,7 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [taskHint, setTaskHint] = useState<string | null>(null);
+  const { inputRef, modalFocusRef } = useTuiFocus(activeModal !== null, activeModal?.kind);
   const handleClientError = useCallback((error: ChatClientError) => {
     setActiveModal({ kind: "error", title: error.title, message: error.message });
   }, []);
@@ -90,50 +93,55 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
 
   return (
     <ThemeProvider value={theme}>
-      <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
-        <StatusBar serverInfo={serverInfo} />
-        <box flexDirection="row" flexGrow={1} overflow="hidden">
-          {showRuntime && <RuntimeSidebar />}
-          <box
-            flexGrow={1}
-            flexBasis={0}
-            flexDirection="column"
-            overflow="hidden"
-            backgroundColor={theme.colors.bg.codeBlock}
-          >
-            <PanelTitle title="CONVERSATION" meta={busy ? "ACTIVE" : "READY"} tone="primary" />
-            <ChatView onOpenToolDetails={handleOpenToolDetails} />
-            <InputBar
-              onSend={send}
-              onQuit={handleQuit}
-              onHelp={handleHelp}
-              onClear={handleClear}
-              onCompact={handleCompact}
-              onSettings={handleSettings}
-              onCancelTask={handleCancelTask}
-              onCancelHint={setTaskHint}
-              disabled={activeModal !== null}
-            />
+      <ModalOpenProvider value={activeModal !== null}>
+        <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
+          <StatusBar serverInfo={serverInfo} />
+          <box flexDirection="row" flexGrow={1} overflow="hidden">
+            {showRuntime && <RuntimeSidebar />}
+            <box
+              flexGrow={1}
+              flexBasis={0}
+              flexDirection="column"
+              overflow="hidden"
+              backgroundColor={theme.colors.bg.codeBlock}
+            >
+              <PanelTitle title="CONVERSATION" meta={busy ? "ACTIVE" : "READY"} tone="primary" />
+              <ChatView onOpenToolDetails={handleOpenToolDetails} />
+              <InputBar
+                inputRef={inputRef}
+                onSend={send}
+                onQuit={handleQuit}
+                onHelp={handleHelp}
+                onClear={handleClear}
+                onCompact={handleCompact}
+                onSettings={handleSettings}
+                onCancelTask={handleCancelTask}
+                onCancelHint={setTaskHint}
+                disabled={activeModal !== null}
+              />
+            </box>
+            {showTelemetry && <Sidebar contextLimit={contextLimit} url={url} adminToken={adminToken} />}
           </box>
-          {showTelemetry && <Sidebar contextLimit={contextLimit} url={url} adminToken={adminToken} />}
+          <StatusLine hint={taskHint ?? exitHint} />
+          <AppModal
+            modal={activeModal}
+            textColor={theme.colors.text.secondary}
+            focusRef={modalFocusRef}
+            onClose={closeModal}
+            onClearMessages={clearMessages}
+            onQuit={onQuit}
+          />
+          <SettingsModal
+            open={activeModal?.kind === "settings"}
+            focusRef={modalFocusRef}
+            url={url}
+            adminToken={adminToken}
+            serverInfo={serverInfo}
+            onSaved={(info) => onServerInfoChange?.(info)}
+            onClose={closeModal}
+          />
         </box>
-        <StatusLine hint={taskHint ?? exitHint} />
-        <AppModal
-          modal={activeModal}
-          textColor={theme.colors.text.secondary}
-          onClose={closeModal}
-          onClearMessages={clearMessages}
-          onQuit={onQuit}
-        />
-        <SettingsModal
-          open={activeModal?.kind === "settings"}
-          url={url}
-          adminToken={adminToken}
-          serverInfo={serverInfo}
-          onSaved={(info) => onServerInfoChange?.(info)}
-          onClose={closeModal}
-        />
-      </box>
+      </ModalOpenProvider>
     </ThemeProvider>
   );
 }

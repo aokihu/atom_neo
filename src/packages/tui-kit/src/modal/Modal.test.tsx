@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { act, useState } from "react";
+import { act, createRef, useState, type Ref } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
+import type { BoxRenderable } from "@opentui/core";
 import { Modal } from "./Modal";
 import type { ModalAction } from "./types";
 
@@ -13,7 +14,7 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength }: { listLength?: number } = {}) {
+async function mountModal({ listLength, focusRef }: { listLength?: number; focusRef?: Ref<BoxRenderable> } = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
   const triggered: string[] = [];
@@ -36,6 +37,7 @@ async function mountModal({ listLength }: { listLength?: number } = {}) {
         selectedListIndex={1}
         onListNavigate={index => listMoves.push(index)}
         onListActivate={index => triggered.push(`list:${index}`)}
+        focusRef={focusRef}
         hint="↑/↓ select · Tab actions"
       />
     );
@@ -115,6 +117,20 @@ test("renders the hint when provided", async () => {
   try {
     await ctx.render(true);
     expect(ctx.setup.captureCharFrame()).toContain("↑/↓ select · Tab actions");
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("focusRef makes the modal panel the focused renderable", async () => {
+  const focusRef = createRef<BoxRenderable>();
+  const ctx = await mountModal({ focusRef });
+  try {
+    await ctx.render(true);
+    await act(async () => focusRef.current?.focus());
+    expect(ctx.setup.renderer.currentFocusedRenderable).toBe(focusRef.current);
+    await ctx.render(false);
+    expect(ctx.setup.renderer.currentFocusedRenderable).toBeNull();
   } finally {
     await cleanup(ctx);
   }

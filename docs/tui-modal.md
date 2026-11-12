@@ -57,6 +57,7 @@
 | `defaultActionKey` | `string?` | 初始选中的按钮 `key` |
 | `children` | `ReactNode?` | 自定义内容区 |
 | `zIndex` | `number` | 层级，默认 `1000` |
+| `focusRef` | `Ref<BoxRenderable>?` | 可选。传入时 Modal 面板变为可聚焦节点，供 App 显式转移焦点 |
 | `onAction` | `(key, action) => void` | 触发某个按钮时回调 |
 | `onClose` | `() => void` | Esc 关闭时回调 |
 | `listLength` | `number?` | 列表模式：可选项数量，提供后启用 ↑/↓/Enter 列表导航 |
@@ -156,7 +157,7 @@ Modal 有两种交互模式，由是否传入 `listLength` 决定：
 
 > 列表模式与 ActionBar 可同时存在：首次 `Tab`/`←`/`→` 只切换焦点，之后左右键才在 Action 之间移动，避免一次按键同时改变列表与按钮选择。
 
-**焦点模型**：Modal 不依赖元素焦点，而是使用 `@opentui/react` 的全局 `useKeyboard` 钩子订阅按键。打开期间 `App` 给 `InputBar` 传入 `disabled`，使底部 `textarea` `focused={false}`，从而不抢按键、不响应提交。
+**焦点模型**：Modal 通过 `@opentui/react` 的全局 `useKeyboard` 订阅按键；打开期间 App 给 `InputBar` 传入 `disabled` 并显式 `blur()` 输入框。TUI 传入 `focusRef` 时，Modal 面板本身成为 OpenTUI 的 focused renderable，列表项或 ActionBar 高亮表示 Modal 内的焦点。关闭后 App 调用输入框 `focus()`，恢复文本光标。`config-tui` 不传 `focusRef`，继续由表单自身的 `textarea` 持有焦点。
 
 **状态重置**：`open` 变为 `true`、`defaultActionKey` 变化或 Action 集合变化时，`selectedIndex` 会重置为 `findInitialIndex` 的结果；打开/关闭都会清除 ActionBar 焦点。
 
@@ -204,7 +205,7 @@ const modalActions: ModalAction[] = [
 - **布局间距以 1 个单位为基准**：面板底部/两侧内边距为 1、`paddingTop={0}`（标题贴紧顶部边框）；标题用底部分隔线紧贴文字，内容无额外内边距，避免间距叠加。
 - 复用现有 `theme.colors`，不引入新颜色体系。
 - 当前命令菜单由 `InputBar` 内联复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。`CommandPalette` 尚未接线。
-- 仅在 `open` 时拦截按键；关闭后 `InputBar` 自动恢复焦点。
+- 仅在 `open` 时拦截按键；关闭后 App 显式恢复 `InputBar` 焦点。
 
 ## API Key 无效错误框
 

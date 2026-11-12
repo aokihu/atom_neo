@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Ref } from "react";
 import { TextAttributes } from "@opentui/core";
+import type { BoxRenderable } from "@opentui/core";
 import { Modal } from "./modal";
 import type { ModalAction } from "./modal";
 import { useTheme } from "@atom-neo/tui-kit";
@@ -15,6 +17,7 @@ const SETTINGS_ACTIONS: ModalAction[] = [
 
 interface SettingsModalProps {
   open: boolean;
+  focusRef?: Ref<BoxRenderable>;
   url: string;
   adminToken?: string;
   serverInfo: ServerInfo;
@@ -24,7 +27,7 @@ interface SettingsModalProps {
 
 export { modelOptions, serverInfoFromConfig, buildRuntimePatch, headers } from "./settings/settings-model";
 
-export function SettingsModal({ open, url, adminToken, serverInfo, onSaved, onClose }: SettingsModalProps) {
+export function SettingsModal({ open, focusRef, url, adminToken, serverInfo, onSaved, onClose }: SettingsModalProps) {
   const { colors } = useTheme();
   const { config, values, setValues, error, load, patch, reset } = useSettingsConfig({
     open, url, adminToken, serverInfo, onSaved, onClose,
@@ -55,6 +58,7 @@ export function SettingsModal({ open, url, adminToken, serverInfo, onSaved, onCl
       placement="center"
       actions={SETTINGS_ACTIONS}
       defaultActionKey="save"
+      focusRef={focusRef}
       onClose={onClose}
       onAction={(key) => {
         if (key === "cancel") onClose();

@@ -66,6 +66,7 @@ export function Modal({
   defaultActionKey,
   children,
   zIndex = 1000,
+  focusRef,
   onAction,
   onClose,
   listLength,
@@ -209,6 +210,8 @@ export function Modal({
       zIndex={zIndex}
     >
       <box
+        ref={focusRef}
+        focusable={focusRef != null}
         position="absolute"
         {...layout}
         height={boxHeight}
