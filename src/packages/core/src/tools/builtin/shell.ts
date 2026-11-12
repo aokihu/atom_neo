@@ -56,6 +56,7 @@ function spawnShell(params: {
     stderr: "pipe",
     ...(params.abortSignal ? { signal: params.abortSignal } : {}),
     killSignal: "SIGKILL",
+    killTree: true,
   });
 }
 

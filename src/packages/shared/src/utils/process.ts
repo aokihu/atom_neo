@@ -24,6 +24,8 @@ export type SpawnProcessOptions = {
   stderr?: "ignore" | "inherit" | "pipe";
   signal?: AbortSignal;
   killSignal?: NodeJS.Signals | number;
+  /** Kill the child process group so piped descendants also exit. POSIX only. */
+  killTree?: boolean;
   onExit?: (exitCode: number | null, signalCode: NodeJS.Signals | null, error?: Error) => void;
 };
 
@@ -36,6 +38,7 @@ export function spawnProcess(command: readonly string[], options: SpawnProcessOp
   if (!executable) throw new Error("spawnProcess requires a command");
 
   let settled = false;
+  let killed = false;
   let exitCode: number | null = null;
   let signalCode: NodeJS.Signals | null = null;
   let resolveExited!: (code: number) => void;
@@ -43,18 +46,39 @@ export function spawnProcess(command: readonly string[], options: SpawnProcessOp
     resolveExited = resolve;
   });
 
+  const processGroup = options.killTree === true && process.platform !== "win32";
   const child = spawn(executable, args, {
     cwd: options.cwd,
     env: options.env,
     stdio: [options.stdin ?? "ignore", options.stdout ?? "pipe", options.stderr ?? "pipe"],
-    signal: options.signal,
-    killSignal: options.killSignal,
+    detached: processGroup,
     windowsHide: true,
   });
+
+  const kill = (signal: NodeJS.Signals | number = "SIGTERM"): void => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    killed = true;
+    if (processGroup && child.pid) {
+      try {
+        process.kill(-child.pid, signal);
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    }
+    child.kill(signal);
+  };
+
+  const onAbort = () => kill(options.killSignal ?? "SIGTERM");
+  if (options.signal) {
+    if (options.signal.aborted) onAbort();
+    else options.signal.addEventListener("abort", onAbort, { once: true });
+  }
 
   const settle = (code: number | null, signal: NodeJS.Signals | null, error?: Error): void => {
     if (settled) return;
     settled = true;
+    options.signal?.removeEventListener("abort", onAbort);
     exitCode = code;
     signalCode = signal;
     const numericCode = code
@@ -77,10 +101,10 @@ export function spawnProcess(command: readonly string[], options: SpawnProcessOp
     get pid() { return child.pid ?? -1; },
     get exitCode() { return exitCode ?? child.exitCode; },
     get signalCode() { return signalCode ?? child.signalCode; },
-    get killed() { return child.killed; },
+    get killed() { return killed || child.killed; },
     exited,
     stdout: child.stdout,
     stderr: child.stderr,
-    kill(signal) { child.kill(signal); },
+    kill,
   };
 }

@@ -38,6 +38,27 @@ describe("spawnProcess", () => {
     expect(proc.killed).toBe(true);
   });
 
+  test("killTree closes piped descendants with the parent", async () => {
+    const proc = spawnProcess(["sh", "-c", "sleep 10"], { stdout: "pipe", stderr: "pipe", killTree: true });
+    proc.kill("SIGKILL");
+    const result = await Promise.race([proc.exited, Bun.sleep(1_000).then(() => "timeout" as const)]);
+    expect(result).toBe(137);
+  });
+
+  test("abort signal kills the tree and resolves after close", async () => {
+    const controller = new AbortController();
+    const proc = spawnProcess(["sh", "-c", "sleep 10"], {
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: controller.signal,
+      killSignal: "SIGKILL",
+      killTree: true,
+    });
+    controller.abort();
+    const result = await Promise.race([proc.exited, Bun.sleep(1_000).then(() => "timeout" as const)]);
+    expect(result).toBe(137);
+  });
+
   test("invokes onExit once with the final status", async () => {
     const calls: Array<{ exitCode: number | null; signalCode: NodeJS.Signals | null }> = [];
     const proc = spawnProcess(["sh", "-c", "exit 4"], {
