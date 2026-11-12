@@ -26,7 +26,9 @@ Depends only on `@atom-neo/shared`, OpenTUI, and React.
 <ThemeProvider value={theme}>
 ```
 
-`getTheme(name)` falls back to `DEFAULT_THEME` for unknown names.
+`getTheme(name)` falls back to `DEFAULT_THEME` for unknown names and returns colors.
+`ThemeProvider` attaches a renderer-owned `SyntaxStyle`; components that highlight code or
+Markdown must be rendered under it.
 
 ## Modal keyboard map
 

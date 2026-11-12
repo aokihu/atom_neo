@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
+import { useRenderer } from "@opentui/react";
 import { RGBA, SyntaxStyle } from "@opentui/core";
+import type { NativeResourceOwner } from "@opentui/core";
 import { DEFAULT_THEME, isThemeName } from "@atom-neo/shared";
 import type { ThemeName } from "@atom-neo/shared";
 
@@ -18,7 +20,7 @@ export type ThemeColors = {
   status: { success: string; warning: string; error: string };
 };
 
-export type ThemeValue = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
+export type ThemeValue = { colors: ThemeColors; syntaxStyle?: SyntaxStyle };
 
 export const THEMES: Record<ThemeName, ThemeColors> = {
   "edex": {
@@ -97,12 +99,12 @@ export const THEMES: Record<ThemeName, ThemeColors> = {
 
 export function getTheme(name: string = DEFAULT_THEME): ThemeValue {
   const colors = isThemeName(name) ? THEMES[name] : THEMES[DEFAULT_THEME];
-  return { colors, syntaxStyle: buildSyntaxStyle(colors) };
+  return { colors };
 }
 
 function c(hex: string) { return RGBA.fromHex(hex); }
 
-function buildSyntaxStyle(t: ThemeColors): SyntaxStyle {
+function buildSyntaxStyle(t: ThemeColors, owner: NativeResourceOwner): SyntaxStyle {
   return SyntaxStyle.fromStyles({
     "markup.heading.1":    { fg: c(t.accent.brand), bold: true },
     "markup.heading.2":    { fg: c(t.accent.brand), bold: true },
@@ -139,7 +141,7 @@ function buildSyntaxStyle(t: ThemeColors): SyntaxStyle {
     "punctuation.bracket": { fg: c(t.text.bright) },
     "punctuation.delimiter": { fg: c(t.text.medium) },
     default:               { fg: c(t.text.primary) },
-  });
+  }, owner);
 }
 
 const ThemeContext = createContext<ThemeValue>(getTheme());
@@ -150,10 +152,11 @@ type ThemeProviderProps =
 
 /** Provide either a theme name (`theme`) or a precomputed TUI value (`value`). */
 export function ThemeProvider(props: ThemeProviderProps) {
-  const resolved = useMemo(
-    () => props.value ?? getTheme(props.theme ?? DEFAULT_THEME),
-    [props.value, props.theme],
-  );
+  const renderer = useRenderer();
+  const resolved = useMemo(() => {
+    const base = props.value ?? getTheme(props.theme ?? DEFAULT_THEME);
+    return base.syntaxStyle ? base : { ...base, syntaxStyle: buildSyntaxStyle(base.colors, renderer.nativeScene) };
+  }, [props.value, props.theme, renderer]);
   return <ThemeContext.Provider value={resolved}>{props.children}</ThemeContext.Provider>;
 }
 

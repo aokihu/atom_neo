@@ -469,7 +469,16 @@ runtime checks execute with the real Node 26 binary.
 
 - Workspace 共享依赖必须在根目录和各 package 中保持一致，OpenTUI 的
   `@opentui/core`、`@opentui/react` 与根目录 `overrides` 必须使用同一精确版本。
-- 当前 OpenTUI 基线为 `0.5.8`，运行时要求 `bun >= 1.4.0`。
+- 当前 OpenTUI 基线为 `0.8.4`，运行时要求 `bun >= 1.4.0` 与 `node >= 26.4.0`。
+- OpenTUI `0.8.x` 的迁移要求：ScrollBox 的 `wrapper` / `viewport` / `content` /
+  scrollbar 是 native facade，不再是普通 renderable；自定义 renderable 使用
+  `renderSelf()` / `renderBefore` / `renderAfter`，旧 `render()` / `updateLayout()`
+  已移除；零宽高节点不再按 1 cell 绘制。升级后必须运行 TUI 渲染、焦点、
+  ScrollBox 与 Node TUI smoke。
+- 本次升级落地：`SyntaxStyle` 必须绑定 renderer 的 native owner，因此由
+  `ThemeProvider` 使用 `useRenderer()` 创建；`getTheme()` 只返回颜色，供无需高亮的
+  测试与默认 context 使用。固定高度 Modal 的标题、ActionBar 与 hint 设置
+  `flexShrink={0}`，内容区允许收缩，避免 0.8 布局把标题压成 0 高。
 - `opentui-spinner` 仅兼容 OpenTUI `0.3.x` 与 TypeScript `5.x`，不再使用；加载状态复用
   `@atom-neo/tui` 自有的 `BounceBarSpinner`。
 - TypeScript `7.x` 不再支持 `baseUrl`；路径别名直接通过 `paths` 解析。

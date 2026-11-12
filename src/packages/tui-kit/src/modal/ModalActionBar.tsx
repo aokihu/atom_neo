@@ -12,6 +12,7 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
   if (actions.length === 0) return null;
   return (
     <box
+      flexShrink={0}
       flexDirection="row"
       justifyContent="flex-end"
       paddingTop={1}

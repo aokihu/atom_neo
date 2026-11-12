@@ -53,8 +53,8 @@
     "prepare": "bash scripts/setup-git-hooks.sh"
   },
   "dependencies": {
-    "@opentui/core": "0.5.8",
-    "@opentui/react": "0.5.8",
+    "@opentui/core": "0.8.4",
+    "@opentui/react": "0.8.4",
     "react": "^19.2.8",
     "ws": "^8.22.2"
   },
@@ -81,7 +81,7 @@
     "zustand": "^5.0.15"
   },
   "overrides": {
-    "@opentui/core": "0.5.8",
-    "@opentui/react": "0.5.8"
+    "@opentui/core": "0.8.4",
+    "@opentui/react": "0.8.4"
   }
 }

@@ -304,7 +304,7 @@ Dependencies shared by the root application and workspace packages must stay on
 one compatible version line. The current baseline is `ai` 7.0.169 with
 `@ai-sdk/deepseek` 3.0.84, `@ai-sdk/mcp` 2.0.96, and the matching
 `@ai-sdk/openai` / `@ai-sdk/anthropic` / `@ai-sdk/openai-compatible` releases,
-plus OpenTUI 0.5.8.
+plus OpenTUI 0.8.4.
 Workspace manifests may declare these dependencies directly, but must not
 introduce a second major or minor line.
 
@@ -442,8 +442,8 @@ src/packages/tui/
     "docs:typecheck": "tsc -p tsconfig.docs.json"
   },
   "dependencies": {
-    "@opentui/core": "0.5.8",
-    "@opentui/react": "0.5.8",
+    "@opentui/core": "0.8.4",
+    "@opentui/react": "0.8.4",
     "react": "^19.2.8",
     "ws": "^8.22.2"
   },

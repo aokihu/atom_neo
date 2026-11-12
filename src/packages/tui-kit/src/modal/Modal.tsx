@@ -225,13 +225,13 @@ export function Modal({
         backgroundColor={colors.bg.popup}
       >
         {title && (
-          <box {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
+          <box flexShrink={0} {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
             <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>
               {title}
             </text>
           </box>
         )}
-        <box flexGrow={1} flexDirection="column" paddingX={contentPaddingX}>
+        <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>
           {children}
         </box>
         <ModalActionBar
@@ -240,7 +240,7 @@ export function Modal({
           focused={!isList || actionFocus}
         />
         {hint && (
-          <box paddingTop={1}>
+          <box flexShrink={0} paddingTop={1}>
             <text fg={colors.text.muted}>{hint}</text>
           </box>
         )}

@@ -34,7 +34,7 @@ export function ChatView({
 
   return (
     <scrollbox flexGrow={1} flexBasis={0} stickyScroll stickyStart="bottom" paddingTop={1}>
-      {view.messages.map(msg => (
+      {syntaxStyle && view.messages.map(msg => (
         view.completedTools.attachedGroupIds.has(msg.id)
           ? null
           : (
