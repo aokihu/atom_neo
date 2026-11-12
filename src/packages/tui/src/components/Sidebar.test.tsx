@@ -3,19 +3,101 @@ import { act } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
 import type { ScrollBoxRenderable } from "@opentui/core";
-import { RoundsSection, TodoSection } from "./Sidebar";
+import { RoundsSection, Sidebar, TodoSection } from "./Sidebar";
 import { useChatStore } from "../stores/chat";
-import type { TodoItem } from "../types";
+import type { Message, TodoItem } from "../types";
 
 const todos = (active: number, count = 10): TodoItem[] => Array.from({ length: count }, (_, index) => ({
   content: `第${index + 1}项：文明发展的历史与社会变迁，需要保留完整文字并正确换行。`,
   status: index === active ? "in_progress" : index < active ? "completed" : "pending",
   priority: "medium",
 }));
+const toolMessages: Message[] = [
+  { role: "user", content: "run tools", id: "u", timestamp: 1 },
+  {
+    role: "tool-group",
+    id: "tools",
+    timestamp: 2,
+    collapsed: false,
+    entries: [
+      { toolCallId: "a", toolName: "read", phase: "done" },
+      { toolCallId: "b", toolName: "shell", phase: "executing" },
+      { toolCallId: "c", toolName: "webfetch", phase: "error" },
+      { toolCallId: "d", toolName: "todowrite", phase: "preparing" },
+    ],
+  },
+];
 beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
 afterEach(() => {
-  useChatStore.setState({ todoItems: [], rounds: null, telemetryOnline: false });
+  useChatStore.setState({
+    todoItems: [],
+    rounds: null,
+    telemetryOnline: false,
+    messages: [],
+    toolInfos: [],
+    mcpServers: [],
+    contextTokens: 0,
+  });
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = false;
+});
+
+test("SIDEBAR renders context, tools, MCP and network telemetry from store state", async () => {
+  const originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async () => new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+  const setup = await createTestRenderer({ width: 40, height: 60 });
+  const root = createRoot(setup.renderer);
+  try {
+    useChatStore.setState({
+      telemetryOnline: true,
+      contextTokens: 5_000,
+      rounds: { goalId: "g", globalUsed: 40, globalAllowance: 100, localUsed: 2, localLimit: 5 },
+      messages: toolMessages,
+      toolInfos: [
+        { name: "read", source: "builtin" },
+        { name: "shell", source: "builtin" },
+        { name: "mcp_read", source: "mcp" },
+      ],
+      mcpServers: [
+        { name: "alpha", online: true, toolCount: 1 },
+        { name: "beta", online: false, toolCount: 1 },
+        { name: "gamma", online: true, toolCount: 1 },
+        { name: "delta", online: false, toolCount: 1 },
+        { name: "epsilon", online: true, toolCount: 1 },
+      ],
+      todoItems: todos(0, 2),
+    });
+    await act(async () => root.render(<Sidebar contextLimit={10_000} url="http://127.0.0.1:1" />));
+    await setup.renderOnce();
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("CONTEXT");
+    expect(frame).toContain("50%");
+    expect(frame).toContain("5,000 / 10,000");
+    expect(frame).toContain("40 / 100");
+    expect(frame).toContain("WINDOW");
+    expect(frame).toContain("2 / 5");
+    expect(frame).toContain("SCHEDULES");
+    expect(frame).toContain("TOOLS");
+    expect(frame).toContain("2 RUN");
+    expect(frame).toContain("shell");
+    expect(frame).toContain("webfetch");
+    expect(frame).toContain("todowrite");
+    expect(frame).not.toContain("read");
+    expect(frame).toContain("RUN");
+    expect(frame).toContain("ERR");
+    expect(frame).toContain("3/5");
+    expect(frame).toContain("alpha");
+    expect(frame).toContain("ONLINE");
+    expect(frame).toContain("OFFLINE");
+    expect(frame).not.toContain("epsilon");
+    expect(frame).toContain("NETWORK");
+    expect(frame).toContain("WEBFETCH");
+    expect(frame).toContain("SUCCESS");
+    expect(frame).toContain("FAILED");
+  } finally {
+    await act(async () => root.unmount());
+    setup.renderer.destroy();
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("TODO follows wrapped active rows, preserves manual scroll, and supports keyboard and mouse", async () => {
