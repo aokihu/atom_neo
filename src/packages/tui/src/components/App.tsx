@@ -4,7 +4,7 @@ import { useChat } from "../hooks/useChat";
 import type { ChatClientError } from "../hooks/useChat";
 import { useChatStore } from "../stores/chat";
 import { ThemeProvider, getTheme } from "@atom-neo/tui-kit";
-import type { ServerInfo, Message, ToolGroupMessage } from "../types";
+import type { ServerInfo, ToolGroupMessage } from "../types";
 import { StatusBar } from "./StatusBar";
 import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
@@ -12,10 +12,9 @@ import { InputBar } from "./InputBar";
 import { PanelTitle } from "./PanelTitle";
 import { RuntimeSidebar } from "./RuntimeSidebar";
 import { Sidebar } from "./Sidebar";
-import { Modal } from "./modal";
-import type { ModalAction } from "./modal";
+import { AppModal } from "./app/AppModal";
+import type { ActiveModal } from "./app/app-modal-config";
 import { useInputHistory } from "../stores/inputHistory";
-import { summarizeToolGroups, ToolDetailsContent } from "./ToolMessageBox";
 import { SettingsModal } from "./SettingsModal";
 
 const TELEMETRY_MIN_WIDTH = 100;
@@ -29,27 +28,6 @@ export function resolveTuiLayout(width: number): TuiLayoutMode {
   if (width >= TELEMETRY_MIN_WIDTH) return "medium";
   return "compact";
 }
-
-type ActiveModal =
-  | { kind: "confirm-clear" }
-  | { kind: "confirm-quit" }
-  | { kind: "error"; title: string; message: string }
-  | { kind: "tool-details"; groups: ToolGroupMessage[] }
-  | { kind: "settings" }
-  | null;
-
-const MODAL_ACTIONS: ModalAction[] = [
-  { key: "cancel", label: "Cancel", role: "cancel" },
-  { key: "ok", label: "OK", role: "confirm", variant: "primary" },
-];
-
-const ERROR_MODAL_ACTIONS: ModalAction[] = [
-  { key: "ok", label: "OK", role: "confirm", variant: "primary" },
-];
-
-const TOOL_MODAL_ACTIONS: ModalAction[] = [
-  { key: "close", label: "Close", role: "confirm", variant: "primary" },
-];
 
 const HELP_TEXT = `Available commands:
   /quit     Exit Atom Neo
@@ -109,12 +87,6 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
   const handleCancelTask = useCallback(() => {
     if (!cancel()) setTaskHint(null);
   }, [cancel]);
-  const toolModalSummary = activeModal?.kind === "tool-details"
-    ? summarizeToolGroups(activeModal.groups)
-    : null;
-  const toolModalTitle = toolModalSummary
-    ? `TOOLS ${toolModalSummary.success}/${toolModalSummary.total}`
-    : "";
 
   return (
     <ThemeProvider value={theme}>
@@ -146,51 +118,13 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
           {showTelemetry && <Sidebar contextLimit={contextLimit} url={url} adminToken={adminToken} />}
         </box>
         <StatusLine hint={taskHint ?? exitHint} />
-        {activeModal && activeModal.kind !== "settings" && (
-          <Modal
-            open
-            title={activeModal.kind === "confirm-clear"
-              ? "Clear conversation?"
-              : activeModal.kind === "confirm-quit"
-                ? "Exit Atom Neo?"
-                : activeModal.kind === "tool-details"
-                  ? toolModalTitle
-                  : activeModal.title}
-            placement="center"
-            width={activeModal.kind === "tool-details" ? 84 : 56}
-            height={activeModal.kind === "tool-details" ? 20 : undefined}
-            actions={activeModal.kind === "error"
-              ? ERROR_MODAL_ACTIONS
-              : activeModal.kind === "tool-details"
-                ? TOOL_MODAL_ACTIONS
-                : MODAL_ACTIONS}
-            defaultActionKey={activeModal.kind === "error"
-              ? "ok"
-              : activeModal.kind === "tool-details"
-                ? "close"
-                : "cancel"}
-            onClose={closeModal}
-            onAction={(key) => {
-              if (activeModal.kind === "error") { closeModal(); return; }
-              if (activeModal.kind === "tool-details") { closeModal(); return; }
-              if (key === "cancel") { closeModal(); return; }
-              if (activeModal.kind === "confirm-clear") { clearMessages(); closeModal(); return; }
-              if (activeModal.kind === "confirm-quit") { closeModal(); onQuit?.(); }
-            }}
-          >
-            {activeModal.kind === "tool-details"
-              ? <ToolDetailsContent groups={activeModal.groups} />
-              : (
-                <text fg={theme.colors.text.secondary}>
-                  {activeModal.kind === "confirm-clear"
-                    ? "This will remove all messages from the current TUI view."
-                    : activeModal.kind === "confirm-quit"
-                      ? "The current terminal UI session will be closed."
-                      : activeModal.message}
-                </text>
-              )}
-          </Modal>
-        )}
+        <AppModal
+          modal={activeModal}
+          textColor={theme.colors.text.secondary}
+          onClose={closeModal}
+          onClearMessages={clearMessages}
+          onQuit={onQuit}
+        />
         <SettingsModal
           open={activeModal?.kind === "settings"}
           url={url}

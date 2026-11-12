@@ -44,7 +44,6 @@ describe("beginEdit / beginNewProvider", () => {
     expect(pending?.isNew).toBe(false);
     expect(pending?.edit).toEqual(deepseekEdit);
     expect(next.editedProviders.deepseek).toEqual(deepseekEdit);
-    expect(next.step).toBe(1);
   });
 
   test("adding a new provider does not enter editedProviders yet", () => {
@@ -109,18 +108,15 @@ describe("finalizeEdit", () => {
       thinking: "adaptive",
     });
     expect(final!.envKeys).toEqual({ VOLENGINE_API_KEY: "sk-vol" });
-    expect(final!.step).toBe(1); // config: back to the providers list
   });
 
-  test("first-run finalize advances to the next step", () => {
+  test("first-run finalize commits the edit", () => {
     const state = firstRunState();
     const { state: s1, pending } = beginEdit(state, "deepseek");
     const { state: s2, pending: p2 } = updatePendingApiKey(s1, pending!, "sk-x");
-    expect(s2.step).toBe(2); // models step
 
     const final = finalizeEdit(s2, p2, { models: ["deepseek-v4-flash"], thinking: "disabled" });
 
-    expect(final!.step).toBe(3);
     expect(final!.editedProviders.deepseek.apiKey).toBe("sk-x");
     expect(final!.envKeys).toEqual({ DEEPSEEK_API_KEY: "sk-x" });
   });
@@ -449,7 +445,6 @@ describe("commit (first-run mode)", () => {
 describe("buildInitialState", () => {
   test("first-run mode starts from defaults without touching the sandbox", () => {
     const state = buildInitialState("first-run", makeSandbox());
-    expect(state.step).toBe(0);
     expect(state.provider).toBe("deepseek");
     expect(state.editedProviders).toEqual({});
     expect(state.envKeys).toEqual({});
