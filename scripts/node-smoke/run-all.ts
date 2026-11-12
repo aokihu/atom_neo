@@ -1,12 +1,12 @@
 /**
  * Node smoke orchestrator (S10-B1).
  *
- * Runs the build boundary check, the platform capabilities smoke and the release
- * artifact smoke, all under Node >= 26. The conversation smoke reuses the S9
- * fake-model script.
+ * Runs the build boundary check, the platform capabilities smoke, the Node TUI
+ * render smoke and the release artifact smoke, all under Node >= 26. The
+ * conversation smoke reuses the S9 fake-model script.
  *
  * Usage:
- *   bun scripts/node-smoke/run-all.ts          # build:node + build check + platform + release + conversation
+ *   bun scripts/node-smoke/run-all.ts          # build:node + build check + platform + TUI render + release + conversation
  *   bun scripts/node-smoke/run-all.ts platform # platform only
  *   bun scripts/node-smoke/run-all.ts release  # build:node + release artifact only
  */
@@ -20,6 +20,7 @@ const PLATFORM = join(ROOT, "scripts/node-smoke/platform.ts");
 const CONVERSATION = join(ROOT, "scripts/node-smoke/core-conversation.ts");
 const RELEASE = join(ROOT, "scripts/node-smoke/release.ts");
 const BUILD_CHECK = join(ROOT, "scripts/node-smoke/build.ts");
+const TUI_RENDER = join(ROOT, "scripts/node-smoke/tui-render.ts");
 const WATCHDOG_MS = 240_000;
 
 let steps = 0;
@@ -67,6 +68,10 @@ function main(): void {
 
     if (mode === "all" || mode === "platform") {
       runNodeBundle("platform", PLATFORM, join(temp, "platform.mjs"));
+    }
+
+    if (mode === "all") {
+      run("tui-render", ["node", TUI_RENDER]);
     }
 
     if (mode === "all" || mode === "release") {

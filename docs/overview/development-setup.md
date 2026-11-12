@@ -178,6 +178,9 @@ node /tmp/atom-node-conversation-smoke/core-conversation.mjs
 
 # 4) Bun client -> Node Core entry bundle (cross-runtime attach + session.ready)
 bun scripts/node-smoke/cross-runtime.ts
+
+# 5) Node TUI render: OpenTUI test renderer, border + text frame under Node
+node scripts/node-smoke/tui-render.ts
 ```
 
 The fake conversation smoke does not call any external provider: it starts a local
@@ -323,8 +326,8 @@ Package layout:
 tarball contents, runtime dependency rewrite, installation into a temp project,
 `--help`, `npx --no-install atom --help`, and a real installed Core
 health/SIGTERM cycle. The TUI entrypoint import is covered by
-`scripts/node-smoke/build.ts`; an automated TUI render test under Node remains a
-follow-up.
+`scripts/node-smoke/build.ts`; a real Node TUI render smoke is covered by
+`scripts/node-smoke/tui-render.ts` and included in `smoke:node`.
 
 ---
 
