@@ -1,10 +1,10 @@
-import { BaseService } from "./base-service";
-import { countRelatedMemories, linkMemories, traverseMemories } from "./memory/memory-graph";
-import { searchMemories } from "./memory/memory-query";
-import { MemoryStore } from "./memory/memory-store";
-import type { MemoryKind, MemoryNode, MemorySaveOptions, MemoryTraversalNode } from "./memory/memory-types";
+import { BaseService } from "../base/base-service";
+import { countRelatedMemories, linkMemories, traverseMemories } from "./memory-graph";
+import { searchMemories } from "./memory-query";
+import { MemoryStore } from "./memory-store";
+import type { MemoryKind, MemoryNode, MemorySaveOptions, MemoryTraversalNode } from "./memory-types";
 
-export type { MemoryKind, MemoryNode, MemorySaveOptions, MemoryTraversalNode } from "./memory/memory-types";
+export type { MemoryKind, MemoryNode, MemorySaveOptions, MemoryTraversalNode } from "./memory-types";
 
 export class MemoryService extends BaseService {
   readonly name = "memory";

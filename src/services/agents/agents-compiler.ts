@@ -1,4 +1,4 @@
-import { BaseService } from "./base-service";
+import { BaseService } from "../base/base-service";
 import { createHash } from "node:crypto";
 import { watch, readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
@@ -6,7 +6,7 @@ import { generateText } from "ai";
 import { createLanguageModel, providerOptionsFor } from "@atom-neo/core";
 import type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
 import compilerSystemPrompt from "@assets/prompts/agents_compiler_system_prompt.md";
-import type { RuntimeService } from "./runtime-service";
+import type { RuntimeService } from "../runtime/runtime-service";
 
 const MAX_HISTORY = 5;
 

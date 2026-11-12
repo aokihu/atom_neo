@@ -39,8 +39,8 @@ export type SkillLoadResult = { ok: boolean; sections?: string[]; error?: string
 
 | 文件 | 说明 |
 |------|------|
-| `src/services/skill-parser.ts` | `SkillParser` 接口 + `MechanicalParser` 实现 |
-| `src/services/skill-parser.test.ts` | 测试 |
+| `src/services/skill/skill-parser.ts` | `SkillParser` 接口 + `MechanicalParser` 实现 |
+| `src/services/skill/skill-parser.test.ts` | 测试 |
 
 ### 测试用例（先写）
 
@@ -75,8 +75,8 @@ class MechanicalParser implements SkillParser {
 
 | 文件 | 说明 |
 |------|------|
-| `src/services/skill-service.ts` | `SkillService extends BaseService` |
-| `src/services/skill-service.test.ts` | 测试 |
+| `src/services/skill/skill-service.ts` | `SkillService extends BaseService` |
+| `src/services/skill/skill-service.test.ts` | 测试 |
 
 ### 测试用例（先写）
 
@@ -196,7 +196,7 @@ export type SkillServiceLike = {
 
 | 文件 | 变更 |
 |------|------|
-| `src/services/service-manager.ts` | 无需改（通用 get<T>） |
+| `src/services/base/service-manager.ts` | 无需改（通用 get<T>） |
 | `src/main.ts` | 注册 `sm.register("skill", new SkillService({ sandbox }))` |
 | `src/packages/core/src/server.ts` | `sm.get("skill")` → 注册 tools → 传入 pipeline |
 | `src/packages/core/src/pipelines/conversation/elements/types.ts` | `ConversationFlowState` 追加 `skillContext?: string` |

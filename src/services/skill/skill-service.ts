@@ -1,4 +1,4 @@
-import { BaseService } from "./base-service";
+import { BaseService } from "../base/base-service";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { MechanicalParser } from "./skill-parser";

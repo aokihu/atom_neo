@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { SqliteDatabase } from "./sqlite-database";
+import { SqliteDatabase } from "../storage/sqlite-database";
 import { parseMemorySearchTerms } from "@atom-neo/shared";
 import { MemoryService } from "./memory-service";
 import { DAY_MS } from "./memory-ranking";

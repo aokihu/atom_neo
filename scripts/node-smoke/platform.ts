@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { Logger } from "@atom-neo/shared";
 import { loadConfig } from "../../src/bootstrap/config";
 import { loadEnv } from "../../src/bootstrap/env";
-import { MemoryService } from "../../src/services/memory-service";
+import { MemoryService } from "../../src/services/memory/memory-service";
 import { BackgroundShellService } from "../../src/packages/core/src/tools/builtin/shell";
 import type { BackgroundShellCompletion } from "../../src/packages/core/src/tools/builtin/shell";
 import { createGlobTool, createSandbox } from "../../src/packages/core/src/tools/builtin/fs";

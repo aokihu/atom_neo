@@ -417,7 +417,7 @@ if (input.contextData) parts.push(input.contextData);
 
 ```typescript
 // main.ts
-import { SkillService } from "./services/skill-service";
+import { SkillService } from "./services/skill/skill-service";
 
 const sm = new ServiceManager({ logger });
 const compiler = new AgentsCompilerService({ runtime });
@@ -530,8 +530,8 @@ export type ConversationPipelineDeps = {
 | 文件 | 包 | 说明 |
 |------|-----|------|
 | `shared/src/types/skill.ts` | `@atom-neo/shared` | SkillDef, SkillListItem, SkillSectionMeta, SkillLoadResult, SkillServiceLike 类型 |
-| `services/skill-service.ts` | app-level | SkillService — extends BaseService, 生命周期管理，持 parser |
-| `services/skill-parser.ts` | app-level | MechanicalParser + SkillParser 接口（为 LLM 解析预留） |
+| `services/skill/skill-service.ts` | app-level | SkillService — extends BaseService, 生命周期管理，持 parser |
+| `services/skill/skill-parser.ts` | app-level | MechanicalParser + SkillParser 接口（为 LLM 解析预留） |
 | `core/src/skills/types.ts` | `@atom-neo/core` | SkillServiceLike 接口定义 |
 | `core/src/tools/builtin/skill.ts` | `@atom-neo/core` | 5 个 tool 定义函数 (createSkillTools) |
 | `core/src/pipelines/conversation/elements/inject-skill-context.ts` | `@atom-neo/core` | 新 Pipeline Element |

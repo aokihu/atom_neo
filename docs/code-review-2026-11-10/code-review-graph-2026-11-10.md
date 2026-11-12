@@ -467,8 +467,8 @@ graph LR
 |---|---|---|
 | CR-COR-01 | `config-tui/wizard-logic.ts` | S1 |
 | CR-COR-02 | `core/server.ts` | S1 |
-| CR-COR-03 | `services/memory-service.ts` | S1 |
-| CR-COR-04 | `services/service-manager.ts`, `base-service.ts` | S1 |
+| CR-COR-03 | `services/memory/memory-service.ts` | S1 |
+| CR-COR-04 | `services/base/service-manager.ts`, `base-service.ts` | S1 |
 | CR-COR-05 | `shared/log/sinks/pipe.ts` | S1 |
 | CR-COR-06 | `core/server.ts` | S1 |
 | CR-COR-07 | `pipelines/shared/index.ts` | S1 |

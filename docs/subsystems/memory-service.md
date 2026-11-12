@@ -15,7 +15,7 @@
 
 - **SQLite 单一数据源** — 正文、生命周期和图关系在同一事务中更新
 - **SQLite FTS5 统一搜索** — `trigram` 负责三字符以上子串和 BM25 排序，短词使用索引表上的 `instr()` 兜底
-- **Node 内置 SQLite** — `import { DatabaseSync } from "node:sqlite"`，经 `services/sqlite-database.ts` 包装（参数归一化、事务 savepoint）
+- **Node 内置 SQLite** — `import { DatabaseSync } from "node:sqlite"`，经 `services/storage/sqlite-database.ts` 包装（参数归一化、事务 savepoint）
 
 ## 2. Schema
 
@@ -248,7 +248,7 @@ LLM 调用 intent: { action: "retain_memory", mem_id: "2d4bed" }
 
 ## 10. 模块布局（v1.24.1）
 
-`MemoryService` 仍是唯一公开 facade（`src/services/memory-service.ts`），内部实现位于 `src/services/memory/`：
+`MemoryService` 仍是唯一公开 facade（`src/services/memory/memory-service.ts`），内部实现位于 `src/services/memory/`：
 
 | 文件 | 职责 |
 |------|------|

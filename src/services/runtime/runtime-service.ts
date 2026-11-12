@@ -1,10 +1,10 @@
 import { inferProviderProtocol } from "@atom-neo/shared";
 import type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
-import type { Mode } from "./types";
+import type { Mode } from "../base/types";
 import {
   ConfigSchema, RuntimeConfigSchema, mergeConfig, saveRuntimeConfig, deleteRuntimeConfig,
-} from "../bootstrap/config";
-import type { AppConfig, LoadedConfig, RuntimeConfig } from "../bootstrap/config";
+} from "../../bootstrap/config";
+import type { AppConfig, LoadedConfig, RuntimeConfig } from "../../bootstrap/config";
 
 export type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
 

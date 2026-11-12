@@ -265,7 +265,7 @@ TUI 的 Runtime / Conversation / Telemetry 响应式布局对所有主题生效�
 ## 7. 运行时访问与调整
 
 ```typescript
-// RuntimeService (src/services/runtime-service.ts)
+// RuntimeService (src/services/runtime/runtime-service.ts)
 const runtime = sm.get("runtime");
 
 runtime.maxTokens;    // transport.maxOutputTokens

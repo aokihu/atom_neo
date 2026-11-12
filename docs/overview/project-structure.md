@@ -22,8 +22,14 @@ atom_neo/
 │   ├── main.ts               # Application entry point
 │   ├── version.ts            # App version
 │   ├── bootstrap/            # App startup layer (CLI/config/env/menu/backup)
-│   ├── services/             # App-level services (Memory, Skill, Network, Agents)
-│   │   └── network/          # Shared domain scheduling + WebFetch
+│   ├── services/             # App-level services
+│   │   ├── base/             # BaseService, ServiceManager, shared service types
+│   │   ├── memory/           # Memory facade, SQLite store, FTS5, ranking, graph
+│   │   ├── network/          # Shared domain scheduling + WebFetch
+│   │   ├── skill/            # Skill service + SKILL.md parser
+│   │   ├── agents/           # Agent definition compiler
+│   │   ├── runtime/          # Runtime resource coordination
+│   │   └── storage/          # node:sqlite thin wrapper
 │   ├── assets/               # Static assets (bundled with app)
 │   │   └── prompts/          # AGENTS.md compiler/template prompts
 │   └── packages/

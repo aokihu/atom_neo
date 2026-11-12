@@ -1,6 +1,6 @@
-import type { MemoryKind } from "../memory-ranking";
+import type { MemoryKind } from "./memory-ranking";
 
-export type { MemoryKind } from "../memory-ranking";
+export type { MemoryKind } from "./memory-ranking";
 
 export type MemoryNode = {
   id: string;

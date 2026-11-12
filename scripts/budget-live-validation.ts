@@ -7,8 +7,8 @@ import { startCore } from "../src/packages/core/src/server";
 import { Logger } from "@atom-neo/shared";
 import { loadEnv } from "../src/bootstrap/env";
 import { loadConfig } from "../src/bootstrap/config";
-import { RuntimeService } from "../src/services/runtime-service";
-import { MemoryService } from "../src/services/memory-service";
+import { RuntimeService } from "../src/services/runtime/runtime-service";
+import { MemoryService } from "../src/services/memory/memory-service";
 import { NetworkService } from "../src/services/network/network-service";
 
 const source = join(process.cwd(), "sandbox");

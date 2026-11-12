@@ -5,7 +5,7 @@ import type {
   WebFetchRequest,
   WebFetchResponse,
 } from "@atom-neo/shared";
-import { BaseService } from "../base-service";
+import { BaseService } from "../base/base-service";
 import { DomainScheduler } from "./domain-scheduler";
 import type { DomainSchedulerOptions } from "./domain-scheduler";
 import { executeWebFetch } from "./web-fetch";

@@ -87,7 +87,7 @@ export const S12_TARGETS: readonly SizeTarget[] = [
   { file: "src/packages/core/src/pipelines/conversation/elements/stream/tool-runtime-mcp.ts", maxLines: 140 },
   { file: "src/packages/core/src/pipelines/conversation/elements/stream/tool-governance-runtime.ts", maxLines: 120 },
   { file: "src/packages/core/src/pipelines/conversation/elements/stream/tool-result-status.ts", maxLines: 100 },
-  { file: "src/services/memory-service.ts", maxLines: 180 },
+  { file: "src/services/memory/memory-service.ts", maxLines: 180 },
   { file: "src/services/memory/memory-store.ts", maxLines: 260 },
   { file: "src/services/memory/memory-query.ts", maxLines: 170 },
   { file: "src/services/memory/memory-graph.ts", maxLines: 130 },

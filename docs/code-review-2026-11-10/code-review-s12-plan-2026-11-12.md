@@ -364,8 +364,8 @@ S12-H 在 A..G 全部完成后
 - **复杂度**: 简单（2h）
 - **目标**: 记录 `sqlite_master` 的 table/index/trigger、FTS5 列、搜索结果 id 顺序、traverse BFS 顺序；归一化时间戳。
 - **文件**:
-  - 新增 `packages/services/memory-characterization.test.ts`（实际位于 `src/services/`）
-  - 复用 `src/services/memory-service.test.ts`
+  - 新增 `packages/services/memory/memory-characterization.test.ts`（实际位于 `src/services/`）
+  - 复用 `src/services/memory/memory-service.test.ts`
 - **依赖**: 无
 - **行为快照/测试**:
   - `SELECT type,name,sql FROM sqlite_master ORDER BY type,name` 快照（SQL 可格式化，但列/trigger 名/顺序不变）。
@@ -382,7 +382,7 @@ S12-H 在 A..G 全部完成后
 - **文件**:
   - 新增 `packages/services/memory/memory-types.ts`
   - 新增 `packages/services/memory/README.md`
-  - `src/services/memory-service.ts`
+  - `src/services/memory/memory-service.ts`
 - **依赖**: B1
 - **行为快照/测试**: 现有 `memory-service.test.ts`；typecheck。
 - **行为风险**: 低；纯类型。
@@ -395,7 +395,7 @@ S12-H 在 A..G 全部完成后
 - **目标**: `MemoryStore` 负责 open/close、DDL、列迁移、FTS trigger、legacy 迁移、`loadNode`、事务、raw query 执行；SQL 逐字保留。
 - **文件**:
   - 新增 `packages/services/memory/memory-store.ts`
-  - `src/services/memory-service.ts`
+  - `src/services/memory/memory-service.ts`
 - **依赖**: B2
 - **行为快照/测试**: B1 schema dump；现有 memory 测试；新增 store 单测（open/close、重复 start、row 映射、FTS rebuild）。
 - **行为风险**: 中（DDL/迁移）。
@@ -407,7 +407,7 @@ S12-H 在 A..G 全部完成后
 - **复杂度**: 中等（3h）
 - **目标**: `MemoryService` 的 `onStart/onStop/#dbHandle/#initDb/#migrateLegacyContent/#loadNode` 改为 store 调用；公共 API 签名不变。
 - **文件**:
-  - `src/services/memory-service.ts`
+  - `src/services/memory/memory-service.ts`
   - `packages/services/memory/memory-store.ts`
 - **依赖**: B3
 - **行为快照/测试**: B1；`memory-service.test.ts` 全量；start/stop 幂等。
@@ -421,7 +421,7 @@ S12-H 在 A..G 全部完成后
 - **目标**: 把 `search` 的 FTS/短词候选、过期/supersedes 过滤、覆盖率、rankOrder、final score、retrieval 记录移到 `memory-query.ts`。
 - **文件**:
   - 新增 `packages/services/memory/memory-query.ts`
-  - `src/services/memory-service.ts`
+  - `src/services/memory/memory-service.ts`
 - **依赖**: B4
 - **行为快照/测试**: B1 搜索顺序；现有 memory 测试；新增 query 单测（长词/短词/空/limit/kind 过滤）。
 - **行为风险**: 中（排序/过滤）。
@@ -434,7 +434,7 @@ S12-H 在 A..G 全部完成后
 - **目标**: 把 `traverse`、`link`、`countRelated`、neighbor 查询/质量排序移到 `memory-graph.ts`。
 - **文件**:
   - 新增 `packages/services/memory/memory-graph.ts`
-  - `src/services/memory-service.ts`
+  - `src/services/memory/memory-service.ts`
 - **依赖**: B4
 - **行为快照/测试**: B1 traverse 顺序；现有 memory 测试；新增 graph 单测（缺失 id、重复 link、countRelated 过期过滤）。
 - **行为风险**: 中（BFS/排序）。
@@ -446,11 +446,11 @@ S12-H 在 A..G 全部完成后
 - **复杂度**: 简单（2h）
 - **目标**: 为 `memory-store/query/graph` 增加直接单测；`memory-service.ts` 只保留 facade/公共 API；确认无重复 SQL。
 - **文件**:
-  - `src/services/memory-service.ts`
+  - `src/services/memory/memory-service.ts`
   - `packages/services/memory/*.test.ts`
-  - `src/services/memory-service.test.ts`
+  - `src/services/memory/memory-service.test.ts`
 - **依赖**: B3/B5/B6
-- **行为快照/测试**: B1 + 全量 memory 测试；`rg '#initDb|#loadNode|#memoryQuality' src/services/memory-service.ts` 为空。
+- **行为快照/测试**: B1 + 全量 memory 测试；`rg '#initDb|#loadNode|#memoryQuality' src/services/memory/memory-service.ts` 为空。
 - **行为风险**: 低；纯清理/测试。
 - **回滚**: revert 单 commit。
 - **DoD**: `memory-service.ts` ≤180 行；store/query/graph 各自 ≤预算；schema/search/traverse 快照不变。
@@ -1447,7 +1447,7 @@ S12-H 在 A..G 全部完成后
 - **行为快照/测试**:
   - `stream-characterization`、memory schema/search、context snapshot、persistence dir/JSONL、chat store、wizard view。
   - `bun test src/packages/core/src/pipelines/conversation`
-  - `bun test src/services/memory-service.test.ts`
+  - `bun test src/services/memory/memory-service.test.ts`
   - `bun test src/packages/core/src/context src/packages/core/src/session`
   - `bun test src/packages/gateway/src/client-manager`
   - `bun test src/packages/tui/src src/packages/config-tui/src`
@@ -1911,7 +1911,7 @@ bun run check:size
 
 # 目标测试（示例）
 bun test src/packages/core/src/pipelines/conversation
-bun test src/services/memory-service.test.ts
+bun test src/services/memory/memory-service.test.ts
 bun test src/packages/core/src/context src/packages/core/src/session
 bun test src/packages/gateway/src/client-manager
 bun test src/packages/tui/src src/packages/config-tui/src

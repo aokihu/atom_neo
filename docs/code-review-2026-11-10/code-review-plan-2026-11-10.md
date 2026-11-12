@@ -157,7 +157,7 @@
 - `bootstrap/cli.ts` 用 `process.argv[1]` / `process.versions.bun` 区分 Bun 源码、Bun 编译二进制与 Node；编译态帮助仍显示 `atom`。
 - `fs.glob` 使用 `withFileTypes` 过滤目录，保留相对路径、cwd、500 上限与排序。
 - `croner@11.0.0` 替换 `Bun.cron`；暂停实例用于解析 next run，`stop()` 保留服务停止语义。
-- `services/sqlite-database.ts` 封装 `node:sqlite`（布尔/undefined 参数归一化、嵌套事务 savepoint、`changes` 数值化）；MemoryService 与测试改用包装器。
+- `services/storage/sqlite-database.ts` 封装 `node:sqlite`（布尔/undefined 参数归一化、嵌套事务 savepoint、`changes` 数值化）；MemoryService 与测试改用包装器。
 
 **验收**：
 ```bash

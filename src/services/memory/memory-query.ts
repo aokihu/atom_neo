@@ -4,8 +4,8 @@ import {
   calculateGraphScore,
   calculateMemoryQuality,
   calculateRetrievalRelevance,
-} from "../memory-ranking";
-import type { MemoryKind } from "../memory-ranking";
+} from "./memory-ranking";
+import type { MemoryKind } from "./memory-ranking";
 import type { MemoryNode } from "./memory-types";
 import type { MemoryStore } from "./memory-store";
 

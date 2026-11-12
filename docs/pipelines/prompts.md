@@ -247,7 +247,7 @@ src/packages/core/src/pipelines/shared/llm.ts         callLLM 必须接收 resol
 src/packages/core/src/pipelines/shared/jev-element.ts Jev 决策模拟传递 resolver
 src/packages/core/src/decision/choose.ts              chooseDecision 必须接收 resolver（JEV 路径不解析提示词）
 src/packages/core/src/pipelines/shared/model-provider.ts  Provider 模型/options 工厂
-src/services/runtime-service.ts                      protocol/options 解析（不跨 Provider 回退密钥）
+src/services/runtime/runtime-service.ts                      protocol/options 解析（不跨 Provider 回退密钥）
 src/assets/prompts/base_system_prompt.md             保留弃用标记（variants/lang/zh.ts 替代）
 ```
 

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { calculateDecayedUsage } from "../memory-ranking";
-import { SqliteDatabase } from "../sqlite-database";
-import type { SqliteStatementResult, SqliteValue } from "../sqlite-database";
+import { calculateDecayedUsage } from "./memory-ranking";
+import { SqliteDatabase } from "../storage/sqlite-database";
+import type { SqliteStatementResult, SqliteValue } from "../storage/sqlite-database";
 import type { MemoryKind, MemoryNode, MemorySaveOptions } from "./memory-types";
 import { initializeMemorySchema, migrateLegacyContent } from "./memory-schema";
 

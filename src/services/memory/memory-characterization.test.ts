@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryService } from "./memory-service";
-import { SqliteDatabase } from "./sqlite-database";
+import { SqliteDatabase } from "../storage/sqlite-database";
 
 const activeServices: MemoryService[] = [];
 

@@ -135,7 +135,7 @@ startGateway({ logger, httpServer })
 | CR-ARCH-03 | 已由 S11-A6–A11 删除；改为 per-Core registry + resolver | `src/packages/shared/src/prompts/index.ts` | 已消除 | `createPromptRegistry()` + `PromptResolver` |
 | CR-ARCH-04 | Gateway 模块级 Logger | 已在 S9-D 删除 | import 无副作用已满足 | 仅防回归测试 |
 | CR-ARCH-05 | ThemeContext 在 `App.tsx` | 已在 S5 移到 `tui-kit/src/theme.tsx` | 循环依赖已解除 | 仅 import 图防回归 |
-| CR-ARCH-06 | 字符串 ServiceManager | `src/services/service-manager.ts:18-20`、`bootstrap.ts:102-109` | `sm.get("memory")` 无类型；缺失服务延迟失败 | `CoreServices` + 显式注入 |
+| CR-ARCH-06 | 字符串 ServiceManager | `src/services/base/service-manager.ts:18-20`、`bootstrap.ts:102-109` | `sm.get("memory")` 无类型；缺失服务延迟失败 | `CoreServices` + 显式注入 |
 | CR-ARCH-07 | Element 边界 `session/task/memory: any` | `pipelines/**` 48 处 → 0（S11-G） | 类型失真；重构无编译保护 | 窄 `PipelineSession` + `TaskItem` |
 | CR-ARCH-08 | 事件重入 + 变异 FlowState | `task-engine.ts:91-100,142-167` | 递归调度；输入对象被写入 `abortSignal` | 单循环 + 不可变 FlowState |
 | CR-ARCH-09 | 三种并发机制混合 | `gateway/src/client-manager/index.ts` | exit/timer/serialize/health 相互竞争 | `ProcessSupervisor` 状态机 |
@@ -516,7 +516,7 @@ export function useTheme(): ThemeValue { return useContext(ThemeContext); }
 
 **级别**: P2 · **阶段**: S11-A · **当前状态**: 已解决（S11-A1–A5）
 
-**位置**: `src/services/service-manager.ts:18-20`、`src/packages/core/src/bootstrap.ts:102-109`、`src/main.ts:174-181,203`。
+**位置**: `src/services/base/service-manager.ts:18-20`、`src/packages/core/src/bootstrap.ts:102-109`、`src/main.ts:174-181,203`。
 
 **当前**:
 

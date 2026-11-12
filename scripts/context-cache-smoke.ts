@@ -6,7 +6,7 @@ import { createLanguageModel } from "../src/packages/core/src/pipelines/shared/m
 import type { ContextFragment } from "@atom-neo/shared";
 import { loadConfig } from "../src/bootstrap/config";
 import { loadEnv } from "../src/bootstrap/env";
-import { RuntimeService } from "../src/services/runtime-service";
+import { RuntimeService } from "../src/services/runtime/runtime-service";
 import { compileContextSnapshot } from "../src/packages/core/src/context/compiler";
 
 if (!Bun.argv.includes("--live")) {

@@ -162,7 +162,7 @@ if (!checkpointed && session && before) {
 
 ### CR-COR-03 — MemoryService 构造器开库、不关闭、retain 更新错误
 
-**位置**: `src/services/memory-service.ts:58-66, 305-318, 342-348`
+**位置**: `src/services/memory/memory-service.ts:58-66, 305-318, 342-348`
 
 **当前**:
 
@@ -238,7 +238,7 @@ weight = MIN(100, weight + 10),
 
 ### CR-COR-04 — ServiceManager 吞掉启动失败，BaseService 提前置 running
 
-**位置**: `src/services/service-manager.ts:12-31`、`src/services/base-service.ts:15`
+**位置**: `src/services/base/service-manager.ts:12-31`、`src/services/base/base-service.ts:15`
 
 **当前**:
 
@@ -583,7 +583,7 @@ export const THEME_PALETTES: Record<ThemeName, ThemeColors> = { /* 唯一来源 
 - `src/bootstrap/config.ts:5-80`（完整 schema）
 - `src/packages/config-tui/src/wizard-logic.ts:59-95`（`PROVIDERS` / `THEMES` / `DEFAULT_PROFILES`）
 - `src/packages/gateway/src/config.ts:3-19`（ClientConfig 子集）
-- `src/services/runtime-service.ts:86`（默认模型）
+- `src/services/runtime/runtime-service.ts:86`（默认模型）
 
 **当前**:
 
@@ -705,9 +705,9 @@ function stringifyToolOutput(output: unknown): string {
 
 | 类型 | 位置 | 问题 |
 |---|---|---|
-| `SkillDef` / `SkillListItem` / `SkillLoadResult` | `shared/src/types/skill.ts:1-25`、`core/src/skills/types.ts:1-11`、`services/skill-parser.ts:1-17`、`services/skill-service.ts:7-17` | 3–4 份 |
-| `MemoryKind` | `shared/src/types/memory.ts:3-13`、`services/memory-ranking.ts:4-11` | 2 份 |
-| `MemoryNode` | `shared/src/types/memory.ts:15-26`、`services/memory-service.ts:15-33` | 同名不同形 |
+| `SkillDef` / `SkillListItem` / `SkillLoadResult` | `shared/src/types/skill.ts:1-25`、`core/src/skills/types.ts:1-11`、`services/skill/skill-parser.ts:1-17`、`services/skill/skill-service.ts:7-17` | 3–4 份 |
+| `MemoryKind` | `shared/src/types/memory.ts:3-13`、`services/memory/memory-ranking.ts:4-11` | 2 份 |
+| `MemoryNode` | `shared/src/types/memory.ts:15-26`、`services/memory/memory-service.ts:15-33` | 同名不同形 |
 | `TodoItem` | `core/src/session/context.ts:22`、`tui/src/types.ts:47` | 2 份 |
 | Modal 类型 | 两包 `modal/types.ts` | 已分叉 |
 
@@ -1196,7 +1196,7 @@ export function useTheme() { return useContext(ThemeContext); }
 
 ### CR-ARCH-06 — ServiceManager 是字符串服务定位器
 
-**位置**: `src/services/service-manager.ts`、`src/packages/core/src/server.ts:140-145`
+**位置**: `src/services/base/service-manager.ts`、`src/packages/core/src/server.ts:140-145`
 
 **当前**:
 
@@ -1356,7 +1356,7 @@ async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
 | `Bun.spawn` / `Bun.Subprocess` | `bootstrap/first-run.ts:19`、`gateway/client-manager:160`、`tools/builtin/shell.ts:12,50` | `node:child_process` + `ProcessHandle` |
 | `Bun.Glob` | `tools/builtin/fs.ts:217` | `fs.glob` / `fs.globSync` |
 | `Bun.cron` | `tools/schedule-service.ts:56,114,173,186,220` | `croner` |
-| `bun:sqlite` | `services/memory-service.ts:3` | `node:sqlite` 包装 |
+| `bun:sqlite` | `services/memory/memory-service.ts:3` | `node:sqlite` 包装 |
 | `Bun.serve` / `Bun.Server` | `core/server.ts:619,654`、`gateway/server.ts:102` | `HttpServer` 端口或统一 `node:http + ws` |
 | `ServerWebSocket` (type) | `core/ws/handler.ts:1`、`broadcaster.ts:1` | 自有 `WebSocketPeer` |
 | `srv.requestIP` | `shared/utils/admin-auth.ts:8` | `RequestContext.ip` |
@@ -1538,7 +1538,7 @@ Bun 实现用 `Bun.serve`；Node 实现用 `node:http` + `ws`。`admin-auth.ts` 
 - `core/pipelines/shared/llm.ts:2,20`
 - `core/decision/choose.ts:2,87`
 - `core/pipelines/prediction/elements/predict-intent.ts:6,78`
-- `services/agents-compiler.ts:6,156`
+- `services/agents/agents-compiler.ts:6,156`
 
 **当前**:
 
@@ -1608,13 +1608,13 @@ type ProviderOptionsStrategy = {
 
 ### CR-PRO-05 — AgentsCompiler 忽略 Provider 配置
 
-**当前**: `services/agents-compiler.ts:155-160` 固定 `createDeepSeek` + `deepseek-v4-flash`，只读 `providers.deepseek.thinking`。
+**当前**: `services/agents/agents-compiler.ts:155-160` 固定 `createDeepSeek` + `deepseek-v4-flash`，只读 `providers.deepseek.thinking`。
 
 **目标**: 注入 `getResolvedModel("fast")` 或 `ModelProvider`；使用同一工厂与 provider options。
 
 ### CR-PRO-06 — API Key 跨 Provider 回退
 
-**位置**: `services/runtime-service.ts:94-97`、`main.ts:159`
+**位置**: `services/runtime/runtime-service.ts:94-97`、`main.ts:159`
 
 **当前**:
 
@@ -1690,7 +1690,7 @@ const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "ll
 | `src/packages/core/src/pipelines/conversation/elements/stream-llm.ts` | 1227 | CR-ARCH-12, CR-DUP-11, CR-STR-01, CR-PRO-01 | 拆分/Provider |
 | `src/packages/core/src/server.ts` | 793 | CR-COR-02/06, CR-ARCH-13, CR-STR-02, CR-RUN-06 | 拆分/生命周期/HTTP |
 | `src/packages/core/src/context/context-service.ts` | 552 | CR-STR-04, CR-NAM-10 | 拆分/注释 |
-| `src/services/memory-service.ts` | 550 | CR-COR-03, CR-STR-03, CR-RUN-05 | 生命周期/拆分/SQLite |
+| `src/services/memory/memory-service.ts` | 550 | CR-COR-03, CR-STR-03, CR-RUN-05 | 生命周期/拆分/SQLite |
 | `src/packages/core/src/session/persistence-service.ts` | 514 | CR-DUP-05, CR-STR-05 | 原子写/拆分 |
 | `src/packages/config-tui/src/wizard-logic.ts` | 441 | CR-COR-01, CR-DUP-03/04 | 写盘/配置契约 |
 | `src/bootstrap/backup.ts` | 336 | CR-DUP-04/05 | env/原子写 |
@@ -1711,7 +1711,7 @@ const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) ?? (type === "ll
 | `src/packages/core/src/pipelines/shared/llm.ts` | 39 | CR-PRO-01/03 | Provider 工厂 |
 | `src/packages/core/src/decision/choose.ts` | ~110 | CR-PRO-01/03/04 | Provider 工厂 |
 | `src/packages/core/src/pipelines/prediction/elements/predict-intent.ts` | ~110 | CR-PRO-01 | Provider 工厂 |
-| `src/services/agents-compiler.ts` | ~180 | CR-PRO-05 | 注入模型 |
+| `src/services/agents/agents-compiler.ts` | ~180 | CR-PRO-05 | 注入模型 |
 | `src/packages/shared/src/constants/events.ts` | 87 | CR-DUP-08 | 单一事件源 |
 | `src/packages/shared/src/types/pipeline.ts` | ~145 | CR-DUP-08 | 类型派生 |
 | `src/packages/shared/src/protocol.ts` | ~160 | CR-DUP-08, CR-DOC-08 | 删除/派生 |

@@ -38,7 +38,7 @@
 ```bash
 wc -l \
   src/packages/core/src/pipelines/conversation/elements/stream-llm.ts \
-  src/services/memory-service.ts \
+  src/services/memory/memory-service.ts \
   src/packages/core/src/context/context-service.ts \
   src/packages/core/src/session/persistence-service.ts \
   src/packages/gateway/src/client-manager/process-supervisor.ts \
@@ -50,7 +50,7 @@ wc -l \
 | 文件 | 行数 | 主要 CR |
 |---|---:|---|
 | `src/packages/core/src/pipelines/conversation/elements/stream-llm.ts` | **1240** | CR-STR-01, CR-ARCH-12, CR-DUP-11 |
-| `src/services/memory-service.ts` | **565** | CR-STR-03 |
+| `src/services/memory/memory-service.ts` | **565** | CR-STR-03 |
 | `src/packages/core/src/context/context-service.ts` | **552** | CR-STR-04 |
 | `src/packages/core/src/session/persistence-service.ts` | **515** | CR-STR-05 |
 | `src/packages/gateway/src/client-manager/process-supervisor.ts` | **411** | CR-STR-06（残余） |
@@ -657,7 +657,7 @@ S12 完成后，以下行为必须与 `e3b51f5` 一致。任何一条变化都�
 |---|---|---|
 | stream 特征/边界/缓存/tool loop | `stream-characterization` + `stream-boundaries` + `stream-cache` + `tool-loop` | 29 pass / 0 fail |
 | conversation 全量 | `bun test src/packages/core/src/pipelines/conversation` | 156 pass / 0 fail |
-| memory schema/search/graph | `bun test src/services/memory-service.test.ts src/services/memory` | 46 pass / 0 fail |
+| memory schema/search/graph | `bun test src/services/memory/memory-service.test.ts src/services/memory` | 46 pass / 0 fail |
 | context + persistence | `bun test src/packages/core/src/context src/packages/core/src/session` | 160 pass / 0 fail |
 | gateway supervisor | `bun test src/packages/gateway/src/client-manager` | 45 pass / 0 fail |
 | TUI chat/panels | `bun test src/packages/tui/src` | 132 pass / 0 fail |

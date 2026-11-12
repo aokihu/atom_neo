@@ -110,7 +110,7 @@ sandbox/.atom/
 ## 8. 文件
 
 ```
-src/services/agents-compiler.ts                        服务实现
+src/services/agents/agents-compiler.ts                        服务实现
 src/assets/prompts/agents_compiler_system_prompt.md    编译 LLM 系统提示词
 src/bootstrap/agents.ts                                AGENTS.md 初始化 + 模板
 src/assets/prompts/agents_md_sample.md                 AGENTS.md 默认模板

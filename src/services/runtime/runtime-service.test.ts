@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeService } from "./runtime-service";
-import { ConfigSchema, loadConfig } from "../bootstrap/config";
+import { ConfigSchema, loadConfig } from "../../bootstrap/config";
 
 const TEST_KEY_ENV = "ATOM_TEST_DEEPSEEK_KEY";
 const OPENAI_KEY_ENV = "ATOM_TEST_OPENAI_KEY";

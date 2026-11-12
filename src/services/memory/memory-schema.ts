@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, rmdirSync, unlinkSync } from "node:fs";
-import type { SqliteDatabase } from "../sqlite-database";
+import type { SqliteDatabase } from "../storage/sqlite-database";
 
 export function initializeMemorySchema(db: SqliteDatabase): boolean {
   db.run(`CREATE TABLE IF NOT EXISTS nodes (
