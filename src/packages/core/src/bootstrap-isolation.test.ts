@@ -53,7 +53,7 @@ async function stop(core: CoreBootstrap): Promise<void> {
 }
 
 describe("Core bootstrap isolation", () => {
-  test("two bootstraps own independent element registries and pipeline stores", async () => {
+  test("two bootstraps own independent element registries, prompt resolvers and pipeline stores", async () => {
     const firstSandbox = mkdtempSync(join(tmpdir(), "atom-bootstrap-a-"));
     const secondSandbox = mkdtempSync(join(tmpdir(), "atom-bootstrap-b-"));
     const first = makeBootstrap(firstSandbox);
@@ -61,6 +61,8 @@ describe("Core bootstrap isolation", () => {
     try {
       expect(first.elementRegistry).not.toBe(second.elementRegistry);
       expect(first.pipelineStore).not.toBe(second.pipelineStore);
+      expect(first.promptRegistry).not.toBe(second.promptRegistry);
+      expect(first.promptResolver).not.toBe(second.promptResolver);
       expect(first.elementRegistry.names()).toEqual(second.elementRegistry.names());
       expect(first.elementRegistry.names().length).toBe(29);
       expect(new Set(first.elementRegistry.names()).size).toBe(29);

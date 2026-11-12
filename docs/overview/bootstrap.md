@@ -91,6 +91,8 @@ Fake conversation（本地 fake SSE 模型 → conversation `completed`）与 Bu
 
 TUI 与 gateway 控制分支不得初始化 Core 数据库、Provider 或后台服务。运行信息由 Core 提供，不能让独立 TUI 重新推导模型与工具状态。地址为监听通配符时，发现文件中转换为可连接的本机地址。
 
+同一进程可同时运行多个 `startCore` 实例。每个实例独立创建 `PromptRegistry`/`PromptResolver`、`ElementRegistry`、`PipelineInstanceStore`、`SessionStore` 与定时器，并只使用显式注入的 `CoreServices`；不存在模块级注册表、prompt 单例或 pipeline map。`server-dual-instance.test.ts` 使用不同 sandbox、fake runtime、admin token 与端口验证 health/attach/停止互不影响。
+
 ## Attach 和 Session
 
 默认每次新建 TUI Session；只有 `-c` / `--continue` 恢复 `initiator.type=tui` 且 `lastTuiUsedAt` 最近的会话，无候选时由 Core 原子创建。initiator 与 lastTuiUsedAt 随 checkpoint 保存，磁盘挂起会话也可参与选择。Gateway/内部任务活动不改变默认 TUI 目标，历史未知来源不通过 ID 推断。

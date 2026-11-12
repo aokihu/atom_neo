@@ -6,7 +6,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `main` @ `e9b9452` (v1.22.0)
-> **状态**: S0–S10 已完成；S10-A（Node 构建/类型检查边界）、S10-B1（平台/发布产物 smoke）与 S10-B2（CI/发布包/版本）均已完成。下一步为 S11。
+> **状态**: S0–S11 已完成；S11（全局状态 / DI 收口）已于 2026-11-12 完成并发布 v1.23.0。下一步为 S12。
 
 ---
 
@@ -483,23 +483,23 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **目标**：去掉模块级可变状态，落实 `dependency-injection.md`。
 
-> **S11 已拆分并单独成文**（仅规划，待实施）：
+> **S11 已拆分并单独成文（已完成，v1.23.0）**：
 > - [code-review-s11-2026-11-12.md](./code-review-s11-2026-11-12.md) — CR-ARCH-01..09 问题、当前/目标契约、兼容不变量
 > - [code-review-s11-graph-2026-11-12.md](./code-review-s11-graph-2026-11-12.md) — 当前/目标 DI、registry/prompt/task 序列、状态机、风险与回滚
 > - [code-review-s11-plan-2026-11-12.md](./code-review-s11-plan-2026-11-12.md) — A–H 子阶段、49 个 S/M 任务、测试矩阵、回滚与 DoD
 
 **子阶段**：
 
-| 子阶段 | 主题 | 风险 | 依赖 | 预估 |
-|---|---|---|---|---|
-| S11-A | 类型化 `Services` + `PromptRegistry` DI | 中 | — | 25.5h |
-| S11-B | `ElementRegistry` 实例化 | 中 | A5 | 15h |
-| S11-C | `PipelineInstanceStore` | 低 | B7 | 4h |
-| S11-D | TaskEngine 单循环 / 不可变 FlowState | 中（行为风险高） | C3 | 15h |
-| S11-E | ClientManager → ProcessSupervisor | 中（行为风险高） | 可与 A/B 并行 | 20h |
-| S11-F | TUI ThemeContext 防回归（S5 已迁移） | 低 | — | 1h |
-| S11-G | Element 边界窄接口（CR-ARCH-07 收窄） | 中 | A11/B7/D4 | 14h |
-| S11-H | 双实例验收 / 清理 / 文档 | 中 | A..G | 15.5h |
+| 子阶段 | 主题 | 状态 | 风险 | 依赖 | 预估 |
+|---|---|---|---|---|---|
+| S11-A | 类型化 `Services` + `PromptRegistry` DI | 已完成 | 中 | — | 25.5h |
+| S11-B | `ElementRegistry` 实例化 | 已完成 | 中 | A5 | 15h |
+| S11-C | `PipelineInstanceStore` | 已完成 | 低 | B7 | 4h |
+| S11-D | TaskEngine 单循环 / 不可变 FlowState | 已完成 | 中（行为风险高） | C3 | 15h |
+| S11-E | ClientManager → ProcessSupervisor | 已完成 | 中（行为风险高） | 可与 A/B 并行 | 20h |
+| S11-F | TUI ThemeContext 防回归（S5 已迁移） | 已完成 | 低 | — | 1h |
+| S11-G | Element 边界窄接口（CR-ARCH-07 收窄） | 已完成 | 中 | A11/B7/D4 | 14h |
+| S11-H | 双实例验收 / 清理 / 文档 | 已完成 | 中 | A..G | 15.5h |
 
 > 表中“行为风险高”只表示回归影响面；全部 49 个任务的实现复杂度均为 **简单（S）** 或 **中等（M）**。
 
@@ -516,11 +516,14 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 - 服务缺失时启动失败，而非半初始化。
 - 详见 S11 实施计划第 8 节。
 
+**实施结果**：S11-A..H 全部完成；同进程双 `startCore`、双 registry/prompt/store、TaskEngine/Supervisor 矩阵与全局残留 guard 均通过；源码/全量测试、typecheck、build、Node smoke 与 docs 检查通过；版本 1.23.0。
+
 **风险/回滚**：极高；按 A–H 子阶段拆 PR，每任务单 commit；过渡包装保留旧路径直到对应测试全绿。
 
 **变更记录**：
 
 - 2026-11-12：S11 拆分完成，新增三份 S11 文档（问题/图/计划）；子阶段 A–H、49 个任务均为 S/M；仅文档，未实施、未改源码。
+- 2026-11-12：S11 全部完成（v1.23.0）：A 类型化 Services/Prompt DI、B ElementRegistry、C PipelineInstanceStore、D TaskEngine 单循环/不可变 FlowState、E ProcessSupervisor、F Theme guard、G Element 窄接口、H 双实例验收/清理/文档；CR-ARCH-01/02/03/06/08/09 关闭，04/05 防回归，07 收窄完成。
 
 ---
 
@@ -688,7 +691,7 @@ bun run scripts/check-file-headers.ts
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
 | S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；1.22.11 起 Node 支持下限 26；保留双 adapter，S10 再评估统一 |
 | S10 | 已完成 | — | S10-A：`tsconfig.node.json`/`typecheck:node`、`build:node` → `dist/node/main.js`、Node TUI import guard、Node build smoke；S10-B1：platform smoke（config/env/memory FTS5/shell/glob/schedule）、release artifact smoke（health/attach/WS/SIGTERM）、`smoke:node` 编排；S10-B2：`main`/`exports`/`bin`/`files`、`@atom-neo/*` 发布策略、`prepack`、tarball 安装 smoke（11/11）、CI 双 job、版本 1.22.12；TUI render 自动化列为后续 |
-| S11 | 已拆分，待实施 | — | 新增 S11 问题/图/计划三份文档；A–H 共 49 个任务（20 简单 / 29 中等），基线 110h、关键路径 89h；CR-ARCH-04/05 已由 S9-D/S5 关闭，仅防回归；未改源码 |
+| S11 | 已完成 | — | A–H 全部完成，v1.23.0：CoreServices/Prompt DI、ElementRegistry、PipelineInstanceStore、TaskEngine 单循环/不可变 FlowState、ProcessSupervisor、Theme guard、Element 窄接口；新增同进程双 `startCore` 验收与全局残留 guard；双 registry/prompt/store 隔离、TaskEngine/Supervisor 矩阵通过；过渡符号 0 残留；workspace 包版本不变；源码 1095 pass / 21 skip / 0 fail，全量 1968 pass / 21 skip / 0 fail，typecheck 6/6、typecheck:node 0 error、build 6/6，Node/package smoke 与 docs 检查通过 |
 | S12 | 未开始 | — | 结构重构 |
 
 > 每完成一个阶段，更新本表与 `code-review-2026-11-10.md` 的变更记录。

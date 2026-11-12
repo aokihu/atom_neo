@@ -187,6 +187,48 @@ describe("TaskEngine", () => {
     expect(store.size).toBe(0);
   });
 
+  test("cancelling a processing task emits Activated then Failed and clears its pipeline", async () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const queue = new TaskQueue();
+    const store = new PipelineInstanceStore();
+    const events: string[] = [];
+    let activated = false;
+    const task = { ...createTask("processing-cancel"), pipeline: "blocking" };
+    bus.on(BusEvents.Task.Activated, () => {
+      activated = true;
+      events.push("activated");
+    });
+    bus.on(BusEvents.Task.Failed, ({ task: failed }) => events.push(`failed:${failed.state}`));
+    bus.on(BusEvents.Pipeline.Result, () => events.push("result"));
+    const engine = new TaskEngine({
+      bus,
+      queue,
+      pipelineStore: store,
+      pipelineBuilders: {
+        blocking: () => ({
+          elements: [{
+            process: async (input: { abortSignal: AbortSignal }) => {
+              await new Promise<void>((_resolve, reject) => {
+                input.abortSignal.addEventListener("abort", () => reject(input.abortSignal.reason), { once: true });
+              });
+              return input;
+            },
+          }],
+        } as any),
+      },
+    });
+    queue.enqueue(task);
+    engine.start();
+    bus.emit(BusEvents.Task.Enqueued, { task });
+    await waitFor(() => activated);
+
+    expect(engine.cancel(task.id, task.sessionId)).toBe(true);
+    expect(await engine.drain({ timeoutMs: 1_000 })).toBe(true);
+    expect(events).toEqual(["activated", `failed:${TaskState.CANCELLED}`]);
+    expect(queue.size).toBe(0);
+    expect(store.size).toBe(0);
+  });
+
   test("removes the cached pipeline after a failed task", async () => {
     const bus = new PipelineEventBus<FullEventMap>();
     const queue = new TaskQueue();

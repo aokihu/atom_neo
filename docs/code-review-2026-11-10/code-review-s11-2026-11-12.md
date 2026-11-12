@@ -2,7 +2,7 @@
 
 > **Baseline**: `code-review/2026-11-10` @ `ef7ff15` (v1.22.12, S10 complete)
 > **Scope**: CR-ARCH-01..09 中尚未收口的全局状态、构造方式与边界类型
-> **Status**: S11-A1–A11、B/C/D/E/F 已实施；G/H 待实施
+> **Status**: **S11 已完成（v1.23.0，2026-11-12）**。A1–A11、B、C、D、E、F、G、H 全部实施并通过全量回归；CR-ARCH-01/02/03/06/08/09 关闭，04/05 有防回归测试，07 按 Element 边界收窄完成。
 > **Related**:
 > - [code-review-s11-graph-2026-11-12.md](./code-review-s11-graph-2026-11-12.md)
 > - [code-review-s11-plan-2026-11-12.md](./code-review-s11-plan-2026-11-12.md)
@@ -33,7 +33,7 @@
 | `S11-G1..G6` | Element 边界窄接口 |
 | `S11-H1..H7` | 双实例验收、清理、文档 |
 
-### 当前计数（2026-11-12 实测）
+### 基线计数（实施前，2026-11-12 实测）
 
 ```bash
 rg -n '\bany\b' src/packages/core/src --glob '!**/*.test.*' --glob '!**/dist/**' | wc -l
@@ -54,6 +54,8 @@ rg -n 'getRegistry\(|initPromptRegistry\(' src --glob '!**/*.test.*' --glob '!**
 rg -n 'getPipeline\(|setPipeline\(|removePipeline\(|pipelineMap' src --glob '!**/dist/**' | wc -l
 # 11（7 个定义/API 行 + 4 个 task-engine 调用点）
 ```
+
+> **S11 完成后（v1.23.0）**：上述 registry/prompt/pipelineMap 目标符号均为 0；Core 生产代码 `sm.get` 为 0；`pipelines/**` 的 `session/task/memory: any` 为 0；TUI 非测试文件不从 `App` 导入主题 API。`global-state-guard.test.ts` 对这些结果做静态回归。
 
 > 原审查记录为 `any` ~140、`session/task/memory: any` ~47、registry 调用 ~43、prompt 调用 ~24、pipelineMap ~8。数字已随 S1–S10 变化，实施时以最新实测为准；不要为了凑旧数字而扩大范围。
 
@@ -512,7 +514,7 @@ export function useTheme(): ThemeValue { return useContext(ThemeContext); }
 
 ### CR-ARCH-06 — ServiceManager 是字符串服务定位器
 
-**级别**: P2 · **阶段**: S11-A · **当前状态**: 未解决
+**级别**: P2 · **阶段**: S11-A · **当前状态**: 已解决（S11-A1–A5）
 
 **位置**: `src/services/service-manager.ts:18-20`、`src/packages/core/src/bootstrap.ts:102-109`、`src/main.ts:174-181,203`。
 
@@ -600,6 +602,12 @@ export function createCoreBootstrap(options: CoreBootstrapOptions) {
 - `memory`、`network` 必填；`skill`、`compiler` 可选（保持现有“无 skill 也能启动”“无 compiler 空 prompt”的行为）。
 - 缺失必填服务在 `startCore` 入口 fail-fast，错误信息包含服务名；已启动服务由 `main.ts` 的 `shutdown` 回滚。
 - 不引入 DI 容器、不引入字符串 token 类型系统、不做自动扫描。
+
+**实施记录（S11-A1–A5）**:
+
+- `core-services.ts` 定义 `CoreServices` / `assertCoreServices` / `resolveCoreServices`；`memory`/`network` 必填，`skill`/`compiler` 可选。
+- `createCoreBootstrap` 与 `startCore` 只接收 `services`；Core 内 `sm.get` 为 0，`ServiceManager` 只负责启停。
+- 缺失必填服务在创建 HTTP server 前 fail-fast；Node/Bun smoke、server-continuation 与 budget-live-validation 已迁移。
 
 **验收**:
 
@@ -820,7 +828,7 @@ for (const element of pipeline.elements) {
 
 ### CR-ARCH-09 — ClientManager 三种并发机制混合
 
-**级别**: P2 · **阶段**: S11-E · **当前状态**: 未解决
+**级别**: P2 · **阶段**: S11-E · **当前状态**: 已解决（S11-E1–E7）
 
 **位置**: `src/packages/gateway/src/client-manager/index.ts:131-149,151-205,207-239,247-261`。
 
@@ -921,6 +929,12 @@ export class ProcessSupervisor {
 - `stopAll` 的 `AggregateError` 语义不变。
 - 健康检查失败现在进入同一重启策略（CR-ARCH-09 目标）；这是 Gateway 内部行为变化，需在发布说明中标注。
 - 所有 timer 必须 `unref` 或可注入；`stopAll` 后不得再 spawn。
+
+**实施记录（S11-E1–E7）**:
+
+- 新增 `runtime.ts`、`process-state.ts`、`restart-policy.ts`、`health-probe.ts`、`process-supervisor.ts` 与 `test-helpers.ts`；`ClientManager` 仅保留 facade。
+- 状态机、重启上限/退避/成功重置、readiness 与 health probe 均使用 fake spawn/fetch/timer 测试；健康失败现在与异常退出共用重启入口。
+- Gateway 路由/鉴权/状态码、端口/secret、`stopAll` 的 `AggregateError` 语义保持不变；所有测试结束断言无 pending timer。
 
 **验收**:
 
@@ -1062,18 +1076,18 @@ S11 优先“先加新路径，再切调用，再删旧路径”：
 
 ## 7. 验收标准（S11 整体）
 
-- [ ] 同一进程内两个 `startCore` 实例（不同端口、不同 sandbox、不同 registry/prompt/store）可同时启动、提交任务、停止，互不污染。
-- [ ] 两个 `PromptRegistry`、两个 `ElementRegistry`、两个 `PipelineInstanceStore` 的隔离测试通过。
-- [ ] `rg 'clearRegistry|pipelineMap|getRegistry\\(|initPromptRegistry\\(' src --glob '!**/*.test.*'` 为 0。
-- [ ] `core` 生产代码不再有 `sm.get`；缺失必填服务启动即失败。
-- [ ] TaskEngine 串行、取消、drain、事件顺序测试通过；FlowState 输入不被变异。
-- [ ] ClientManager 状态机、重启策略、健康检查、并发 start/stop 测试通过。
-- [ ] `pipelines/**` 的 `session/task: any` 为 0；`SessionContext` 可直接赋值给 `PipelineSession`。
-- [ ] Theme import 图无环；`useTheme` 只从 `tui-kit` 导入。
-- [ ] `bun run typecheck` 6/6、`bun test` 全量 0 fail、`bun run build` 6/6。
-- [ ] `bun run smoke:node` 与 `smoke:node:package` 通过（Node 26）。
-- [ ] `bun run docs:check` / `bun run docs:typecheck` 通过。
-- [ ] 每个任务单 commit 可回退；回滚不影响已发布 Bun/Node 行为。
+- [x] 同一进程内两个 `startCore` 实例（不同端口、不同 sandbox、不同 admin token）可同时启动，health/attach 与停止互不污染；任务链行为由 `server-continuation.test.ts` 覆盖。
+- [x] 两个 `PromptRegistry`、两个 `ElementRegistry`、两个 `PipelineInstanceStore` 的隔离测试通过（含 `bootstrap-isolation.test.ts` 的实例身份断言）。
+- [x] `rg 'clearRegistry|pipelineMap|getRegistry\\(|initPromptRegistry\\(' src --glob '!**/*.test.*'` 为 0；`global-state-guard.test.ts` 无白名单。
+- [x] `core` 生产代码不再有 `sm.get`；缺失必填服务启动即失败。
+- [x] TaskEngine 串行、取消、drain、事件顺序测试通过；FlowState 输入不被变异。
+- [x] ClientManager 状态机、重启策略、健康检查、并发 start/stop 测试通过。
+- [x] `pipelines/**` 的 `session/task: any` 为 0；`SessionContext` 可直接赋值给 `PipelineSession`。
+- [x] Theme import 图无环；`useTheme` 只从 `tui-kit` 导入。
+- [x] `bun run typecheck` 6/6、`bun test` 全量 0 fail、`bun run build` 6/6。
+- [x] `bun run smoke:node` 与 `smoke:node:package` 通过（Node 26）。
+- [x] `bun run docs:check` / `bun run docs:typecheck` 通过。
+- [x] 每个任务单 commit 可回退；回滚不影响已发布 Bun/Node 行为。
 
 ---
 
@@ -1133,3 +1147,5 @@ rg -n 'from "\\.\\./App"|from "\\./App"' src/packages/tui/src --glob '!**/*.test
 |---|---|
 | 2026-11-12 | 初始 S11 专项审查：基于 `ef7ff15` 盘点 CR-ARCH-01..09，标注 04/05 已关闭；给出 ElementRegistry / PipelineInstanceStore / CoreServices / PromptRegistry / TaskEngine / ProcessSupervisor / PipelineSession 目标契约与兼容不变量；仅文档，未改源码 |
 | 2026-11-12 | S11-B/C 实施：ElementRegistry 与 PipelineInstanceStore 已实例化并注入；CR-ARCH-01/02 关闭，旧全局 registry/自由函数与 `pipelineMap` 删除 |
+| 2026-11-12 | S11-A/D/E/F/G 实施：Prompt DI、TaskEngine 单循环/不可变 FlowState、ProcessSupervisor、Theme guard 与 Element 窄接口完成；CR-ARCH-03/06/08/09 关闭，07 按边界收窄 |
+| 2026-11-12 | S11-H 实施完成（S11 完成，v1.23.0）：同进程双 `startCore` 验收、registry/prompt/store 隔离补强、TaskEngine/Supervisor 矩阵补齐、全局残留 guard（含 TUI theme guard）通过；过渡符号 0 残留；文档与版本同步；全量回归通过 |

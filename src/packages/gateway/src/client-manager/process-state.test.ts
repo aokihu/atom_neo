@@ -40,6 +40,13 @@ describe("nextProcessState", () => {
     expect(() => nextProcessState("idle", { type: "ready" })).toThrow("Invalid process transition: idle -> ready");
   });
 
+  test("enters failed from starting or stopping on an unexpected exit", () => {
+    expect(nextProcessState("starting", { type: "stop" })).toBe("stopping");
+    expect(nextProcessState("starting", { type: "exit", intentional: false })).toBe("failed");
+    expect(nextProcessState("starting", { type: "health_failed" })).toBe("failed");
+    expect(nextProcessState("stopping", { type: "exit", intentional: false })).toBe("failed");
+  });
+
   test("reset returns every state to idle", () => {
     for (const state of ["idle", "starting", "running", "stopping", "failed"] as ProcessState[]) {
       expect(nextProcessState(state, { type: "reset" })).toBe("idle");

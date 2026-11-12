@@ -9,47 +9,36 @@
 
 **"Whoever creates an object, provides its dependencies."**
 
-There is NO DI container. The bootstrap function in `server.ts` is the ONLY place where objects are constructed. All other code receives pre-built dependencies.
+There is NO DI container. `main.ts` is the application composition root; `startCore` / `createCoreBootstrap` assemble the Core runtime. All other code receives pre-built dependencies.
 
 ---
 
 ## 2. The Construction Chain
 
 ```text
-bootstrap()
+main.ts
   │
-  ├── config = loadConfig()
-  │
-  ├── logger = createLogger(config)
-  │
-  ├── memoryService = new MemoryService({ dbPath: config.memoryDbPath })
-  │     └── memoryService.start()
-  │
-  ├── sessionStore = new SessionStore({ maxSessions: config.maxSessions })
-  │
-  ├── toolRegistry = new ToolRegistry()
-  │     ├── toolRegistry.register(readTool)
-  │     ├── toolRegistry.register(writeTool)
-  │     └── toolRegistry.register(searchMemoryTool)
-  │
-  ├── bus = new PipelineEventBus<PipelineEventMap>()
-  │
-  ├── elementRegistry = new ElementRegistry()
-  │     ├── elementRegistry.register("collect-prompts", CollectPromptsElement)
-  │     └── elementRegistry.register("stream-llm", StreamLLMElement)
-  │
-  ├── pipelineManager = new PipelineManager()
-  │     └── registerPipelines(pipelineManager, { elementRegistry, toolRegistry, bus })
-  │
-  ├── taskQueue = new TaskQueue()
-  │
-  ├── pipelineStore = new PipelineInstanceStore()
-  │
-  ├── taskEngine = new TaskEngine({ bus, queue: taskQueue, pipelineStore, pipelineBuilders })
-  │     └── taskEngine.start()
-  │
-  └── server = Bun.serve({ ... })
+  ├── config / logger / sandbox / HttpServer adapter
+  ├── ServiceManager          # register / startAll / stopAll only
+  └── CoreServices object     # memory / network / skill? / compiler?
+        │
+        └── startCore({ services, runtime, logger, httpServer? })
+              ├── resolveCoreServices({ services })    # fail fast
+              ├── createCoreBootstrap()
+              │     ├── promptRegistry  = createPromptRegistry()
+              │     ├── promptResolver  = createPromptResolver(promptRegistry)
+              │     ├── elementRegistry = createElementRegistry()
+              │     ├── pipelineStore   = new PipelineInstanceStore()
+              │     ├── bus / taskQueue / SessionStore / tools / MCP
+              │     ├── register*Elements(elementRegistry)  # 7 pipelines
+              │     ├── createPipelineFactory({ elementRegistry, promptResolver, ... })
+              │     ├── new TaskEngine({ bus, queue, pipelineStore, pipelineBuilders })
+              │     │     └── taskEngine.start()
+              │     └── createWsHandlers({ ... })
+              └── httpServer.serve({ fetch: router.fetch, upgrade: router.upgrade, websocket })
 ```
+
+`server.ts` owns the HTTP/WS lifecycle and shutdown order; `bootstrap.ts` only assembles collaborators. There is no module-level registry, prompt singleton or pipeline map.
 
 ### CoreServices Boundary
 
@@ -169,6 +158,19 @@ and passes `{ ...state, abortSignal }` to every element. The `Wakeup` primitive 
 a notify that arrives before `wait()`, so the scheduler needs no timer or polling.
 `stop()` never aborts the current task; `drain()` still polls `queue.size` and returns
 `false` on timeout.
+
+### Dual-Instance Acceptance
+
+`src/packages/core/src/server-dual-instance.test.ts` starts two complete
+`startCore` instances in one process with different sandboxes, fake runtimes,
+services, admin tokens and ports. Both `/api/health` and `/api/tui/attach`
+work, each attach reports its own port/sandbox/theme/model, sessions do not
+cross, and stopping one Core leaves the other healthy. Startup itself proves
+element registry isolation: both instances register the same element names
+without an `already registered` error. A static guard
+(`global-state-guard.test.ts`) keeps `pipelineMap`, `clearRegistry`,
+`getRegistry(`, `initPromptRegistry(`, free `resolvePrompt(`, `let _instance`
+and module-level `const registry = new Map` out of production sources.
 
 ---
 

@@ -367,7 +367,7 @@ src/packages/tui/
 // package.json (root)
 {
   "name": "atom-neo",
-  "version": "1.22.12",
+  "version": "1.23.0",
   "type": "module",
   "main": "./dist/node/main.js",
   "exports": {

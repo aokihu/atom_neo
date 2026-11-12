@@ -1,6 +1,7 @@
 # Atom Neo Code Review Graph — S11 Global State / DI — 2026-11-12
 
 > **Baseline**: `code-review/2026-11-10` @ `ef7ff15` (v1.22.12)
+> **Status**: **S11 已完成（v1.23.0，2026-11-12）**。本图保留实施前的当前/目标对照；A–H 均已落地，H1 双实例与 H5 guard 为出口门禁。
 > **Scope**: S11 的当前全局状态、目标注入关系、关键序列、阶段依赖、风险与回滚
 > **Related**:
 > - [code-review-s11-2026-11-12.md](./code-review-s11-2026-11-12.md)
@@ -743,3 +744,23 @@ graph TB
 - ClientManager 的 exit 回调不能直接重新 spawn；必须经过 supervisor 状态机。
 - TUI 主题只能单向依赖 `tui-kit`。
 - S11 后新增模块级可变状态视为失败（DoD 检查）。
+
+---
+
+## 14. 实施后验收（S11-H）
+
+```text
+server-dual-instance.test.ts
+  ├── startCore A (sandbox A, runtime A, token A, port A)
+  ├── startCore B (sandbox B, runtime B, token B, port B)
+  ├── health A/B = 200
+  ├── attach A/B = 200；port/sandbox/theme/model 各自正确
+  ├── session A 在 B 中 404；token A 对 B = 403
+  ├── stop A → health A down，health B = 200 + attach 仍可用
+  └── stop B
+```
+
+`global-state-guard.test.ts` 同时静态扫描生产 `src`（排除 tests/dist）与 TUI import 图：
+`pipelineMap`、`clearRegistry`、`getRegistry(`、`initPromptRegistry(`、自由
+`resolvePrompt(`、`let _instance`、模块级 `const registry = new Map`、`sm.get(` 均为 0；
+TUI 不从 `App` 导入主题 API，`useTheme` 只来自 `@atom-neo/tui-kit`。

@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `ef7ff15` (v1.22.12, S10 complete)
-> **Status**: S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-D（TaskEngine 单循环 + 不可变 FlowState）、S11-E（ProcessSupervisor）、S11-F（Theme import guard）与 S11-G（Element 边界窄接口）已实施；H 待实施
+> **Status**: **S11 已完成（v1.23.0，2026-11-12）**。S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-D（TaskEngine 单循环 + 不可变 FlowState）、S11-E（ProcessSupervisor）、S11-F（Theme import guard）、S11-G（Element 边界窄接口）与 S11-H（双实例验收 / 清理 / 文档）全部实施并通过 H6 全量回归。
 > **Scope**: CR-ARCH-01..09；CR-ARCH-04/05 已关闭，仅防回归
 
 ---
@@ -53,17 +53,17 @@
 
 ## 2. 子阶段总览
 
-| 子阶段 | 主题 | 任务数 | S/M | 预估 | 依赖 | 主要 CR |
-|---|---|---:|---:|---:|---|---|
-| S11-A | 类型化 Services + PromptRegistry DI | 11 | 5/6 | 25.5h (3.2d) | — | CR-ARCH-03/06 |
-| S11-B | ElementRegistry 实例化 | 7 | 3/4 | 15h (1.9d) | A5 | CR-ARCH-01 |
-| S11-C | PipelineInstanceStore | 3 | 3/0 | 4h (0.5d) | B7 | CR-ARCH-02 |
-| S11-D | TaskEngine 单循环 / 不可变 FlowState | 7 | 3/4 | 15h (1.9d) | C3 | CR-ARCH-08 |
-| S11-E | ClientManager → ProcessSupervisor | 7 | 1/6 | 20h (2.5d) | 可与 A/B 并行 | CR-ARCH-09 |
-| S11-F | TUI ThemeContext 防回归 | 1 | 1/0 | 1h (0.1d) | — | CR-ARCH-05（已关闭） |
-| S11-G | Element 边界窄接口 | 6 | 2/4 | 14h (1.8d) | A11/B7/D4 | CR-ARCH-07（范围收窄） |
-| S11-H | 双实例验收 / 清理 / 文档 | 7 | 2/5 | 15.5h (1.9d) | A..G | 全部 |
-| **合计** | | **49** | **20/29** | **110h (13.75d)** | | |
+| 子阶段 | 主题 | 状态 | 任务数 | S/M | 预估 | 依赖 | 主要 CR |
+|---|---|---|---:|---:|---:|---|---|
+| S11-A | 类型化 Services + PromptRegistry DI | 已完成 | 11 | 5/6 | 25.5h (3.2d) | — | CR-ARCH-03/06 |
+| S11-B | ElementRegistry 实例化 | 已完成 | 7 | 3/4 | 15h (1.9d) | A5 | CR-ARCH-01 |
+| S11-C | PipelineInstanceStore | 已完成 | 3 | 3/0 | 4h (0.5d) | B7 | CR-ARCH-02 |
+| S11-D | TaskEngine 单循环 / 不可变 FlowState | 已完成 | 7 | 3/4 | 15h (1.9d) | C3 | CR-ARCH-08 |
+| S11-E | ClientManager → ProcessSupervisor | 已完成 | 7 | 1/6 | 20h (2.5d) | 可与 A/B 并行 | CR-ARCH-09 |
+| S11-F | TUI ThemeContext 防回归 | 已完成 | 1 | 1/0 | 1h (0.1d) | — | CR-ARCH-05（已关闭） |
+| S11-G | Element 边界窄接口 | 已完成 | 6 | 2/4 | 14h (1.8d) | A11/B7/D4 | CR-ARCH-07（范围收窄） |
+| S11-H | 双实例验收 / 清理 / 文档 | 已完成 | 7 | 2/5 | 15.5h (1.9d) | A..G | 全部 |
+| **合计** | | **已完成** | **49** | **20/29** | **110h (13.75d)** | | |
 
 ### 顺序原则
 
@@ -906,6 +906,30 @@ S11-F（Theme guard）随时可做
 - **回滚**: revert 单 commit。
 - **DoD**: 文档与代码一致；`dependency-injection.md` 的构造链更新为当前实现；S11 进度标记完成（实施阶段执行）。
 
+> **实施状态（H1–H7）**: 已完成（2026-11-12，v1.23.0）。
+>
+> - [x] H1 `server-dual-instance.test.ts`：同进程两个 `startCore`（不同 sandbox/fake runtime/services/admin token/端口）同时启动；两个 `/api/health` 200、两个 attach 各自返回正确 port/sandbox/theme/model、session 不跨实例、A 的 admin token 对 B 返回 403；先停 A 后 B 仍 health/attach，再停 B。
+> - [x] H2 现有隔离测试已足够并补强：`registry.test.ts` 同名注册/clear 隔离；`prompts.test.ts` 双 registry/resolver/缓存隔离；`instance-store.test.ts` 相同 taskId 不串；`bootstrap-isolation.test.ts` 增加 promptRegistry/promptResolver 实例身份断言。
+> - [x] H3 现有 TaskEngine 矩阵覆盖优先级、串行、queued/processing/跨 session 取消、chain、drain、start/stop、事件顺序；新增 processing 取消事件顺序 + store 清零用例；预算/链回滚由 `task-lifecycle.test.ts` / `server-continuation.test.ts` 覆盖。
+> - [x] H4 现有 ProcessSupervisor 矩阵覆盖 spawn/readiness/stop/give-up/restart/health/manual stop/timer cleanup/stopAll 竞争；新增 `starting → stopping/failed` 与 `stopping → failed` 状态转移断言。
+> - [x] H5 新增 `global-state-guard.test.ts`：扫描生产 `src`（排除 tests/dist）确认 `pipelineMap`、`clearRegistry`、`getRegistry(`、`initPromptRegistry(`、自由 `resolvePrompt(`、`let _instance`、模块级 `const registry = new Map`、`sm.get(` 均为 0；并包含 TUI 不 import App 主题 API / `useTheme` 只来自 `tui-kit` / `ThemeContext` 仅在 `tui-kit` 的 guard。完整 import 图仍由 `theme-imports.test.ts` 覆盖；无白名单。
+> - [x] H6 全量回归见下节“最终数字”。
+> - [x] H7 `dependency-injection.md`、`bootstrap.md`、`project-structure.md`、`task-execution.md`、`index.md`、S11 三份文档与主计划已同步；过渡包装 `rg` 为 0；根 `package.json` / `src/version.ts` bump 到 1.23.0，workspace 包版本不变。
+
+### 最终数字（H6，2026-11-12）
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | 6/6 |
+| `bun run typecheck:node` | 0 error |
+| `bun test --path-ignore-patterns='**/dist/**'` | 1095 pass / 21 skip / 0 fail（1116 tests / 139 files） |
+| `bun test` | 1968 pass / 21 skip / 0 fail（1989 tests / 259 files，含 dist 镜像） |
+| `bun run build` | 6/6 |
+| `bun run smoke:node` | build check 5/5 + platform 15/15 + release 9/9 + conversation 11/11（7 steps 全 PASS） |
+| `bun run smoke:node:package` | 11/11；`atom-neo-1.23.0.tgz` 569.5 KiB |
+| `docs:check` / `docs:typecheck` | 通过 |
+| 残留 `rg` | 0（含 `sm.get(` 与 TUI App import） |
+
 ---
 
 ## 5. 任务规模表（S/M）
@@ -1255,3 +1279,5 @@ rg -n 'let _instance|const pipelineMap|const registry = new Map' src/packages --
 | 2026-11-12 | S11-B1–B7 实施：新增 `ElementRegistry` / `createElementRegistry()`；7 个注册函数、`PipelineBuilder` / `pipeline()`、pipeline factory 与 bootstrap 全部显式透传 registry；删除模块级 registry 与旧自由函数。`registry.test.ts` 增加双实例同名隔离；`server-continuation` 移除全局表保存/恢复 |
 | 2026-11-12 | S11-C1–C3 实施：新增 `PipelineInstanceStore` 并注入 `TaskEngine`；删除 `api/tasks.ts` 的 `pipelineMap` 与三个自由函数；成功/失败/取消/drain 清理与双 store 隔离测试补齐。源码 1066 pass / 21 skip / 0 fail；全量 1902 pass / 21 skip / 0 fail |
 | 2026-11-12 | S11-D1–D7 实施：新增 `task/wakeup.ts` 与 `task/task-runner.ts`；`TaskEngine` 改为单一 `#runLoop`，`Task.Enqueued` 只唤醒；删除递归重入、`#processing`、`#processNext`、`#timeoutMs`；FlowState 改为逐元素新对象并剥离 `abortSignal`；取消路径收敛到 `#applyCancellation`。补充事件顺序、优先级、start 幂等、stop/drain、queued/processing/跨 session 取消与 FlowState 测试；目标测试 36 pass、全量 1946 pass / 21 skip / 0 fail、typecheck 6/6、build 6/6 |
+| 2026-11-12 | S11-E/F/G 实施完成：`ProcessSupervisor` 状态机/重启/健康探测落地；Theme import guard；Element 窄接口使 `pipelines/**` 的 `session/task/memory: any` 降为 0；全量 1954 pass / 21 skip / 0 fail |
+| 2026-11-12 | S11-H1–H7 实施完成（S11 完成，v1.23.0）：新增双 `startCore` 验收与全局残留 guard；补强 prompt/store/registry 隔离、TaskEngine processing 取消事件顺序、ProcessSupervisor 状态转移；清理过渡符号（0 残留）；更新 DI/启动/结构/任务执行/索引与全部 S11 文档；根版本 bump 1.23.0（workspace 包不变）。最终测试计数见 H 节 |
