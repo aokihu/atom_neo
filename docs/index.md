@@ -103,3 +103,6 @@
 | [code-review-s9-2026-11-11.md](./code-review-2026-11-10/code-review-s9-2026-11-11.md) | S9 专项审查：HTTP/WS 运行时问题、Bun/Node 契约、代码片段与验收 | 实施 S9 前必读 |
 | [code-review-s9-graph-2026-11-11.md](./code-review-2026-11-10/code-review-s9-graph-2026-11-11.md) | S9 关系图：请求/升级生命周期、双 adapter、阶段依赖、风险热区 | 理解 S9 影响面 |
 | [code-review-s9-plan-2026-11-11.md](./code-review-2026-11-10/code-review-s9-plan-2026-11-11.md) | S9 实施计划：S9-A..E、spike、文件改动、测试矩阵、回滚与 DoD | 实施 S9 时使用 |
+| [code-review-s11-2026-11-12.md](./code-review-2026-11-10/code-review-s11-2026-11-12.md) | S11 专项审查：CR-ARCH-01..09、全局状态盘点、目标契约、兼容不变量 | 实施 S11 前必读 |
+| [code-review-s11-graph-2026-11-12.md](./code-review-2026-11-10/code-review-s11-graph-2026-11-12.md) | S11 关系图：当前/目标 DI、registry/prompt/task 序列、状态机、风险与回滚 | 理解 S11 影响面 |
+| [code-review-s11-plan-2026-11-12.md](./code-review-2026-11-10/code-review-s11-plan-2026-11-12.md) | S11 实施计划：A–H 子阶段、49 个 S/M 任务、测试矩阵、回滚与 DoD | 实施 S11 时使用 |

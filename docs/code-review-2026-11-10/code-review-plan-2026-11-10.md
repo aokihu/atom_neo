@@ -483,24 +483,44 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 
 **目标**：去掉模块级可变状态，落实 `dependency-injection.md`。
 
-**任务清单**：
+> **S11 已拆分并单独成文**（仅规划，待实施）：
+> - [code-review-s11-2026-11-12.md](./code-review-s11-2026-11-12.md) — CR-ARCH-01..09 问题、当前/目标契约、兼容不变量
+> - [code-review-s11-graph-2026-11-12.md](./code-review-s11-graph-2026-11-12.md) — 当前/目标 DI、registry/prompt/task 序列、状态机、风险与回滚
+> - [code-review-s11-plan-2026-11-12.md](./code-review-s11-plan-2026-11-12.md) — A–H 子阶段、49 个 S/M 任务、测试矩阵、回滚与 DoD
 
-- [ ] `CR-ARCH-01`：`ElementRegistry` 实例化，注入 Builder/Manager/Engine。
-- [ ] `CR-ARCH-02`：`PipelineInstanceStore` 替代 `pipelineMap`。
-- [ ] `CR-ARCH-03`：`PromptRegistry` 实例化并注入。
-- [ ] `CR-ARCH-04`：Gateway Logger 注入。
-- [ ] `CR-ARCH-06`：类型化 `Services`，`startCore` 接收显式依赖。
-- [ ] `CR-ARCH-08`：TaskEngine 改直线循环 + 唤醒 Promise；FlowState 不变异。
-- [ ] `CR-ARCH-09`：ClientManager 拆 `ProcessSupervisor`（可与 S12 合并）。
-- [ ] 移除模块级计数器/日志器/单例。
-- [ ] 启动 fail-fast + 回滚。
+**子阶段**：
+
+| 子阶段 | 主题 | 风险 | 依赖 | 预估 |
+|---|---|---|---|---|
+| S11-A | 类型化 `Services` + `PromptRegistry` DI | 中 | — | 25.5h |
+| S11-B | `ElementRegistry` 实例化 | 中 | A5 | 15h |
+| S11-C | `PipelineInstanceStore` | 低 | B7 | 4h |
+| S11-D | TaskEngine 单循环 / 不可变 FlowState | 中（行为风险高） | C3 | 15h |
+| S11-E | ClientManager → ProcessSupervisor | 中（行为风险高） | 可与 A/B 并行 | 20h |
+| S11-F | TUI ThemeContext 防回归（S5 已迁移） | 低 | — | 1h |
+| S11-G | Element 边界窄接口（CR-ARCH-07 收窄） | 中 | A11/B7/D4 | 14h |
+| S11-H | 双实例验收 / 清理 / 文档 | 中 | A..G | 15.5h |
+
+> 表中“行为风险高”只表示回归影响面；全部 49 个任务的实现复杂度均为 **简单（S）** 或 **中等（M）**。
+
+**说明**：
+
+- 原“5–8 天”只覆盖 A–C 的主路径；细化后基线 **110h（约 13.75 工程师日）**，关键路径 **89h**。建议按 **14–16 工程师日**排期（Core/Gateway 两人并行约 10–12 日历日）。
+- CR-ARCH-04/05 已由 S9-D / S5 关闭；S11-F 只做防回归。
+- CR-ARCH-07 只处理 Element 边界的 Session/Task 窄接口，全量 `any` 留给 S12。
+- 任务规模、测试矩阵、回滚矩阵与 DoD 见 [S11 实施计划](./code-review-s11-plan-2026-11-12.md)，不在本文件重复。
 
 **验收**：
 - 两次 `startCore` / 并行测试不冲突。
 - 全局 `let` / 模块级 `new Map` 审查通过。
 - 服务缺失时启动失败，而非半初始化。
+- 详见 S11 实施计划第 8 节。
 
-**风险/回滚**：极高；按 registry/prompt/service/engine 拆 4 个 PR。
+**风险/回滚**：极高；按 A–H 子阶段拆 PR，每任务单 commit；过渡包装保留旧路径直到对应测试全绿。
+
+**变更记录**：
+
+- 2026-11-12：S11 拆分完成，新增三份 S11 文档（问题/图/计划）；子阶段 A–H、49 个任务均为 S/M；仅文档，未实施、未改源码。
 
 ---
 
@@ -514,7 +534,7 @@ rg -n 'Bun\.' src --glob '!**/dist/**' --glob '!**/*.test.*'
 - [ ] `CR-STR-03`：`memory-service.ts` 拆分。
 - [ ] `CR-STR-04`：`context-service.ts` 拆分。
 - [ ] `CR-STR-05`：`persistence-service.ts` 拆分。
-- [ ] `CR-STR-06`：`ClientManager` → `ProcessSupervisor`。
+- [ ] `CR-STR-06`：ClientManager 行数收尾（`ProcessSupervisor` 已在 S11-E 拆出）。
 - [ ] `CR-STR-07`：`check-follow-up` / `compress-finalize` 纯函数化。
 - [ ] `CR-DUP-11/12`：工具执行与消息投影统一。
 
@@ -668,7 +688,7 @@ bun run scripts/check-file-headers.ts
 | S8 | 已完成 | — | server 拆分：`bootstrap`/`pipeline-factory`/`task-lifecycle`/`http-router`/`mcp-lifecycle`；`startCore` 853→102 行；新增路由与回滚测试；typecheck/build 6/6，测试 1717 pass / 21 skip / 0 fail（源码 969）；版本 1.22.9 |
 | S9 | 已完成 | — | 双运行时 HTTP/WS 完成：S9-A 契约/spike；S9-B Bun adapter；S9-C Node adapter；S9-D Node 入口与运行时选择；S9-E Node fake conversation smoke（11 项 PASS）、Bun→Node cross-runtime（7 项 PASS）、adapter/Core smoke 各 9 项；fixture 清理；残留检查仅 Bun adapter 保留 `Bun.serve`/`requestIP`；typecheck/build 6/6，源码 1001 pass / 21 skip / 0 fail，全量 1781 pass；版本 1.22.10；1.22.11 起 Node 支持下限 26；保留双 adapter，S10 再评估统一 |
 | S10 | 已完成 | — | S10-A：`tsconfig.node.json`/`typecheck:node`、`build:node` → `dist/node/main.js`、Node TUI import guard、Node build smoke；S10-B1：platform smoke（config/env/memory FTS5/shell/glob/schedule）、release artifact smoke（health/attach/WS/SIGTERM）、`smoke:node` 编排；S10-B2：`main`/`exports`/`bin`/`files`、`@atom-neo/*` 发布策略、`prepack`、tarball 安装 smoke（11/11）、CI 双 job、版本 1.22.12；TUI render 自动化列为后续 |
-| S11 | 未开始 | — | DI 收口 |
+| S11 | 已拆分，待实施 | — | 新增 S11 问题/图/计划三份文档；A–H 共 49 个任务（20 简单 / 29 中等），基线 110h、关键路径 89h；CR-ARCH-04/05 已由 S9-D/S5 关闭，仅防回归；未改源码 |
 | S12 | 未开始 | — | 结构重构 |
 
 > 每完成一个阶段，更新本表与 `code-review-2026-11-10.md` 的变更记录。
