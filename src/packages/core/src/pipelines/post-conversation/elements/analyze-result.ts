@@ -1,10 +1,10 @@
-import { getProgressFacts } from "../../shared/progress-evidence";
+import { getProgressFacts } from "@core/pipelines/shared/progress-evidence";
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
 import { FALLBACK_ANALYSIS } from "./types";
-import { callLLM, parseJsonFromLLMResponse } from "../../shared";
+import { callLLM, parseJsonFromLLMResponse } from "@core/pipelines/shared";
 
 const NON_RETRY_TASK_INTENTS = new Set(["creative", "conversation"]);
 

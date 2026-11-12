@@ -1,6 +1,6 @@
 import type { ContinuationDecision, TodoTarget, ContextOwner, ContextSnapshot, ConversationContinuationAction, IntentRequest } from "@atom-neo/shared";
-import type { ElementTask } from "../../../session/element-session";
-import type { TokenUsage } from "../../../session/context";
+import type { ElementTask } from "@core/session/element-session";
+import type { TokenUsage } from "@core/session/context";
 
 export type ConversationMode =
   | "initial"
@@ -43,8 +43,8 @@ export type ConversationFlowState = {
   };
   chainAction?: ConversationContinuationAction;
   continuationDecision?: ContinuationDecision;
-  progressTrace?: import("../../shared/progress-evidence").ProgressTrace;
-  todoBefore?: import("../../../session/context").TodoItem[];
+  progressTrace?: import("@core/pipelines/shared/progress-evidence").ProgressTrace;
+  todoBefore?: import("@atom-neo/shared").TodoItem[];
   currentTodo?: TodoTarget;
   todoHandoff?: boolean;
   toolStopReason?: string;

@@ -1,5 +1,5 @@
 import { describe, test, expect, mock } from "bun:test";
-import type { SkillServiceLike } from "../../skills/types";
+import type { SkillServiceLike } from "@core/skills/types";
 import { createSkillTools } from "./skill";
 
 function makeMockService(overrides?: Partial<SkillServiceLike>): SkillServiceLike {

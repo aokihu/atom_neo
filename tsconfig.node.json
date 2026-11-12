@@ -6,6 +6,7 @@
     "moduleSuffixes": [".node", ""],
     "paths": {
       "@assets/*": ["./src/assets/*"],
+      "@core/*": ["./src/packages/core/src/*"],
       "@opentui/react/runtime-plugin-support": ["./scripts/types/opentui-runtime-plugin-support.d.ts"]
     }
   },

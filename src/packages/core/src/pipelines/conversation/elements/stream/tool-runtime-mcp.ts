@@ -1,4 +1,4 @@
-import type { ToolCallLedger } from "../../../../tools/governance";
+import type { ToolCallLedger } from "@core/tools/governance";
 import { stringifyToolOutput } from "../tool-loop";
 import { executeGovernedTool } from "./tool-runtime";
 import { resolveMCPToolMetadata } from "./tool-result-status";

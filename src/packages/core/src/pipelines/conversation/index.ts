@@ -1,5 +1,5 @@
-import { pipeline } from "../../pipeline/builder";
-import type { ElementRegistry } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   CollectPromptsElement,
   LoadSystemPromptElement,
@@ -15,13 +15,13 @@ import {
   ApplySourceContextElement,
 } from "./elements";
 
-import { DEFAULT_MAX_TOKENS } from "../../constants";
-import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
-import type { SkillServiceLike } from "../../skills/types";
-import type { ContextService } from "../../context/context-service";
-import type { ToolRecordStore } from "../../tools/tool-record-store";
+import { DEFAULT_MAX_TOKENS } from "@core/constants";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { ContextService } from "@core/context/context-service";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
 import type { PromptResolver } from "@atom-neo/shared";
-import type { ElementMemory, ElementTask, PipelineSession } from "../../session/element-session";
+import type { ElementMemory, ElementTask, PipelineSession } from "@core/session/element-session";
 
 export function registerConversationElements(registry: ElementRegistry): void {
   registry.register("collect-prompts", CollectPromptsElement);
@@ -42,8 +42,8 @@ export type ConversationPipelineDeps = {
   elementRegistry: ElementRegistry;
   promptResolver: PromptResolver;
   decisionMode?: "jev" | "rules";
-  decisionModel?: import("../../decision/choose").DecisionModel;
-  fallbackModel?: import("../../decision/choose").DecisionModel;
+  decisionModel?: import("@core/decision/choose").DecisionModel;
+  fallbackModel?: import("@core/decision/choose").DecisionModel;
   session: PipelineSession;
   task: ElementTask;
   apiKey?: string;

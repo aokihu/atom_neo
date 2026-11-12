@@ -1,12 +1,12 @@
 import { BaseElement, BusEvents, IntentRequestType, substringWellFormed } from "@atom-neo/shared";
 import type { ContinuationDecision, PipelineEventMap, PipelineEventBus, TodoTarget } from "@atom-neo/shared";
-import { hasActiveTodos, findTodoTarget, selectCurrentTodo } from "../../../session/context";
-import type { TodoItem } from "../../../session/context";
-import type { ElementMemory, PipelineSession } from "../../../session/element-session";
-import { getTaskPayload } from "../../../session/element-session";
-import { retainIntentMemory } from "../../../tools/builtin/intent";
+import { hasActiveTodos, findTodoTarget, selectCurrentTodo } from "@core/session/context";
+import type { TodoItem } from "@atom-neo/shared";
+import type { ElementMemory, PipelineSession } from "@core/session/element-session";
+import { getTaskPayload } from "@core/session/element-session";
+import { retainIntentMemory } from "@core/tools/builtin/intent";
 import type { ConversationFlowState } from "./types";
-import { createProgressTrace } from "../../shared/progress-evidence";
+import { createProgressTrace } from "@core/pipelines/shared/progress-evidence";
 import { evaluateContinuationRules } from "./continuation-rules";
 import type { ContinuationRouting } from "./continuation-rules";
 import { arbitrateContinuation } from "./continuation-arbitration";

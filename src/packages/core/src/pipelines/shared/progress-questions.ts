@@ -1,4 +1,4 @@
-import type { ChoiceQuestions, DecisionChoices } from "../../decision/choose";
+import type { ChoiceQuestions, DecisionChoices } from "@core/decision/choose";
 import type { ProgressEvidence } from "./progress-evidence";
 
 export function buildProgressQuestions(evidence: ProgressEvidence, continuation = false): ChoiceQuestions {

@@ -1,4 +1,4 @@
-import type { ElementRegistry } from "../../pipeline/registry";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import { JevElement } from "./jev-element";
 import { TokenRatioElement } from "./token-ratio";
 

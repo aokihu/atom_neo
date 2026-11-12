@@ -1,9 +1,9 @@
 import type { IntentPredictionResult, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
-import type { ElementTask, PipelineSession } from "../../../session/element-session";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import type { SkillServiceLike } from "../../../skills/types";
-import type { DecisionModel } from "../../../decision/choose";
-import type { ElementRegistry } from "../../../pipeline/registry";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { DecisionModel } from "@core/decision/choose";
+import type { ElementRegistry } from "@core/pipeline/registry";
 
 export type PredictionMode = "initial" | "predicting" | "routing";
 

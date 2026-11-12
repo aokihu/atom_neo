@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 import { toolResult } from "../outcome";
-import type { ElementMemory } from "../../session/element-session";
+import type { ElementMemory } from "@core/session/element-session";
 
 export const IntentInputSchema = z.object({
   action: z.enum(["follow_up", "retain_memory"]),

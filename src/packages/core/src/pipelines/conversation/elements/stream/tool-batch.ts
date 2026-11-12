@@ -1,7 +1,7 @@
 import { BusEvents } from "@atom-neo/shared";
 import type { ToolResultMetadata } from "@atom-neo/shared";
 import type { ModelMessage } from "ai";
-import { IntentInputSchema, retainIntentMemory } from "../../../../tools/builtin/intent";
+import { IntentInputSchema, retainIntentMemory } from "@core/tools/builtin/intent";
 import { stringifyToolOutput } from "../tool-loop";
 import type { ManualToolCall, ToolStepRecord } from "../tool-loop";
 import { validateToolCallBatch, projectToolMessages } from "../tool-loop";

@@ -1,5 +1,5 @@
-import { pipeline } from "../../pipeline/builder";
-import type { ElementRegistry } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import { BaseElement, PipelineEventBus } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";

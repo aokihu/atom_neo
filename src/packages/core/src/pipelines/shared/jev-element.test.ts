@@ -2,7 +2,7 @@ import { buildAssistantReview } from "../post-conversation/elements/collect-inpu
 import { describe, expect, test } from "bun:test";
 import { makeBus, makePromptResolver } from "../test-helpers";
 import { JevElement, composeTopic, TOPIC_CHOICES } from "./jev-element";
-import { createElementRegistry } from "../../pipeline/registry";
+import { createElementRegistry } from "@core/pipeline/registry";
 import { predictionPipeline, registerPredictionElements } from "../prediction";
 import { postConversationPipeline, registerPostConversationElements } from "../post-conversation";
 import { registerSharedElements } from ".";

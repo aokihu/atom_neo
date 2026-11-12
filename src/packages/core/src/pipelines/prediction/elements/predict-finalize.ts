@@ -1,11 +1,11 @@
-import { startExecutionGoal } from "../../../session/execution-budget";
-import { getTaskPayload } from "../../../session/element-session";
+import { startExecutionGoal } from "@core/session/execution-budget";
+import { getTaskPayload } from "@core/session/element-session";
 import { BaseElement } from "@atom-neo/shared";
 import type { IntentPredictionResult, PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
 import type { PredictionFlowState } from "./types";
-import type { SkillServiceLike } from "../../../skills/types";
+import type { SkillServiceLike } from "@core/skills/types";
 
 export function resolveEffectiveTopic(
   prediction: Pick<IntentPredictionResult, "contextRelevance" | "topic">,

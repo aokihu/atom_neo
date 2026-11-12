@@ -1,5 +1,5 @@
-import type { ToolEffectSummary } from "../../conversation/elements/types";
-import type { ElementTask, PipelineSession } from "../../../session/element-session";
+import type { ToolEffectSummary } from "@core/pipelines/conversation/elements/types";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
 
 export type PostConversationMode = "initial" | "analyzing" | "acting";
 
@@ -29,7 +29,7 @@ export type PostConversationFlowState = {
   finishReason: string;
   completeDetected: boolean;
   toolEffectSummary: ToolEffectSummary;
-  progressEvidence?: import("../../shared/progress-evidence").ProgressEvidence;
+  progressEvidence?: import("@core/pipelines/shared/progress-evidence").ProgressEvidence;
   analysis?: AnalysisResult;
   abortSignal?: AbortSignal;
   executionGoalId?: string;

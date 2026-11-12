@@ -6,12 +6,12 @@ import type {
   PipelineEventMap,
   PromptResolver,
 } from "@atom-neo/shared";
-import type { ContextService } from "../../../context/context-service";
-import type { PipelineSession } from "../../../session/element-session";
-import { getTaskPayload } from "../../../session/element-session";
-import type { SkillServiceLike } from "../../../skills/types";
-import type { ToolRecordStore } from "../../../tools/tool-record-store";
-import { appendCurrentUserMessage, projectPipelineMessage } from "../../../session/message-projection";
+import type { ContextService } from "@core/context/context-service";
+import type { PipelineSession } from "@core/session/element-session";
+import { getTaskPayload } from "@core/session/element-session";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import { appendCurrentUserMessage, projectPipelineMessage } from "@core/session/message-projection";
 import type { ConversationFlowState } from "./types";
 
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {

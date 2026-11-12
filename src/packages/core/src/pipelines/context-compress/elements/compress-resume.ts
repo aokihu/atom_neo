@@ -1,6 +1,6 @@
 import type { ContextCompressRequest, ContinuationDecision } from "@atom-neo/shared";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import type { ElementTask } from "../../../session/element-session";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { ElementTask } from "@core/session/element-session";
 
 export type CompressResumeParams = {
   request: ContextCompressRequest;

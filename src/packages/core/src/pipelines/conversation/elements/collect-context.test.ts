@@ -1,10 +1,10 @@
-import { contextRows as rows } from "../../../context/test-helpers";
+import { contextRows as rows } from "@core/context/test-helpers";
 import { describe, expect, test } from "bun:test";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { ToolRecordStore } from "../../../tools/tool-record-store";
-import { makeBus, makePromptResolver } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { ToolRecordStore } from "@core/tools/tool-record-store";
+import { makeBus, makePromptResolver } from "@core/pipelines/test-helpers";
 import { CollectContextElement } from "./collect-context";
 import { RecordContextElement } from "./record-context";
 

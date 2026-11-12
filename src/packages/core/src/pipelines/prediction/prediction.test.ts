@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { registerPredictionElements, predictionPipeline } from "../index";
 import { registerSharedElements } from "../shared";
-import { createElementRegistry } from "../../pipeline/registry";
+import { createElementRegistry } from "@core/pipeline/registry";
 import { makeBus, makeMockOrchestrator, makePromptResolver } from "../test-helpers";
-import { ContextService } from "../../context/context-service";
+import { ContextService } from "@core/context/context-service";
 import { buildPredictionEnvelope, IntentPredictionSchema } from "./elements/predict-intent";
 import { resolveEffectiveTopic } from "./elements/predict-finalize";
 
@@ -366,8 +366,8 @@ describe("prediction pipeline DSL", () => {
 });
 
 test("standalone request in the same Topic initializes a fresh goal budget", async () => {
-  const { SessionContext } = await import("../../session/context");
-  const { startExecutionGoal } = await import("../../session/execution-budget");
+  const { SessionContext } = await import("@core/session/context");
+  const { startExecutionGoal } = await import("@core/session/execution-budget");
   const session = new SessionContext("same-topic"); session.resetForNewTopic("knowledge.general.other");
   session.addMessage({ role: "user", content: "old goal", timestamp: 0 });
   startExecutionGoal(session, "old-root", "old goal", 200);

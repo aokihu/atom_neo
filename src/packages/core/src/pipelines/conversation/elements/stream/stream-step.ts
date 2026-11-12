@@ -1,7 +1,7 @@
 import { BusEvents } from "@atom-neo/shared";
 import { streamText } from "ai";
 import type { ManualToolCall } from "../tool-loop";
-import { findTodoTarget } from "../../../../session/context";
+import { findTodoTarget } from "@core/session/context";
 import {
   reportModelStepEnded,
   reportModelStepUsage,

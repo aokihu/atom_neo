@@ -55,7 +55,11 @@ import { BaseElement } from "@atom-neo/shared";
 // Same package, relative
 import { type MyTypes } from "./types";
 
-// NEVER use absolute path aliases across package boundaries.
+// Cross-layer inside @atom-neo/core only
+import type { ContextService } from "@core/context/context-service";
+
+// NEVER use @core/* from gateway/tui/services or across package boundaries.
+// Shared/cross-package types use @atom-neo/shared.
 ```
 
 ## 5. Error Handling

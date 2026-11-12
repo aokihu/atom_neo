@@ -2,9 +2,9 @@ import { getProgressFacts } from "./progress-evidence";
 /** Optional typed-decision transform for Prediction and Post-Conversation. */
 import { BaseElement, BusEvents, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, IntentPredictionResult, PromptResolver } from "@atom-neo/shared";
-import type { DecisionModel, SimulateDecision } from "../../decision/choose";
-import { chooseDecision } from "../../decision/choose";
-import type { JevQuestion } from "../../decision/jev-client";
+import type { DecisionModel, SimulateDecision } from "@core/decision/choose";
+import { chooseDecision } from "@core/decision/choose";
+import type { JevQuestion } from "@core/decision/jev-client";
 import type { PredictionFlowState } from "../prediction/elements/types";
 import type { PostConversationFlowState, AnalysisResult } from "../post-conversation/elements/types";
 import { buildProgressQuestions, readProgressAssessment } from "./progress-questions";

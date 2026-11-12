@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
-import type { SkillServiceLike } from "../../skills/types";
+import type { SkillServiceLike } from "@core/skills/types";
 import { toolResult } from "../outcome";
 
 export function createSkillTools(svc: SkillServiceLike): ToolDefinition[] {

@@ -17,7 +17,8 @@
     "sourceMap": true,
     "ignoreDeprecations": "6.0",
     "paths": {
-      "@assets/*": ["./src/assets/*"]
+      "@assets/*": ["./src/assets/*"],
+      "@core/*": ["./src/packages/core/src/*"]
     }
   }
 }

@@ -1,9 +1,9 @@
 import type { ContextEntry, SessionMessage } from "@atom-neo/shared";
-import type { ContextService } from "../../../context/context-service";
-import { estimateTokenCount } from "../../../context/compiler";
-import type { CheckpointSession, PipelineMessage } from "../../../session/element-session";
-import type { SessionPersistenceService } from "../../../session/persistence-service";
-import type { ArchiveReceipt } from "../../../session/types";
+import type { ContextService } from "@core/context/context-service";
+import { estimateTokenCount } from "@core/context/compiler";
+import type { CheckpointSession, PipelineMessage } from "@core/session/element-session";
+import type { SessionPersistenceService } from "@core/session/persistence-service";
+import type { ArchiveReceipt } from "@core/session/types";
 
 export type TokenEstimate = { snapshot: number; messages: number; total: number };
 

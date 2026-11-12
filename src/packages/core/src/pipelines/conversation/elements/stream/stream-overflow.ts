@@ -1,5 +1,5 @@
 import { BusEvents } from "@atom-neo/shared";
-import { calcTokenRatio } from "../../../shared";
+import { calcTokenRatio } from "@core/pipelines/shared";
 import type { ConversationFlowState } from "../types";
 import type { StreamRun } from "./types";
 

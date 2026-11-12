@@ -1,14 +1,14 @@
-import { pipeline } from "../../pipeline/builder";
-import type { ElementRegistry } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   CollectInputElement,
   AnalyzeResultElement,
   PostConversationFinalizeElement,
 } from "./elements";
-import type { ContextService } from "../../context/context-service";
-import type { DecisionModel } from "../../decision/choose";
+import type { ContextService } from "@core/context/context-service";
+import type { DecisionModel } from "@core/decision/choose";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
-import type { ElementTask, PipelineSession } from "../../session/element-session";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
 
 export function registerPostConversationElements(registry: ElementRegistry): void {
   registry.register("post-collect-input", CollectInputElement);

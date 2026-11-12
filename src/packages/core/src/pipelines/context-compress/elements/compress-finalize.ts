@@ -1,11 +1,11 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { ContinuationDecision, ContextCompressRequest, PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import type { SessionPersistenceService } from "../../../session/persistence-service";
-import type { ElementTask } from "../../../session/element-session";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { SessionPersistenceService } from "@core/session/persistence-service";
+import type { ElementTask } from "@core/session/element-session";
 import type { CompressFlowState } from "./types";
-import type { ContextService } from "../../../context/context-service";
+import type { ContextService } from "@core/context/context-service";
 import { commitCompression } from "./compress-commit";
 import { resumeAfterCompress } from "./compress-resume";
 

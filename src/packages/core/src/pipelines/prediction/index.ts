@@ -1,5 +1,5 @@
-import { pipeline } from "../../pipeline/builder";
-import type { ElementRegistry } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   PredictInputElement,
   PredictIntentElement,

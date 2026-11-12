@@ -1,6 +1,6 @@
 import { BusEvents } from "@atom-neo/shared";
-import { findTodoTarget, selectCurrentTodo } from "../../../../session/context";
-import type { ToolRecordStore } from "../../../../tools/tool-record-store";
+import { findTodoTarget, selectCurrentTodo } from "@core/session/context";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
 import type { ManualToolCall } from "../tool-loop";
 import { shouldRecordToolResult } from "./stream-model-input";
 import type { StreamRun, ToolExecutionStatus } from "./types";

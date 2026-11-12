@@ -6,9 +6,9 @@
  */
 import { describe, expect, mock, test } from "bun:test";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { makeBus } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { CompressFinalizeElement } from "./compress-finalize";
 import type { CompressFlowState } from "./types";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createElementRegistry } from "../../pipeline/registry";
+import { createElementRegistry } from "@core/pipeline/registry";
 import { registerSharedElements } from ".";
 
 describe("registerSharedElements", () => {

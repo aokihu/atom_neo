@@ -9,13 +9,13 @@ import type {
   ToolsGroup,
 } from "@atom-neo/shared";
 import type { ModelMessage } from "ai";
-import type { ContextService } from "../../../../context/context-service";
-import type { ElementMemory, ElementTask, PipelineSession } from "../../../../session/element-session";
-import type { SkillServiceLike } from "../../../../skills/types";
-import type { IntentToolInput } from "../../../../tools/builtin/intent";
-import type { ToolCallLedger } from "../../../../tools/governance";
-import type { ToolRecordStore } from "../../../../tools/tool-record-store";
-import type { createLanguageModel } from "../../../shared/model-provider";
+import type { ContextService } from "@core/context/context-service";
+import type { ElementMemory, ElementTask, PipelineSession } from "@core/session/element-session";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { IntentToolInput } from "@core/tools/builtin/intent";
+import type { ToolCallLedger } from "@core/tools/governance";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import type { createLanguageModel } from "@core/pipelines/shared/model-provider";
 import type { ManualToolCall } from "../tool-loop";
 import type { ConversationFlowState } from "../types";
 import type { ToolStatusCollector } from "./tool-result-status";

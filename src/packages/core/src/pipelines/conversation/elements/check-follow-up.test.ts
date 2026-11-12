@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BusEvents, IntentRequestType } from "@atom-neo/shared";
-import { makeBus, makePromptResolver } from "../../test-helpers";
+import { makeBus, makePromptResolver } from "@core/pipelines/test-helpers";
 import { CheckFollowUpElement } from "./check-follow-up";
 
 function createElement(todoState: any[] = []) {

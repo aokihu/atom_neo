@@ -2,7 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
-import { callLLM } from "../../shared";
+import { callLLM } from "@core/pipelines/shared";
 
 export class CompressSummarizeElement extends BaseElement<CompressFlowState, CompressFlowState> {
   #apiKey: string;

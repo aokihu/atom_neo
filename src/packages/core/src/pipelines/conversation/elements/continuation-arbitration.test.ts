@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { makePromptResolver } from "../../test-helpers";
+import { makePromptResolver } from "@core/pipelines/test-helpers";
 import { arbitrateContinuation } from "./continuation-arbitration";
 import type { ContinuationRouting } from "./continuation-rules";
 

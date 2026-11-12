@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { BusEvents } from "@atom-neo/shared";
 import type { TodoTarget } from "@atom-neo/shared";
-import { CONTEXT_DATA_HEADER } from "../../../../context/compiler";
-import type { ElementTask } from "../../../../session/element-session";
+import { CONTEXT_DATA_HEADER } from "@core/context/compiler";
+import type { ElementTask } from "@core/session/element-session";
 import { resolveCacheMetrics } from "./stream-model-input";
 import type { ModelUsage, StreamReporter, StreamTrace, TodoTargetState } from "./types";
 

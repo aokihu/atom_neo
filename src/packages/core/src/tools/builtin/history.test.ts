@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { PipelineEventBus } from "@atom-neo/shared";
 import type { FullEventMap } from "@atom-neo/shared";
-import { ContextService } from "../../context/context-service";
-import { SessionContext } from "../../session/context";
-import { SessionPersistenceService } from "../../session/persistence-service";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { SessionPersistenceService } from "@core/session/persistence-service";
 import { createHistoryTools } from "./history";
 
 const roots: string[] = [];

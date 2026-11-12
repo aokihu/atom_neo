@@ -1,7 +1,7 @@
 import type { SessionMessage } from "@atom-neo/shared";
 import type { ContextCompressRequest } from "@atom-neo/shared";
-import type { ArchiveReceipt } from "../../../session/types";
-import type { CheckpointSession, ElementTask } from "../../../session/element-session";
+import type { ArchiveReceipt } from "@core/session/types";
+import type { CheckpointSession, ElementTask } from "@core/session/element-session";
 
 export type CompressMode = "initial" | "archiving" | "summarizing" | "finalizing";
 

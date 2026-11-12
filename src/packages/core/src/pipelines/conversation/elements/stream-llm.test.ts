@@ -1,4 +1,4 @@
-import { contextRows } from "../../../context/test-helpers";
+import { contextRows } from "@core/context/test-helpers";
 import { describe, expect, test } from "bun:test";
 import {
   injectToolContext,
@@ -11,13 +11,13 @@ import {
 import { ToolStatusCollector, resolveMCPToolMetadata } from "./stream/tool-result-status";
 import { wrapMCPAiTools } from "./stream/tool-runtime-mcp";
 
-import { ContextService } from "../../../context/context-service";
-import { makeBus } from "../../test-helpers";
-import { ToolCallLedger } from "../../../tools/governance";
+import { ContextService } from "@core/context/context-service";
+import { makeBus } from "@core/pipelines/test-helpers";
+import { ToolCallLedger } from "@core/tools/governance";
 import type { Message } from "./types";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { streamText } from "ai";
-import { deepSeekProviderOptions } from "../../shared/llm";
+import { deepSeekProviderOptions } from "@core/pipelines/shared/llm";
 
 test("DeepSeek request uses the effective thinking mode", async () => {
   const requests: any[] = [];

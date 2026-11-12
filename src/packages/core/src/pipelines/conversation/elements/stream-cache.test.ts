@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { makeBus } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { StreamLLMElement } from "./stream-llm";
 
 // Real SDK transport against loopback only: no credentials or external model requests.

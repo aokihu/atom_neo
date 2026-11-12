@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { registerContextCompressElements, contextCompressPipeline } from "../index";
 import { registerSharedElements } from "../shared";
-import { createElementRegistry } from "../../pipeline/registry";
+import { createElementRegistry } from "@core/pipeline/registry";
 import { makeBus, makeMockOrchestrator, makePromptResolver } from "../test-helpers";
-import { ContextService } from "../../context/context-service";
-import { SessionContext } from "../../session/context";
-import { SessionPersistenceService } from "../../session/persistence-service";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { SessionPersistenceService } from "@core/session/persistence-service";
 import { BusEvents } from "@atom-neo/shared";
 import { formatSummaryMessage, isSummaryEligibleMessage } from "./elements/compress-input";
 

@@ -1,4 +1,4 @@
-import type { ElementTask, PipelineSession } from "../../../session/element-session";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
 
 export type EvaluatorMode = "initial" | "analyzing" | "intervening";
 

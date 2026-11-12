@@ -1,7 +1,7 @@
 import { BaseElement, BusEvents, inferProviderProtocol, PromptKey } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
-import { chooseDecision } from "../../../decision/choose";
-import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "../../../decision/choose";
+import { chooseDecision } from "@core/decision/choose";
+import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "@core/decision/choose";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
 import { FALLBACK_EVALUATOR } from "./types";
 

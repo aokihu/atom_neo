@@ -1,7 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import { appendCurrentUserMessage, projectPipelineMessage } from "../../../session/message-projection";
+import { appendCurrentUserMessage, projectPipelineMessage } from "@core/session/message-projection";
 import type { ConversationFlowState } from "./types";
 
 export class FormatUserMessagesElement extends BaseElement<ConversationFlowState, ConversationFlowState> {

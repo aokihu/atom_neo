@@ -1,7 +1,7 @@
 import { BusEvents } from "@atom-neo/shared";
-import type { ElementTask, PipelineSession } from "../../../../session/element-session";
-import type { ToolCallLedger } from "../../../../tools/governance";
-import { ToolCallLedger as ToolCallLedgerClass } from "../../../../tools/governance";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
+import type { ToolCallLedger } from "@core/tools/governance";
+import { ToolCallLedger as ToolCallLedgerClass } from "@core/tools/governance";
 import type { ToolResultMetadata } from "@atom-neo/shared";
 import { tool, zodSchema } from "ai";
 import type { ToolDefinition } from "@atom-neo/shared";

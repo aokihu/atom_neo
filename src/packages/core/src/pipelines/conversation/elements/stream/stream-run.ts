@@ -1,9 +1,9 @@
 import { BusEvents } from "@atom-neo/shared";
-import { getTaskPayload } from "../../../../session/element-session";
-import { selectCurrentTodo } from "../../../../session/context";
-import { ToolCallLedger } from "../../../../tools/governance";
-import { CONTEXT_RESERVE } from "../../../../constants";
-import { createLanguageModel } from "../../../shared/model-provider";
+import { getTaskPayload } from "@core/session/element-session";
+import { selectCurrentTodo } from "@core/session/context";
+import { ToolCallLedger } from "@core/tools/governance";
+import { CONTEXT_RESERVE } from "@core/constants";
+import { createLanguageModel } from "@core/pipelines/shared/model-provider";
 import { toSchemaOnlyTools } from "../tool-loop";
 import type { ConversationFlowState } from "../types";
 import { createStreamTrace, createTransportReporter } from "./stream-reporting";

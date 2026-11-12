@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { makeBus } from "../../../pipelines/test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { FinalizeElement } from "./finalize";
 
 function createFixture(errorStatusCode = 0) {

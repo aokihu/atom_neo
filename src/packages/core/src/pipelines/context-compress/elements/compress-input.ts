@@ -1,12 +1,12 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import type { ContextService } from "../../../context/context-service";
-import type { CheckpointSession } from "../../../session/element-session";
-import { getTaskPayload } from "../../../session/element-session";
+import type { ContextService } from "@core/context/context-service";
+import type { CheckpointSession } from "@core/session/element-session";
+import { getTaskPayload } from "@core/session/element-session";
 import type { CompressFlowState } from "./types";
 import type { SessionMessage } from "@atom-neo/shared";
-import { isFailedToolAssistant } from "../../../session/message-policy";
+import { isFailedToolAssistant } from "@core/session/message-policy";
 
 export function isSummaryEligibleMessage(message: SessionMessage): boolean {
   if (message.visible === false || (message.role !== "user" && message.role !== "assistant")) return false;

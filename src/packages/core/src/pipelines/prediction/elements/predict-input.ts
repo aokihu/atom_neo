@@ -1,8 +1,8 @@
 import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, SessionMessage } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import { isPromptEligibleMessage } from "../../../session/message-policy";
-import type { PipelineSession, ElementTask } from "../../../session/element-session";
+import { isPromptEligibleMessage } from "@core/session/message-policy";
+import type { PipelineSession, ElementTask } from "@core/session/element-session";
 import type { PredictionFlowState } from "./types";
 import type { PreviousTurnContext } from "./types";
 

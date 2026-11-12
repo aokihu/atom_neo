@@ -1,8 +1,8 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
-import type { PipelineSession } from "../../session/element-session";
+import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "@core/constants";
+import type { PipelineSession } from "@core/session/element-session";
 
 export function calcTokenUsage(total: number, inputUsage?: { total?: number }): number {
   return total + (inputUsage?.total ?? 0);

@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 import type { ToolContextInjection, ToolDefinition, ToolResultMetadata } from "@atom-neo/shared";
-import type { ContextService } from "../../../../context/context-service";
+import type { ContextService } from "@core/context/context-service";
 import type { ConversationFlowState, ToolEffectSummary } from "../types";
 
 export function resolveModelInput(input: Pick<

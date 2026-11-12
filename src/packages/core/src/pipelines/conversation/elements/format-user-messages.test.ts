@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { makeBus } from "../../test-helpers";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { FormatUserMessagesElement } from "./format-user-messages";
 
 describe("FormatUserMessagesElement", () => {

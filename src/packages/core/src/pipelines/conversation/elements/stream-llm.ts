@@ -1,10 +1,10 @@
 import { BaseElement, inferProviderProtocol } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, ProviderProtocol, ToolDefinition } from "@atom-neo/shared";
-import type { ElementMemory, ElementTask, PipelineSession } from "../../../session/element-session";
-import type { SkillServiceLike } from "../../../skills/types";
-import type { ContextService } from "../../../context/context-service";
-import type { ToolRecordStore } from "../../../tools/tool-record-store";
-import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "../../../constants";
+import type { ElementMemory, ElementTask, PipelineSession } from "@core/session/element-session";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { ContextService } from "@core/context/context-service";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT } from "@core/constants";
 import { createToolRuntime } from "./stream/tool-runtime";
 import { runConversationStream } from "./stream/stream-run";
 import type { DomainEmitter, StreamConfig, StreamReporter } from "./stream/types";

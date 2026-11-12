@@ -1,17 +1,17 @@
-import { pipeline } from "../../pipeline/builder";
-import type { ElementRegistry } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   CompressInputElement,
   CompressArchiveElement,
   CompressSummarizeElement,
   CompressFinalizeElement,
 } from "./elements";
-import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
-import type { ContextService } from "../../context/context-service";
-import type { SessionPersistenceService } from "../../session/persistence-service";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { ContextService } from "@core/context/context-service";
+import type { SessionPersistenceService } from "@core/session/persistence-service";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
-import type { CheckpointSession, ElementTask } from "../../session/element-session";
-import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
+import type { CheckpointSession, ElementTask } from "@core/session/element-session";
+import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "@core/constants";
 
 export function registerContextCompressElements(registry: ElementRegistry): void {
   registry.register("compress-input", CompressInputElement);

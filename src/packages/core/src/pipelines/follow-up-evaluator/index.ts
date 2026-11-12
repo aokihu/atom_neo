@@ -1,16 +1,16 @@
-import type { DecisionModel } from "../../decision/choose";
-import type { ToolRecordStore } from "../../tools/tool-record-store";
-import { pipeline } from "../../pipeline/builder";
-import type { ElementRegistry } from "../../pipeline/registry";
+import type { DecisionModel } from "@core/decision/choose";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   EvaluatorInputElement,
   EvaluatorAnalyzeElement,
   EvaluateFinalizeElement,
 } from "./elements";
-import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
-import type { ContextService } from "../../context/context-service";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { ContextService } from "@core/context/context-service";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
-import type { ElementTask, PipelineSession } from "../../session/element-session";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
 
 export function registerFollowUpEvaluatorElements(registry: ElementRegistry): void {
   registry.register("evaluator-input", EvaluatorInputElement);

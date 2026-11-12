@@ -1,5 +1,5 @@
 import type { ContinuationDecision, TodoTarget } from "@atom-neo/shared";
-import type { TodoItem } from "../../../session/context";
+import type { TodoItem } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 
 export type ContinuationRouting = {

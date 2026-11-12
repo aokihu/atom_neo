@@ -1,11 +1,11 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, TaskFailureCodes } from "@atom-neo/shared";
-import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import type { PipelineSession } from "../../../session/element-session";
+import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "@core/constants";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { PipelineSession } from "@core/session/element-session";
 import type { ConversationFlowState } from "./types";
-import { calcTokenRatio, applyCompressRatio } from "../../shared";
+import { calcTokenRatio, applyCompressRatio } from "@core/pipelines/shared";
 
 export class ApiKeyInvalidError extends Error {
   readonly code = TaskFailureCodes.ApiKeyInvalid;

@@ -3,13 +3,13 @@ import { TaskSource } from "@atom-neo/shared";
 import { EvaluatorAnalyzeElement } from "./elements/evaluator-analyze";
 import { EvaluatorInputElement } from "./elements/evaluator-input";
 import { EvaluateFinalizeElement } from "./elements/evaluate-finalize";
-import { SessionContext } from "../../session/context";
-import { startExecutionGoal, prepareBudgetRelease } from "../../session/execution-budget";
-import { createTaskItem } from "../../task-factory";
-import { TaskQueue } from "../../task-queue";
-import { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
+import { SessionContext } from "@core/session/context";
+import { startExecutionGoal, prepareBudgetRelease } from "@core/session/execution-budget";
+import { createTaskItem } from "@core/task-factory";
+import { TaskQueue } from "@core/task-queue";
+import { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
 import { makeBus, makePromptResolver } from "../test-helpers";
-import { ToolRecordStore } from "../../tools/tool-record-store";
+import { ToolRecordStore } from "@core/tools/tool-record-store";
 
 function setup() {
   const session = new SessionContext("s");

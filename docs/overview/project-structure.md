@@ -471,6 +471,16 @@ tests, docs and scripts are excluded through `files`; npm always includes
 | `tsconfig.docs.json` | `["bun"]` | `docs/**/*.ts` + `scripts/check-docs.ts` |
 | `src/packages/*/tsconfig.json` | `["bun"]` | Per-workspace Bun typecheck/build |
 
+### Path aliases
+
+- `@assets/*` → `src/assets/*`: app-level bundled assets (for example prompt Markdown).
+- `@core/*` → `src/packages/core/src/*`: cross-layer imports **inside core only**.
+  Example: `import type { ContextService } from "@core/context/context-service"`.
+- Keep `./` / `../` for same-module imports; use `@atom-neo/shared` for shared
+  types and `@atom-neo/<package>` across workspace package boundaries.
+- `@core/*` is resolved by TypeScript, Bun, and the Bun/Node build; the published
+  Node artifact is bundled, so no runtime alias resolver is required.
+
 `tsconfig.node.json` deliberately does not weaken `types`. Bun-only production
 code is isolated by path instead: `bun-http-server.ts` resolves to the type-only
 `bun-http-server.node.ts` through `moduleSuffixes: [".node", ""]`, and the

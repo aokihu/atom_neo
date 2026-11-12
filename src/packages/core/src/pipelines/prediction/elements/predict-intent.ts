@@ -5,7 +5,7 @@ import type { IntentPredictionResult } from "@atom-neo/shared";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { PredictionFlowState } from "./types";
-import { createLanguageModel, providerOptionsFor } from "../../shared/model-provider";
+import { createLanguageModel, providerOptionsFor } from "@core/pipelines/shared/model-provider";
 
 const FALLBACK: IntentPredictionResult = {
   difficulty: "medium",

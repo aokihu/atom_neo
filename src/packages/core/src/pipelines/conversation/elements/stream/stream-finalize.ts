@@ -1,8 +1,8 @@
 import { sanitizeForJSON } from "@atom-neo/shared";
 import { BusEvents, IntentRequestSource, IntentRequestType } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
-import type { IntentToolInput } from "../../../../tools/builtin/intent";
-import type { TokenUsage } from "../../../../session/context";
+import type { IntentToolInput } from "@core/tools/builtin/intent";
+import type { TokenUsage } from "@core/session/context";
 import { stripToolCallMarkup } from "../tool-loop";
 import { summarizeToolEffects } from "./stream-model-input";
 import { resolveTokenOverflow } from "./stream-overflow";

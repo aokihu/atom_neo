@@ -1,11 +1,11 @@
 import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import type { TodoItem } from "../../../session/context";
-import type { PipelineSession } from "../../../session/element-session";
-import type { ToolEffectSummary } from "../../conversation/elements/types";
+import type { TodoItem } from "@atom-neo/shared";
+import type { PipelineSession } from "@core/session/element-session";
+import type { ToolEffectSummary } from "@core/pipelines/conversation/elements/types";
 import type { PostConversationFlowState } from "./types";
-import { buildProgressEvidence } from "../../shared/progress-evidence";
+import { buildProgressEvidence } from "@core/pipelines/shared/progress-evidence";
 
 type AssistantPart = {
   seq?: number;

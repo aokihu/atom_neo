@@ -1,8 +1,8 @@
 import { BusEvents } from "@atom-neo/shared";
 import type { ContextSnapshot, ContextOwner, TodoItem, ToolContextInjection } from "@atom-neo/shared";
-import type { ContextService } from "../../../../context/context-service";
-import type { ElementTask, PipelineSession } from "../../../../session/element-session";
-import type { SkillServiceLike } from "../../../../skills/types";
+import type { ContextService } from "@core/context/context-service";
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
+import type { SkillServiceLike } from "@core/skills/types";
 import { injectToolContext } from "./stream-model-input";
 import type { DomainEmitter, StepContextLike, StreamReporter } from "./types";
 

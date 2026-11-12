@@ -3,8 +3,8 @@ import type { PipelineEventMap, PipelineEventBus, PipelineResult, PromptResolver
 import { BusEvents, PipelineResultType, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState } from "./types";
 import { FALLBACK_ANALYSIS, STALL_THRESHOLD } from "./types";
-import { trigramSimilarity } from "../../shared/trigram";
-import type { ContextService } from "../../../context/context-service";
+import { trigramSimilarity } from "@core/pipelines/shared/trigram";
+import type { ContextService } from "@core/context/context-service";
 
 export class PostConversationFinalizeElement extends BaseElement<PostConversationFlowState, PipelineResult> {
   #contextService: ContextService;

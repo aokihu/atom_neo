@@ -2,8 +2,8 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
-import { projectPipelineMessage, selectPromptEligibleMessages } from "../../../session/message-projection";
-import type { PipelineSession } from "../../../session/element-session";
+import { projectPipelineMessage, selectPromptEligibleMessages } from "@core/session/message-projection";
+import type { PipelineSession } from "@core/session/element-session";
 
 export function selectPromptMessages<T extends { role: string }>(
   messages: readonly T[],

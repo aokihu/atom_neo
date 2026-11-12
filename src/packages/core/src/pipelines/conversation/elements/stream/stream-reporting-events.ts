@@ -1,6 +1,6 @@
 import { BusEvents } from "@atom-neo/shared";
 import type { ContinuationDecision, TodoItem, TodoTarget } from "@atom-neo/shared";
-import type { ToolGovernanceSnapshot } from "../../../../tools/governance";
+import type { ToolGovernanceSnapshot } from "@core/tools/governance";
 import type { StreamReporter, StreamTrace } from "./types";
 
 export function reportStreamLoopEnded(params: {

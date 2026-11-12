@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PermissionLevel, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
 import type { ToolDefinition } from "@atom-neo/shared";
-import type { SessionPersistenceService } from "../../session/persistence-service";
+import type { SessionPersistenceService } from "@core/session/persistence-service";
 import { toolResult } from "../outcome";
 
 const searchSchema = z.object({

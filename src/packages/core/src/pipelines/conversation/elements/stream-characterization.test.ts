@@ -2,10 +2,10 @@ import { expect, test } from "bun:test";
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { createIntentTool } from "../../../tools/builtin/intent";
-import { makeBus } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { createIntentTool } from "@core/tools/builtin/intent";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { StreamLLMElement } from "./stream-llm";
 
 /**

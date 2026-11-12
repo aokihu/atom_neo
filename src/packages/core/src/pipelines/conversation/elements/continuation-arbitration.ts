@@ -1,11 +1,11 @@
 import { substringWellFormed } from "@atom-neo/shared";
 import type { ContinuationDecision, PromptResolver } from "@atom-neo/shared";
-import type { PipelineSession } from "../../../session/element-session";
-import { chooseDecision } from "../../../decision/choose";
-import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "../../../decision/choose";
+import type { PipelineSession } from "@core/session/element-session";
+import { chooseDecision } from "@core/decision/choose";
+import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "@core/decision/choose";
 import type { ConversationFlowState } from "./types";
-import { buildProgressEvidence, getProgressFacts } from "../../shared/progress-evidence";
-import { buildProgressQuestions, readProgressAssessment } from "../../shared/progress-questions";
+import { buildProgressEvidence, getProgressFacts } from "@core/pipelines/shared/progress-evidence";
+import { buildProgressQuestions, readProgressAssessment } from "@core/pipelines/shared/progress-questions";
 import { buildContinuationDecision } from "./continuation-rules";
 import type { ContinuationRouting } from "./continuation-rules";
 

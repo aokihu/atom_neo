@@ -1,9 +1,9 @@
 import { BaseElement, BusEvents } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import type { ToolRecordStore } from "../../../tools/tool-record-store";
-import type { PipelineSession } from "../../../session/element-session";
-import { getTaskPayload } from "../../../session/element-session";
-import { buildProgressEvidence } from "../../shared/progress-evidence";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import type { PipelineSession } from "@core/session/element-session";
+import { getTaskPayload } from "@core/session/element-session";
+import { buildProgressEvidence } from "@core/pipelines/shared/progress-evidence";
 import type { EvaluatorFlowState } from "./types";
 
 export class EvaluatorInputElement extends BaseElement<any, EvaluatorFlowState> {

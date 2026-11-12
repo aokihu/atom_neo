@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import { makeBus, makePromptResolver } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import { makeBus, makePromptResolver } from "@core/pipelines/test-helpers";
 import { CollectInputElement } from "./collect-input";
 import { PostConversationFinalizeElement } from "./finalize";
 import { FALLBACK_ANALYSIS } from "./types";

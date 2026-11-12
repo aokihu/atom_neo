@@ -1,7 +1,7 @@
 import { BusEvents } from "@atom-neo/shared";
 import type { ToolResultMetadata } from "@atom-neo/shared";
-import type { ToolCallDecision, ToolCallLedger } from "../../../../tools/governance";
-import { formatToolGovernanceBlock } from "../../../../tools/governance";
+import type { ToolCallDecision, ToolCallLedger } from "@core/tools/governance";
+import { formatToolGovernanceBlock } from "@core/tools/governance";
 import type { ToolStatusCollector } from "./tool-result-status";
 import type { StreamReporter } from "./types";
 

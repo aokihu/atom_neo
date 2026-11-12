@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { BusEvents } from "@atom-neo/shared";
-import { ToolCallLedger } from "../../../../tools/governance";
+import { ToolCallLedger } from "@core/tools/governance";
 import { ToolStatusCollector } from "./tool-result-status";
 import { createToolRuntime } from "./tool-runtime";
 import { wrapMCPAiTools } from "./tool-runtime-mcp";
