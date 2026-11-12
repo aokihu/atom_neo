@@ -176,6 +176,7 @@ src/packages/core/
 │
 ├── session/
 │   ├── context.ts
+│   ├── element-session.ts  # PipelineSession / ElementTask / ElementMemory Element 边界
 │   ├── store.ts
 │   ├── persistence-service.ts
 │   ├── execution-budget.ts

@@ -10,6 +10,7 @@ import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestr
 import type { ContextService } from "../../context/context-service";
 import type { SessionPersistenceService } from "../../session/persistence-service";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import type { CheckpointSession, ElementTask } from "../../session/element-session";
 import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
 
 export function registerContextCompressElements(registry: ElementRegistry): void {
@@ -21,8 +22,8 @@ export function registerContextCompressElements(registry: ElementRegistry): void
 
 export function contextCompressPipeline(deps: {
   elementRegistry: ElementRegistry;
-  session: any;
-  task: any;
+  session: CheckpointSession;
+  task: ElementTask;
   promptResolver: PromptResolver;
   apiKey: string;
   model: string;

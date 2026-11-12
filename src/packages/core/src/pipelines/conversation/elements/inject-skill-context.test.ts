@@ -6,7 +6,7 @@ import type { ConversationFlowState } from "./types";
 function makeState(overrides: Partial<ConversationFlowState> = {}): ConversationFlowState {
   return {
     mode: "streaming",
-    task: {},
+    task: {} as any,
     ...overrides,
   };
 }

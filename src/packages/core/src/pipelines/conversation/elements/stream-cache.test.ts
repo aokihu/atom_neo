@@ -59,7 +59,7 @@ test.each([false, true])("refreshes bounded snapshots and settles the actual ste
           return { content: "updated", metadata: { ok: true, effect: "state_changed" } };
         } }],
     });
-    const result = await element.doProcess({ mode: "formatted", task: { id: owner.taskId, sessionId: owner.sessionId },
+    const result = await element.doProcess({ mode: "formatted", task: { id: owner.taskId, sessionId: owner.sessionId } as any,
       contextOwner: owner, contextSnapshot: initial, userMessages: [{ role: "user", content: "Run test" }] });
     expect(requests).toHaveLength(2);
     expect(requests[1].messages[2]).toMatchObject({ role: "assistant", content: "第一段。",

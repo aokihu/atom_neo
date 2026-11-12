@@ -1,4 +1,5 @@
 import type { ToolEffectSummary } from "../../conversation/elements/types";
+import type { ElementTask, PipelineSession } from "../../../session/element-session";
 
 export type PostConversationMode = "initial" | "analyzing" | "acting";
 
@@ -16,8 +17,8 @@ export const STALL_THRESHOLD = 0.6;
 
 export type PostConversationFlowState = {
   mode: PostConversationMode;
-  task: any;
-  session: any;
+  task: ElementTask;
+  session: PipelineSession;
   userMessage: string;
   assistantResponse: string;
   predictedTaskIntent: string;

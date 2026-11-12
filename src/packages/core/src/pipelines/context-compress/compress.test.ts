@@ -90,7 +90,7 @@ describe("compress-input", () => {
 
     const Ctor = registry.resolve("compress-input");
     const contextService = makeContextService(bus);
-    const el = new Ctor({ name: "compress-input", kind: "source", bus, session, contextService });
+    const el = new Ctor({ name: "compress-input", kind: "source", bus, session: session as any, contextService });
     const result = await (el as any).doProcess({ mode: "initial", task: { id: "t1" } });
 
     expect(result.mode).toBe("archiving");
@@ -110,7 +110,7 @@ describe("compress-input", () => {
 
     const Ctor = registry.resolve("compress-input");
     const contextService = makeContextService(bus);
-    const el = new Ctor({ name: "compress-input", kind: "source", bus, session, contextService });
+    const el = new Ctor({ name: "compress-input", kind: "source", bus, session: session as any, contextService });
     await (el as any).doProcess({ mode: "initial", task: { id: "t1" } });
 
     expect(session.messages[0]?.content).toBe(longContent);
@@ -126,7 +126,7 @@ describe("compress-input", () => {
 
     const Ctor = registry.resolve("compress-input");
     const contextService = makeContextService(bus);
-    const el = new Ctor({ name: "compress-input", kind: "source", bus, session, contextService });
+    const el = new Ctor({ name: "compress-input", kind: "source", bus, session: session as any, contextService });
     const result = await (el as any).doProcess({ mode: "initial", task: { id: "t1" } });
 
     expect(result.archiveMessages.length).toBe(0);
@@ -462,8 +462,8 @@ describe("context-compress DSL", () => {
     const pipeline = contextCompressPipeline({
       elementRegistry: registry,
       promptResolver: makePromptResolver(),
-      session: { sessionId: "s1" },
-      task: { id: "t1" },
+      session: { sessionId: "s1" } as any,
+      task: { id: "t1" } as any,
       apiKey: "sk-test",
       model: "test",
       orchestrator: makeMockOrchestrator(null) as any,

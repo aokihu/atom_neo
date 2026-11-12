@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
 import { toolResult } from "../outcome";
+import type { ElementMemory } from "../../session/element-session";
 
 export const IntentInputSchema = z.object({
   action: z.enum(["follow_up", "retain_memory"]),
@@ -28,7 +29,7 @@ export function createIntentTool(): ToolDefinition {
 }
 
 /** Confirm an existing memory without controlling the conversation lifecycle. */
-export function retainIntentMemory(memory: any, id: string): boolean {
+export function retainIntentMemory(memory: ElementMemory | null | undefined, id: string): boolean {
   if (!memory || !id) return false;
   const fullId = memory.findFullId?.(id) ?? (memory.has?.(id) ? id : null);
   if (!fullId) return false;

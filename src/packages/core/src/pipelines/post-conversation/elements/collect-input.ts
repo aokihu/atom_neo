@@ -2,6 +2,7 @@ import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { TodoItem } from "../../../session/context";
+import type { PipelineSession } from "../../../session/element-session";
 import type { ToolEffectSummary } from "../../conversation/elements/types";
 import type { PostConversationFlowState } from "./types";
 import { buildProgressEvidence } from "../../shared/progress-evidence";
@@ -71,20 +72,20 @@ export function buildAssistantReview(parts: readonly AssistantPart[], todos: rea
 }
 
 export class CollectInputElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
-  #session: any;
+  #session: PipelineSession;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    session: any;
+    session: PipelineSession;
   }) {
     super({ name: params.name, kind: "source", bus: params.bus });
     this.#session = params.session;
   }
 
   async doProcess(input: PostConversationFlowState): Promise<PostConversationFlowState> {
-    const msgs: Array<{ seq?: number; role: string; content: string; visible?: boolean; metadata?: Record<string, unknown> }> = this.#session?.messages ?? [];
+    const msgs = this.#session?.messages ?? [];
     const prediction = this.#session?.pendingPrediction ?? {};
 
     const budget = this.#session?.executionBudget;

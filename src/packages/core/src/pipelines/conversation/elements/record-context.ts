@@ -7,6 +7,8 @@ import type {
   PromptResolver,
 } from "@atom-neo/shared";
 import type { ContextService } from "../../../context/context-service";
+import type { PipelineSession } from "../../../session/element-session";
+import { getTaskPayload } from "../../../session/element-session";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { ToolRecordStore } from "../../../tools/tool-record-store";
 import { appendCurrentUserMessage } from "./types";
@@ -14,7 +16,7 @@ import type { ConversationFlowState } from "./types";
 
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #cwd: string;
-  #session: any;
+  #session?: PipelineSession;
   #promptResolver: PromptResolver;
   #providerModel: string;
   #taskIntent: string;
@@ -30,7 +32,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     contextService: ContextService;
     promptResolver: PromptResolver;
     sandbox?: string;
-    session?: any;
+    session?: PipelineSession;
     providerModel?: string;
     configContextLimit?: number;
     taskIntent?: string;
@@ -101,7 +103,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       originalGoal: this.#session?.executionBudget?.goal,
       executionBudget: this.#session?.executionBudget ? { globalUsed: this.#session.executionBudget.globalUsed,
         globalAllowance: this.#session.executionBudget.globalAllowance, localUsed: this.#session.executionBudget.localUsed } : undefined });
-    const continuation = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data;
+    const continuation = getTaskPayload(input.task, "continuation_request");
     if (continuation) {
       this.#putText("task", taskOwner, "continuation-rules", "runtime",
         continuation.kind === "reconcile_progress"
@@ -119,7 +121,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       .filter(prompt => prompt.role !== "tool")
       .map(prompt => ({ role: prompt.role, content: prompt.content,
         ...(prompt.reasoning_content ? { reasoning_content: prompt.reasoning_content } : {}) }));
-    appendCurrentUserMessage(userMessages, input.task?.payload?.find((part: any) => part.type === "text")?.data);
+    appendCurrentUserMessage(userMessages, getTaskPayload(input.task, "text"));
     this.report(BusEvents.Element.Data, {
       step: "done",
       taskIntent: this.#taskIntent,

@@ -28,7 +28,7 @@ export class ApplySourceContextElement extends BaseElement<ConversationFlowState
   }
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
-    const platform = (input.task as any)?.platform as string | undefined;
+    const platform = input.task.platform;
     if (!platform) return input;
 
     const key = PLATFORM_PROMPTS[platform];

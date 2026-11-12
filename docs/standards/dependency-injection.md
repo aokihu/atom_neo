@@ -112,6 +112,34 @@ Duplicate names still throw `Element "<name>" already registered`; missing names
 still throw `Element "<name>" not found. Registered: [...]`. Two registries can
 hold the same names without interfering.
 
+### Element Session Boundary
+
+Elements depend on the structural `PipelineSession`, not the concrete
+`SessionContext` or `any`. Every member has a real Element call site; the task
+shape stays `TaskItem` through `ElementTask`. Memory intent handling uses the
+`ElementMemory` subset (`retain` / optional `findFullId` / optional `has`):
+
+```typescript
+import type { PipelineSession, ElementTask } from "@atom-neo/core";
+
+class ExampleElement {
+  #session: PipelineSession;
+  #task?: ElementTask;
+
+  constructor(params: { session: PipelineSession; task?: ElementTask }) {
+    this.#session = params.session;
+    this.#task = params.task;
+  }
+}
+```
+
+`SessionContext` is assignable to `PipelineSession` at compile time
+(`session/element-session.test.ts`); an object missing required session fields
+fails typecheck. `CheckpointSession` adds only `exportState`, so context
+compression can hand its narrow session to `SessionPersistenceService`.
+`getTaskPayload(task, "text")` replaces untyped payload scans. This boundary is
+guarded against regression by a static test over `pipelines/**` production files.
+
 ### PipelineInstanceStore Boundary
 
 `TaskEngine` caches each built pipeline for the lifetime of one task through an

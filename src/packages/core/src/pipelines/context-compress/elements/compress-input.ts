@@ -2,8 +2,9 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { ContextService } from "../../../context/context-service";
+import type { CheckpointSession } from "../../../session/element-session";
+import { getTaskPayload } from "../../../session/element-session";
 import type { CompressFlowState } from "./types";
-import type { ContextCompressRequest } from "@atom-neo/shared";
 import type { SessionMessage } from "@atom-neo/shared";
 import { isFailedToolAssistant } from "../../../session/message-policy";
 
@@ -32,14 +33,14 @@ function resolveStrategy(ratio: number): { keepCount: number; summaryMaxTokens: 
 }
 
 export class CompressInputElement extends BaseElement<any, CompressFlowState> {
-  #session: any;
+  #session: CheckpointSession;
   #contextService: ContextService;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    session: any;
+    session: CheckpointSession;
     contextService: ContextService;
   }) {
     super({ name: params.name, kind: "source", bus: params.bus });
@@ -49,8 +50,7 @@ export class CompressInputElement extends BaseElement<any, CompressFlowState> {
 
   async doProcess(input: any): Promise<CompressFlowState> {
     const messages = [...(this.#session?.messages ?? [])].map(message => ({ ...message }));
-    const request = input.task?.payload?.find((part: { type?: string }) =>
-      part.type === "context_compress_request")?.data as ContextCompressRequest | undefined;
+    const request = getTaskPayload(input.task, "context_compress_request");
     const resolvedRequest = request ?? { trigger: "manual", resumeConversation: false };
 
     const ratio = this.#session?.compressRatio ?? 0.5;

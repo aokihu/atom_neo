@@ -29,7 +29,7 @@ function createFixture(errorStatusCode = 0) {
     element,
     input: {
       mode: "ready_to_finalize" as const,
-      task: { id: "t1", sessionId: "s1", chatId: "c1" },
+      task: { id: "t1", sessionId: "s1", chatId: "c1" } as any,
       contextSnapshot,
       errorStatusCode,
       contextSnapshotAccepted: errorStatusCode === 0,

@@ -10,6 +10,7 @@ import {
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { ContextService } from "../../context/context-service";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import type { ElementTask, PipelineSession } from "../../session/element-session";
 
 export function registerFollowUpEvaluatorElements(registry: ElementRegistry): void {
   registry.register("evaluator-input", EvaluatorInputElement);
@@ -22,8 +23,8 @@ export function followUpEvaluatorPipeline(deps: {
   decisionModel?: DecisionModel;
   fallbackModel?: DecisionModel;
   toolRecordStore?: ToolRecordStore;
-  session: any;
-  task: any;
+  session: PipelineSession;
+  task: ElementTask;
   promptResolver: PromptResolver;
   apiKey: string;
   model: string;

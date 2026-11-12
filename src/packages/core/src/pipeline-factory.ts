@@ -18,6 +18,7 @@ import type { SessionPersistenceService } from "./session/persistence-service";
 import type { SessionStore } from "./session/store";
 import type { SkillServiceLike } from "./skills/types";
 import type { Pipeline } from "./pipeline/builder";
+import type { ElementMemory, ElementTask } from "./session/element-session";
 import type { ElementRegistry } from "./pipeline/registry";
 
 /** Local extension of the shared model shape: fake runtimes may omit protocol/type. */
@@ -70,11 +71,11 @@ export type PipelineFactoryDeps = {
   mcpToolsRef: { current: Record<string, any> };
   getCompiledPrompt: () => string;
   skillService?: SkillServiceLike;
-  memory: unknown;
+  memory: ElementMemory;
   sandbox: string;
 };
 
-export type PipelineBuilders = Record<string, (task: any) => Pipeline>;
+export type PipelineBuilders = Record<string, (task: ElementTask) => Pipeline>;
 
 /** Build the pipeline map used by TaskEngine; model selection matches the legacy startCore closures. */
 export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilders {
@@ -122,7 +123,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
   const budgetLimits = () => budgetLimitsFor(runtime);
 
   return {
-    prediction: (task: any) => {
+    prediction: (task: ElementTask) => {
       const session = sessionStore.get(task.sessionId);
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
@@ -141,7 +142,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       }).build(deps.bus);
     },
 
-    conversation: (task: any) => {
+    conversation: (task: ElementTask) => {
       const session = sessionStore.get(task.sessionId);
       const prediction = session.pendingPrediction ?? {
         difficulty: "medium",
@@ -198,7 +199,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       }).build(deps.bus);
     },
 
-    "follow-up-evaluator": (task: any) => {
+    "follow-up-evaluator": (task: ElementTask) => {
       const session = sessionStore.get(task.sessionId);
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
@@ -217,7 +218,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       }).build(deps.bus);
     },
 
-    "context-compress": (task: any) => {
+    "context-compress": (task: ElementTask) => {
       const session = sessionStore.get(task.sessionId);
       const selected = getModel("basic");
       return contextCompressPipeline({
@@ -241,7 +242,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       }).build(deps.bus);
     },
 
-    "post-conversation": (task: any) => {
+    "post-conversation": (task: ElementTask) => {
       const session = sessionStore.get(task.sessionId);
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;

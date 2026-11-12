@@ -17,7 +17,8 @@ export class FormatUserMessagesElement extends BaseElement<ConversationFlowState
       if (m.role === "tool") continue;
       messages.push({ role: m.role, content: m.content });
     }
-    appendCurrentUserMessage(messages, input.task?.payload?.[0]?.data);
+    const [first] = input.task?.payload ?? [];
+    appendCurrentUserMessage(messages, first?.type === "text" ? first.data : undefined);
 
     this.report(BusEvents.Element.Data, { step: "done", messageCount: messages.length });
     return { ...input, mode: "formatted", userMessages: messages };

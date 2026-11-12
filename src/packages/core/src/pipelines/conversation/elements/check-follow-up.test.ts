@@ -9,7 +9,7 @@ function createElement(todoState: any[] = []) {
     kind: "boundary",
     bus: makeBus(),
     promptResolver: makePromptResolver(),
-    session: { todoState },
+    session: { todoState } as any,
   });
 }
 
@@ -116,7 +116,7 @@ const explicitIntent = [{ request: IntentRequestType.FOLLOW_UP, params: { next_p
 const model = { type: "jev" as const, apiKey: "test", model: "test-model", baseUrl: "https://decisions.example.test" };
 function arbitration(todos: any[], options: any = {}) {
   const session = { todoState: todos, messages: [{ role: "user", content: "写世界文明史" }] };
-  return new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus: makeBus(), promptResolver: makePromptResolver(), session, ...options });
+  return new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus: makeBus(), promptResolver: makePromptResolver(), session: session as any, ...options });
 }
 function flow(options: any = {}): any {
   return { mode: "executing", task: { id: "task", sessionId: "session" }, todoBefore: [first, second],
@@ -265,7 +265,7 @@ test("arbitration receives the executed request and refuses repeated text withou
     followUp: { summary: "前半", nextPrompt: "写剩余部分", avoidRepeat: "前半" } };
   const session = { todoState: [first, second], messages: [{ role: "user", content: "文明史" }, { role: "assistant", content: text }] };
   let sent: any;
-  const element = new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus: makeBus(), promptResolver: makePromptResolver(), session,
+  const element = new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus: makeBus(), promptResolver: makePromptResolver(), session: session as any,
     decisionModel: model, fetchImpl: async (_url, init) => { sent = JSON.parse(String(init.body)); return response(sent.questions, "resume_current"); } });
   const result = await element.doProcess(flow({ responseText: text, task: { id: "task", sessionId: "session",
     payload: [{ type: "continuation_request", data: request }] } }));

@@ -3,6 +3,7 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, TaskFailureCodes } from "@atom-neo/shared";
 import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import type { PipelineSession } from "../../../session/element-session";
 import type { ConversationFlowState } from "./types";
 import { calcTokenRatio, applyCompressRatio } from "../../shared";
 
@@ -17,7 +18,7 @@ export class ApiKeyInvalidError extends Error {
 
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
   #orchestrator?: InternalTaskOrchestrator;
-  #session: any;
+  #session: PipelineSession;
   #configContextLimit: number;
   #maxTokens: number;
 
@@ -26,7 +27,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator?: InternalTaskOrchestrator;
-    session?: any;
+    session: PipelineSession;
     configContextLimit?: number;
     maxTokens?: number;
   }) {

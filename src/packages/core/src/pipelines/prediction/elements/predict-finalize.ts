@@ -1,4 +1,5 @@
 import { startExecutionGoal } from "../../../session/execution-budget";
+import { getTaskPayload } from "../../../session/element-session";
 import { BaseElement } from "@atom-neo/shared";
 import type { IntentPredictionResult, PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
@@ -70,7 +71,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     // Goal lifecycle is independent of Topic; related turns retain the original goal.
     if ((!session.executionBudget && session.legacyBudgetDepth === undefined) || prediction.contextRelevance === "standalone") {
       if (prediction.contextRelevance === "standalone") { session.setTodoState?.([]); session.clearContinuationContext?.(); }
-      const goal = input.task.payload?.find((part: any) => part.type === "text")?.data ?? "";
+      const goal = getTaskPayload(input.task, "text") ?? "";
       const allowance = this.#maxGlobalRounds;
       startExecutionGoal(session, input.task.chainId ?? input.task.id, goal, allowance);
     }

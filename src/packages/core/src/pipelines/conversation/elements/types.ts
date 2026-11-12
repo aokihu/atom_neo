@@ -1,4 +1,5 @@
 import type { ContinuationDecision, TodoTarget, ContextOwner, ContextSnapshot, ConversationContinuationAction, IntentRequest } from "@atom-neo/shared";
+import type { ElementTask } from "../../../session/element-session";
 import type { TokenUsage } from "../../../session/context";
 
 export type ConversationMode =
@@ -29,7 +30,7 @@ export const appendCurrentUserMessage = (messages: Message[], content?: string):
 
 export type ConversationFlowState = {
   mode: ConversationMode;
-  task: any;
+  task: ElementTask;
   prompts?: Array<{ role: string; content: string; reasoning_content?: string }>;
   systemPrompt?: string;
   compiledAgentsPrompt?: string;

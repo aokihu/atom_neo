@@ -8,6 +8,7 @@ import {
 import type { ContextService } from "../../context/context-service";
 import type { DecisionModel } from "../../decision/choose";
 import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import type { ElementTask, PipelineSession } from "../../session/element-session";
 
 export function registerPostConversationElements(registry: ElementRegistry): void {
   registry.register("post-collect-input", CollectInputElement);
@@ -17,8 +18,8 @@ export function registerPostConversationElements(registry: ElementRegistry): voi
 
 export function postConversationPipeline(deps: {
   elementRegistry: ElementRegistry;
-  session: any;
-  task: any;
+  session: PipelineSession;
+  task: ElementTask;
   promptResolver: PromptResolver;
   apiKey: string;
   model: string;

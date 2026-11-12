@@ -1,4 +1,5 @@
 import type { IntentPredictionResult, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import type { ElementTask, PipelineSession } from "../../../session/element-session";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { DecisionModel } from "../../../decision/choose";
@@ -13,8 +14,8 @@ export type PreviousTurnContext = {
 
 export type PredictionFlowState = {
   mode: PredictionMode;
-  task: any;
-  session: any;
+  task: ElementTask;
+  session: PipelineSession;
   userMessage: string;
   currentTopic: string;
   previousTurnContext?: PreviousTurnContext;
@@ -25,8 +26,8 @@ export type PredictionFlowState = {
 
 export type PredictionPipelineDeps = {
   elementRegistry: ElementRegistry;
-  session: any;
-  task: any;
+  session: PipelineSession;
+  task: ElementTask;
   promptResolver: PromptResolver;
   apiKey: string;
   model: string;

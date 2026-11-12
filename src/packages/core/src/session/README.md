@@ -4,6 +4,8 @@
 DSML 或 `toolEffectSummary`。
 
 - `context.ts`：内存中的 Session 状态、消息序号、TODO 与 Continuation。
+- `element-session.ts`：Element 边界的 `PipelineSession` / `ElementTask` / `ElementMemory` 结构契约、`CheckpointSession` 与类型化 `getTaskPayload`；不复制 `SessionContext` 全量。
+- `element-session.test.ts`：`SessionContext` 可赋值、缺失字段编译失败、`ElementTask = TaskItem` 与 pipelines 生产代码 `session/task/memory: any` 静态回归。
 - `store.ts`：Session 缓存、恢复、挂起、淘汰与默认 TUI 会话选择。
 - `initiator` 与 `lastTuiUsedAt` 随 checkpoint 保存；历史缺字段保留 unknown，不解析 ID。
 - `persistence-service.ts`：目录 checkpoint、JSONL 分段、恢复和历史查询。

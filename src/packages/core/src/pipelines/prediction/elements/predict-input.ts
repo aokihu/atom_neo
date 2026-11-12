@@ -2,6 +2,7 @@ import { BaseElement, substringWellFormed } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, SessionMessage } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import { isPromptEligibleMessage } from "../../../session/message-policy";
+import type { PipelineSession, ElementTask } from "../../../session/element-session";
 import type { PredictionFlowState } from "./types";
 import type { PreviousTurnContext } from "./types";
 
@@ -42,14 +43,14 @@ export function getPreviousTurnContext(messages: readonly SessionMessage[]): Pre
 }
 
 export class PredictInputElement extends BaseElement<any, PredictionFlowState> {
-  #session: any;
+  #session: PipelineSession;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    session: any;
-    task: any;
+    session: PipelineSession;
+    task?: ElementTask;
   }) {
     super({ name: params.name, kind: "source", bus: params.bus });
     this.#session = params.session;

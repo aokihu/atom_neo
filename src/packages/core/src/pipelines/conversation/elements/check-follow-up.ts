@@ -2,6 +2,8 @@ import { BaseElement, BusEvents, IntentRequestType, substringWellFormed } from "
 import type { ContinuationDecision, PipelineEventMap, PipelineEventBus, PromptResolver, TodoTarget } from "@atom-neo/shared";
 import { hasActiveTodos, findTodoTarget, selectCurrentTodo } from "../../../session/context";
 import type { TodoItem } from "../../../session/context";
+import type { ElementMemory, PipelineSession } from "../../../session/element-session";
+import { getTaskPayload } from "../../../session/element-session";
 import { retainIntentMemory } from "../../../tools/builtin/intent";
 import { chooseDecision } from "../../../decision/choose";
 import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "../../../decision/choose";
@@ -28,11 +30,11 @@ function excerpt(text: string, limit: number) {
 }
 
 export class CheckFollowUpElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
-  #memory: any;
-  #session: any;
+  #memory?: ElementMemory;
+  #session?: PipelineSession;
   #params: ArbitrationParams;
 
-  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap>; memory?: any; session?: any } & ArbitrationParams) {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap>; memory?: ElementMemory; session?: PipelineSession } & ArbitrationParams) {
     super({ name: params.name, kind: "boundary", bus: params.bus });
     this.#memory = params.memory;
     this.#session = params.session;
@@ -41,12 +43,12 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "executing") return input;
-    const todos: TodoItem[] = this.#session?.todoState ?? [];
+    const todos: readonly TodoItem[] = this.#session?.todoState ?? [];
     const allMessages = this.#session?.messages ?? [];
     const budget = this.#session?.executionBudget;
     const userIndex = budget ? allMessages.findIndex((message: any) => message.seq === budget.goalStartSeq)
       : allMessages.findLastIndex((message: any) => message.role === "user");
-    const request = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data as ContinuationDecision | undefined;
+    const request = getTaskPayload(input.task, "continuation_request");
     const progressTrace = createProgressTrace(input, todos);
     input = { ...input, progressTrace };
     const active = hasActiveTodos(todos);
@@ -157,7 +159,7 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
     const chainAction = continuationDecision.kind === "resume_current" ? "follow_up"
       : continuationDecision.kind === "advance_todo" ? "continue_todo"
       : continuationDecision.kind === "reconcile_progress" ? "reconcile_todo" : undefined;
-    const incomingContinuation = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data;
+    const incomingContinuation = getTaskPayload(input.task, "continuation_request");
     if (incomingContinuation?.kind === "reconcile_progress") {
       const todoAfter = this.#session?.todoState ?? [];
       this.report(BusEvents.Element.Data, { step: "reconciliation-result", ...this.#trace(input), incomingContinuation,

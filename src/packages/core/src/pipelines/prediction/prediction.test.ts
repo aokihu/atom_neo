@@ -34,9 +34,6 @@ describe("prediction pipeline elements", () => {
   test("builds a bounded classification envelope without changing user input", () => {
     const userMessage = "  数据是最新的吗？\n";
     const envelope = buildPredictionEnvelope({
-      mode: "predicting",
-      task: {},
-      session: null,
       userMessage,
       currentTopic: "knowledge.weather.typhoon",
       previousTurnContext: { user: "最近还有厉害的台风吗", assistant: "浪卡仍然活跃。" },
@@ -67,7 +64,7 @@ describe("prediction pipeline elements", () => {
       name: "predict-input",
       kind: "source",
       bus,
-      session: null,
+      session: null as any,
       task: { payload: [{ data: "  hello world\n" }] },
     });
 
@@ -160,7 +157,7 @@ describe("prediction pipeline elements", () => {
       name: "predict-input",
       kind: "source",
       bus,
-      session: null,
+      session: null as any,
       task: { payload: [] },
     });
 
@@ -185,7 +182,7 @@ describe("prediction pipeline elements", () => {
     const result = await el.process({
       mode: "predicting",
       task: {},
-      session: null,
+      session: null as any,
       userMessage: "帮我查天气",
     });
 
@@ -209,7 +206,7 @@ describe("prediction pipeline elements", () => {
     const result = await el.process({
       mode: "predicting",
       task: {},
-      session: null,
+      session: null as any,
       userMessage: "",
     });
 
@@ -352,8 +349,8 @@ describe("prediction pipeline DSL", () => {
     const pipeline = predictionPipeline({
       elementRegistry: registry,
       promptResolver: makePromptResolver(),
-      session: { sessionId: "s1" },
-      task: { id: "t1", payload: [{ data: "test" }] },
+      session: {} as any,
+      task: {} as any,
       apiKey: "sk-test",
       model: "deepseek-v4-flash",
       orchestrator: makeMockOrchestrator(null),

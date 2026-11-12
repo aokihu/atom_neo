@@ -8,6 +8,13 @@ export { createTaskItem, createContinuationTask } from "./task-factory";
 
 export { SessionContext } from "./session/context";
 export type {
+  CheckpointSession,
+  ElementMemory,
+  ElementPrediction,
+  ElementTask,
+  PipelineSession,
+} from "./session/element-session";
+export type {
   InferenceFact,
   ToolContext,
   ScopeState,

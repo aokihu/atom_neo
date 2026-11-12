@@ -111,7 +111,7 @@ describe("PostConversationFinalizeElement", () => {
     };
     const task = { id: "post-1", chainId: "root-1", parentTaskId: "root-1", chatId: "c1" };
     orchestrator.beginTask(task as any);
-    const collect = new CollectInputElement({ name: "post-collect", kind: "source", bus, session });
+    const collect = new CollectInputElement({ name: "post-collect", kind: "source", bus, session: session as any });
     const finalize = new PostConversationFinalizeElement({
       name: "post-finalize",
       kind: "sink",

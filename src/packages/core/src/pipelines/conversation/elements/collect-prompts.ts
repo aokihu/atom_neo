@@ -3,6 +3,7 @@ import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
 import { isPromptEligibleMessage } from "../../../session/message-policy";
+import type { PipelineSession } from "../../../session/element-session";
 
 export function selectPromptMessages<T extends { role: string }>(
   messages: readonly T[],
@@ -17,14 +18,14 @@ export function selectPromptMessages<T extends { role: string }>(
 }
 
 export class CollectPromptsElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
-  #session: any;
+  #session: PipelineSession;
   #contextRelevance: string;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    session: any;
+    session: PipelineSession;
     contextRelevance?: string;
   }) {
     super({ name: params.name, kind: "source", bus: params.bus });

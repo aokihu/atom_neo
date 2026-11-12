@@ -21,6 +21,7 @@ import type { SkillServiceLike } from "../../skills/types";
 import type { ContextService } from "../../context/context-service";
 import type { ToolRecordStore } from "../../tools/tool-record-store";
 import type { PromptResolver } from "@atom-neo/shared";
+import type { ElementMemory, ElementTask, PipelineSession } from "../../session/element-session";
 
 export function registerConversationElements(registry: ElementRegistry): void {
   registry.register("collect-prompts", CollectPromptsElement);
@@ -43,8 +44,8 @@ export type ConversationPipelineDeps = {
   decisionMode?: "jev" | "rules";
   decisionModel?: import("../../decision/choose").DecisionModel;
   fallbackModel?: import("../../decision/choose").DecisionModel;
-  session: any;
-  task: any;
+  session: PipelineSession;
+  task: ElementTask;
   apiKey?: string;
   model?: string;
   provider?: string;
@@ -60,7 +61,7 @@ export type ConversationPipelineDeps = {
   getCompiledPrompt?: () => string;
   maxTokens?: number;
   maxSteps?: number;
-  memory?: any;
+  memory?: ElementMemory;
   intent?: string;
   contextRelevance?: string;
   sandbox?: string;

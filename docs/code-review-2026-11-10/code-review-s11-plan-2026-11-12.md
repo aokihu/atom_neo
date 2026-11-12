@@ -7,7 +7,7 @@
 >
 > **Branch**: `code-review/2026-11-10`
 > **Baseline**: `ef7ff15` (v1.22.12, S10 complete)
-> **Status**: S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-D（TaskEngine 单循环 + 不可变 FlowState）、S11-E（ProcessSupervisor）与 S11-F（Theme import guard）已实施；G/H 待实施
+> **Status**: S11-A1–A11（CoreServices + Prompt DI）、S11-B/C（ElementRegistry + PipelineInstanceStore）、S11-D（TaskEngine 单循环 + 不可变 FlowState）、S11-E（ProcessSupervisor）、S11-F（Theme import guard）与 S11-G（Element 边界窄接口）已实施；H 待实施
 > **Scope**: CR-ARCH-01..09；CR-ARCH-04/05 已关闭，仅防回归
 
 ---
@@ -795,6 +795,15 @@ S11-F（Theme guard）随时可做
 - **行为风险**: 低；纯检查。
 - **回滚**: revert 单 commit。
 - **DoD**: 残留检查通过；全量 pipeline 测试通过；不触碰 `stream-llm` 内部 `as any`。
+
+> **实施状态（G1–G6）**: 已完成（2026-11-12）。新增 `session/element-session.ts`：`PipelineSession` 只包含 Element 实际使用的 Session 成员，`ElementTask = TaskItem`，`ElementMemory` 覆盖 `retain/findFullId/has`，`CheckpointSession` 保留压缩 checkpoint 所需的 `exportState`；`getTaskPayload` 统一 Task payload 的类型化读取。Conversation / Prediction / Post-conversation / Context-compress / Follow-up-evaluator 的 FlowState、pipeline deps 与元素构造参数全部改为窄类型；`applyCompressRatio`、`startExecutionGoal`、`budgetPauseMessage` 与 `SessionPersistenceService.checkpoint` 接收结构化的 Session 能力。`stream-llm` 内部局部 `as any`、prompt/provider/model 行为、pipeline 顺序与可写 compress 字段均未改变。
+>
+> - [x] `rg 'session\\??\\s*:\\s*any|task\\??\\s*:\\s*any|memory\\??\\s*:\\s*any' src/packages/core/src/pipelines --glob '!**/*.test.*'` 由基线 48 处降为 0。
+> - [x] `SessionContext` 可直接赋值给 `PipelineSession`；缺少 `messages/todoState/currentTopic` 或方法的对象在编译期失败（`element-session.test.ts`）。
+> - [x] 静态回归测试扫描 `pipelines/**` 生产文件，禁止重新引入 `session/task/memory: any`。
+> - [x] pipeline + session budget/persistence 定向测试 197 pass / 0 fail（含 compress、prediction、evaluator 与 element-session 类型/残留用例）。
+> - [x] 全量 `bun test`：1954 pass / 21 skip / 0 fail（build 后含 dist 镜像；新增 4 个源码类型/残留回归用例）。
+> - [x] `bun run typecheck` 6/6、`bun run typecheck:node` 0 error、`bun run build` 6/6、`docs:check` / `docs:typecheck` 通过；未修改 TaskQueue/TaskEngine 循环、HTTP/WS、Gateway、TUI 或 prompt 文本。
 
 ---
 

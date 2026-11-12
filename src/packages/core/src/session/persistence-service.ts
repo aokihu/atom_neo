@@ -19,6 +19,7 @@ import type { SessionMessage, ToolsGroup } from "@atom-neo/shared";
 import type { ContextService, PersistedContextState } from "../context/context-service";
 import { ToolRecordStore } from "../tools/tool-record-store";
 import { SessionContext } from "./context";
+import type { CheckpointSession } from "./element-session";
 import type {
   ArchiveReceipt,
   HistoryMatch,
@@ -123,7 +124,7 @@ export class SessionPersistenceService {
   }
 
   checkpoint(
-    session: SessionContext,
+    session: CheckpointSession,
     reason: SessionCheckpointReason,
     latestMessages: readonly SessionMessage[] = session.messages,
   ): PersistedSessionState {

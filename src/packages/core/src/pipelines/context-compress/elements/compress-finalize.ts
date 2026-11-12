@@ -4,13 +4,15 @@ import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { ContextEntry } from "@atom-neo/shared";
 import type { SessionPersistenceService } from "../../../session/persistence-service";
+import type { CheckpointSession, PipelineMessage } from "../../../session/element-session";
 import type { CompressFlowState } from "./types";
 import type { ContextService } from "../../../context/context-service";
 import { estimateTokenCount } from "../../../context/compiler";
+import type { ElementTask } from "../../../session/element-session";
 
 type CompressResult = {
   type: typeof PipelineResultType.Complete;
-  task: any;
+  task: ElementTask;
   output: string;
   chainAction?: "follow_up";
   continuationDecision?: ContinuationDecision;
@@ -215,7 +217,7 @@ export class CompressFinalizeElement extends BaseElement<CompressFlowState, Comp
     this.#contextService.put({ scope: "session", owner: { sessionId }, entry });
   }
 
-  #estimateContextTokens(session: any, messages: readonly any[]): {
+  #estimateContextTokens(session: CheckpointSession, messages: readonly PipelineMessage[]): {
     snapshot: number;
     messages: number;
     total: number;

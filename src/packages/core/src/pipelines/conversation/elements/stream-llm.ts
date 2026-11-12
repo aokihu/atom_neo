@@ -7,6 +7,8 @@ import { createLanguageModel } from "../../shared/model-provider";
 import type { ToolContextInjection, ToolDefinition, ToolEffect, ToolResultMetadata, ToolsGroup } from "@atom-neo/shared";
 import { BusEvents, IntentRequestType, IntentRequestSource } from "@atom-neo/shared";
 import type { IntentRequest } from "@atom-neo/shared";
+import type { ElementMemory, ElementTask, PipelineSession } from "../../../session/element-session";
+import { getTaskPayload } from "../../../session/element-session";
 import type { TokenUsage, TodoItem } from "../../../session/context";
 import { findTodoTarget, selectCurrentTodo } from "../../../session/context";
 import { DEFAULT_MAX_TOKENS, DEFAULT_CONTEXT_LIMIT, CONTEXT_RESERVE } from "../../../constants";
@@ -134,7 +136,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #providerOptions: Record<string, any>;
   #taskIntent: string;
   #stepCounter = { count: 0 };
-  #session: any;
+  #session?: PipelineSession;
   #configContextLimit: number;
   #mcpToolsRef?: { current: Record<string, any> };
   #toolResults = new Map<string, ToolExecutionStatus[]>();
@@ -144,8 +146,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
   #sameToolBatchNames: ReadonlySet<string>;
   #toolRecordStore?: ToolRecordStore;
   #toolDefinitions: ReadonlyMap<string, ToolDefinition>;
-  #task?: { id?: string; chatId?: string };
-  #memory: any;
+  #task?: ElementTask;
+  #memory?: ElementMemory;
 
   constructor(params: {
     name: string;
@@ -163,13 +165,13 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
     maxSteps?: number;
     providerOptions?: Record<string, any>;
     taskIntent?: string;
-    session?: any;
+    session?: PipelineSession;
     configContextLimit?: number;
     skillService?: SkillServiceLike;
     contextService: ContextService;
     toolRecordStore?: ToolRecordStore;
-    task?: { id?: string; chatId?: string };
-    memory?: any;
+    task?: ElementTask;
+    memory?: ElementMemory;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
@@ -203,8 +205,8 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
 
   async doProcess(input: ConversationFlowState): Promise<ConversationFlowState> {
     if (input.mode !== "formatted") return input;
-    const todoBefore: TodoItem[] = structuredClone(this.#session?.todoState ?? []);
-    const request = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data;
+    const todoBefore: TodoItem[] = structuredClone([...(this.#session?.todoState ?? [])]);
+    const request = getTaskPayload(input.task, "continuation_request");
     const reconcile = request?.kind === "reconcile_progress";
     const trace = { sessionId: input.task.sessionId, taskId: input.task.id,
       parentTaskId: input.task.parentTaskId, rootTaskId: input.task.chainId };
@@ -660,7 +662,7 @@ export class StreamLLMElement extends BaseElement<ConversationFlowState, Convers
           if (status.metadata.ok) completedCalls++;
           else failedCalls++;
           if (call.toolName === "todowrite" && status.metadata.ok) {
-            const todos: TodoItem[] = this.#session?.todoState ?? [];
+            const todos = this.#session?.todoState ?? [];
             if (!currentTodo && !reconcile) currentTodo = selectCurrentTodo(todos);
             const current = findTodoTarget(todos, currentTodo);
             if (current && (current.todo.status === "completed" || current.todo.status === "cancelled")) todoHandoff = true;
@@ -1043,8 +1045,8 @@ function buildAllAiTools(
   stepCounter: { count: number },
   toolResults: Map<string, ToolExecutionStatus[]>,
   governance: { current: ToolCallLedger },
-  session?: any,
-  task?: { id?: string; chatId?: string },
+  session?: PipelineSession,
+  task?: ElementTask,
 ): Record<string, any> {
   const result: Record<string, any> = {};
   for (const t of tools) {

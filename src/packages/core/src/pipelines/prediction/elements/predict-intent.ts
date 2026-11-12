@@ -25,7 +25,7 @@ export const IntentPredictionSchema = z.object({
   reasoning: z.string(),
 });
 
-export function buildPredictionEnvelope(input: PredictionFlowState): Record<string, unknown> {
+export function buildPredictionEnvelope(input: Pick<PredictionFlowState, "userMessage" | "currentTopic" | "previousTurnContext">): Record<string, unknown> {
   return {
     userInput: input.userMessage,
     currentTopic: input.currentTopic || "",

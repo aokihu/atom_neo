@@ -45,7 +45,7 @@ async function run(steps: Step[], options: { todos?: any[]; request?: any; memor
       execute: async () => { dangerousCalls++; return { metadata: { ok: true, effect: "state_changed" } }; } }];
     const element = new StreamLLMElement({ name: "stream-llm", kind: "transform", bus,
       apiKey: "local-test", model: "deepseek-flash", baseUrl: server.url.toString(),
-      beforeCall: options.beforeCall, tools, contextService: context, session, memory: options.memory, task, maxSteps: 5 });
+      beforeCall: options.beforeCall, tools, contextService: context, session, memory: options.memory, task: task as any, maxSteps: 5 });
     const result = await element.doProcess({ mode: "formatted", task: task as any, systemText: "Test task boundaries",
       userMessages: [{ role: "user", content: "世界文明史" }], abortSignal: options.abortSignal });
     const arbitrated = await new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus, session,

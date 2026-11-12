@@ -2,6 +2,7 @@ import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
 import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
+import type { PipelineSession } from "../../session/element-session";
 
 export function calcTokenUsage(total: number, inputUsage?: { total?: number }): number {
   return total + (inputUsage?.total ?? 0);
@@ -16,7 +17,7 @@ export function calcTokenRatio(
   return effectiveLimit > 0 ? tu / effectiveLimit : 0;
 }
 
-export function applyCompressRatio(session: any, usageRatio: number): void {
+export function applyCompressRatio(session: PipelineSession, usageRatio: number): void {
   if (session.compressRetry === 0) {
     session.compressRatio = Math.max(0, (usageRatio - 0.8) * 5);
   }
@@ -28,7 +29,7 @@ export function applyCompressRatio(session: any, usageRatio: number): void {
 }
 
 export class TokenRatioElement extends BaseElement<any, any> {
-  #session: any;
+  #session?: PipelineSession;
   #configContextLimit: number;
   #maxTokens: number;
 
@@ -36,7 +37,7 @@ export class TokenRatioElement extends BaseElement<any, any> {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
-    session?: any;
+    session?: PipelineSession;
     configContextLimit?: number;
     maxTokens?: number;
   }) {

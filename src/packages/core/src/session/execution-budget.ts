@@ -2,11 +2,12 @@ import { TaskSource } from "@atom-neo/shared";
 import type { TaskItem } from "@atom-neo/shared";
 import { createTaskItem } from "../task-factory";
 import type { SessionContext } from "./context";
+import type { PipelineSession } from "./element-session";
 import type { ExecutionBudget } from "./types";
 
 export type BudgetLimits = { maxGlobalRounds: number; maxLocalRounds: number };
 
-export function startExecutionGoal(session: SessionContext, goalId: string, goal: string, allowance: number): void {
+export function startExecutionGoal(session: PipelineSession, goalId: string, goal: string, allowance: number): void {
   session.executionBudget = {
     goalId, goal, globalUsed: 0, globalAllowance: allowance, localUsed: 0,
     goalStartSeq: session.messages.findLast(message => message.role === "user" && message.content === goal)?.seq ?? session.messages.at(-1)?.seq ?? 0,
@@ -16,7 +17,7 @@ export function startExecutionGoal(session: SessionContext, goalId: string, goal
   session.legacyBudgetDepth = undefined;
 }
 
-export function budgetPauseMessage(session: SessionContext, reason: string): string {
+export function budgetPauseMessage(session: Pick<PipelineSession, "todoState">, reason: string): string {
   const todos = session.todoState;
   const completed = todos.filter(todo => todo.status === "completed").map(todo => todo.content);
   const remaining = todos.filter(todo => todo.status === "pending" || todo.status === "in_progress").map(todo => todo.content);
