@@ -1,22 +1,13 @@
 import { useRef, useCallback, useEffect } from "react";
-import { TuiClient } from "../client/ws-client";
 import { useChatStore } from "../stores/chat";
-import type { ToolInfo, MCPServerInfo } from "../types";
-import { TaskFailureCodes } from "@atom-neo/shared";
+import type { Message, ToolInfo, MCPServerInfo } from "../types";
+import { connectChat, submitChatMessage } from "./chat-connection";
+import type { ChatConnection } from "./chat-connection";
+import { resolveChatClientError } from "./chat-errors";
+import type { ChatClientError } from "./chat-errors";
 
-export type ChatClientError = { code: string; title: string; message: string };
-
-export function resolveChatClientError(error: unknown): ChatClientError | undefined {
-  const code = typeof (error as { code?: unknown } | null)?.code === "string"
-    ? (error as { code: string }).code
-    : "";
-  if (code !== TaskFailureCodes.ApiKeyInvalid) return undefined;
-  return {
-    code,
-    title: "API Key Invalid",
-    message: "The configured API key was rejected by the model provider. Update it and restart Atom Neo.",
-  };
-}
+export { resolveChatClientError };
+export type { ChatClientError };
 
 export function useChat(
   url: string,
@@ -25,150 +16,42 @@ export function useChat(
   initialMCPServers?: MCPServerInfo[],
   onClientError?: (error: ChatClientError) => void,
 ) {
-  const clientRef = useRef<TuiClient | null>(null);
-  const reasoningBufferRef = useRef("");
-  const activityRef = useRef(false);
-  const thinkingStartRef = useRef(0);
+  const connectionRef = useRef<ChatConnection | null>(null);
 
   useEffect(() => {
-    if (initialToolInfos) useChatStore.setState({ toolInfos: initialToolInfos });
-    if (initialMCPServers) useChatStore.setState({ mcpServers: initialMCPServers });
-
-    const client = new TuiClient({ url, sessionId });
-    useChatStore.setState({ rounds: null, todoItems: [], telemetryOnline: false });
-    clientRef.current = client;
-    client.onSnapshot(messages => {
-      useChatStore.setState({ predictionDecision: null, postDecision: null, messages: messages.filter(m => m.visible !== false && (m.role === "user" || m.role === "assistant")).map(m => ({
-        id: `${client.sessionId}-${m.seq ?? m.timestamp}`, role: m.role as "user" | "assistant", content: m.content, timestamp: m.timestamp, streaming: false,
-      })) });
+    const connection = connectChat({
+      url,
+      sessionId,
+      initialToolInfos,
+      initialMCPServers,
     });
-    client.onTelemetry(telemetry => {
-      if (clientRef.current === client) useChatStore.setState({ rounds: telemetry.rounds, todoItems: telemetry.todos, telemetryOnline: true });
-    });
-    client.onDisconnect(() => {
-      if (clientRef.current !== client) return;
-      useChatStore.setState({ rounds: null, todoItems: [], telemetryOnline: false });
-      useChatStore.getState().addMessage({ id: useChatStore.getState().generateId(), role: "error", content: "Core disconnected. Attach again to resume this session.", timestamp: Date.now() });
-    });
-
-    client.onContextTokens((total) => {
-      useChatStore.getState().setContextTokens(total);
-    });
-
-    client.onReason((delta) => {
-      if (!activityRef.current) {
-        activityRef.current = true;
-        useChatStore.getState().setShowPreparing(false);
-        thinkingStartRef.current = Date.now();
-      }
-      reasoningBufferRef.current += delta;
-    });
-
-    client.onDelta((delta, offset) => {
-      const reasoning = reasoningBufferRef.current;
-      if (!activityRef.current) {
-        activityRef.current = true;
-        thinkingStartRef.current = Date.now();
-        reasoningBufferRef.current = "";
-      } else {
-        reasoningBufferRef.current = "";
-      }
-      const duration = reasoning && thinkingStartRef.current
-        ? Math.round((Date.now() - thinkingStartRef.current) / 1000)
-        : undefined;
-      useChatStore.getState().handleDelta(delta, offset, reasoning || undefined, duration);
-    });
-
-    client.onTool((event) => {
-      useChatStore.getState().handleToolEvent(event);
-    });
-
-    client.onToolStepFinish((event) => {
-      useChatStore.getState().handleToolStepFinish(
-        event.total, event.success, event.failed, event.toolNames,
-      );
-    });
-
-    client.onToolGroupComplete((event) => {
-      useChatStore.getState().handleToolGroupComplete(
-        event.total, event.success, event.failed, event.toolNames,
-      );
-    });
-
-    client.onBusyChange((busy) => {
-      useChatStore.getState().setBusy(busy);
-    });
-
-    client.onDecisionUpdate(update => useChatStore.getState().setDecisionUpdate(update));
-
-    client.onMCPConnected((data) => {
-      useChatStore.getState().updateMCPConnected(data);
-    });
-
-    client.onMCPStatus((servers) => {
-      useChatStore.getState().updateMCPStatus(servers);
-    });
-
-    client.connect().catch(() => {
-      useChatStore.getState().addMessage({
-        role: "error", content: "Connection failed",
-        id: useChatStore.getState().generateId(), timestamp: Date.now(),
-      });
-    });
-
+    connectionRef.current = connection;
     return () => {
-      client.close();
-      clientRef.current = null;
+      connection.close();
+      if (connectionRef.current === connection) connectionRef.current = null;
     };
   }, [url, sessionId]);
 
   const send = useCallback(async (text: string) => {
-    activityRef.current = false;
-    thinkingStartRef.current = 0;
-    reasoningBufferRef.current = "";
-    useChatStore.getState().prepareForSend();
-
-    const id = useChatStore.getState().generateId();
-    useChatStore.getState().addMessage({
-      role: "user", content: text, id, timestamp: Date.now(),
-    });
-
-    try {
-      const client = clientRef.current;
-      if (!client) throw new Error("Not connected");
-      await client.send(text);
-    } catch (err: any) {
-      const cancelled = err?.name === "TaskCancelledError";
-      const clientError = resolveChatClientError(err);
-      if (clientError && onClientError) {
-        onClientError(clientError);
-        return;
-      }
-      const message = {
-        role: cancelled ? "info" as const : "error" as const,
-        content: cancelled ? "Task cancelled by user" : err.message,
-        id: useChatStore.getState().generateId(),
-        timestamp: Date.now(),
-      };
-      if (cancelled) useChatStore.getState().addTransientMessage(message, 2_000);
-      else useChatStore.getState().addMessage(message);
-    }
+    const connection = connectionRef.current;
+    if (connection) await connection.send(text, onClientError);
+    else await submitChatMessage(null, text, onClientError);
   }, [onClientError]);
 
   const clearMessages = useCallback(() => {
     useChatStore.getState().clearMessages();
   }, []);
 
-  const addMessage = useCallback((msg: import("../types").Message) => {
+  const addMessage = useCallback((msg: Message) => {
     useChatStore.getState().addMessage(msg);
   }, []);
 
   const compact = useCallback(() => {
-    clientRef.current?.sendCompact();
+    connectionRef.current?.compact();
   }, []);
 
   const cancel = useCallback(() => {
-    return clientRef.current?.cancelActiveTask() ?? false;
+    return connectionRef.current?.cancel() ?? false;
   }, []);
 
   return { send, clearMessages, addMessage, compact, cancel };

@@ -1,40 +1,12 @@
-type DeltaCallback = (delta: string, offset: number) => void;
-type ReasonCallback = (delta: string, offset: number) => void;
-type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
-type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
-type ToolGroupCompleteCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
-type ContextTokensCallback = (total: number) => void;
-type BusyChangeCallback = (busy: boolean) => void;
-type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: string[] }[]) => void;
-type MCPConnectedCallback = (data: { servers: { name: string; online: boolean; toolCount: number }[]; toolInfos: { name: string; source: string; description: string; online: boolean }[] }) => void;
-
-import { TaskFailureCodes, WsMessages, isServerEventType } from "@atom-neo/shared";
+import { WsMessages } from "@atom-neo/shared";
 import type { DecisionUpdatePayload, ServerEvent, SessionTelemetry } from "@atom-neo/shared";
+import { parseServerEvent, TuiTaskError } from "./ws-client-protocol";
+import type {
+  BusyChangeCallback, ContextTokensCallback, DeltaCallback, MCPConnectedCallback, MCPStatusCallback,
+  ReasonCallback, ToolCallback, ToolGroupCompleteCallback, ToolStepCallback,
+} from "./ws-client-protocol";
 
-function parseServerEvent(value: unknown): ServerEvent | null {
-  if (typeof value !== "object" || value === null) return null;
-  const record = value as Record<string, unknown>;
-  if (!isServerEventType(record.type)) return null;
-  return { type: record.type, payload: record.payload } as ServerEvent;
-}
-
-type PendingRequest = {
-  resolve: (text: string) => void;
-  reject: (err: Error) => void;
-  text: string;
-  rootTaskId: string;
-};
-
-export class TuiTaskError extends Error {
-  readonly code?: string;
-
-  constructor(message: string, code?: string) {
-    super(message);
-    this.code = code;
-    if (code === TaskFailureCodes.PipelineAborted) this.name = "TaskCancelledError";
-    if (code === TaskFailureCodes.ApiKeyInvalid) this.name = "ApiKeyInvalidError";
-  }
-}
+export { TuiTaskError } from "./ws-client-protocol";
 
 export class TuiClient {
   #url: string;
@@ -58,7 +30,7 @@ export class TuiClient {
   #currentRootTaskId: string | null = null;
   #earlyDecisions: DecisionUpdatePayload[] = [];
   #activeTaskIds: Set<string> = new Set();
-  #pending: PendingRequest[] = [];
+  #pending: { resolve: (text: string) => void; reject: (err: Error) => void; text: string; rootTaskId: string }[] = [];
 
   constructor(params: { url?: string; sessionId?: string; chatId?: string } = {}) {
     this.#url = (params.url ?? "http://127.0.0.1:3100").replace(/^http/, "ws");

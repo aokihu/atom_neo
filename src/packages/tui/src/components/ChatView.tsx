@@ -3,42 +3,10 @@ import { useChatStore } from "../stores/chat";
 import { MessageBubble } from "./MessageBubble";
 import { useTheme } from "@atom-neo/tui-kit";
 import { ThinkingSpinner } from "./ThinkingSpinner";
-import type { Message, ToolGroupMessage } from "../types";
+import { buildChatViewModel } from "./chat-view-model";
+import type { ToolGroupMessage } from "../types";
 
-type CompletedToolPlacement = {
-  byAssistantId: Map<string, ToolGroupMessage[]>;
-  attachedGroupIds: Set<string>;
-};
-
-export function placeCompletedToolGroups(messages: Message[]): CompletedToolPlacement {
-  const byAssistantId = new Map<string, ToolGroupMessage[]>();
-  const attachedGroupIds = new Set<string>();
-
-  const placeTurn = (start: number, end: number) => {
-    const turn = messages.slice(start, end);
-    const assistant = turn.findLast(
-      message => message.role === "assistant" && Boolean(message.reasoningContent),
-    ) ?? turn.findLast(message => message.role === "assistant");
-    if (!assistant) return;
-    const groups = turn.filter(
-      (message): message is ToolGroupMessage =>
-        message.role === "tool-group" && message.collapsed && Boolean(message.summary),
-    );
-    if (groups.length === 0) return;
-    byAssistantId.set(assistant.id, groups);
-    for (const group of groups) attachedGroupIds.add(group.id);
-  };
-
-  let turnStart = 0;
-  for (let index = 1; index < messages.length; index++) {
-    if (messages[index]?.role !== "user") continue;
-    placeTurn(turnStart, index);
-    turnStart = index;
-  }
-  placeTurn(turnStart, messages.length);
-
-  return { byAssistantId, attachedGroupIds };
-}
+export { placeCompletedToolGroups } from "./chat-view-model";
 
 export function ChatView({
   onOpenToolDetails,
@@ -48,9 +16,9 @@ export function ChatView({
   const { colors, syntaxStyle } = useTheme();
   const messages = useChatStore(s => s.messages);
   const showPreparing = useChatStore(s => s.showPreparing);
-  const completedTools = useMemo(() => placeCompletedToolGroups(messages), [messages]);
+  const view = useMemo(() => buildChatViewModel(messages), [messages]);
 
-  if (messages.length === 0) {
+  if (view.isEmpty) {
     return (
       <scrollbox flexGrow={1} flexBasis={0} stickyScroll stickyStart="bottom">
         <box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
@@ -66,15 +34,15 @@ export function ChatView({
 
   return (
     <scrollbox flexGrow={1} flexBasis={0} stickyScroll stickyStart="bottom" paddingTop={1}>
-      {messages.map(msg => (
-        completedTools.attachedGroupIds.has(msg.id)
+      {view.messages.map(msg => (
+        view.completedTools.attachedGroupIds.has(msg.id)
           ? null
           : (
             <MessageBubble
               key={msg.id}
               message={msg}
               syntaxStyle={syntaxStyle}
-              completedToolGroups={completedTools.byAssistantId.get(msg.id)}
+              completedToolGroups={view.completedTools.byAssistantId.get(msg.id)}
               onOpenToolDetails={onOpenToolDetails}
             />
           )
