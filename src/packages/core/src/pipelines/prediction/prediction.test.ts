@@ -2,7 +2,7 @@ import { describe, test, expect, beforeAll } from "bun:test";
 import { registerPredictionElements, predictionPipeline } from "../index";
 import { registerSharedElements } from "../shared";
 import { clearRegistry, resolveElement } from "../../pipeline/registry";
-import { makeBus, makeMockOrchestrator } from "../test-helpers";
+import { makeBus, makeMockOrchestrator, makePromptResolver } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
 import { buildPredictionEnvelope, IntentPredictionSchema } from "./elements/predict-intent";
 import { resolveEffectiveTopic } from "./elements/predict-finalize";
@@ -349,6 +349,7 @@ describe("prediction pipeline DSL", () => {
   test("predictionPipeline builds without errors", () => {
     const bus = makeBus();
     const pipeline = predictionPipeline({
+      promptResolver: makePromptResolver(),
       session: { sessionId: "s1" },
       task: { id: "t1", payload: [{ data: "test" }] },
       apiKey: "sk-test",

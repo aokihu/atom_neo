@@ -20,6 +20,7 @@ import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestr
 import type { SkillServiceLike } from "../../skills/types";
 import type { ContextService } from "../../context/context-service";
 import type { ToolRecordStore } from "../../tools/tool-record-store";
+import type { PromptResolver } from "@atom-neo/shared";
 
 export function registerConversationElements(): void {
   registerElement("collect-prompts", CollectPromptsElement);
@@ -37,6 +38,7 @@ export function registerConversationElements(): void {
 }
 
 export type ConversationPipelineDeps = {
+  promptResolver: PromptResolver;
   decisionMode?: "jev" | "rules";
   decisionModel?: import("../../decision/choose").DecisionModel;
   fallbackModel?: import("../../decision/choose").DecisionModel;
@@ -72,6 +74,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
     .transform("record-context", {
       contextService: deps.contextService,
+      promptResolver: deps.promptResolver,
       sandbox: deps.sandbox,
       session: deps.session,
       providerModel: deps.providerModel,
@@ -83,6 +86,7 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     })
     .transform("apply-source-context", {
       contextService: deps.contextService,
+      promptResolver: deps.promptResolver,
       providerModel: deps.providerModel,
     })
     .transform("collect-context", {
@@ -112,6 +116,6 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       memory: deps.memory,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .boundary("check-follow-up", { memory: deps.memory, session: deps.session, decisionMode: deps.decisionMode, decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel })
+    .boundary("check-follow-up", { memory: deps.memory, session: deps.session, promptResolver: deps.promptResolver, decisionMode: deps.decisionMode, decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel })
     .sink("finalize", { orchestrator: deps.orchestrator, session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }

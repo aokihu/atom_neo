@@ -3,8 +3,8 @@
  * tool registry, MCP lifecycle, schedule/hook managers, pipelines, task lifecycle,
  * broadcaster and WebSocket handlers. HTTP serving stays in server.ts.
  */
-import { BusEvents, PipelineEventBus, WsMessages, initPromptRegistry, substringWellFormed } from "@atom-neo/shared";
-import type { FullEventMap, Logger, NetworkServiceLike, ToolDefinition } from "@atom-neo/shared";
+import { BusEvents, PipelineEventBus, WsMessages, createPromptRegistry, createPromptResolver, substringWellFormed } from "@atom-neo/shared";
+import type { FullEventMap, Logger, PromptRegistry, PromptResolver, ToolDefinition } from "@atom-neo/shared";
 import { TaskQueue } from "./task-queue";
 import { TaskEngine } from "./task-engine";
 import { SessionStore } from "./session/store";
@@ -20,7 +20,6 @@ import { ScheduleService } from "./tools/schedule-service";
 import { HookManager } from "./hooks/hook-manager";
 import { createScheduleTools } from "./tools/builtin/schedule";
 import { createSkillTools } from "./tools/builtin/skill";
-import type { SkillServiceLike } from "./skills/types";
 import { registerConversationElements } from "./pipelines/conversation";
 import { registerPredictionElements } from "./pipelines/prediction";
 import { registerFollowUpElements } from "./pipelines/follow-up";
@@ -37,20 +36,14 @@ import type { BudgetLimits, PipelineBuilders, ResolvedModel, RuntimeLike } from 
 import { registerTaskLifecycle } from "./task-lifecycle";
 import { createMcpLifecycle } from "./mcp-lifecycle";
 import type { McpLifecycle, McpServerInfo } from "./mcp-lifecycle";
-
-interface CompilerLike {
-  getCompiledPrompt(): string;
-}
-
-interface ServiceProvider {
-  get<T>(name: string): T | undefined;
-}
+import { resolveCoreServices } from "./core-services";
+import type { CoreServices } from "./core-services";
 
 export type CoreDeps = {
   port: number;
   host: string;
   logger: Logger;
-  sm: ServiceProvider;
+  services: CoreServices;
   runtime: RuntimeLike;
   version?: string;
   adminToken?: string;
@@ -89,24 +82,22 @@ export type CoreBootstrap = {
   sessionSweepTimer: ReturnType<typeof setInterval>;
   wsHandlers: ReturnType<typeof createWsHandlers>;
   pipelineBuilders: PipelineBuilders;
+  promptRegistry: PromptRegistry;
+  promptResolver: PromptResolver;
   getMcpServerInfos: () => McpServerInfo[];
 };
 
 /** Build every Core collaborator in the startup order required by the pipeline runtime. */
 export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstrap {
-  const { logger, sm, runtime, isStopping } = options;
+  const { logger, runtime, isStopping } = options;
+  const { memory, network, skill: skillService, compiler } = resolveCoreServices({ services: options.services });
+  const promptRegistry = createPromptRegistry();
+  const promptResolver = createPromptResolver(promptRegistry);
   const sandbox: string = runtime.sandbox ?? "";
   const fallbackModel = resolveInitialModel(runtime);
   const budgetLimits = () => budgetLimitsFor(runtime);
 
-  const memory = sm.get("memory");
-  const skillService = sm.get<SkillServiceLike>("skill");
-  const network = sm.get<NetworkServiceLike>("network");
-  if (!network) throw new Error('Required service "network" is not registered');
-  const getCompiledPrompt = () => {
-    const compiler = sm.get<CompilerLike>("agents-compiler");
-    return compiler?.getCompiledPrompt() ?? "";
-  };
+  const getCompiledPrompt = () => compiler?.getCompiledPrompt() ?? "";
 
   const bus = new PipelineEventBus<FullEventMap>();
   bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
@@ -165,6 +156,7 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
 
   const pipelineBuilders = createPipelineFactory({
     runtime,
+    promptResolver,
     fallbackModel,
     bus,
     sessionStore,
@@ -183,7 +175,6 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
   registerBuiltinTools(toolRegistry, toolDependencies);
   logger.info("tools registered", { count: toolRegistry.getAll().length });
 
-  initPromptRegistry();
   registerConversationElements();
   registerPredictionElements();
   registerFollowUpElements();
@@ -282,6 +273,8 @@ export function createCoreBootstrap(options: CoreBootstrapOptions): CoreBootstra
     sessionSweepTimer,
     wsHandlers,
     pipelineBuilders,
+    promptRegistry,
+    promptResolver,
     getMcpServerInfos: () => mcp.getServerInfos(),
   };
 }

@@ -1,5 +1,5 @@
-import { BaseElement, BusEvents, inferProviderProtocol, PromptKey, resolvePrompt } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
+import { BaseElement, BusEvents, inferProviderProtocol, PromptKey } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { chooseDecision } from "../../../decision/choose";
 import type { ChoiceQuestions, DecisionModel, SimulateDecision } from "../../../decision/choose";
 import type { EvaluatorFlowState, EvaluatorResult } from "./types";
@@ -11,8 +11,10 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
   #simulate?: SimulateDecision;
   #fetch?: (url: string, init: RequestInit) => Promise<Response>;
   #timeout: number;
+  #promptResolver: PromptResolver;
 
   constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap>;
+    promptResolver: PromptResolver;
     apiKey: string; model: string; provider?: string; protocol?: ProviderProtocol;
     baseUrl?: string; options?: Record<string, unknown>; maxTokens?: number;
     decisionModel?: DecisionModel; fallbackModel?: DecisionModel; simulate?: SimulateDecision;
@@ -32,6 +34,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
     this.#simulate = params.simulate;
     this.#fetch = params.fetchImpl;
     this.#timeout = params.timeoutMs ?? 10_000;
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: EvaluatorFlowState): Promise<EvaluatorFlowState> {
@@ -40,7 +43,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
     if (!input.evidence || !input.budgetCheck) return { ...input, mode: "intervening", evaluation: FALLBACK_EVALUATOR };
     const promptProvider = this.#model.provider ?? "deepseek";
     const questions: ChoiceQuestions = { health: { type: "choice",
-      instructions: resolvePrompt(PromptKey.EVALUATOR_ANALYZE, `${promptProvider}/${this.#model.model}`),
+      instructions: this.#promptResolver(PromptKey.EVALUATOR_ANALYZE, `${promptProvider}/${this.#model.model}`),
       criteria: {
         healthy: "The provided window excerpts and real executions show concrete progress toward the ORIGINAL goal. This permits more execution, NOT overall acceptance. Distinct substantive sections with corresponding handoffs are progress even if a final validation item remains. TODO changes, length or claims alone are insufficient.",
         looping: "Repeated equivalent output or failed approaches without meaningful progress.",
@@ -51,6 +54,7 @@ export class EvaluatorAnalyzeElement extends BaseElement<EvaluatorFlowState, Eva
     let fallbackReason: string | undefined;
     try {
       const result = await chooseDecision({ state: input.evidence, questions, model: this.#model, fallback: this.#fallback,
+        promptResolver: this.#promptResolver,
         fallbackOnError: true, timeoutMs: this.#timeout, maxTokens: 512, maxRetries: 0,
         abortSignal: input.abortSignal, simulate: this.#simulate, fetchImpl: this.#fetch,
         onRequest: request => this.report(BusEvents.Element.Data, { step: "decision-request", purpose: "budget-health",

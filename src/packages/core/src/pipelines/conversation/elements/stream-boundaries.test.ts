@@ -6,7 +6,7 @@ import { ContextService } from "../../../context/context-service";
 import { SessionContext } from "../../../session/context";
 import { createIntentTool } from "../../../tools/builtin/intent";
 import { createTodoWriteTool } from "../../../tools/builtin/todowrite";
-import { makeBus } from "../../test-helpers";
+import { makeBus, makePromptResolver } from "../../test-helpers";
 import { StreamLLMElement } from "./stream-llm";
 import { CheckFollowUpElement } from "./check-follow-up";
 
@@ -48,7 +48,8 @@ async function run(steps: Step[], options: { todos?: any[]; request?: any; memor
       beforeCall: options.beforeCall, tools, contextService: context, session, memory: options.memory, task, maxSteps: 5 });
     const result = await element.doProcess({ mode: "formatted", task: task as any, systemText: "Test task boundaries",
       userMessages: [{ role: "user", content: "世界文明史" }], abortSignal: options.abortSignal });
-    const arbitrated = await new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus, session, decisionMode: "rules" }).doProcess(result);
+    const arbitrated = await new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus, session,
+      promptResolver: makePromptResolver(), decisionMode: "rules" }).doProcess(result);
     return { requests, result, arbitrated, todos: session.todoState, deltas, dangerousCalls, events };
   } finally { server.stop(true); context.stop(); }
 }

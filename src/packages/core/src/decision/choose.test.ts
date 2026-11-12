@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { chooseDecision } from "./choose";
 import type { DecisionRequest } from "./choose";
+import { makePromptResolver } from "../pipelines/test-helpers";
 
 const questions = { continuation: { type: "choice" as const, instructions: "Choose a continuation", criteria: {
   resume_current: "Continue", reconcile_progress: "Check progress",
@@ -17,8 +18,8 @@ test("actual LLM simulation validates choices and limits the output to 512 token
   } });
   try {
     const model = { type: "llm" as const, apiKey: "local-test", model: "local", baseUrl: server.url.toString() };
-    const result = await chooseDecision({ state: {}, questions, model, fallback: model, maxTokens: 512, maxRetries: 0,
-      onRequest: request => { observed = request; } });
+    const result = await chooseDecision({ state: {}, questions, model, fallback: model, promptResolver: makePromptResolver(),
+      maxTokens: 512, maxRetries: 0, onRequest: request => { observed = request; } });
     expect(result.source).toBe("llm");
     expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
     expect(result.choices.continuation?.choice).toBe("resume_current");
@@ -35,7 +36,7 @@ test("request diagnostics match the native JEV body without provider credentials
   const observed: DecisionRequest[] = [];
   const model = { type: "jev" as const, apiKey: "secret-sentinel", model: "native", baseUrl: "https://local.example.test/decisions" };
   const result = await chooseDecision({ state: { todoAfter: [{ content: "文明", status: "in_progress" }] }, questions, model, fallback: model,
-    onRequest: request => observed.push(request), fetchImpl: async (_url, init) => {
+    promptResolver: makePromptResolver(), onRequest: request => observed.push(request), fetchImpl: async (_url, init) => {
       sent = JSON.parse(String(init.body));
       return Response.json({ model: "native", answers: { continuation: { type: "choice", choice: "resume_current",
         probabilities: { resume_current: 1, reconcile_progress: 0 }, confidence: 1 } } });
@@ -50,10 +51,10 @@ test("request diagnostics identify the selected fallback and omit unavailable re
   const observed: DecisionRequest[] = [];
   const model = { type: "jev" as const, apiKey: "", model: "unavailable" };
   const fallback = { apiKey: "fallback-secret", model: "fallback" };
-  await chooseDecision({ state: {}, questions, model, fallback, maxRetries: 0,
+  await chooseDecision({ state: {}, questions, model, fallback, promptResolver: makePromptResolver(), maxRetries: 0,
     onRequest: request => observed.push(request), simulate: async () => ({ continuation: "reconcile_progress" }) });
   expect(observed).toEqual([{ source: "llm", model: "fallback", state: {}, questions, maxTokens: 512, maxRetries: 0 }]);
-  await expect(chooseDecision({ state: {}, questions, model, fallback: model,
+  await expect(chooseDecision({ state: {}, questions, model, fallback: model, promptResolver: makePromptResolver(),
     onRequest: request => observed.push(request) })).rejects.toThrow("no decision model API key");
   expect(observed).toHaveLength(1);
 });
@@ -66,7 +67,7 @@ test("arbitration simulation does not retry provider errors", async () => {
   } });
   try {
     const model = { type: "llm" as const, apiKey: "local-test", model: "local", baseUrl: server.url.toString() };
-    await expect(chooseDecision({ state: {}, questions, model, fallback: model, maxRetries: 0 })).rejects.toThrow();
+    await expect(chooseDecision({ state: {}, questions, model, fallback: model, promptResolver: makePromptResolver(), maxRetries: 0 })).rejects.toThrow();
     expect(calls).toBe(1);
   } finally { server.stop(true); }
 });
@@ -75,7 +76,7 @@ test("test proxy queue wait precedes each decision timeout", async () => {
   let calls = 0;
   const model = { type: "llm" as const, apiKey: "test", model: "local",
     beforeCall: async () => { await new Promise(resolve => setTimeout(resolve, 30)); } };
-  const result = await chooseDecision({ state: {}, questions, model, fallback: model, timeoutMs: 10,
+  const result = await chooseDecision({ state: {}, questions, model, fallback: model, promptResolver: makePromptResolver(), timeoutMs: 10,
     simulate: async () => { calls++; return { continuation: "resume_current" }; } });
   expect(calls).toBe(1);
   expect(result.source).toBe("llm");

@@ -3,6 +3,7 @@ import { statSync } from "node:fs";
 import type { LogWarningsFunction } from "ai";
 import { Logger, StdoutSink, LogHub, FileSink, PipeSink, createHttpServer, resolveHttpRuntime } from "@atom-neo/shared";
 import type { HttpServer, LogLevel } from "@atom-neo/shared";
+import type { CoreServices } from "@atom-neo/core";
 import { VERSION } from "./version";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
@@ -172,13 +173,18 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
 
   // Services
   const sm = new ServiceManager({ logger });
-  sm.register("agents-compiler", new AgentsCompilerService({ runtime }));
-  sm.register("memory", new MemoryService({
+  const compiler = new AgentsCompilerService({ runtime });
+  const memory = new MemoryService({
     dbPath: runtime.atomDir + "/memory/memory.db",
     legacyNodesPath: runtime.atomDir + "/memory/nodes",
-  }));
-  sm.register("skill", new SkillService({ sandbox: args.sandbox }));
-  sm.register("network", new NetworkService());
+  });
+  const skill = new SkillService({ sandbox: args.sandbox });
+  const network = new NetworkService();
+  sm.register("agents-compiler", compiler);
+  sm.register("memory", memory);
+  sm.register("skill", skill);
+  sm.register("network", network);
+  const services: CoreServices = { memory, network, skill, compiler };
   let core: Awaited<ReturnType<typeof import("@atom-neo/core").startCore>> | undefined;
   let gateway: Awaited<ReturnType<typeof import("@atom-neo/gateway").startGateway>> | undefined;
   const cleanupFiles: (() => void)[] = [];
@@ -200,7 +206,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const httpServer: HttpServer = await createHttpServer(runtimeKind);
     await sm.startAll();
     const { startCore } = await import("@atom-neo/core");
-    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer });
+    core = await startCore({ port: args.port, host: args.host, logger, services, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer });
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {

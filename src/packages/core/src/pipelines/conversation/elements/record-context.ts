@@ -1,9 +1,10 @@
-import { BaseElement, BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BaseElement, BusEvents, PromptKey } from "@atom-neo/shared";
 import type {
   ContextOwner,
   ContextScope,
   PipelineEventBus,
   PipelineEventMap,
+  PromptResolver,
 } from "@atom-neo/shared";
 import type { ContextService } from "../../../context/context-service";
 import type { SkillServiceLike } from "../../../skills/types";
@@ -14,6 +15,7 @@ import type { ConversationFlowState } from "./types";
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #cwd: string;
   #session: any;
+  #promptResolver: PromptResolver;
   #providerModel: string;
   #taskIntent: string;
   #getCompiledPrompt: () => string;
@@ -26,6 +28,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     contextService: ContextService;
+    promptResolver: PromptResolver;
     sandbox?: string;
     session?: any;
     providerModel?: string;
@@ -39,6 +42,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     this.#contextService = params.contextService;
     this.#cwd = params.sandbox ?? process.cwd();
     this.#session = params.session;
+    this.#promptResolver = params.promptResolver;
     this.#providerModel = params.providerModel ?? "";
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#getCompiledPrompt = params.getCompiledPrompt ?? (() => "");
@@ -130,7 +134,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
   }
 
   #resolve(key: PromptKey): string {
-    return resolvePrompt(key, this.#providerModel);
+    return this.#promptResolver(key, this.#providerModel);
   }
 
   #putText(

@@ -1,6 +1,6 @@
 import { buildAssistantReview } from "../post-conversation/elements/collect-input";
 import { describe, expect, test } from "bun:test";
-import { makeBus } from "../test-helpers";
+import { makeBus, makePromptResolver } from "../test-helpers";
 import { JevElement, composeTopic, TOPIC_CHOICES } from "./jev-element";
 import { clearRegistry } from "../../pipeline/registry";
 import { predictionPipeline, registerPredictionElements } from "../prediction";
@@ -25,11 +25,13 @@ describe("JevElement", () => {
     const decision = { type: "jev" as const, apiKey: "key", model: "typesafe/jev-1.13" };
     const fallback = { apiKey: "llm-key", model: "deepseek-v4-flash" };
     const predictionDeps = {
-      session: {}, task: {}, apiKey: "llm-key", model: "deepseek-v4-flash", orchestrator: {} as any,
+      session: {}, task: {}, promptResolver: makePromptResolver(),
+      apiKey: "llm-key", model: "deepseek-v4-flash", orchestrator: {} as any,
       decisionModel: decision, fallbackModel: fallback,
     };
     const postDeps = {
-      session: {}, task: {}, apiKey: "llm-key", model: "deepseek-v4-flash", contextService: {} as any,
+      session: {}, task: {}, promptResolver: makePromptResolver(),
+      apiKey: "llm-key", model: "deepseek-v4-flash", contextService: {} as any,
       decisionModel: decision, fallbackModel: fallback,
     };
     const names = (items: { elements: Array<{ name: string }> }) => items.elements.map(item => item.name);
@@ -57,7 +59,7 @@ describe("JevElement", () => {
     bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
     bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-request") requests.push(payload); });
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus, purpose: "prediction",
+      name: "jev-decision", kind: "transform", bus, purpose: "prediction", promptResolver: makePromptResolver(),
       model: { type: "jev", apiKey: "test-key", model: "typesafe/jev-1.13", baseUrl: "https://decisions.example.test/v1" },
       fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
       fetchImpl: async (url, init) => {
@@ -90,7 +92,7 @@ describe("JevElement", () => {
     const updates: Record<string, unknown>[] = [];
     bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus, purpose: "post-conversation",
+      name: "jev-decision", kind: "transform", bus, purpose: "post-conversation", promptResolver: makePromptResolver(),
       model: { type: "jev", apiKey: "", model: "typesafe/jev-1.13" },
       fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
       simulate: async (_state, _questions, _signal, model) => { simulated = true; expect(model?.model).toBe("deepseek-v4-flash"); return { status: "blocked", behavior: "intent_only" }; },
@@ -112,7 +114,7 @@ describe("JevElement", () => {
   test("does not send Jev requests when the provider has no endpoint", async () => {
     let sent = false;
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "prediction",
+      name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "prediction", promptResolver: makePromptResolver(),
       model: { type: "jev", apiKey: "jev-key", model: "other/decision-model" },
       fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
       fetchImpl: async () => { sent = true; throw new Error("unexpected network call"); },
@@ -128,7 +130,7 @@ describe("JevElement", () => {
 
   test("uses the fast LLM itself when configured instead of the basic fallback", async () => {
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "post-conversation",
+      name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "post-conversation", promptResolver: makePromptResolver(),
       model: { type: "llm", apiKey: "fast-key", model: "fast-model" },
       fallback: { apiKey: "basic-key", model: "basic-model" },
       simulate: async (_state, _questions, _signal, model) => {
@@ -149,7 +151,7 @@ describe("JevElement", () => {
     const updates: Record<string, unknown>[] = [];
     bus.on(BusEvents.Element.Data, ({ payload }) => { if (payload.step === "decision-updated") updates.push(payload); });
     const element = new JevElement({
-      name: "jev-decision", kind: "transform", bus, purpose: "prediction",
+      name: "jev-decision", kind: "transform", bus, purpose: "prediction", promptResolver: makePromptResolver(),
       model: { type: "jev", apiKey: "", model: "typesafe/jev-1.13" },
       fallback: { apiKey: "llm-key", model: "deepseek-v4-flash" },
       simulate: async () => { throw new Error("private provider detail"); },
@@ -169,6 +171,7 @@ test.each(["partial_work", "no_output"])("post review rejects satisfactory with 
   const review = buildAssistantReview([{ seq: 7, content: "实际输出" }]);
   let captured: any;
   const element = new JevElement({ name: "jev-decision", kind: "transform", bus: makeBus(), purpose: "post-conversation",
+    promptResolver: makePromptResolver(),
     model: { type: "llm", apiKey: "test", model: "fast" }, fallback: { apiKey: "test", model: "basic" },
     simulate: async (state, questions) => { captured = state;
       expect(Object.keys(questions)).toEqual(["status", "behavior", "contentState", "reasonCode", "evidenceRef"]);

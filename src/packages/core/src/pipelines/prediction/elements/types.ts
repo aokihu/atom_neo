@@ -1,4 +1,4 @@
-import type { IntentPredictionResult, ProviderProtocol } from "@atom-neo/shared";
+import type { IntentPredictionResult, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
 import type { SkillServiceLike } from "../../../skills/types";
 import type { DecisionModel } from "../../../decision/choose";
@@ -25,6 +25,7 @@ export type PredictionFlowState = {
 export type PredictionPipelineDeps = {
   session: any;
   task: any;
+  promptResolver: PromptResolver;
   apiKey: string;
   model: string;
   provider?: string;

@@ -2,7 +2,7 @@
  * Pipeline factory: resolves models/limits and builds the five Core pipelines.
  * Pure construction only — no task scheduling or lifecycle side effects.
  */
-import type { FullEventMap, PipelineEventBus, ProviderProtocol, ToolDefinition } from "@atom-neo/shared";
+import type { FullEventMap, PipelineEventBus, PromptResolver, ProviderProtocol, ToolDefinition } from "@atom-neo/shared";
 import type { ResolvedModel as SharedResolvedModel } from "@atom-neo/shared";
 import { inferProviderProtocol } from "@atom-neo/shared";
 import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
@@ -57,6 +57,7 @@ export function budgetLimitsFor(runtime: RuntimeLike): BudgetLimits {
 
 export type PipelineFactoryDeps = {
   runtime: RuntimeLike;
+  promptResolver: PromptResolver;
   fallbackModel: ResolvedModel;
   bus: PipelineEventBus<FullEventMap>;
   sessionStore: SessionStore;
@@ -124,6 +125,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return predictionPipeline({
+        promptResolver: deps.promptResolver,
         maxGlobalRounds: budgetLimits().maxGlobalRounds,
         session,
         task,
@@ -163,6 +165,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
 
       return conversationPipeline({
+        promptResolver: deps.promptResolver,
         ...decisionDeps("continuation"),
         session,
         task,
@@ -196,6 +199,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return followUpEvaluatorPipeline({
+        promptResolver: deps.promptResolver,
         ...decisionDeps("continuation"),
         toolRecordStore: persistence.toolRecords,
         session,
@@ -212,6 +216,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const session = sessionStore.get(task.sessionId);
       const selected = getModel("basic");
       return contextCompressPipeline({
+        promptResolver: deps.promptResolver,
         session,
         task,
         apiKey: selected.apiKey,
@@ -235,6 +240,7 @@ export function createPipelineFactory(deps: PipelineFactoryDeps): PipelineBuilde
       const selected = getModel("balanced");
       const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
       return postConversationPipeline({
+        promptResolver: deps.promptResolver,
         session,
         task,
         apiKey: selected.apiKey, model: selected.model, provider: selected.provider, protocol: selected.protocol,

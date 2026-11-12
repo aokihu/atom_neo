@@ -4,7 +4,7 @@ import { BusEvents } from "@atom-neo/shared";
 import { ContextService } from "../../../context/context-service";
 import { SessionContext } from "../../../session/context";
 import { ToolRecordStore } from "../../../tools/tool-record-store";
-import { makeBus } from "../../test-helpers";
+import { makeBus, makePromptResolver } from "../../test-helpers";
 import { CollectContextElement } from "./collect-context";
 import { RecordContextElement } from "./record-context";
 
@@ -35,6 +35,7 @@ async function buildSnapshot(params: {
     kind: "transform",
     bus,
     contextService,
+    promptResolver: makePromptResolver(),
     ...params,
   });
   const collect = new CollectContextElement({

@@ -1,5 +1,5 @@
-import { test, expect, beforeAll } from "bun:test";
-import { initPromptRegistry, TaskSource } from "@atom-neo/shared";
+import { test, expect } from "bun:test";
+import { TaskSource } from "@atom-neo/shared";
 import { EvaluatorAnalyzeElement } from "./elements/evaluator-analyze";
 import { EvaluatorInputElement } from "./elements/evaluator-input";
 import { EvaluateFinalizeElement } from "./elements/evaluate-finalize";
@@ -8,10 +8,9 @@ import { startExecutionGoal, prepareBudgetRelease } from "../../session/executio
 import { createTaskItem } from "../../task-factory";
 import { TaskQueue } from "../../task-queue";
 import { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
-import { makeBus } from "../test-helpers";
+import { makeBus, makePromptResolver } from "../test-helpers";
 import { ToolRecordStore } from "../../tools/tool-record-store";
 
-beforeAll(() => initPromptRegistry());
 function setup() {
   const session = new SessionContext("s");
   session.addMessage({ role: "user", content: "earlier weather", timestamp: 0 });
@@ -33,6 +32,7 @@ function setup() {
 }
 function analyzer(extra: any = {}) {
   return new EvaluatorAnalyzeElement({ name: "evaluator-analyze", kind: "transform", bus: makeBus(),
+    promptResolver: makePromptResolver(),
     apiKey: "", model: "local", decisionModel: { type: "jev", apiKey: "test", model: "jev", baseUrl: "https://example.invalid/jev" },
     fallbackModel: { apiKey: "test", model: "llm" }, ...extra });
 }

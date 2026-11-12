@@ -17,8 +17,9 @@ export function predictionPipeline(deps: PredictionPipelineDeps) {
   return pipeline("prediction")
     .source("predict-input", { session: deps.session, task: deps.task })
     .transform(deps.decisionMode === "jev" ? "jev-decision" : "predict-intent", deps.decisionMode === "jev"
-      ? { purpose: "prediction", model: deps.decisionModel, fallback: deps.fallbackModel, maxTokens: deps.maxTokens }
+      ? { purpose: "prediction", model: deps.decisionModel, fallback: deps.fallbackModel, promptResolver: deps.promptResolver, maxTokens: deps.maxTokens }
       : {
+        promptResolver: deps.promptResolver,
         apiKey: deps.apiKey,
         model: deps.model,
         provider: deps.provider,

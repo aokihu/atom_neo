@@ -1,6 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
-import { BusEvents, inferProviderProtocol, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import { BusEvents, inferProviderProtocol, PromptKey } from "@atom-neo/shared";
 import type { IntentPredictionResult } from "@atom-neo/shared";
 import { generateText, Output } from "ai";
 import { z } from "zod";
@@ -42,11 +42,13 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
   #thinking?: string;
   #options?: Record<string, unknown>;
   #maxTokens: number;
+  #promptResolver: PromptResolver;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    promptResolver: PromptResolver;
     apiKey: string;
     model: string;
     provider?: string;
@@ -65,6 +67,7 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
     this.#thinking = params.thinking;
     this.#options = params.options;
     this.#maxTokens = params.maxTokens ?? 512;
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: PredictionFlowState): Promise<PredictionFlowState> {
@@ -92,7 +95,7 @@ export class PredictIntentElement extends BaseElement<PredictionFlowState, Predi
       });
       const result = await generateText({
         model,
-        instructions: resolvePrompt(PromptKey.PREDICT_INTENT, `${this.#provider}/${this.#model}`),
+        instructions: this.#promptResolver(PromptKey.PREDICT_INTENT, `${this.#provider}/${this.#model}`),
         prompt: JSON.stringify(buildPredictionEnvelope(input)),
         output: Output.object({ schema: IntentPredictionSchema }),
         maxOutputTokens: this.#maxTokens,

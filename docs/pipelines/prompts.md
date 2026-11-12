@@ -20,7 +20,7 @@
 
 ```
 src/packages/shared/src/prompts/
-  index.ts              — resolvePrompt(key, "provider/model"): string
+  index.ts              — createPromptRegistry() + createPromptResolver(registry)
   registry.ts           — PromptRegistry: 惰性合成 + Map 缓存
   keys.ts               — PromptKey 枚举
   model_profiles.ts     — LANGUAGE_MAP + MODEL_REFINEMENT_MAP
@@ -41,7 +41,10 @@ src/packages/shared/src/prompts/
 ### resolve() 流程
 
 ```
-resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
+const registry = createPromptRegistry();
+const promptResolver = createPromptResolver(registry);
+
+promptResolver(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
 
   cacheKey = "BASE_SYSTEM:deepseek:deepseek-v4-pro"
   ↓ cache hit → 直接返回
@@ -66,11 +69,11 @@ resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
 | `openai-compatible` / 其他未知 id | `en` |
 | 未传 `providerModel`（默认 `openai/gpt-4o`） | `en` |
 
-所有生产调用都必须显式传入 `${provider}/${model}`：对话主链（LoadSystemPrompt / RecordContext /
-ApplySourceContext）、预测（PredictIntent）、决策回退（chooseDecision）、健康评估、上下文压缩与
-对话后分析/finalize。DeepSeek 因此继续拿到中文提示词；OpenAI / Anthropic / OpenAI-compatible
-拿到英文提示词。仅在单元测试等直接构造 Element 且未传 `providerModel` 时，才使用各 Element
-的兼容默认值。
+所有生产调用都通过注入的 `PromptResolver` 并显式传入 `${provider}/${model}`：对话主链
+（LoadSystemPrompt / RecordContext / ApplySourceContext）、预测（PredictIntent）、决策回退
+（chooseDecision）、健康评估、上下文压缩与对话后分析/finalize。DeepSeek 因此继续拿到中文
+提示词；OpenAI / Anthropic / OpenAI-compatible 拿到英文提示词。仅在单元测试等直接构造
+Element 且未传 `providerModel` 时，才使用各 Element 的兼容默认值。
 
 ### 精细化追加规则
 
@@ -94,21 +97,28 @@ ApplySourceContext）、预测（PredictIntent）、决策回退（chooseDecisio
 ### 生命周期
 
 ```
-server.ts 启动
-  └─ registerAllPrompts()
+createCoreBootstrap()（每个 Core 实例一次）
+  └─ createPromptRegistry()
       ├─ 加载 lang/zh.ts → #langBases["zh"]
       ├─ 加载 lang/en.ts → #langBases["en"]
       └─ 加载 models/*.ts → #modelRefinements["deepseek-v4-pro"], ...
          不计算、不缓存 ← 纯存储
+  └─ createPromptResolver(registry)
+      └─ createPipelineFactory({ promptResolver })
+          └─ pipeline deps → Element.promptResolver
 
 首次请求 (cache miss)
-  └─ resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
+  └─ promptResolver(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
       └─ base + append 合成 → cache.set()
 
 后续请求 (cache hit)
-  └─ resolvePrompt(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
+  └─ promptResolver(BASE_SYSTEM, "deepseek/deepseek-v4-pro")
       └─ cache.get() → O(1) 直接返回
 ```
+
+没有模块级 `_instance`、`getRegistry()`、`initPromptRegistry()` 或自由 `resolvePrompt()`。
+两个 Core 实例各自持有 registry/resolver；测试必须显式创建
+`createPromptResolver(createPromptRegistry())`，不再依赖启动时初始化。
 
 ## 提示词版本号
 
@@ -222,25 +232,28 @@ src/packages/shared/src/prompts/model_profiles.ts   语言映射 + 模型精细�
 src/packages/shared/src/prompts/variants/lang/zh.ts 中文基础提示词
 src/packages/shared/src/prompts/variants/lang/en.ts 英文基础提示词
 src/packages/shared/src/prompts/variants/models/*.ts 模型级追加文本
-src/packages/core/src/pipelines/conversation/elements/load-system-prompt.ts   改用 resolvePrompt()
-src/packages/core/src/pipelines/conversation/elements/collect-context.ts      改用 resolvePrompt()
-src/packages/core/src/pipelines/prediction/elements/predict-intent.ts         改用 resolvePrompt()
-src/packages/core/src/pipelines/post-conversation/elements/analyze-result.ts  改用 resolvePrompt()
-src/packages/core/src/pipelines/post-conversation/elements/finalize.ts        改用 resolvePrompt()
-src/packages/core/src/pipelines/post-conversation/elements/collect-input.ts   改用 resolvePrompt()
-src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluator-analyze.ts  改用 resolvePrompt()
-src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluate-finalize.ts  改用 resolvePrompt()
-src/packages/core/src/pipelines/context-compress/elements/compress-summarize.ts    改用 resolvePrompt()
+src/packages/core/src/bootstrap.ts                    创建 registry/resolver，注入 pipeline factory
+src/packages/core/src/pipeline-factory.ts             透传 promptResolver 到 6 条 pipeline
+src/packages/core/src/pipelines/conversation/elements/load-system-prompt.ts   注入 resolver
+src/packages/core/src/pipelines/conversation/elements/record-context.ts       注入 resolver
+src/packages/core/src/pipelines/conversation/elements/apply-source-context.ts 注入 resolver
+src/packages/core/src/pipelines/conversation/elements/check-follow-up.ts      注入 resolver 到 chooseDecision
+src/packages/core/src/pipelines/prediction/elements/predict-intent.ts         注入 resolver
+src/packages/core/src/pipelines/post-conversation/elements/analyze-result.ts  注入 resolver
+src/packages/core/src/pipelines/post-conversation/elements/finalize.ts        注入 resolver
+src/packages/core/src/pipelines/follow-up-evaluator/elements/evaluator-analyze.ts  注入 resolver
+src/packages/core/src/pipelines/context-compress/elements/compress-summarize.ts    注入 resolver
+src/packages/core/src/pipelines/shared/llm.ts         callLLM 必须接收 resolver
+src/packages/core/src/pipelines/shared/jev-element.ts Jev 决策模拟传递 resolver
+src/packages/core/src/decision/choose.ts              chooseDecision 必须接收 resolver（JEV 路径不解析提示词）
 src/packages/core/src/pipelines/shared/model-provider.ts  Provider 模型/options 工厂
-src/packages/core/src/server.ts                      registerAllPrompts() 调用
 src/services/runtime-service.ts                      protocol/options 解析（不跨 Provider 回退密钥）
 src/assets/prompts/base_system_prompt.md             保留弃用标记（variants/lang/zh.ts 替代）
-src/packages/core/src/pipelines/conversation/index.ts 传递 providerModel 到 LoadSystemPrompt + CollectContext
 ```
 
 ## 相关文档
 
 | 文档 | 说明 |
 |------|------|
-| [conversation.md](./conversation.md) | 各 Element 如何通过 resolvePrompt() 获取提示词 |
+| [conversation.md](./conversation.md) | 各 Element 如何通过注入的 PromptResolver 获取提示词 |
 | [agents-compiler.md](../subsystems/agents-compiler.md) | AGENTS.md 编译器 — 另一个提示词生成源 |

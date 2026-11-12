@@ -1,5 +1,6 @@
 import { BaseElement } from "@atom-neo/shared";
-import { PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { PromptKey } from "@atom-neo/shared";
+import type { PromptResolver } from "@atom-neo/shared";
 import type { ContextService } from "@atom-neo/core";
 import type { ConversationFlowState } from "./types";
 
@@ -9,10 +10,12 @@ const PLATFORM_PROMPTS: Record<string, PromptKey> = {
 
 export class ApplySourceContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #contextService: ContextService;
+  #promptResolver: PromptResolver;
   #providerModel: string;
 
   constructor(params: {
     contextService: ContextService;
+    promptResolver: PromptResolver;
     providerModel?: string;
     name?: string;
     kind?: string;
@@ -20,6 +23,7 @@ export class ApplySourceContextElement extends BaseElement<ConversationFlowState
   }) {
     super({ name: params.name ?? "apply-source-context", kind: "transform", bus: params.bus as any });
     this.#contextService = params.contextService;
+    this.#promptResolver = params.promptResolver;
     this.#providerModel = params.providerModel ?? "deepseek/deepseek-v4-pro";
   }
 
@@ -30,7 +34,7 @@ export class ApplySourceContextElement extends BaseElement<ConversationFlowState
     const key = PLATFORM_PROMPTS[platform];
     if (!key) return input;
 
-    const instructions = resolvePrompt(key, this.#providerModel);
+    const instructions = this.#promptResolver(key, this.#providerModel);
     if (!instructions) return input;
 
     this.#contextService.put({

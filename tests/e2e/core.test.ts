@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { startCore } from "../../src/packages/core/src/server";
+import type { CoreServices } from "../../src/packages/core/src/core-services";
 import { Logger, StdoutSink, LogHub } from "@atom-neo/shared";
 
 let server: { port: number; tools: string[]; stop: () => void };
@@ -19,14 +20,22 @@ const mockRuntime = {
   resetRuntimeConfig: () => ({ tui: { theme: "edex" } }),
 };
 
-const mockSm = {
-  get(name: string) {
-    if (name === "agents-compiler") return { getCompiledPrompt: () => "" };
-    if (name === "network") return {
-      webFetch: async () => ({ ok: true, code: "success", content: "ok" }),
-    };
-    return undefined;
-  }
+const mockMemory = {
+  search: async () => [],
+  getById: () => null,
+  save: () => "memory-1",
+  traverse: () => [],
+  link: () => false,
+  forget: () => false,
+  retain: () => {},
+};
+
+const mockServices: CoreServices = {
+  memory: mockMemory,
+  network: {
+    webFetch: async () => ({ ok: true, code: "success", content: "ok" }),
+  },
+  compiler: { getCompiledPrompt: () => "" },
 };
 
 beforeAll(async () => {
@@ -38,7 +47,7 @@ beforeAll(async () => {
     port: 3200,
     host: "127.0.0.1",
     logger: logger as any,
-    sm: mockSm,
+    services: mockServices,
     runtime: mockRuntime,
     adminToken: ADMIN_TOKEN,
   });
@@ -55,9 +64,20 @@ describe("E2E: Core HTTP API", () => {
       port: 0,
       host: "127.0.0.1",
       logger,
-      sm: { get: () => undefined } as any,
+      services: { memory: mockMemory } as any,
       runtime: mockRuntime as any,
     })).rejects.toThrow('Required service "network" is not registered');
+  });
+
+  test("fails fast when MemoryService is not registered", async () => {
+    const logger = new Logger("error", () => {});
+    await expect(startCore({
+      port: 0,
+      host: "127.0.0.1",
+      logger,
+      services: { network: mockServices.network } as any,
+      runtime: mockRuntime as any,
+    })).rejects.toThrow('Required service "memory" is not registered');
   });
 
   test("GET /api/health returns ok", async () => {

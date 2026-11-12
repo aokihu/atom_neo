@@ -1,19 +1,17 @@
-import { beforeAll, describe, expect, test } from "bun:test";
-import { BusEvents, PipelineResultType, initPromptRegistry } from "@atom-neo/shared";
+import { describe, expect, test } from "bun:test";
+import { BusEvents, PipelineResultType } from "@atom-neo/shared";
 import { ContextService } from "../../../context/context-service";
 import { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import { makeBus } from "../../test-helpers";
+import { makeBus, makePromptResolver } from "../../test-helpers";
 import { CollectInputElement } from "./collect-input";
 import { PostConversationFinalizeElement } from "./finalize";
 import { FALLBACK_ANALYSIS } from "./types";
-
-beforeAll(initPromptRegistry);
 
 describe("PostConversationFinalizeElement", () => {
   test("only confirmed completion reports the reviewed goal; fallback and conflict do not", async () => {
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
-    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService });
+    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService, promptResolver: makePromptResolver() });
     const base = { mode: "acting", task: { id: "post" }, session: { originalSource: "external" }, executionGoalId: "reviewed-goal" };
     const result = await element.doProcess({ ...base, analysis: { status: "satisfactory", confirmed: true, reason: "requirements_met", assessment: { contentState: "complete" } } } as any);
     expect(result).toHaveProperty("completedGoalId", "reviewed-goal");
@@ -28,7 +26,7 @@ describe("PostConversationFinalizeElement", () => {
   test("reports stall similarity as a percentage", async () => {
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
-    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService });
+    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService, promptResolver: makePromptResolver() });
     const session = {
       sessionId: "s1",
       originalSource: "internal",
@@ -57,6 +55,7 @@ describe("PostConversationFinalizeElement", () => {
       kind: "sink",
       bus,
       contextService,
+      promptResolver: makePromptResolver(),
     });
     const session = {
       sessionId: "s1",
@@ -118,6 +117,7 @@ describe("PostConversationFinalizeElement", () => {
       kind: "sink",
       bus,
       contextService,
+      promptResolver: makePromptResolver(),
     });
 
     const collected = await collect.process({ mode: "initial", task, session } as any);

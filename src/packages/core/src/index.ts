@@ -1,6 +1,6 @@
 // @atom-neo/core - Barrel exports
 export { startCore } from "./server";
-export type { CoreDeps } from "./server";
+export type { CoreDeps, CoreServices, MemoryServiceLike } from "./server";
 
 export { TaskQueue } from "./task-queue";
 export { TaskEngine } from "./task-engine";

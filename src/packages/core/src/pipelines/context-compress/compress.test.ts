@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { registerContextCompressElements, contextCompressPipeline } from "../index";
 import { registerSharedElements } from "../shared";
 import { clearRegistry, resolveElement } from "../../pipeline/registry";
-import { makeBus, makeMockOrchestrator } from "../test-helpers";
+import { makeBus, makeMockOrchestrator, makePromptResolver } from "../test-helpers";
 import { ContextService } from "../../context/context-service";
 import { SessionContext } from "../../session/context";
 import { SessionPersistenceService } from "../../session/persistence-service";
@@ -136,7 +136,7 @@ describe("compress-summarize", () => {
   test("falls back on empty apiKey", async () => {
     const bus = makeBus();
     const Ctor = resolveElement("compress-summarize");
-    const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, apiKey: "", model: "test" });
+    const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, promptResolver: makePromptResolver(), apiKey: "", model: "test" });
     const result = await (el as any).doProcess({
       mode: "summarizing", task: {}, session: null,
       request: { trigger: "manual", resumeConversation: false },
@@ -149,7 +149,7 @@ describe("compress-summarize", () => {
   test("falls back on empty text", async () => {
     const bus = makeBus();
     const Ctor = resolveElement("compress-summarize");
-    const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, apiKey: "sk-test", model: "test" });
+    const el = new Ctor({ name: "compress-summarize", kind: "transform", bus, promptResolver: makePromptResolver(), apiKey: "sk-test", model: "test" });
     const result = await (el as any).doProcess({
       mode: "summarizing", task: {}, session: null,
       request: { trigger: "manual", resumeConversation: false },
@@ -459,6 +459,7 @@ describe("context-compress DSL", () => {
     const root = mkdtempSync(resolve(tmpdir(), "atom-compress-dsl-"));
     const persistence = new SessionPersistenceService(root, contextService);
     const pipeline = contextCompressPipeline({
+      promptResolver: makePromptResolver(),
       session: { sessionId: "s1" },
       task: { id: "t1" },
       apiKey: "sk-test",

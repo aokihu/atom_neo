@@ -9,7 +9,7 @@ import {
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { ContextService } from "../../context/context-service";
 import type { SessionPersistenceService } from "../../session/persistence-service";
-import type { ProviderProtocol } from "@atom-neo/shared";
+import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
 
 export function registerContextCompressElements(): void {
@@ -22,6 +22,7 @@ export function registerContextCompressElements(): void {
 export function contextCompressPipeline(deps: {
   session: any;
   task: any;
+  promptResolver: PromptResolver;
   apiKey: string;
   model: string;
   provider?: string;
@@ -40,6 +41,7 @@ export function contextCompressPipeline(deps: {
     .source("compress-input", { session: deps.session, contextService: deps.contextService })
     .transform("compress-archive", { persistence: deps.persistence })
     .transform("compress-summarize", {
+      promptResolver: deps.promptResolver,
       apiKey: deps.apiKey,
       model: deps.model,
       provider: deps.provider,

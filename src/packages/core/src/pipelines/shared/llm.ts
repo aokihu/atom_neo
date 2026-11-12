@@ -1,11 +1,12 @@
 import { generateText } from "ai";
-import type { PromptKey, ProviderProtocol } from "@atom-neo/shared";
-import { inferProviderProtocol, resolvePrompt } from "@atom-neo/shared";
+import type { PromptKey, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import { inferProviderProtocol } from "@atom-neo/shared";
 import { createLanguageModel, providerOptionsFor } from "./model-provider";
 
 export { deepSeekProviderOptions } from "./model-provider";
 
 export async function callLLM(params: {
+  promptResolver: PromptResolver;
   apiKey: string;
   model: string;
   provider?: string;
@@ -29,7 +30,7 @@ export async function callLLM(params: {
   });
   const result = await generateText({
     model,
-    instructions: resolvePrompt(params.systemKey, `${provider}/${params.model}`),
+    instructions: params.promptResolver(params.systemKey, `${provider}/${params.model}`),
     prompt: params.prompt,
     maxOutputTokens: params.maxTokens,
     temperature: 0,

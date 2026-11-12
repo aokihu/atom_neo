@@ -49,6 +49,48 @@ bootstrap()
   └── server = Bun.serve({ ... })
 ```
 
+### CoreServices Boundary
+
+`@atom-neo/core` does not read services through string keys. `main.ts` builds one
+explicit `CoreServices` object from the concrete instances and passes it to
+`startCore({ services, ... })`:
+
+```typescript
+type CoreServices = {
+  memory: MemoryServiceLike;   // required
+  network: NetworkServiceLike; // required
+  skill?: SkillServiceLike;    // optional
+  compiler?: { getCompiledPrompt(): string }; // optional
+};
+
+resolveCoreServices({ services }); // fail fast before Core is constructed
+```
+
+`ServiceManager` still owns `register/startAll/stopAll`, but it is no longer
+passed into Core. Missing `memory` or `network` throws at the `startCore`
+boundary with the service name in the error.
+
+### PromptRegistry Boundary
+
+Prompt lookups use a per-Core registry plus a narrow resolver. There is no
+module-level `_instance`, `getRegistry()`, `initPromptRegistry()` or free
+`resolvePrompt()`:
+
+```typescript
+const promptRegistry = createPromptRegistry();          // independent per Core
+const promptResolver = createPromptResolver(promptRegistry);
+// (key: PromptKey, providerModel?: string) => string
+
+createPipelineFactory({ promptResolver, ... });         // passed to every pipeline
+// Element params: { promptResolver, providerModel? }
+```
+
+`createPromptRegistry()` registers the same language/model variants on every
+instance; `createPromptResolver()` keeps the `openai/gpt-4o` default and the
+English fallback for unknown providers. Elements and `callLLM` / `chooseDecision`
+receive the resolver explicitly. Tests construct their own registry/resolver
+instead of relying on bootstrap initialization.
+
 ---
 
 ## 3. Every Constructor Follows This Pattern

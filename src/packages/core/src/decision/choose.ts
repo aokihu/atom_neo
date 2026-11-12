@@ -1,6 +1,6 @@
 import { generateText, Output } from "ai";
-import type { ProviderProtocol } from "@atom-neo/shared";
-import { inferProviderProtocol, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import { inferProviderProtocol, PromptKey } from "@atom-neo/shared";
 import { z } from "zod";
 import { callJev } from "./jev-client";
 import type { JevQuestion } from "./jev-client";
@@ -29,7 +29,7 @@ export type DecisionRequest = {
 
 export type DecisionParams = {
   state: Record<string, unknown>; questions: ChoiceQuestions;
-  model: DecisionModel; fallback: DecisionModel; maxTokens?: number; maxRetries?: number;
+  model: DecisionModel; fallback: DecisionModel; promptResolver: PromptResolver; maxTokens?: number; maxRetries?: number;
   abortSignal?: AbortSignal; fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
   simulate?: SimulateDecision;
   onRequest?: (request: DecisionRequest) => void;
@@ -103,7 +103,7 @@ async function chooseDecisionOnce(params: DecisionParams): Promise<DecisionResul
           model: model.model,
           baseUrl: model.baseUrl,
         }),
-        instructions: resolvePrompt(PromptKey.SIMULATE_JEV, `${provider}/${model.model}`),
+        instructions: params.promptResolver(PromptKey.SIMULATE_JEV, `${provider}/${model.model}`),
         prompt: JSON.stringify({ state, questions }),
         output: Output.object({ schema: z.object({ answers: z.record(z.string(), z.string()) }) }),
         maxOutputTokens: params.maxTokens ?? 512, maxRetries: params.maxRetries, temperature: 0, abortSignal,

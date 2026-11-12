@@ -1,5 +1,5 @@
 import { BaseElement, BusEvents, IntentRequestType, substringWellFormed } from "@atom-neo/shared";
-import type { ContinuationDecision, PipelineEventMap, PipelineEventBus, TodoTarget } from "@atom-neo/shared";
+import type { ContinuationDecision, PipelineEventMap, PipelineEventBus, PromptResolver, TodoTarget } from "@atom-neo/shared";
 import { hasActiveTodos, findTodoTarget, selectCurrentTodo } from "../../../session/context";
 import type { TodoItem } from "../../../session/context";
 import { retainIntentMemory } from "../../../tools/builtin/intent";
@@ -9,7 +9,7 @@ import type { ConversationFlowState } from "./types";
 import { buildProgressEvidence, createProgressTrace, getProgressFacts } from "../../shared/progress-evidence";
 import { buildProgressQuestions, readProgressAssessment } from "../../shared/progress-questions";
 
-type ArbitrationParams = { decisionMode?: "jev" | "rules"; decisionModel?: DecisionModel; fallbackModel?: DecisionModel;
+type ArbitrationParams = { promptResolver: PromptResolver; decisionMode?: "jev" | "rules"; decisionModel?: DecisionModel; fallbackModel?: DecisionModel;
   fetchImpl?: (url: string, init: RequestInit) => Promise<Response>; simulate?: SimulateDecision; timeoutMs?: number };
 
 const QUESTIONS = { continuation: { type: "choice", instructions:
@@ -129,6 +129,7 @@ export class CheckFollowUpElement extends BaseElement<ConversationFlowState, Con
         if (signal.aborted) { abort(); return; }
         chooseDecision({ state, questions: { ...QUESTIONS, ...buildProgressQuestions(progressEvidence, true) }, model: this.#params.decisionModel ? { ...this.#params.decisionModel, beforeCall: undefined } : emptyModel,
           fallback: this.#params.fallbackModel ?? emptyModel, abortSignal: signal, maxTokens: 512, maxRetries: 0,
+          promptResolver: this.#params.promptResolver,
           fetchImpl: this.#params.fetchImpl, simulate: this.#params.simulate,
           onRequest: request => this.report(BusEvents.Element.Data, { step: "decision-request", purpose: "continuation", ...this.#trace(input), ...request }) })
           .then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));

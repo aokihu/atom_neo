@@ -6,9 +6,11 @@ import { BusEvents, createHttpServer } from "@atom-neo/shared";
 import type { HttpServer, HttpServerHandle } from "@atom-neo/shared";
 import { createCoreBootstrap } from "./bootstrap";
 import type { CoreDeps } from "./bootstrap";
+import { resolveCoreServices } from "./core-services";
 import { createHttpRouter } from "./http-router";
 
 export type { CoreDeps } from "./bootstrap";
+export type { CoreServices, MemoryServiceLike } from "./core-services";
 export { resolveTaskFailureCode } from "./task-lifecycle";
 
 type CoreHandle = {
@@ -22,10 +24,11 @@ type CoreHandle = {
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
 export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): Promise<CoreHandle> {
   const { port, host, logger } = deps;
+  const services = resolveCoreServices({ services: deps.services });
   const httpServer = deps.httpServer ?? await createHttpServer();
   const stopping = { value: false };
   const isStopping = () => stopping.value;
-  const core = createCoreBootstrap({ ...deps, isStopping });
+  const core = createCoreBootstrap({ ...deps, services, isStopping });
   const router = createHttpRouter({
     logger,
     adminToken: deps.adminToken,

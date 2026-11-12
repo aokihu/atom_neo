@@ -10,6 +10,7 @@ import { SessionContext } from "./session/context";
 import { SessionPersistenceService } from "./session/persistence-service";
 import { ContextService } from "./context/context-service";
 import { makeBus } from "./pipelines/test-helpers";
+import type { CoreServices } from "./core-services";
 
 const first = { content: "世界文明第一阶段", status: "in_progress", priority: "high" };
 const second = { content: "世界文明第二阶段", status: "pending", priority: "high" };
@@ -78,8 +79,20 @@ async function scenario(kind: "reconcile" | "limit" | "checkpoint_failure" | "co
       type: profile === "fast" ? "jev" : "llm", baseUrl: modelServer.url.toString(), thinking: "disabled" }; } };
   const registered = getRegisteredNames().map(name => [name, resolveElement(name)] as const);
   clearRegistry();
-  const core = await startCore({ port: 0, host: "127.0.0.1", sandbox, logger: new Logger("debug", entry => logs.push(entry)),
-    runtime, sm: { get: (name: string) => name === "network" ? {} as any : undefined } } as any);
+  const services: CoreServices = {
+    memory: {
+      search: async () => [],
+      getById: () => null,
+      save: () => "memory-1",
+      traverse: () => [],
+      link: () => false,
+      forget: () => false,
+      retain: () => {},
+    },
+    network: { webFetch: async () => ({ ok: true, code: "success", content: "" }) },
+  };
+  const core = await startCore({ port: 0, host: "127.0.0.1", logger: new Logger("debug", entry => logs.push(entry)),
+    runtime, services });
   try {
     const url = `http://127.0.0.1:${core.port}`;
     const submitted: any = await (await fetch(`${url}/api/tasks`, { method: "POST", headers: { "Content-Type": "application/json" },

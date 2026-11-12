@@ -90,7 +90,7 @@ try {
     logger: new Logger("debug", entry => {
       entries.push(entry);
       appendFileSync(join(dir, "runtime.log"), JSON.stringify(entry) + "\n");
-    }), sm: { get: (name: string) => ({ memory, network, "agents-compiler": { getCompiledPrompt: () => compiled } } as any)[name] } });
+    }), services: { memory, network, compiler: { getCompiledPrompt: () => compiled } } });
   const base = `http://127.0.0.1:${core.port}`;
   for (let i = 0; i < questions.length; i++) {
     if (i) await sleep(10000);

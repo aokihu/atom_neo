@@ -1,8 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { PromptKey } from "./keys";
-import { initPromptRegistry, resolvePrompt } from "./index";
+import { PromptKey, PromptRegistry, createPromptRegistry, createPromptResolver } from "./index";
 import { enBases } from "./variants/lang/en";
 import { zhBases } from "./variants/lang/zh";
+import { deepseekV4ProRefinements } from "./variants/models/deepseek-v4-pro";
+import { deepseekV4FlashRefinements } from "./variants/models/deepseek-v4-flash";
+import { gpt4oRefinements } from "./variants/models/gpt-4o";
+import { claudeSonnetRefinements } from "./variants/models/claude-sonnet";
+
+function createReferenceRegistry(): PromptRegistry {
+  const registry = new PromptRegistry();
+  registry.registerLangBases("zh", zhBases);
+  registry.registerLangBases("en", enBases);
+  registry.registerModelRefinements("deepseek-v4-pro", deepseekV4ProRefinements);
+  registry.registerModelRefinements("deepseek-v4-flash", deepseekV4FlashRefinements);
+  registry.registerModelRefinements("gpt-4o", gpt4oRefinements);
+  registry.registerModelRefinements("claude-sonnet", claudeSonnetRefinements);
+  return registry;
+}
+
+function makeResolver() {
+  return createPromptResolver(createPromptRegistry());
+}
 
 describe("Memory discovery prompts", () => {
   test("Prediction retains classification fields without Memory or Tool instructions", () => {
@@ -81,8 +99,8 @@ describe("Memory discovery prompts", () => {
 
 describe("Prompt language selection", () => {
   test("deepseek resolves Chinese while other providers resolve English", () => {
-    initPromptRegistry();
-    expect(resolvePrompt(PromptKey.BASE_SYSTEM, "deepseek/some-model"))
+    const resolve = makeResolver();
+    expect(resolve(PromptKey.BASE_SYSTEM, "deepseek/some-model"))
       .toBe(zhBases[PromptKey.BASE_SYSTEM]!);
     for (const providerModel of [
       "openai/some-model",
@@ -90,13 +108,62 @@ describe("Prompt language selection", () => {
       "openai-compatible/some-model",
       "custom/some-model",
     ]) {
-      expect(resolvePrompt(PromptKey.BASE_SYSTEM, providerModel)).toBe(enBases[PromptKey.BASE_SYSTEM]!);
+      expect(resolve(PromptKey.BASE_SYSTEM, providerModel)).toBe(enBases[PromptKey.BASE_SYSTEM]!);
     }
   });
 
   test("defaults to an English provider when no provider/model is supplied", () => {
-    initPromptRegistry();
-    expect(resolvePrompt(PromptKey.BASE_SYSTEM)).toContain(enBases[PromptKey.BASE_SYSTEM]!);
+    const resolve = makeResolver();
+    expect(resolve(PromptKey.BASE_SYSTEM)).toBe(resolve(PromptKey.BASE_SYSTEM, "openai/gpt-4o"));
+    expect(resolve(PromptKey.BASE_SYSTEM)).toContain(enBases[PromptKey.BASE_SYSTEM]!);
+  });
+
+  test("empty provider/model falls back to the English base prompt", () => {
+    const resolve = makeResolver();
+    expect(resolve(PromptKey.BASE_SYSTEM, "")).toBe(enBases[PromptKey.BASE_SYSTEM]!);
+  });
+});
+
+describe("Prompt registry factories", () => {
+  test("creates independent registries with byte-identical variants", () => {
+    const first = createPromptRegistry();
+    const second = createPromptRegistry();
+    expect(first).not.toBe(second);
+    expect(createPromptResolver(first)(PromptKey.BASE_SYSTEM))
+      .toBe(createPromptResolver(second)(PromptKey.BASE_SYSTEM));
+
+    const actual = createPromptResolver(first);
+    const reference = createPromptResolver(createReferenceRegistry());
+    for (const key of Object.values(PromptKey)) {
+      for (const providerModel of [
+        "openai/gpt-4o",
+        "deepseek/deepseek-v4-pro",
+        "deepseek/deepseek-v4-flash",
+        "anthropic/claude-sonnet",
+        "openai/unknown-model",
+        "unknown/model",
+        undefined,
+      ]) {
+        expect(actual(key, providerModel)).toBe(reference(key, providerModel));
+      }
+    }
+  });
+
+  test("keeps resolver caches and later registration isolated per registry", () => {
+    const first = createPromptRegistry();
+    const second = createPromptRegistry();
+    const firstResolve = createPromptResolver(first);
+    const secondResolve = createPromptResolver(second);
+    const defaultGpt = [enBases[PromptKey.BASE_SYSTEM], gpt4oRefinements[PromptKey.BASE_SYSTEM]]
+      .filter(Boolean).join("\n\n");
+    expect(firstResolve(PromptKey.BASE_SYSTEM, "openai/gpt-4o")).toBe(defaultGpt);
+    expect(secondResolve(PromptKey.BASE_SYSTEM, "openai/gpt-4o")).toBe(defaultGpt);
+
+    first.registerModelRefinements("gpt-4o", { [PromptKey.BASE_SYSTEM]: "first registry only" });
+
+    expect(firstResolve(PromptKey.BASE_SYSTEM, "openai/gpt-4o"))
+      .toBe(`${enBases[PromptKey.BASE_SYSTEM]}\n\nfirst registry only`);
+    expect(secondResolve(PromptKey.BASE_SYSTEM, "openai/gpt-4o")).toBe(defaultGpt);
   });
 });
 

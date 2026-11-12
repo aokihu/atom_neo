@@ -217,5 +217,5 @@ export type { EnvEntry, WriteFileAtomicOptions } from "./utils";
 export { BusEvents, EVENTS, TaskFailureCodes, WsMessages } from "./constants";
 
 // ── Prompts ──
-export { PromptKey, initPromptRegistry, resolvePrompt, getRegistry } from "./prompts";
-export type { PromptRegistry } from "./prompts";
+export { PromptKey, PromptRegistry, createPromptRegistry, createPromptResolver } from "./prompts";
+export type { PromptResolver } from "./prompts";

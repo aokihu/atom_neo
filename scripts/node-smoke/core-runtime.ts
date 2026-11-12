@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { WebSocket } from "ws";
 import type { RawData } from "ws";
 import { startCore } from "../../src/packages/core/src/server";
+import type { CoreServices } from "../../src/packages/core/src/core-services";
 import { Logger, WsMessages, createHttpServer, resolveHttpRuntime } from "../../src/packages/shared/src/index";
 import { createNodeHttpServer } from "../../src/packages/shared/src/http/node-http-server";
 
@@ -115,7 +116,18 @@ async function main(): Promise<void> {
         };
       },
     };
-    const sm = { get: (name: string) => name === "network" ? {} as any : undefined };
+    const services: CoreServices = {
+      memory: {
+        search: async () => [],
+        getById: () => null,
+        save: () => "memory-1",
+        traverse: () => [],
+        link: () => false,
+        forget: () => false,
+        retain: () => {},
+      },
+      network: { webFetch: async () => ({ ok: true, code: "success", content: "" }) },
+    };
 
     core = await startCore({
       port: 0,
@@ -123,7 +135,7 @@ async function main(): Promise<void> {
       sandbox,
       logger: new Logger("debug", () => {}),
       runtime,
-      sm,
+      services,
       adminToken: ADMIN_TOKEN,
       httpServer: createNodeHttpServer(),
     } as any);

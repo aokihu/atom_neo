@@ -1,9 +1,14 @@
-import { PipelineEventBus } from "@atom-neo/shared";
-import type { FullEventMap } from "@atom-neo/shared";
+import { PipelineEventBus, createPromptRegistry, createPromptResolver } from "@atom-neo/shared";
+import type { FullEventMap, PromptResolver } from "@atom-neo/shared";
 import type { InternalTaskOrchestrator } from "../task/internal-task-orchestrator";
 
 export function makeBus() {
   return new PipelineEventBus<FullEventMap>();
+}
+
+/** Explicit prompt resolver for tests that construct pipeline elements directly. */
+export function makePromptResolver(): PromptResolver {
+  return createPromptResolver(createPromptRegistry());
 }
 
 export function makeMockOrchestrator(capture: { enqueued: any } | null) {

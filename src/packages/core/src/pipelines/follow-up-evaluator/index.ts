@@ -9,7 +9,7 @@ import {
 } from "./elements";
 import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
 import type { ContextService } from "../../context/context-service";
-import type { ProviderProtocol } from "@atom-neo/shared";
+import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 
 export function registerFollowUpEvaluatorElements(): void {
   registerElement("evaluator-input", EvaluatorInputElement);
@@ -23,6 +23,7 @@ export function followUpEvaluatorPipeline(deps: {
   toolRecordStore?: ToolRecordStore;
   session: any;
   task: any;
+  promptResolver: PromptResolver;
   apiKey: string;
   model: string;
   provider?: string;
@@ -38,6 +39,7 @@ export function followUpEvaluatorPipeline(deps: {
     .source("evaluator-input", { session: deps.session, toolRecordStore: deps.toolRecordStore })
     .transform("evaluator-analyze", {
       decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel,
+      promptResolver: deps.promptResolver,
       apiKey: deps.apiKey,
       model: deps.model,
       provider: deps.provider,

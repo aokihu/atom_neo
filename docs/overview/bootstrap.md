@@ -83,8 +83,9 @@ Fake conversation（本地 fake SSE 模型 → conversation `completed`）与 Bu
   └─ 默认 / core / core-gateway
        → env/config → 日志 → 配置检查 → sandbox 初始化
        → RuntimeService → 解析 ATOM_HTTP_RUNTIME → 创建 HttpServer
+       → 构造 Memory/Skill/Network/Compiler，注册到 ServiceManager
        → ServiceManager.startAll
-       → startCore（Session/工具/任务/HookManager/HTTP/WS）
+       → startCore({ services })
        → 默认：startTui；core：常驻；core-gateway：startGateway
 ```
 

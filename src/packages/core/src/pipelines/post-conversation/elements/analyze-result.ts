@@ -1,6 +1,6 @@
 import { getProgressFacts } from "../../shared/progress-evidence";
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus, ProviderProtocol } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
 import { FALLBACK_ANALYSIS } from "./types";
@@ -17,11 +17,13 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
   #thinking?: string;
   #options?: Record<string, unknown>;
   #maxTokens: number;
+  #promptResolver: PromptResolver;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    promptResolver: PromptResolver;
     apiKey: string;
     model: string;
     provider?: string;
@@ -40,6 +42,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
     this.#thinking = params.thinking;
     this.#options = params.options;
     this.#maxTokens = params.maxTokens ?? 256;
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: PostConversationFlowState): Promise<PostConversationFlowState> {
@@ -76,6 +79,7 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       this.report(BusEvents.Element.Data, { step: "analyzing", userMsgLen: input.userMessage.length, assistantMsgLen: input.assistantResponse.length });
 
       const raw = await callLLM({
+        promptResolver: this.#promptResolver,
         apiKey: this.#apiKey,
         model: this.#model,
         provider: this.#provider,

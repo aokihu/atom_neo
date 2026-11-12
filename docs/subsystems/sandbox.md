@@ -126,8 +126,8 @@ src/main.ts
   ├── 6. initAtomDir(args.sandbox)        → 创建 .atom/
   ├── 7. initAgentsMd(args.sandbox)       → 检查/创建 AGENTS.md
   ├── 8. new RuntimeService({...})        → 统一环境入口
-  ├── 9. sm.register() + sm.startAll()    → ServiceManager 管理
-  └── 10. startCore({ port, host, logger, sm }) → HTTP 服务器
+  ├── 9. sm.register() + sm.startAll()    → ServiceManager 管理生命周期
+  └── 10. startCore({ port, host, logger, services }) → HTTP 服务器
 ```
 
 首次启动时，若 `$SANDBOX/.atom/installed` 不存在，进入 Ink 交互式安装向导。向导完成后创建此空文件作为「已安装」标记，后续启动直接跳过向导。详见 [first-run-wizard.md](./first-run-wizard.md)。
