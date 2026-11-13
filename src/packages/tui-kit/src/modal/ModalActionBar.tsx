@@ -22,6 +22,8 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
         const active = selected && focused;
         const labelWidth = Array.from(action.label).length;
         const minWidth = labelWidth % 2 === 0 ? 5 : 6;
+        const naturalWidth = Math.max(minWidth, labelWidth);
+        const contentWidth = naturalWidth + (naturalWidth - labelWidth) % 2;
         const fg =
           action.variant === "danger" || action.role === "destructive"
             ? colors.status.error
@@ -38,7 +40,7 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
             borderColor={active ? colors.accent.brand : colors.bg.popup}
             backgroundColor={active ? colors.decoration.subtle : undefined}
           >
-            <box id={`modal-action-label-${action.key}`} minWidth={minWidth} flexDirection="row" justifyContent="center">
+            <box id={`modal-action-label-${action.key}`} minWidth={contentWidth} flexDirection="row" justifyContent="center">
               <text fg={action.disabled || !focused ? colors.text.muted : fg}>
                 {action.label}
               </text>

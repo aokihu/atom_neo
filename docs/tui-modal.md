@@ -23,7 +23,7 @@
 └──────────────────────────────────────────────┘
 ```
 
-Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与内容区之间保留 1 行间隔。Action 按钮统一使用 `paddingX=1`、`paddingY=0`，不设置 margin。按钮内容区最小宽度按文字长度奇偶决定：偶数长度为 5，奇数长度为 6；文字水平居中。只有选中且 ActionBar 聚焦的按钮显示 `accent.brand` 边框与 `decoration.subtle` 背景；未选中按钮的边框颜色与面板背景 `bg.popup` 相同，视觉上不显示边框，但保留相同尺寸与间距，避免切换选择时布局跳动。
+Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与内容区之间保留 1 行间隔。Action 按钮统一使用 `paddingX=1`、`paddingY=0`，不设置 margin。按钮内容区最小宽度按文字长度奇偶决定：偶数长度为 5，奇数长度为 6；如果该宽度与文字长度之差为奇数，自动补 1 格，使文字在字符网格中真正水平居中。只有选中且 ActionBar 聚焦的按钮显示 `accent.brand` 边框与 `decoration.subtle` 背景；未选中按钮的边框颜色与面板背景 `bg.popup` 相同，视觉上不显示边框，但保留相同尺寸与间距，避免切换选择时布局跳动。
 
 ## 组件构成
 

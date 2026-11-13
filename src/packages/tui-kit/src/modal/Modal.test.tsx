@@ -156,23 +156,23 @@ test("draws a panel border and highlights the selected action border", async () 
   }
 });
 
-test("even-length labels use a five-cell minimum width", async () => {
+test("even-length labels center within a six-cell content width", async () => {
   const ctx = await mountModal();
   try {
     await ctx.render(true);
     const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-ok") as BoxRenderable;
-    expect(label.width).toBe(5);
+    expect(label.width).toBe(6);
   } finally {
     await cleanup(ctx);
   }
 });
 
-test("odd-length labels use a six-cell minimum width", async () => {
+test("odd-length labels center within a seven-cell content width", async () => {
   const ctx = await mountModal({ actions: [{ key: "run", label: "Run" }] });
   try {
     await ctx.render(true);
     const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-run") as BoxRenderable;
-    expect(label.width).toBe(6);
+    expect(label.width).toBe(7);
   } finally {
     await cleanup(ctx);
   }
