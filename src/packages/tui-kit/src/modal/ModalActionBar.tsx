@@ -19,30 +19,33 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
     >
       {actions.map((action, index) => {
         const selected = index === selectedIndex;
+        const active = selected && focused;
         const fg =
           action.variant === "danger" || action.role === "destructive"
             ? colors.status.error
             : action.variant === "primary" || action.role === "confirm"
               ? colors.accent.brand
               : colors.text.primary;
-        return (
+        const label = (
+          <text fg={action.disabled || !focused ? colors.text.muted : fg}>
+            {action.label}
+          </text>
+        );
+        return active ? (
           <box
             key={action.key}
             id={`modal-action-${action.key}`}
-            marginLeft={1}
-            paddingX={2}
+            paddingX={1}
             border
             borderStyle="single"
-            borderColor={action.disabled
-              ? colors.decoration.subtle
-              : selected && focused
-                ? colors.accent.brand
-                : colors.border.default}
-            backgroundColor={selected && focused ? colors.decoration.subtle : undefined}
+            borderColor={colors.accent.brand}
+            backgroundColor={colors.decoration.subtle}
           >
-            <text fg={action.disabled || !focused ? colors.text.muted : fg}>
-              {action.label}
-            </text>
+            {label}
+          </box>
+        ) : (
+          <box key={action.key} id={`modal-action-${action.key}`} height={3} paddingX={1} justifyContent="center">
+            {label}
           </box>
         );
       })}
