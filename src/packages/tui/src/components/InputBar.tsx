@@ -74,7 +74,7 @@ export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact,
       {!disabled && showMenu && cmdMatches.length > 0 && (
         <box
           position="absolute"
-          bottom={6}
+          bottom={7}
           left={0}
           right={1}
           zIndex={1000}
@@ -117,7 +117,7 @@ export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact,
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused={!disabled}
-          height={2}
+          height={3}
           backgroundColor={colors.bg.popup}
           focusedBackgroundColor={colors.bg.popup}
           textColor={colors.text.primary}
