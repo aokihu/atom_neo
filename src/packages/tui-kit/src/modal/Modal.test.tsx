@@ -2,9 +2,11 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { act, createRef, useState, type Ref } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
+import { RGBA } from "@opentui/core";
 import type { BoxRenderable } from "@opentui/core";
 import { Modal } from "./Modal";
 import type { ModalAction } from "./types";
+import { getTheme } from "../theme";
 
 const ACTIONS: ModalAction[] = [
   { key: "cancel", label: "Cancel", role: "cancel" },
@@ -131,6 +133,24 @@ test("focusRef makes the modal panel the focused renderable", async () => {
     expect(ctx.setup.renderer.currentFocusedRenderable).toBe(focusRef.current);
     await ctx.render(false);
     expect(ctx.setup.renderer.currentFocusedRenderable).toBeNull();
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("draws a panel border and highlights the selected action border", async () => {
+  const ctx = await mountModal();
+  try {
+    await ctx.render(true);
+    const frame = ctx.setup.captureCharFrame();
+    expect(frame).toContain("┌");
+    const selected = ctx.setup.renderer.root.findDescendantById("modal-action-ok") as BoxRenderable;
+    const unselected = ctx.setup.renderer.root.findDescendantById("modal-action-cancel") as BoxRenderable;
+    const { colors } = getTheme();
+    expect(selected.border).toBe(true);
+    expect(unselected.border).toBe(true);
+    expect(selected.borderColor.equals(RGBA.fromHex(colors.accent.brand))).toBe(true);
+    expect(unselected.borderColor.equals(RGBA.fromHex(colors.border.default))).toBe(true);
   } finally {
     await cleanup(ctx);
   }

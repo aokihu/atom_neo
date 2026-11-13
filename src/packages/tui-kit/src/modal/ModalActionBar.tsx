@@ -15,7 +15,6 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
       flexShrink={0}
       flexDirection="row"
       justifyContent="flex-end"
-      paddingTop={1}
     >
       {actions.map((action, index) => {
         const selected = index === selectedIndex;
@@ -28,8 +27,16 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
         return (
           <box
             key={action.key}
+            id={`modal-action-${action.key}`}
             marginLeft={1}
             paddingX={2}
+            border
+            borderStyle="single"
+            borderColor={action.disabled
+              ? colors.decoration.subtle
+              : selected && focused
+                ? colors.accent.brand
+                : colors.border.default}
             backgroundColor={selected && focused ? colors.decoration.subtle : undefined}
           >
             <text fg={action.disabled || !focused ? colors.text.muted : fg}>

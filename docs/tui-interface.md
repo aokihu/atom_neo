@@ -128,6 +128,7 @@ Wide
 - `Up/Down` 浏览历史或命令。
 - `Esc` 关闭菜单；Session busy 时双击 `Esc` 取消 Task。
 - 面板折叠功能必须提供键盘路径，不能只绑定 `onMouseUp`。
+- Modal 面板和 ActionBar 按钮均使用单线边框；选中按钮以强调色边框和低对比度背景突出。
 
 ### 焦点管理
 

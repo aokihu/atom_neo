@@ -58,6 +58,7 @@ export function SettingsModal({ open, focusRef, url, adminToken, serverInfo, onS
       placement="center"
       actions={SETTINGS_ACTIONS}
       defaultActionKey="save"
+      titlePadding={0}
       focusRef={focusRef}
       onClose={onClose}
       onAction={(key) => {
@@ -70,7 +71,7 @@ export function SettingsModal({ open, focusRef, url, adminToken, serverInfo, onS
       onListNavigate={setSelectedIndex}
       onListActivate={cycleRow}
     >
-      <text fg={colors.text.muted}>Up/Down select · Enter change value · Tab actions · Enter confirm</text>
+      <text fg={colors.text.muted}>↑/↓ select · Enter change · Tab actions · Enter confirm</text>
       {error && <text fg={colors.status.error}>{error}</text>}
       {rows.length === 0 ? (
         <text fg={colors.text.muted}>Loading configuration...</text>
