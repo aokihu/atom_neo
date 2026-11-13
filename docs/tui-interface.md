@@ -90,7 +90,7 @@ Wide
 - Tool Group 完成后移除执行 Block，并聚合到同一 User Turn 最后一个可用的
   Thought 行：`THOUGHT 5s │ TOOLS 5/5 ▼`。点击 Tool 摘要或在其获得
   焦点后按 Enter，打开 Modal 查看每个 Tool 的状态、输入与结果摘要。
-- 输入框最小高度为 3 行字符，上下 padding 各 1；命令菜单继续覆盖在输入框上方。输入框内部不显示 `COMMAND` / `READY` 或模型状态行，运行状态由外部 `StatusLine` 和边框颜色表达。
+- 输入框保持固定高度；命令菜单继续覆盖在输入框上方。
 
 ### Telemetry
 
