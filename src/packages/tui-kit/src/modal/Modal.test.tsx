@@ -148,8 +148,9 @@ test("draws a panel border and highlights the selected action border", async () 
     const unselected = ctx.setup.renderer.root.findDescendantById("modal-action-cancel") as BoxRenderable;
     const { colors } = getTheme();
     expect(selected.border).toBe(true);
-    expect(unselected.border).toBe(false);
+    expect(unselected.border).toBe(true);
     expect(selected.borderColor.equals(RGBA.fromHex(colors.accent.brand))).toBe(true);
+    expect(unselected.borderColor.equals(RGBA.fromHex(colors.bg.popup))).toBe(true);
   } finally {
     await cleanup(ctx);
   }

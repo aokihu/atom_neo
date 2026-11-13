@@ -26,26 +26,19 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
             : action.variant === "primary" || action.role === "confirm"
               ? colors.accent.brand
               : colors.text.primary;
-        const label = (
-          <text fg={action.disabled || !focused ? colors.text.muted : fg}>
-            {action.label}
-          </text>
-        );
-        return active ? (
+        return (
           <box
             key={action.key}
             id={`modal-action-${action.key}`}
             paddingX={1}
             border
             borderStyle="single"
-            borderColor={colors.accent.brand}
-            backgroundColor={colors.decoration.subtle}
+            borderColor={active ? colors.accent.brand : colors.bg.popup}
+            backgroundColor={active ? colors.decoration.subtle : undefined}
           >
-            {label}
-          </box>
-        ) : (
-          <box key={action.key} id={`modal-action-${action.key}`} height={3} paddingX={1} justifyContent="center">
-            {label}
+            <text fg={action.disabled || !focused ? colors.text.muted : fg}>
+              {action.label}
+            </text>
           </box>
         );
       })}
