@@ -16,7 +16,7 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength, focusRef }: { listLength?: number; focusRef?: Ref<BoxRenderable> } = {}) {
+async function mountModal({ listLength, focusRef, actions = ACTIONS }: { listLength?: number; focusRef?: Ref<BoxRenderable>; actions?: ModalAction[] } = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
   const triggered: string[] = [];
@@ -31,7 +31,7 @@ async function mountModal({ listLength, focusRef }: { listLength?: number; focus
         open={open}
         title="Test"
         width={48}
-        actions={ACTIONS}
+        actions={actions}
         defaultActionKey="ok"
         onAction={key => triggered.push(key)}
         onClose={() => {}}
@@ -156,12 +156,23 @@ test("draws a panel border and highlights the selected action border", async () 
   }
 });
 
-test("action labels keep a four-cell minimum content width", async () => {
+test("even-length labels use a five-cell minimum width", async () => {
   const ctx = await mountModal();
   try {
     await ctx.render(true);
     const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-ok") as BoxRenderable;
-    expect(label.width).toBeGreaterThanOrEqual(4);
+    expect(label.width).toBe(5);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("odd-length labels use a six-cell minimum width", async () => {
+  const ctx = await mountModal({ actions: [{ key: "run", label: "Run" }] });
+  try {
+    await ctx.render(true);
+    const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-run") as BoxRenderable;
+    expect(label.width).toBe(6);
   } finally {
     await cleanup(ctx);
   }
