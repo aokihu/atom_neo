@@ -1,19 +1,23 @@
-import { BaseElement, BusEvents, PromptKey, resolvePrompt } from "@atom-neo/shared";
+import { BaseElement, BusEvents, PromptKey } from "@atom-neo/shared";
 import type {
   ContextOwner,
   ContextScope,
   PipelineEventBus,
   PipelineEventMap,
+  PromptResolver,
 } from "@atom-neo/shared";
-import type { ContextService } from "../../../context/context-service";
-import type { SkillServiceLike } from "../../../skills/types";
-import type { ToolRecordStore } from "../../../tools/tool-record-store";
-import { appendCurrentUserMessage } from "./types";
+import type { ContextService } from "@core/context/context-service";
+import type { PipelineSession } from "@core/session/element-session";
+import { getTaskPayload } from "@core/session/element-session";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import { appendCurrentUserMessage, projectPipelineMessage } from "@core/session/message-projection";
 import type { ConversationFlowState } from "./types";
 
 export class RecordContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #cwd: string;
-  #session: any;
+  #session?: PipelineSession;
+  #promptResolver: PromptResolver;
   #providerModel: string;
   #taskIntent: string;
   #getCompiledPrompt: () => string;
@@ -26,8 +30,9 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     contextService: ContextService;
+    promptResolver: PromptResolver;
     sandbox?: string;
-    session?: any;
+    session?: PipelineSession;
     providerModel?: string;
     configContextLimit?: number;
     taskIntent?: string;
@@ -39,6 +44,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     this.#contextService = params.contextService;
     this.#cwd = params.sandbox ?? process.cwd();
     this.#session = params.session;
+    this.#promptResolver = params.promptResolver;
     this.#providerModel = params.providerModel ?? "";
     this.#taskIntent = params.taskIntent ?? "conversation";
     this.#getCompiledPrompt = params.getCompiledPrompt ?? (() => "");
@@ -97,7 +103,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
       originalGoal: this.#session?.executionBudget?.goal,
       executionBudget: this.#session?.executionBudget ? { globalUsed: this.#session.executionBudget.globalUsed,
         globalAllowance: this.#session.executionBudget.globalAllowance, localUsed: this.#session.executionBudget.localUsed } : undefined });
-    const continuation = input.task?.payload?.find((part: any) => part.type === "continuation_request")?.data;
+    const continuation = getTaskPayload(input.task, "continuation_request");
     if (continuation) {
       this.#putText("task", taskOwner, "continuation-rules", "runtime",
         continuation.kind === "reconcile_progress"
@@ -111,11 +117,12 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
     putData("current-time", { time: new Date().toISOString() });
     this.#putText("task", taskOwner, "difficulty-rules", "prompt-registry", this.#buildTaskInstructions(), 700);
 
-    const userMessages = (input.prompts ?? [])
-      .filter(prompt => prompt.role !== "tool")
-      .map(prompt => ({ role: prompt.role, content: prompt.content,
-        ...(prompt.reasoning_content ? { reasoning_content: prompt.reasoning_content } : {}) }));
-    appendCurrentUserMessage(userMessages, input.task?.payload?.find((part: any) => part.type === "text")?.data);
+    const userMessages = appendCurrentUserMessage(
+      (input.prompts ?? [])
+        .filter(prompt => prompt.role !== "tool")
+        .map(prompt => projectPipelineMessage(prompt)),
+      getTaskPayload(input.task, "text"),
+    );
     this.report(BusEvents.Element.Data, {
       step: "done",
       taskIntent: this.#taskIntent,
@@ -130,7 +137,7 @@ export class RecordContextElement extends BaseElement<ConversationFlowState, Con
   }
 
   #resolve(key: PromptKey): string {
-    return resolvePrompt(key, this.#providerModel);
+    return this.#promptResolver(key, this.#providerModel);
   }
 
   #putText(

@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { z } from "zod";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { makeBus } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { StreamLLMElement } from "./stream-llm";
 
 // Real SDK transport against loopback only: no credentials or external model requests.
@@ -59,7 +59,7 @@ test.each([false, true])("refreshes bounded snapshots and settles the actual ste
           return { content: "updated", metadata: { ok: true, effect: "state_changed" } };
         } }],
     });
-    const result = await element.doProcess({ mode: "formatted", task: { id: owner.taskId, sessionId: owner.sessionId },
+    const result = await element.doProcess({ mode: "formatted", task: { id: owner.taskId, sessionId: owner.sessionId } as any,
       contextOwner: owner, contextSnapshot: initial, userMessages: [{ role: "user", content: "Run test" }] });
     expect(requests).toHaveLength(2);
     expect(requests[1].messages[2]).toMatchObject({ role: "assistant", content: "第一段。",

@@ -1,11 +1,10 @@
-import { createContext, useContext, useMemo, useEffect, useCallback, useState } from "react";
+import { useMemo, useEffect, useCallback, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useChat } from "../hooks/useChat";
 import type { ChatClientError } from "../hooks/useChat";
 import { useChatStore } from "../stores/chat";
-import { getTheme } from "../theme";
-import type { ServerInfo, ThemeColors, Message, ToolGroupMessage } from "../types";
-import { SyntaxStyle } from "@opentui/core";
+import { ThemeProvider, getTheme } from "@atom-neo/tui-kit";
+import type { ServerInfo, ToolGroupMessage } from "../types";
 import { StatusBar } from "./StatusBar";
 import { StatusLine } from "./StatusLine";
 import { ChatView } from "./ChatView";
@@ -13,11 +12,12 @@ import { InputBar } from "./InputBar";
 import { PanelTitle } from "./PanelTitle";
 import { RuntimeSidebar } from "./RuntimeSidebar";
 import { Sidebar } from "./Sidebar";
-import { Modal } from "./modal";
-import type { ModalAction } from "./modal";
+import { AppModal } from "./app/AppModal";
+import type { ActiveModal } from "./app/app-modal-config";
 import { useInputHistory } from "../stores/inputHistory";
-import { summarizeToolGroups, ToolDetailsContent } from "./ToolMessageBox";
 import { SettingsModal } from "./SettingsModal";
+import { useTuiFocus } from "../hooks/use-tui-focus";
+import { ModalOpenProvider } from "./app/modal-focus-context";
 
 const TELEMETRY_MIN_WIDTH = 100;
 const RUNTIME_MIN_WIDTH = 150;
@@ -30,33 +30,6 @@ export function resolveTuiLayout(width: number): TuiLayoutMode {
   if (width >= TELEMETRY_MIN_WIDTH) return "medium";
   return "compact";
 }
-
-type ActiveModal =
-  | { kind: "confirm-clear" }
-  | { kind: "confirm-quit" }
-  | { kind: "error"; title: string; message: string }
-  | { kind: "tool-details"; groups: ToolGroupMessage[] }
-  | { kind: "settings" }
-  | null;
-
-const MODAL_ACTIONS: ModalAction[] = [
-  { key: "cancel", label: "Cancel", role: "cancel" },
-  { key: "ok", label: "OK", role: "confirm", variant: "primary" },
-];
-
-const ERROR_MODAL_ACTIONS: ModalAction[] = [
-  { key: "ok", label: "OK", role: "confirm", variant: "primary" },
-];
-
-const TOOL_MODAL_ACTIONS: ModalAction[] = [
-  { key: "close", label: "Close", role: "confirm", variant: "primary" },
-];
-
-type ThemeCtx = { colors: ThemeColors; syntaxStyle: SyntaxStyle };
-
-const ThemeContext = createContext<ThemeCtx>(getTheme());
-
-export function useTheme() { return useContext(ThemeContext); }
 
 const HELP_TEXT = `Available commands:
   /quit     Exit Atom Neo
@@ -84,6 +57,7 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [taskHint, setTaskHint] = useState<string | null>(null);
+  const { inputRef, modalFocusRef } = useTuiFocus(activeModal !== null, activeModal?.kind);
   const handleClientError = useCallback((error: ChatClientError) => {
     setActiveModal({ kind: "error", title: error.title, message: error.message });
   }, []);
@@ -116,97 +90,58 @@ export function App({ url, sessionId, adminToken, historySandbox, serverInfo, on
   const handleCancelTask = useCallback(() => {
     if (!cancel()) setTaskHint(null);
   }, [cancel]);
-  const toolModalSummary = activeModal?.kind === "tool-details"
-    ? summarizeToolGroups(activeModal.groups)
-    : null;
-  const toolModalTitle = toolModalSummary
-    ? `TOOLS ${toolModalSummary.success}/${toolModalSummary.total}`
-    : "";
 
   return (
-    <ThemeContext.Provider value={theme}>
-      <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
-        <StatusBar serverInfo={serverInfo} />
-        <box flexDirection="row" flexGrow={1} overflow="hidden">
-          {showRuntime && <RuntimeSidebar />}
-          <box
-            flexGrow={1}
-            flexBasis={0}
-            flexDirection="column"
-            overflow="hidden"
-            backgroundColor={theme.colors.bg.codeBlock}
-          >
-            <PanelTitle title="CONVERSATION" meta={busy ? "ACTIVE" : "READY"} tone="primary" />
-            <ChatView onOpenToolDetails={handleOpenToolDetails} />
-            <InputBar
-              onSend={send}
-              onQuit={handleQuit}
-              onHelp={handleHelp}
-              onClear={handleClear}
-              onCompact={handleCompact}
-              onSettings={handleSettings}
-              onCancelTask={handleCancelTask}
-              onCancelHint={setTaskHint}
-              disabled={activeModal !== null}
-            />
+    <ThemeProvider value={theme}>
+      <ModalOpenProvider value={activeModal !== null}>
+        <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.colors.bg.page}>
+          <StatusBar serverInfo={serverInfo} />
+          <box flexDirection="row" flexGrow={1} overflow="hidden">
+            {showRuntime && <RuntimeSidebar />}
+            <box
+              flexGrow={1}
+              flexBasis={0}
+              flexDirection="column"
+              overflow="hidden"
+              backgroundColor={theme.colors.bg.codeBlock}
+            >
+              <PanelTitle title="CONVERSATION" meta={busy ? "ACTIVE" : "READY"} tone="primary" />
+              <ChatView onOpenToolDetails={handleOpenToolDetails} />
+              <InputBar
+                inputRef={inputRef}
+                onSend={send}
+                onQuit={handleQuit}
+                onHelp={handleHelp}
+                onClear={handleClear}
+                onCompact={handleCompact}
+                onSettings={handleSettings}
+                onCancelTask={handleCancelTask}
+                onCancelHint={setTaskHint}
+                disabled={activeModal !== null}
+              />
+            </box>
+            {showTelemetry && <Sidebar contextLimit={contextLimit} url={url} adminToken={adminToken} />}
           </box>
-          {showTelemetry && <Sidebar contextLimit={contextLimit} url={url} adminToken={adminToken} />}
-        </box>
-        <StatusLine hint={taskHint ?? exitHint} />
-        {activeModal && activeModal.kind !== "settings" && (
-          <Modal
-            open
-            title={activeModal.kind === "confirm-clear"
-              ? "Clear conversation?"
-              : activeModal.kind === "confirm-quit"
-                ? "Exit Atom Neo?"
-                : activeModal.kind === "tool-details"
-                  ? toolModalTitle
-                  : activeModal.title}
-            placement="center"
-            width={activeModal.kind === "tool-details" ? 84 : 56}
-            height={activeModal.kind === "tool-details" ? 20 : undefined}
-            actions={activeModal.kind === "error"
-              ? ERROR_MODAL_ACTIONS
-              : activeModal.kind === "tool-details"
-                ? TOOL_MODAL_ACTIONS
-                : MODAL_ACTIONS}
-            defaultActionKey={activeModal.kind === "error"
-              ? "ok"
-              : activeModal.kind === "tool-details"
-                ? "close"
-                : "cancel"}
+          <StatusLine hint={taskHint ?? exitHint} />
+          <AppModal
+            modal={activeModal}
+            textColor={theme.colors.text.secondary}
+            focusRef={modalFocusRef}
             onClose={closeModal}
-            onAction={(key) => {
-              if (activeModal.kind === "error") { closeModal(); return; }
-              if (activeModal.kind === "tool-details") { closeModal(); return; }
-              if (key === "cancel") { closeModal(); return; }
-              if (activeModal.kind === "confirm-clear") { clearMessages(); closeModal(); return; }
-              if (activeModal.kind === "confirm-quit") { closeModal(); onQuit?.(); }
-            }}
-          >
-            {activeModal.kind === "tool-details"
-              ? <ToolDetailsContent groups={activeModal.groups} />
-              : (
-                <text fg={theme.colors.text.secondary}>
-                  {activeModal.kind === "confirm-clear"
-                    ? "This will remove all messages from the current TUI view."
-                    : activeModal.kind === "confirm-quit"
-                      ? "The current terminal UI session will be closed."
-                      : activeModal.message}
-                </text>
-              )}
-          </Modal>
-        )}
-        <SettingsModal
-          open={activeModal?.kind === "settings"}
-          url={url}
-          adminToken={adminToken}
-          serverInfo={serverInfo}
-          onSaved={(info) => onServerInfoChange?.(info)}
-          onClose={closeModal}
-        />
-      </box>
-    </ThemeContext.Provider>
+            onClearMessages={clearMessages}
+            onQuit={onQuit}
+          />
+          <SettingsModal
+            open={activeModal?.kind === "settings"}
+            focusRef={modalFocusRef}
+            url={url}
+            adminToken={adminToken}
+            serverInfo={serverInfo}
+            onSaved={(info) => onServerInfoChange?.(info)}
+            onClose={closeModal}
+          />
+        </box>
+      </ModalOpenProvider>
+    </ThemeProvider>
   );
 }

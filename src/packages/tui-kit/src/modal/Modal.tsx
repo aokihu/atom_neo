@@ -1,0 +1,250 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { TextAttributes } from "@opentui/core";
+import type { KeyEvent } from "@opentui/core";
+import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { useTheme } from "../theme";
+import { ModalActionBar } from "./ModalActionBar";
+import type { ModalAction, ModalAnchorPoint, ModalProps } from "./types";
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+type LayoutPos = { left?: number; right?: number; top?: number; bottom?: number; width: number };
+
+function pointFractions(p: ModalAnchorPoint): { h: number; v: number } {
+  const v = p === "top" || p.startsWith("top-") ? 0
+    : p === "bottom" || p.startsWith("bottom-") ? 1
+    : 0.5;
+  const h = p === "left" || p.endsWith("-left") ? 0
+    : p === "right" || p.endsWith("-right") ? 1
+    : 0.5;
+  return { h, v };
+}
+
+function findInitialIndex(actions: ModalAction[], defaultActionKey?: string) {
+  if (actions.length === 0) return -1;
+  const byKey = defaultActionKey
+    ? actions.findIndex(a => a.key === defaultActionKey && !a.disabled)
+    : -1;
+  if (byKey >= 0) return byKey;
+  const confirm = actions.findIndex(
+    a => (a.role === "confirm" || a.variant === "primary") && !a.disabled,
+  );
+  if (confirm >= 0) return confirm;
+  const firstEnabled = actions.findIndex(a => !a.disabled);
+  return firstEnabled >= 0 ? firstEnabled : 0;
+}
+
+const actionSignature = (actions: ModalAction[]) =>
+  actions.map(action => `${action.key}:${action.disabled ? 1 : 0}`).join("|");
+
+/**
+ * Shared Modal.
+ *
+ * Keymap:
+ * - always: Esc closes.
+ * - list mode (`listLength` > 0):
+ *   Up/Down navigate the list; Enter activates the list item;
+ *   Tab/Left/Right focus the action bar without moving the list selection;
+ *   once focused, Left/Right/Tab cycle actions and Enter triggers the action.
+ * - non-list mode:
+ *   Tab/Right select the next action, Left the previous one, Enter triggers it.
+ */
+export function Modal({
+  open,
+  title,
+  width = 60,
+  height,
+  placement = "center",
+  anchorRect,
+  anchorPosition = "bottom-left",
+  position: modalPosition = "top-left",
+  offset,
+  matchAnchorWidth,
+  actions = [],
+  defaultActionKey,
+  children,
+  zIndex = 1000,
+  focusRef,
+  onAction,
+  onClose,
+  listLength,
+  selectedListIndex = 0,
+  onListNavigate,
+  onListActivate,
+  interactive = true,
+  titlePadding = 1,
+  contentPaddingX = 1,
+  hint,
+  chrome = "plain",
+}: ModalProps) {
+  const { colors } = useTheme();
+  const { width: screenWidth, height: screenHeight } = useTerminalDimensions();
+  const bordered = chrome === "bordered";
+  const isList = listLength != null && listLength > 0;
+  const actionsKey = useMemo(() => actionSignature(actions), [actions]);
+
+  const [selectedIndex, setSelectedIndex] = useState(() => findInitialIndex(actions, defaultActionKey));
+  const [actionFocus, setActionFocus] = useState(false);
+
+  // Reopening or changing the action set restores the configured default action.
+  useEffect(() => {
+    setActionFocus(false);
+    if (open) setSelectedIndex(findInitialIndex(actions, defaultActionKey));
+  }, [open, actionsKey, defaultActionKey]);
+
+  const boxWidth = clamp(width, 20, Math.max(20, screenWidth - 4));
+  const centeredTop = bordered
+    ? Math.max(1, Math.floor(screenHeight / 4))
+    : Math.floor(screenHeight / 3);
+  const boxHeight = height == null
+    ? undefined
+    : bordered
+      ? clamp(height, 6, Math.max(6, screenHeight - centeredTop - 2))
+      : height;
+  const offsetX = offset?.x ?? 0;
+  const offsetY = offset?.y ?? 0;
+
+  const layout = useMemo<LayoutPos>(() => {
+    const panelWidth = matchAnchorWidth && anchorRect ? anchorRect.width : boxWidth;
+
+    if (anchorRect) {
+      const a = pointFractions(anchorPosition);
+      const m = pointFractions(modalPosition);
+      const targetX = anchorRect.x + a.h * anchorRect.width + offsetX;
+      const targetY = anchorRect.y + a.v * anchorRect.height + offsetY;
+      const pos: LayoutPos = { width: panelWidth };
+
+      if (m.h === 1) pos.right = Math.max(0, screenWidth - targetX);
+      else if (m.h === 0.5) pos.left = Math.round(targetX - panelWidth / 2);
+      else pos.left = targetX;
+
+      if (m.v === 1) pos.bottom = Math.max(0, screenHeight - targetY);
+      else if (m.v === 0.5) pos.top = Math.round(targetY - (boxHeight ?? 0) / 2);
+      else pos.top = targetY;
+
+      return pos;
+    }
+
+    const fallbackX = Math.floor((screenWidth - panelWidth) / 2);
+    if (bordered) return { left: Math.max(0, fallbackX), top: centeredTop, width: panelWidth };
+    if (placement === "top") return { left: fallbackX, top: 2, width: panelWidth };
+    if (placement === "bottom") return { left: fallbackX, bottom: 2, width: panelWidth };
+    return { left: fallbackX, top: Math.floor(screenHeight / 3), width: panelWidth };
+  }, [anchorRect, anchorPosition, modalPosition, matchAnchorWidth, offsetX, offsetY, placement, boxWidth, boxHeight, bordered, centeredTop, screenWidth, screenHeight]);
+
+  const moveSelection = useCallback((direction: 1 | -1) => {
+    if (actions.length === 0) return;
+    setSelectedIndex(prev => {
+      let next = prev;
+      for (let i = 0; i < actions.length; i++) {
+        next = (next + direction + actions.length) % actions.length;
+        if (!actions[next]?.disabled) return next;
+      }
+      return prev;
+    });
+  }, [actions]);
+
+  const triggerSelected = useCallback(() => {
+    if (selectedIndex < 0) return;
+    const action = actions[selectedIndex];
+    if (!action || action.disabled) return;
+    onAction?.(action.key, action);
+  }, [actions, selectedIndex, onAction]);
+
+  const handleKeyDown = useCallback((event: KeyEvent) => {
+    if (!open || !interactive) return;
+    if (event.name === "escape") {
+      onClose?.();
+      return;
+    }
+
+    if (isList) {
+      if (event.name === "up" || event.name === "down") {
+        setActionFocus(false);
+        const delta = event.name === "up" ? -1 : 1;
+        onListNavigate?.((selectedListIndex + delta + listLength) % listLength);
+        return;
+      }
+      if (event.name === "return" || event.name === "enter") {
+        if (actionFocus) triggerSelected();
+        else onListActivate?.(selectedListIndex);
+        return;
+      }
+      if (event.name === "tab" || event.name === "right" || event.name === "left") {
+        if (actions.length === 0) return;
+        if (!actionFocus) {
+          setActionFocus(true);
+          return;
+        }
+        moveSelection(event.name === "left" ? -1 : 1);
+      }
+      return;
+    }
+
+    if (event.name === "tab" || event.name === "right") {
+      moveSelection(1);
+      return;
+    }
+    if (event.name === "left") {
+      moveSelection(-1);
+      return;
+    }
+    if (event.name === "return" || event.name === "enter") {
+      triggerSelected();
+    }
+  }, [open, interactive, isList, listLength, selectedListIndex, actionFocus, onListNavigate, onListActivate, actions.length, moveSelection, triggerSelected, onClose]);
+
+  useKeyboard(handleKeyDown);
+
+  if (!open) return null;
+
+  return (
+    <box
+      position="absolute"
+      top={0}
+      left={0}
+      right={0}
+      bottom={0}
+      zIndex={zIndex}
+    >
+      <box
+        ref={focusRef}
+        focusable={focusRef != null}
+        position="absolute"
+        {...layout}
+        height={boxHeight}
+        flexDirection="column"
+        border={bordered ? true : undefined}
+        borderStyle={bordered ? "single" : undefined}
+        borderColor={bordered ? colors.border.default : undefined}
+        paddingTop={0}
+        paddingBottom={1}
+        paddingX={1}
+        backgroundColor={colors.bg.popup}
+      >
+        {title && (
+          <box flexShrink={0} {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
+            <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>
+              {title}
+            </text>
+          </box>
+        )}
+        <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>
+          {children}
+        </box>
+        <ModalActionBar
+          actions={actions}
+          selectedIndex={selectedIndex}
+          focused={!isList || actionFocus}
+        />
+        {hint && (
+          <box flexShrink={0} paddingTop={1}>
+            <text fg={colors.text.muted}>{hint}</text>
+          </box>
+        )}
+      </box>
+    </box>
+  );
+}

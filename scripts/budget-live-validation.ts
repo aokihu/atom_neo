@@ -7,8 +7,8 @@ import { startCore } from "../src/packages/core/src/server";
 import { Logger } from "@atom-neo/shared";
 import { loadEnv } from "../src/bootstrap/env";
 import { loadConfig } from "../src/bootstrap/config";
-import { RuntimeService } from "../src/services/runtime-service";
-import { MemoryService } from "../src/services/memory-service";
+import { RuntimeService } from "../src/services/runtime/runtime-service";
+import { MemoryService } from "../src/services/memory/memory-service";
 import { NetworkService } from "../src/services/network/network-service";
 
 const source = join(process.cwd(), "sandbox");
@@ -74,7 +74,7 @@ for (const [name, definition] of Object.entries(config.providers ?? {}) as Array
 }
 writeFileSync(join(sandbox, "config.json"), JSON.stringify(config));
 const runtime = new RuntimeService({ mode: "core", port: 0, host: "127.0.0.1", sandbox,
-  apiKey: process.env.DEEPSEEK_API_KEY ?? "", config: loadConfig(sandbox) });
+  config: loadConfig(sandbox) });
 const runtimeAdapter: any = { sandbox, maxTokens: runtime.maxTokens, appConfig: runtime.appConfig,
   getResolvedModel: (profile: any) => ({ ...runtime.getResolvedModel(profile), beforeCall: waitReady }) };
 const memory = new MemoryService({ dbPath: join(sandbox, ".atom/memory/memory.db") });
@@ -90,7 +90,7 @@ try {
     logger: new Logger("debug", entry => {
       entries.push(entry);
       appendFileSync(join(dir, "runtime.log"), JSON.stringify(entry) + "\n");
-    }), sm: { get: (name: string) => ({ memory, network, "agents-compiler": { getCompiledPrompt: () => compiled } } as any)[name] } });
+    }), services: { memory, network, compiler: { getCompiledPrompt: () => compiled } } });
   const base = `http://127.0.0.1:${core.port}`;
   for (let i = 0; i < questions.length; i++) {
     if (i) await sleep(10000);

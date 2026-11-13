@@ -1,12 +1,19 @@
 // @atom-neo/core - Barrel exports
 export { startCore } from "./server";
-export type { CoreDeps } from "./server";
+export type { CoreDeps, CoreServices, MemoryServiceLike } from "./server";
 
 export { TaskQueue } from "./task-queue";
 export { TaskEngine } from "./task-engine";
 export { createTaskItem, createContinuationTask } from "./task-factory";
 
 export { SessionContext } from "./session/context";
+export type {
+  CheckpointSession,
+  ElementMemory,
+  ElementPrediction,
+  ElementTask,
+  PipelineSession,
+} from "./session/element-session";
 export type {
   InferenceFact,
   ToolContext,
@@ -54,10 +61,20 @@ export {
   createTraverseMemoryTool, createLinkMemoryTool, createForgetMemoryTool,
 } from "./tools/builtin/memory";
 
+// Provider / model factory
+export {
+  createLanguageModel,
+  providerOptionsFor,
+  deepSeekProviderOptions,
+} from "./pipelines/shared/model-provider";
+export type { ModelConfig, ProviderOptionsMap } from "./pipelines/shared/model-provider";
+
 // Pipeline Builder
-export { registerElement, resolveElement, getRegisteredNames, clearRegistry } from "./pipeline/registry";
+export { ElementRegistry, createElementRegistry } from "./pipeline/registry";
+export type { ElementConstructor } from "./pipeline/registry";
 export { pipeline, PipelineBuilder } from "./pipeline/builder";
 export type { Pipeline } from "./pipeline/builder";
+export { PipelineInstanceStore } from "./pipeline/instance-store";
 export { PipelineManager } from "./pipeline/manager";
 
 // Pipelines

@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -44,7 +44,6 @@ describe("beginEdit / beginNewProvider", () => {
     expect(pending?.isNew).toBe(false);
     expect(pending?.edit).toEqual(deepseekEdit);
     expect(next.editedProviders.deepseek).toEqual(deepseekEdit);
-    expect(next.step).toBe(1);
   });
 
   test("adding a new provider does not enter editedProviders yet", () => {
@@ -109,18 +108,15 @@ describe("finalizeEdit", () => {
       thinking: "adaptive",
     });
     expect(final!.envKeys).toEqual({ VOLENGINE_API_KEY: "sk-vol" });
-    expect(final!.step).toBe(1); // config: back to the providers list
   });
 
-  test("first-run finalize advances to the next step", () => {
+  test("first-run finalize commits the edit", () => {
     const state = firstRunState();
     const { state: s1, pending } = beginEdit(state, "deepseek");
     const { state: s2, pending: p2 } = updatePendingApiKey(s1, pending!, "sk-x");
-    expect(s2.step).toBe(2); // models step
 
     const final = finalizeEdit(s2, p2, { models: ["deepseek-v4-flash"], thinking: "disabled" });
 
-    expect(final!.step).toBe(3);
     expect(final!.editedProviders.deepseek.apiKey).toBe("sk-x");
     expect(final!.envKeys).toEqual({ DEEPSEEK_API_KEY: "sk-x" });
   });
@@ -197,6 +193,25 @@ describe("readEnvKeys / writeEnvKeys", () => {
     expect(content).toContain("NEWPROVIDER_API_KEY=sk-new");
     expect(content).not.toContain("DEEPSEEK_API_KEY=old");
   });
+
+  test("updates export lines without duplicating keys and preserves CRLF", () => {
+    const sandbox = makeSandbox();
+    const envPath = `${sandbox}/.env`;
+    Bun.write(envPath, "# keep\r\nexport DEEPSEEK_API_KEY=old\r\nOTHER=1\r\n");
+
+    writeEnvKeys(envPath, { DEEPSEEK_API_KEY: "new" });
+
+    const content = readFileSync(envPath, "utf-8");
+    expect(content).toBe("# keep\r\nexport DEEPSEEK_API_KEY=new\r\nOTHER=1\r\n");
+    expect(content.match(/DEEPSEEK_API_KEY/g)?.length).toBe(1);
+  });
+
+  test("reads quoted and exported values", () => {
+    const sandbox = makeSandbox();
+    const envPath = `${sandbox}/.env`;
+    Bun.write(envPath, 'export A="hello world"\nB=\'literal\'\n');
+    expect(readEnvKeys(envPath)).toEqual({ A: "hello world", B: "literal" });
+  });
 });
 
 // ─── commit (config mode) ─────────────────────────────────────────────────
@@ -251,6 +266,25 @@ describe("commit (config mode)", () => {
     });
     expect(config.providerProfiles.basic).toBe("openai/gpt-4o");
     expect(config.tui).toEqual({ theme: "dracula" });
+  });
+
+  test("propagates write failures instead of reporting success", () => {
+    const sandbox = makeSandbox();
+    mkdirSync(`${sandbox}/config.json`);
+
+    expect(() => commit(sandbox, configState({ editedProviders: {} }))).toThrow();
+  });
+
+  test("preserves unknown tui fields while updating the theme", () => {
+    const sandbox = makeSandbox();
+    Bun.write(`${sandbox}/config.json`, JSON.stringify({
+      tui: { theme: "edex", sidebarWidth: 42, nested: { keep: true } },
+    }));
+
+    commit(sandbox, configState({ theme: "dracula", editedProviders: {} }));
+
+    const config = JSON.parse(readFileSync(`${sandbox}/config.json`, "utf-8"));
+    expect(config.tui).toEqual({ theme: "dracula", sidebarWidth: 42, nested: { keep: true } });
   });
 
   test("adds new providers and writes API keys to .env only", () => {
@@ -411,7 +445,6 @@ describe("commit (first-run mode)", () => {
 describe("buildInitialState", () => {
   test("first-run mode starts from defaults without touching the sandbox", () => {
     const state = buildInitialState("first-run", makeSandbox());
-    expect(state.step).toBe(0);
     expect(state.provider).toBe("deepseek");
     expect(state.editedProviders).toEqual({});
     expect(state.envKeys).toEqual({});
@@ -476,6 +509,16 @@ describe("buildInitialState", () => {
     Bun.write(`${sandbox}/config.json`, JSON.stringify({ tui: { theme: "neon" } }));
     const state = buildInitialState("config", sandbox);
     expect(state.theme).toBe("edex");
+  });
+
+  test("config mode reads tui.theme and ignores the legacy top-level theme", () => {
+    const sandbox = makeSandbox();
+    Bun.write(`${sandbox}/config.json`, JSON.stringify({ theme: "dracula", tui: { theme: "nord" } }));
+    expect(buildInitialState("config", sandbox).theme).toBe("nord");
+
+    const legacyOnly = makeSandbox();
+    Bun.write(`${legacyOnly}/config.json`, JSON.stringify({ theme: "dracula" }));
+    expect(buildInitialState("config", legacyOnly).theme).toBe("edex");
   });
 });
 

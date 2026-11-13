@@ -1,5 +1,8 @@
 export { isAdminRequest } from "./utils/admin-auth";
+export type { AdminRequestContext } from "./utils/admin-auth";
 export { createChildProcessEnv } from "./utils/child-process-env";
+export { spawnProcess } from "./utils/process";
+export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
 
 // ── Types ──
 export {
@@ -22,6 +25,7 @@ export type {
   TaskPayload,
   ContextCompressRequest,
   ContinuationDecision,
+  TodoItem,
   TodoTarget,
   TaskToolCall,
   TaskToolReport,
@@ -39,6 +43,10 @@ export type {
   MemoryScope,
   MemorySearchRequest,
   MemorySearchResult,
+  SkillSectionMeta,
+  SkillDef,
+  SkillListItem,
+  SkillLoadResult,
   WebFetchMethod,
   WebFetchRequest,
   NetworkRequestOptions,
@@ -113,11 +121,60 @@ export type {
   PipelineElementDef,
 } from "./pipeline";
 
+// ── Config ──
+export {
+  ConfigSchema,
+  RuntimeConfigSchema,
+  ClientConfigSchema,
+  ProviderProfilesSchema,
+  ProviderDefinitionSchema,
+  PROVIDERS,
+  DEFAULT_PROFILES,
+  DEFAULT_DECISION_MODES,
+  OPENROUTER_JEV,
+  PROVIDER_TYPES,
+  PROVIDER_PROTOCOLS,
+  THINKING_MODES,
+  inferProviderProtocol,
+  THEME_NAMES,
+  DEFAULT_THEME,
+  isThemeName,
+  mergeConfig,
+  overlaySchema,
+  runtimeConfigPath,
+} from "./config";
+export type {
+  AppConfig,
+  RuntimeConfig,
+  DeepPartial,
+  ClientConfig,
+  ProviderType,
+  ProviderProtocol,
+  ProviderPreset,
+  ThinkingMode,
+  ProfileLevel,
+  ResolvedModel,
+  DecisionModes,
+  ThemeName,
+} from "./config";
+
 // ── Protocol ──
+export { CLIENT_EVENT_TYPES, SERVER_EVENT_TYPES, isClientEventType, isServerEventType } from "./protocol";
 export type {
   ClientEvent,
+  ClientEventType,
   ServerEvent,
+  ServerEventType,
+  ServerEventPayload,
   TaskSubmitPayload,
+  TaskCancelPayload,
+  CompactPayload,
+  SessionReadyPayload,
+  TaskCreatedPayload,
+  SessionTaskActivePayload,
+  MCPConnectedPayload,
+  MCPToolStatusPayload,
+  ControlErrorPayload,
   ElementStartedPayload,
   ElementFinishedPayload,
   DecisionUpdatePayload,
@@ -134,16 +191,31 @@ export type {
   ReplayEndPayload,
 } from "./protocol";
 
+// ── HTTP runtime ──
+export { resolveHttpRuntime, createHttpServer, createBunHttpServer } from "./http";
+export type {
+  HttpRuntime,
+  HttpRequestContext,
+  UpgradeDecision,
+  HttpRouter,
+  WebSocketPeer,
+  WebSocketHandlers,
+  HttpServerOptions,
+  HttpServerHandle,
+  HttpServer,
+} from "./http";
+
 // ── Log ──
 export { Logger, LogHub, StdoutSink, FileSink, PipeSink } from "./log";
 export type { LogLevel, LogEntry, LogSink } from "./log";
 
 // ── Utils ──
-export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms } from "./utils";
+export { normalizeError, errorMessage, substringWellFormed, truncate, slugify, sanitizeForJSON, sleep, debounce, stringWidth, areMemorySearchQueriesSimilar, canonicalizeMemorySearchQuery, containsSkillHint, parseMemorySearchTerms, parseEnv, parseEnvEntries, parseEnvKeys, serializeEnv, upsertEnv, mergeEnv, writeFileAtomic, createId, clamp, parsePortValue, hasBunRuntime } from "./utils";
+export type { EnvEntry, WriteFileAtomicOptions } from "./utils";
 
 // ── Constants ──
-export { BusEvents, TaskFailureCodes, WsMessages } from "./constants";
+export { BusEvents, EVENTS, TaskFailureCodes, WsMessages } from "./constants";
 
 // ── Prompts ──
-export { PromptKey, initPromptRegistry, resolvePrompt, getRegistry } from "./prompts";
-export type { PromptRegistry } from "./prompts";
+export { PromptKey, PromptRegistry, createPromptRegistry, createPromptResolver } from "./prompts";
+export type { PromptResolver } from "./prompts";

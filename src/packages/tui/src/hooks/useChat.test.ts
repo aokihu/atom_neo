@@ -9,4 +9,6 @@ test("maps only API_KEY_INVALID to the blocking TUI error presentation", () => {
     message: "The configured API key was rejected by the model provider. Update it and restart Atom Neo.",
   });
   expect(resolveChatClientError({ code: "NETWORK_ERROR" })).toBeUndefined();
+  expect(resolveChatClientError(null)).toBeUndefined();
+  expect(resolveChatClientError({ code: "" })).toBeUndefined();
 });

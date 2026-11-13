@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { makeBus } from "../../../pipelines/test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { FinalizeElement } from "./finalize";
 
 function createFixture(errorStatusCode = 0) {
@@ -29,7 +29,7 @@ function createFixture(errorStatusCode = 0) {
     element,
     input: {
       mode: "ready_to_finalize" as const,
-      task: { id: "t1", sessionId: "s1", chatId: "c1" },
+      task: { id: "t1", sessionId: "s1", chatId: "c1" } as any,
       contextSnapshot,
       errorStatusCode,
       contextSnapshotAccepted: errorStatusCode === 0,

@@ -100,6 +100,24 @@ TUI 第一次 ESC
       └── 不属于当前 Session / 不存在 → 拒绝
 ```
 
+### 单循环与唤醒
+
+`TaskEngine.start()` 只启动一个 `#runLoop`；`Task.Enqueued` 处理器只调用 `Wakeup.notify()`，
+不执行任务。循环先 `dequeue()`，队列为空时 `await wake.wait()`；notify 早于 wait 时保留唤醒，
+因此不丢任务，也不使用 timer 或轮询。`start()` 幂等；`stop()` 只清除 running 并唤醒循环，
+不 abort 当前 Task；`drain()` 仍轮询到 `queue.size === 0`，超时返回 `false`。
+
+### 不可变 FlowState
+
+`TaskRunner` 对每个 Element 传入 `{ ...current, abortSignal }` 新对象，并在最终结果中剥离
+`abortSignal`。Element 不修改上游对象，同一 Task 内的状态传递不共享引用。
+
+回归矩阵（S11-H3）：`task-engine.test.ts` 覆盖 active/waiting 优先级、同优先级 FIFO/LIFO、
+并发 enqueue 串行、queued/processing/跨 Session 取消、start 幂等、stop 后恢复、drain
+超时与事件顺序；`task-lifecycle.test.ts` 覆盖预算/检查点回滚与 chain/post-check 调度；
+`server-continuation.test.ts` 覆盖 conversation chain 的 reconcile/continue/limit。
+取消 processing 任务只发 `Activated → Failed`，不发 `Pipeline.Result`，且 store 清零。
+
 `TaskEngine` 在每个 Element 执行前后检查取消信号，并将同一信号传给 LLM 与 Tool。
 因此 `shell`、WebFetch 和支持 AbortSignal 的 MCP/模型调用可以立即停止；不支持信号的同步
 Element 最迟在当前 Element 返回后停止，不会继续执行后续 Element。
@@ -132,14 +150,15 @@ ConversationFlowState {
 ### 数据流
 
 ```
-TaskEngine.#processNext()
-  └─ pipeline 执行 (9 elements)
-       │
-       ├─ stream-llm:      chainAction = "follow_up" (if truncated)
-        ├─ check-follow-up: 处理 intent (FOLLOW_UP, RETAIN_MEMORY)
-       └─ FinalizeElement:
-            ├─ "follow_up"  → 创建续写任务   → ActiveQueue
-            └─ return complete
+TaskEngine.#runLoop()
+  └─ TaskRunner.run()
+       └─ pipeline 执行 (9 elements)
+            │
+            ├─ stream-llm:      chainAction = "follow_up" (if truncated)
+            ├─ check-follow-up: 处理 intent (FOLLOW_UP, RETAIN_MEMORY)
+            └─ FinalizeElement:
+                 ├─ "follow_up"  → 创建续写任务   → ActiveQueue
+                 └─ return complete
 ```
 
 ### 扩展新链类型

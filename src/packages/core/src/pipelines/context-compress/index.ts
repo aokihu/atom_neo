@@ -1,30 +1,37 @@
-import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   CompressInputElement,
   CompressArchiveElement,
   CompressSummarizeElement,
   CompressFinalizeElement,
 } from "./elements";
-import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
-import type { ContextService } from "../../context/context-service";
-import type { SessionPersistenceService } from "../../session/persistence-service";
-import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../constants";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { ContextService } from "@core/context/context-service";
+import type { SessionPersistenceService } from "@core/session/persistence-service";
+import type { PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import type { CheckpointSession, ElementTask } from "@core/session/element-session";
+import { CONTEXT_RESERVE, DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "@core/constants";
 
-export function registerContextCompressElements(): void {
-  registerElement("compress-input", CompressInputElement);
-  registerElement("compress-archive", CompressArchiveElement);
-  registerElement("compress-summarize", CompressSummarizeElement);
-  registerElement("compress-finalize", CompressFinalizeElement);
+export function registerContextCompressElements(registry: ElementRegistry): void {
+  registry.register("compress-input", CompressInputElement);
+  registry.register("compress-archive", CompressArchiveElement);
+  registry.register("compress-summarize", CompressSummarizeElement);
+  registry.register("compress-finalize", CompressFinalizeElement);
 }
 
 export function contextCompressPipeline(deps: {
-  session: any;
-  task: any;
+  elementRegistry: ElementRegistry;
+  session: CheckpointSession;
+  task: ElementTask;
+  promptResolver: PromptResolver;
   apiKey: string;
   model: string;
+  provider?: string;
+  protocol?: ProviderProtocol;
   baseUrl?: string;
   thinking?: string;
+  options?: Record<string, unknown>;
   orchestrator: InternalTaskOrchestrator;
   sandbox: string;
   configContextLimit?: number;
@@ -32,14 +39,18 @@ export function contextCompressPipeline(deps: {
   contextService: ContextService;
   persistence: SessionPersistenceService;
 }) {
-  return pipeline("context-compress")
+  return pipeline("context-compress", deps.elementRegistry)
     .source("compress-input", { session: deps.session, contextService: deps.contextService })
     .transform("compress-archive", { persistence: deps.persistence })
     .transform("compress-summarize", {
+      promptResolver: deps.promptResolver,
       apiKey: deps.apiKey,
       model: deps.model,
+      provider: deps.provider,
+      protocol: deps.protocol,
       baseUrl: deps.baseUrl,
       thinking: deps.thinking,
+      options: deps.options,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
     .sink("compress-finalize", {

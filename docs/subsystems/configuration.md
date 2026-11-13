@@ -45,7 +45,6 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 ```jsonc
 {
   "version": 2,
-  "theme": "dark",
 
   // 模型档位：advanced/balanced/basic 为对话模型；fast 用于可选决策模型
   "providerProfiles": {
@@ -59,11 +58,25 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
   "providers": {
     "deepseek": {
       "type": "llm",
+      "protocol": "deepseek",
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
       "baseUrl": "https://api.deepseek.com/v1",
       "thinking": "disabled",
       "contextLimit": 131072
+    },
+    "openai": {
+      "type": "llm",
+      "protocol": "openai",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "models": ["gpt-4o", "gpt-4o-mini", "o4-mini"]
+    },
+    "volengine": {
+      "type": "llm",
+      "protocol": "openai-compatible",
+      "apiKeyEnv": "VOLENGINE_API_KEY",
+      "models": ["model-a"],
+      "baseUrl": "https://api.volengine.example/v1"
     },
     "openrouter-jev": {
       "type": "jev",
@@ -99,6 +112,13 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 
 **Jev 设置**: `type` 缺省为 `llm`；`fast` 缺省回退到 `basic`。Jev 的 `baseUrl` 填完整 Decisions 端点，代码不提供默认请求地址；缺少地址时由 basic LLM 模拟。Key 放在 `.env`。两条管道的 `decisionMode` 可独立设为 `legacy` 或 `jev`，缺省 `legacy`；详见 [jev-decisions.md](./jev-decisions.md)。
 
+**Provider 协议**: `protocol` 可选，支持 `deepseek`、`openai`、`anthropic`、`openai-compatible`：
+- 显式 `providers[id].protocol` 优先；
+- 未填写时按 provider id 推断：`deepseek` / `openai` / `anthropic` 使用同名协议；
+- 其他 id 默认 `openai-compatible`（适合自建或第三方兼容 OpenAI 的服务）；
+- `openai-compatible` 必须配置 `baseUrl`，缺失时构造模型会明确报错；
+- `type: "jev"` 的决策端点不使用 `protocol`，继续走 JEV 客户端。
+
 ---
 
 ## 3. 配置优先级
@@ -116,35 +136,34 @@ CLI args (--port, --host, --sandbox)  >  runtime-config.json  >  config.json  > 
 
 ## 4. Schema 定义
 
+配置契约（Schema、默认值、Provider/TUI 主题清单）的**唯一来源**是
+`src/packages/shared/src/config/`，通过 `@atom-neo/shared` 导出：
+
+| 文件 | 内容 |
+|------|------|
+| `config/schema.ts` | `ConfigSchema`、`RuntimeConfigSchema`、`mergeConfig`、`overlaySchema` |
+| `config/providers.ts` | `ProviderProfilesSchema`、`ProviderDefinitionSchema`、`PROVIDER_PROTOCOLS`、`inferProviderProtocol`、`PROVIDERS`、`DEFAULT_PROFILES`、`DEFAULT_DECISION_MODES` |
+| `config/client.ts` | `ClientConfigSchema`（Core 配置与 Gateway 共用的 client 条目） |
+| `config/theme.ts` | `THEME_NAMES`、`ThemeName`、`DEFAULT_THEME` |
+
+`src/bootstrap/config.ts` 只负责文件加载/保存，并 re-export 上述类型与函数；`config-tui` 与
+`gateway` 直接依赖 shared，不再维护副本。
+
 ```typescript
-// src/bootstrap/config.ts
-const ProviderProfilesSchema = z.object({
-  advanced: z.string().default("deepseek/deepseek-v4-flash"),
-  balanced: z.string().default("deepseek/deepseek-v4-flash"),
-  basic: z.string().default("deepseek/deepseek-v4-flash"),
-});
-
-const ProviderDefinitionSchema = z.object({
-  apiKeyEnv: z.string(),
-  models: z.array(z.string()).min(1),
-  baseUrl: z.string().optional(),
-  options: z.record(z.unknown()).optional(),
-  thinking: z.enum(["enabled", "disabled", "adaptive"]).default("disabled"),
-  contextLimit: z.number().int().positive().optional(),
-});
-
+// src/packages/shared/src/config/schema.ts（节选）
 const ConfigSchema = z.object({
   version: z.literal(2).default(2),
-  theme: z.string().default("dark"),
-  providerProfiles: ProviderProfilesSchema.default({...}),
+  providerProfiles: ProviderProfilesSchema.default({ ...DEFAULT_PROFILES }),
   providers: z.record(z.string(), ProviderDefinitionSchema).default({}),
-  transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({...}),
-  gateway: z.object({ port: z.number().int().default(3000) }).default({...}),
-  tui: z.object({ theme: z.enum(["edex", "github-dark", "github-light", "dracula", "nord", "tokyo-night", "solarized-dark", "monokai"]).default("edex") }).default({...}),
+  transport: z.object({ maxOutputTokens: z.number().int().default(4096) }).default({ maxOutputTokens: 4096 }),
+  gateway: z.object({ port: z.number().int().default(3000), clients: z.array(ClientConfigSchema).default([]) }).default({ port: 3000, clients: [] }),
+  tui: z.object({ theme: z.enum(THEME_NAMES).default(DEFAULT_THEME) }).default({ theme: DEFAULT_THEME }),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;
 ```
+
+> 顶层 `theme` 字段已废弃：主题只读取 `tui.theme`，旧文件中的顶层 `theme` 会被忽略。
 
 ---
 
@@ -159,29 +178,41 @@ config.json
        └─ → providers["deepseek"].apiKeyEnv = "DEEPSEEK_API_KEY"
             → process.env.DEEPSEEK_API_KEY → apiKey
             → providers["deepseek"].baseUrl → baseUrl (optional)
+            → inferProviderProtocol("deepseek", providerConfig) → "deepseek"
 
 RuntimeService.getResolvedModel("balanced") → {
   provider: "deepseek",
+  protocol: "deepseek",                     // explicit or inferred
   model: "deepseek-v4-flash",
+  type: "llm",                              // "llm" | "jev"
   apiKey: "sk-xxx",
   baseUrl: "https://api.deepseek.com/v1",  // optional
   thinking: "disabled",                     // "enabled" | "disabled" | "adaptive"
+  options: { ... },                         // optional raw providerOptions
 }
 
-// server.ts 将 thinking 翻译为 AI SDK providerOptions
-const providerOptions = {
-  deepseek: { thinking: { type: resolved.thinking ?? "disabled" } },
-};
-// → 透传至 StreamLLMElement，直接注入 streamText()
+// server.ts / AgentsCompiler 统一走工厂与 provider options 策略
+const model = createLanguageModel(resolved);
+const providerOptions = providerOptionsFor(resolved);
+// → providerOptions 透传至对应 SDK 调用
 ```
 
-**Provider 处理逻辑**：
-- `deepseek` → `createDeepSeek({ apiKey, baseURL })`  — 使用 `@ai-sdk/deepseek`
-- `openai` / `openaiCompatible` → 同样使用 `createDeepSeek({ apiKey, baseURL })`  — DeepSeek SDK 兼容 OpenAI 协议
+**Provider 处理逻辑**（`createLanguageModel`）：
+- `deepseek` → `createDeepSeek`
+- `openai` → `createOpenAI`
+- `anthropic` → `createAnthropic`
+- `openai-compatible` → `createOpenAICompatible`（必须有 `baseUrl`）
 
-**API Key 获取优先级**：
-1. `providers[provider].apiKeyEnv` 环境变量
-2. 回退到 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY`（全局 fallback）
+**Provider options 策略**（`providerOptionsFor`）：
+- `deepseek` → `{ deepseek: { thinking: { type } } }`（保持原有行为）
+- `anthropic` → `thinking` 为 `enabled` / `adaptive` 时发送 `{ anthropic: { thinking: { type: "enabled", budgetTokens: 2048 } } }`，否则不发送
+- `openai` / `openai-compatible` → 默认不发送；如需要请显式配置 `providers[id].options`
+- `providers[id].options` 存在时视为已塑形的原始 `providerOptions`，直接透传
+
+**API Key 获取规则**：
+1. 只读取 `providers[provider].apiKeyEnv` 指向的环境变量；
+2. 变量缺失或为空时返回空字符串，调用方按无密钥处理；
+3. **不再回退**到 `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` 等其他 Provider 的密钥（CR-PRO-06）。
 
 ---
 
@@ -191,7 +222,6 @@ const providerOptions = {
 // 最小可执行默认值
 {
   version: 2,
-  theme: "dark",
   providerProfiles: {
     advanced: "deepseek/deepseek-v4-flash",
     balanced: "deepseek/deepseek-v4-flash",
@@ -218,7 +248,7 @@ const providerOptions = {
 **`edex` 主题（默认）**：使用近黑背景、淡青色边框与分段标题。它只改变颜色，
 TUI 的 Runtime / Conversation / Telemetry 响应式布局对所有主题生效。
 
-**架构说明**：`config.json` 中 `thinking` 的值由 `server.ts` 翻译为 AI SDK 的 `providerOptions` 对象，再透传给 `StreamLLMElement`。Element 不感知 provider 具体选项结构，仅负责将 `providerOptions` 原样注入 `streamText()`。未来扩展其他 provider（OpenAI `reasoningEffort`、Gemini `thinkingConfig`）时只需修改 `server.ts` 的翻译逻辑，无需改动 Element 代码。
+**架构说明**：`config.json` 中 `thinking` 的值由 `providerOptionsFor()` 按 `protocol` 翻译为对应 AI SDK 的 `providerOptions`。对话主链的 `StreamLLMElement` 不感知 provider 具体选项结构，仅负责将 `server.ts` 计算好的 `providerOptions` 原样注入 `streamText()`；预测、后处理、摘要与决策回退在各自入口调用同一 helper。
 
 **`contextLimit` 字段**：
 - 可选，指定模型的最大上下文 Token 数量
@@ -235,17 +265,17 @@ TUI 的 Runtime / Conversation / Telemetry 响应式布局对所有主题生效�
 ## 7. 运行时访问与调整
 
 ```typescript
-// RuntimeService (src/services/runtime-service.ts)
+// RuntimeService (src/services/runtime/runtime-service.ts)
 const runtime = sm.get("runtime");
 
-// 旧式访问（保留兼容）
-runtime.apiKey;       // 全局 apiKey（fallback）
 runtime.maxTokens;    // transport.maxOutputTokens
 runtime.appConfig;    // 有效配置对象（userConfig + runtimeOverlay 合并结果）
 
-// 新式访问
 const m = runtime.getResolvedModel("balanced");
-// → { provider: "deepseek", model: "deepseek-v4-flash", apiKey: "sk-xxx" }
+// → { provider, protocol, model, type, apiKey, baseUrl?, thinking?, options? }
+
+const model = createLanguageModel(m);          // @atom-neo/core
+const providerOptions = providerOptionsFor(m); // @atom-neo/core
 
 // 运行时调整（仅 TUI 经 API 调用，见 §8）
 runtime.updateRuntimeConfig({ providerProfiles: { balanced: "deepseek/deepseek-v4-pro" } });
@@ -282,7 +312,7 @@ DEEPSEEK_API_KEY=sk-xxx
 OPENAI_API_KEY=sk-xxx
 ```
 
-密钥绝不写入 config.json。config.json 中的 `apiKeyEnv` 字段声明读取哪个环境变量。
+密钥绝不写入 config.json。config.json 中的 `apiKeyEnv` 字段声明读取哪个环境变量。每个 Provider 只读取自己的 `apiKeyEnv`；不同 Provider 之间不共享或回退密钥。
 
 ## 相关文档
 

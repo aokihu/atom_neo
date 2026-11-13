@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test";
 import { PipelineManager } from "./manager";
-import { registerElement, clearRegistry } from "./registry";
+import { createElementRegistry } from "./registry";
+import type { ElementRegistry } from "./registry";
 import { pipeline } from "./builder";
 import { BaseElement, PipelineEventBus } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
@@ -19,17 +20,18 @@ const names = { src: "mgr-src", snk: "mgr-snk" };
 describe("PipelineManager", () => {
   let mgr: PipelineManager;
   let bus: PipelineEventBus<PipelineEventMap>;
+  let registry: ElementRegistry;
 
   beforeEach(() => {
-    clearRegistry();
+    registry = createElementRegistry();
     mgr = new PipelineManager();
     bus = new PipelineEventBus<PipelineEventMap>();
-    registerElement(names.src, Msrc as any);
-    registerElement(names.snk, Msnk as any);
+    registry.register(names.src, Msrc as any);
+    registry.register(names.snk, Msnk as any);
   });
 
   test("registers and retrieves a pipeline", () => {
-    mgr.register("test", () => pipeline("test").source(names.src).sink(names.snk).build(bus));
+    mgr.register("test", () => pipeline("test", registry).source(names.src).sink(names.snk).build(bus));
     const p = mgr.get("test");
     expect(p.name).toBe("test");
   });
@@ -39,7 +41,7 @@ describe("PipelineManager", () => {
   });
 
   test("throws on duplicate registration", () => {
-    const fn = () => pipeline("dup").source(names.src).sink(names.snk).build(bus);
+    const fn = () => pipeline("dup", registry).source(names.src).sink(names.snk).build(bus);
     mgr.register("dup", fn);
     expect(() => mgr.register("dup", fn)).toThrow("already registered");
   });
@@ -48,7 +50,7 @@ describe("PipelineManager", () => {
     let calls = 0;
     mgr.register("p", () => {
       calls++;
-      return pipeline("p").source(names.src).sink(names.snk).build(bus);
+      return pipeline("p", registry).source(names.src).sink(names.snk).build(bus);
     });
     mgr.get("p");
     mgr.get("p");
@@ -59,7 +61,7 @@ describe("PipelineManager", () => {
     let calls = 0;
     mgr.register("p", () => {
       calls++;
-      return pipeline("p").source(names.src).sink(names.snk).build(bus);
+      return pipeline("p", registry).source(names.src).sink(names.snk).build(bus);
     });
     mgr.get("p");
     mgr.reload("p");
@@ -67,8 +69,8 @@ describe("PipelineManager", () => {
   });
 
   test("lists registered pipeline names", () => {
-    mgr.register("a", () => pipeline("a").source(names.src).sink(names.snk).build(bus));
-    mgr.register("b", () => pipeline("b").source(names.src).sink(names.snk).build(bus));
+    mgr.register("a", () => pipeline("a", registry).source(names.src).sink(names.snk).build(bus));
+    mgr.register("b", () => pipeline("b", registry).source(names.src).sink(names.snk).build(bus));
     expect(mgr.list()).toContain("a");
     expect(mgr.list()).toContain("b");
   });

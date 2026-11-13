@@ -1,10 +1,10 @@
-import { contextRows as rows } from "../../../context/test-helpers";
+import { contextRows as rows } from "@core/context/test-helpers";
 import { describe, expect, test } from "bun:test";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { ToolRecordStore } from "../../../tools/tool-record-store";
-import { makeBus } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { ToolRecordStore } from "@core/tools/tool-record-store";
+import { makeBus, makePromptResolver } from "@core/pipelines/test-helpers";
 import { CollectContextElement } from "./collect-context";
 import { RecordContextElement } from "./record-context";
 
@@ -35,6 +35,7 @@ async function buildSnapshot(params: {
     kind: "transform",
     bus,
     contextService,
+    promptResolver: makePromptResolver(),
     ...params,
   });
   const collect = new CollectContextElement({
@@ -193,6 +194,23 @@ describe("conversation context pipeline", () => {
     });
 
     expect(result.userMessages?.map(message => message.content)).toEqual(["current request"]);
+  });
+
+  test("projects prompts without mutating the input array", async () => {
+    const prompts = [{ role: "user", content: "previous request" }];
+    const input = {
+      mode: "streaming",
+      task: { id: "t1", payload: [{ type: "text", data: "current request" }] },
+      prompts,
+    };
+
+    const { result } = await buildSnapshot({ session: makeSession() }, input);
+
+    expect(prompts).toEqual([{ role: "user", content: "previous request" }]);
+    expect(result.userMessages?.map(message => message.content)).toEqual([
+      "previous request",
+      "current request",
+    ]);
   });
 
   test("keeps historical Assistant reasoning for a continuation", async () => {

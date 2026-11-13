@@ -1,5 +1,6 @@
 import type { ContinuationDecision, TodoTarget, ContextOwner, ContextSnapshot, ConversationContinuationAction, IntentRequest } from "@atom-neo/shared";
-import type { TokenUsage } from "../../../session/context";
+import type { ElementTask } from "@core/session/element-session";
+import type { TokenUsage } from "@core/session/context";
 
 export type ConversationMode =
   | "initial"
@@ -19,17 +20,9 @@ export type ToolEffectSummary = {
   failed: number;
 };
 
-export const appendCurrentUserMessage = (messages: Message[], content?: string): Message[] => {
-  const latest = messages.at(-1);
-  if (content && (latest?.role !== "user" || latest.content !== content)) {
-    messages.push({ role: "user", content });
-  }
-  return messages;
-};
-
 export type ConversationFlowState = {
   mode: ConversationMode;
-  task: any;
+  task: ElementTask;
   prompts?: Array<{ role: string; content: string; reasoning_content?: string }>;
   systemPrompt?: string;
   compiledAgentsPrompt?: string;
@@ -50,8 +43,8 @@ export type ConversationFlowState = {
   };
   chainAction?: ConversationContinuationAction;
   continuationDecision?: ContinuationDecision;
-  progressTrace?: import("../../shared/progress-evidence").ProgressTrace;
-  todoBefore?: import("../../../session/context").TodoItem[];
+  progressTrace?: import("@core/pipelines/shared/progress-evidence").ProgressTrace;
+  todoBefore?: import("@atom-neo/shared").TodoItem[];
   currentTodo?: TodoTarget;
   todoHandoff?: boolean;
   toolStopReason?: string;

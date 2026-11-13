@@ -1,14 +1,10 @@
-import { isAdminRequest } from "@atom-neo/shared";
+import { Logger, LogHub, StdoutSink, createHttpServer, isAdminRequest } from "@atom-neo/shared";
+import type { HttpServer } from "@atom-neo/shared";
 import { loadGatewayConfig } from "./config";
 import type { GatewayConfig } from "./config";
 import { SECRET_HEADER } from "./auth/secret";
 import { ClientManager } from "./client-manager";
 import type { ActiveClient } from "./client-manager";
-import { Logger, LogHub, StdoutSink } from "@atom-neo/shared";
-
-const logHub = new LogHub();
-logHub.addSink(new StdoutSink());
-const logger = new Logger("info", (entry) => logHub.write(entry));
 
 type InboundMessage = {
   type: "message";
@@ -24,8 +20,16 @@ type InboundEvent = {
   status: "connected" | "disconnected";
 };
 
-export async function startGateway(configOverrides?: Partial<GatewayConfig> & { adminToken?: string }): Promise<{ port: number; stop: () => Promise<void> }> {
+export type GatewayOverrides = Partial<GatewayConfig> & {
+  adminToken?: string;
+  logger?: Logger;
+  httpServer?: HttpServer;
+};
+
+export async function startGateway(configOverrides?: GatewayOverrides): Promise<{ port: number; stop: () => Promise<void> }> {
   const config = loadGatewayConfig(configOverrides);
+  const logger = configOverrides?.logger ?? new Logger("info", () => {});
+  const httpServer = configOverrides?.httpServer ?? await createHttpServer();
   const cm = new ClientManager(config, logger);
   let stopping = false;
 
@@ -99,14 +103,14 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig> & { 
     throw new Error("task timeout");
   }
 
-  const server = Bun.serve({
+  const handle = await httpServer.serve({
     port: config.port,
-    hostname: config.host,
-    async fetch(req, srv) {
+    host: config.host,
+    async fetch(req, ctx) {
       const url = new URL(req.url);
 
       if (url.pathname === "/admin/clients" && req.method === "POST") {
-        if (!isAdminRequest(req, srv, configOverrides?.adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
+        if (!isAdminRequest(req, ctx, configOverrides?.adminToken)) return Response.json({ error: "Forbidden" }, { status: 403 });
         if (stopping) return Response.json({ error: "Gateway stopping" }, { status: 503 });
         const body = await req.json().catch(() => null) as { action?: string; clientId?: string } | null;
         if (!body || !["start", "stop"].includes(body.action ?? "") || (body.clientId !== undefined && (typeof body.clientId !== "string" || !body.clientId.trim()))) return Response.json({ error: "Expected action start|stop and optional clientId" }, { status: 400 });
@@ -161,15 +165,15 @@ export async function startGateway(configOverrides?: Partial<GatewayConfig> & { 
     },
   });
 
-  config.port = server.port!;
-  try { await cm.startAll(); } catch (error) { try { await cm.stopAll(); } finally { server.stop(true); } throw error; }
-  logger.info("gateway ready", { port: server.port });
+  config.port = handle.port;
+  try { await cm.startAll(); } catch (error) { try { await cm.stopAll(); } finally { await handle.stop(true); } throw error; }
+  logger.info("gateway ready", { port: handle.port });
 
   let stopPromise: Promise<void> | undefined;
-  return { port: server.port!, stop: () => stopPromise ??= (async () => {
+  return { port: handle.port, stop: () => stopPromise ??= (async () => {
     stopping = true;
-    server.stop(false);
-    try { await cm.stopAll(); } finally { server.stop(true); }
+    await handle.stop(false);
+    try { await cm.stopAll(); } finally { await handle.stop(true); }
   })() };
 }
 
@@ -178,5 +182,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 if (import.meta.main) {
-  startGateway();
+  const logHub = new LogHub();
+  logHub.addSink(new StdoutSink());
+  const logger = new Logger("info", (entry) => logHub.write(entry));
+  startGateway({ logger });
 }

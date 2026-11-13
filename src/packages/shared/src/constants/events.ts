@@ -1,4 +1,12 @@
-export const BusEvents = {
+/**
+ * Canonical wire-event catalog.
+ *
+ * Every wire string is declared exactly once here. `BusEvents` and `WsMessages`
+ * are typed views over this catalog for in-process bus consumers and WebSocket
+ * clients respectively. Do not add event strings outside `EVENTS`; both views
+ * must stay derived so the wire contract has a single source of truth.
+ */
+export const EVENTS = {
   Element: {
     StateChanged: "element.state-changed",
     Data: "element.data",
@@ -49,9 +57,6 @@ export const BusEvents = {
     SnapshotCommit: "context.snapshot.commit",
     SnapshotRelease: "context.snapshot.release",
   },
-} as const;
-
-export const WsMessages = {
   Client: {
     TaskSubmit: "event.task.submit",
     TaskCancel: "event.task.cancel",
@@ -76,14 +81,54 @@ export const WsMessages = {
     PipelineElementStarted: "event.pipeline.element.started",
     PipelineElementFinished: "event.pipeline.element.finished",
     DecisionUpdated: "event.decision.updated",
-    ReplayStart: "event.pipeline.replay-start",
-    ReplayEnd: "event.pipeline.replay-end",
   },
   Control: {
     Ping: "ping",
     Pong: "pong",
     Error: "error",
   },
+} as const;
+
+/** In-process pipeline/domain event names. */
+export const BusEvents = {
+  Element: EVENTS.Element,
+  Pipeline: EVENTS.Pipeline,
+  Task: EVENTS.Task,
+  Transport: EVENTS.Transport,
+  Intent: EVENTS.Intent,
+  Replay: EVENTS.Replay,
+  Conversation: EVENTS.Conversation,
+  Session: EVENTS.Session,
+  Context: EVENTS.Context,
+} as const;
+
+/** WebSocket wire message types. */
+export const WsMessages = {
+  Client: EVENTS.Client,
+  Server: {
+    SessionReady: EVENTS.Server.SessionReady,
+    SessionTelemetry: EVENTS.Server.SessionTelemetry,
+    TaskCreated: EVENTS.Server.TaskCreated,
+    TaskCompleted: EVENTS.Server.TaskCompleted,
+    TaskFailed: EVENTS.Server.TaskFailed,
+    TaskStateChanged: EVENTS.Server.TaskStateChanged,
+    TransportDelta: EVENTS.Server.TransportDelta,
+    TransportReason: EVENTS.Server.TransportReason,
+    TransportToolStarted: EVENTS.Server.TransportToolStarted,
+    TransportToolFinished: EVENTS.Server.TransportToolFinished,
+    TransportToolStepFinished: EVENTS.Server.TransportToolStepFinished,
+    TransportToolGroupComplete: EVENTS.Server.TransportToolGroupComplete,
+    SessionTaskActive: EVENTS.Server.SessionTaskActive,
+    MCPConnected: EVENTS.Server.MCPConnected,
+    MCPToolStatus: EVENTS.Server.MCPToolStatus,
+    PipelineElementStarted: EVENTS.Server.PipelineElementStarted,
+    PipelineElementFinished: EVENTS.Server.PipelineElementFinished,
+    DecisionUpdated: EVENTS.Server.DecisionUpdated,
+    // Replay is a bus event and a WebSocket event sharing one canonical string.
+    ReplayStart: EVENTS.Replay.Start,
+    ReplayEnd: EVENTS.Replay.End,
+  },
+  Control: EVENTS.Control,
 } as const;
 
 export const TaskFailureCodes = {

@@ -1,12 +1,12 @@
 import { describe, test, expect } from "bun:test";
-import { makeBus } from "../../../pipelines/test-helpers";
+import { makeBus } from "@core/pipelines/test-helpers";
 import { InjectSkillContextElement } from "./inject-skill-context";
 import type { ConversationFlowState } from "./types";
 
 function makeState(overrides: Partial<ConversationFlowState> = {}): ConversationFlowState {
   return {
     mode: "streaming",
-    task: {},
+    task: {} as any,
     ...overrides,
   };
 }

@@ -54,7 +54,8 @@ test("adds OpenRouter Jev during setup and can clear its Fast profile in config 
       await press("TAB", "RETURN");
       expect(frame()).toContain("DECISIONS");
 
-      await press("ARROW_LEFT", "RETURN");
+      // First Left/Right/Tab focuses the action bar; the next Left cycles actions.
+      await press("ARROW_LEFT", "ARROW_LEFT", "RETURN");
       expect(frame()).toContain("Add OpenRouter Jev");
       await press("ARROW_DOWN", "RETURN");
       await type("test-openrouter-key");

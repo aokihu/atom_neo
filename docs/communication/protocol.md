@@ -2,6 +2,11 @@
 
 > **Purpose**: Define the WebSocket event protocol for Core ↔ Client communication.
 > All events are JSON-serializable. Field names use camelCase.
+>
+> **Single source of truth**: every wire string is declared once in
+> `src/packages/shared/src/constants/events.ts` (`EVENTS`). `BusEvents` / `WsMessages`,
+> the pipeline event maps, and the `ClientEvent` / `ServerEvent` unions are derived from
+> that catalog. This document explains behavior; the constants file owns the names.
 
 ---
 
@@ -9,10 +14,16 @@
 
 - **Core Side**: WebSocket server at `ws://host:port/ws/:sessionId`
 - **Gateway Side**: Message relay for platform Client subprocesses. Validates Client Secret for `/gateway/*` routes, forwards inbound messages to Core, polls task results, and pushes results back to Clients. WebSocket connections bypass Gateway and connect directly to Core.
-- **TUI Side**: Direct WebSocket connection to Core (localhost, no auth)
+- **TUI Side**: TUI 通过 `POST /api/tasks` 提交任务，并直连 Core 的 WebSocket 接收事件（localhost, no auth）
 - **Message Format**: JSON, one message per frame
 - **Session Routing**: Task-scoped `event.transport.*` and `event.decision.updated` events carry `sessionId` and `taskId`, and Core only sends them to clients connected through the matching `/ws/:sessionId` endpoint. System-level events such as MCP status remain global.
 - **Session Path Encoding**: Clients must encode `sessionId` with `encodeURIComponent()` before placing it in `/ws/:sessionId` or `/api/sessions/:sessionId`. Core treats it as one URL path segment and applies `decodeURIComponent()` exactly once before Session lookup. Empty IDs, malformed percent escapes, and unencoded extra path segments are rejected with `400`.
+
+> **Transport-agnostic**: this protocol is defined by HTTP routes/status codes and
+> WebSocket paths/events/payloads/envelopes, not by the server runtime. The Bun
+> (`Bun.serve`) and Node (`node:http` + `ws`) adapters only implement transport;
+> selecting one with `ATOM_HTTP_RUNTIME` must not change any route, status code,
+> event name, payload or envelope described below.
 
 ```typescript
 const encodedSessionId = encodeURIComponent(sessionId);
@@ -51,23 +62,32 @@ Broadcaster 在进程生命周期内统一分配严格递增的 `seq`：
 
 ### 3.1 `task.submit`
 
+> **TUI 提交方式**：TUI `send()` 使用 `POST /api/tasks` 提交任务，WebSocket 只接收事件。
+> WS `event.task.submit` 仍受支持，并与 HTTP 共用同一个 `TaskSubmissionService`
+> （校验、Session checkpoint、创建与入队）。`payload.pipeline` 生效且缺省为
+> `prediction`；`sessionId` 取自 `/ws/:sessionId`，payload 中的值被忽略。
+
 ```typescript
 {
   type: "event.task.submit",
   seq: 0,            // Client assigns
   ts: 1700000000000,
   payload: {
-    sessionId: string;
-    chatId: string;
-    pipeline: string;      // "conversation" | "prediction" | "follow-up"
-    source: TaskSource;     // TaskSource.EXTERNAL | TaskSource.INTERNAL
-    data: {                // Pipeline-specific input data
+    sessionId?: string;    // Compat only; URL session is authoritative
+    chatId?: string;       // Defaults to "default"
+    pipeline?: string;     // "conversation" | "prediction" | "follow-up"; default "prediction"
+    source?: TaskSource;   // Accepted for compatibility; Core creates EXTERNAL tasks
+    data?: {
       text?: string;       // User message text
       toolReport?: TaskToolReport;
     }
   }
 }
 ```
+
+非法 payload（`chatId`/`pipeline`/`text` 类型错误、空 `pipeline` 等）返回
+`Control.Error`，payload 为 `{ message, code: "INVALID_INPUT" }`；checkpoint 失败返回
+`{ message, code: "PERSISTENCE_FAILED" }`，且不会创建 Task。
 
 ### 3.2 `task.cancel`
 
@@ -105,9 +125,33 @@ Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation
 }
 ```
 
+### 3.4 `task.compact`
+
+请求对当前 Session 手动执行 Context + Messages 压缩。Core 使用 WS URL 中的
+`sessionId` 和最近一次 `task.submit` 的 `chatId`（缺省 `default`），不会恢复
+Conversation。
+
+```typescript
+{
+  type: "event.task.compact",
+  seq: 0,
+  ts: 1700000000000,
+  payload: {}
+}
+```
+
 ---
 
 ## 4. Core → Client Events
+
+### 4.0 Connection, telemetry, and lifecycle
+
+- `session.ready`（连接建立后一次）：`{ sessionId, messages, contextTokens, activeTaskIds, telemetry }`。
+- `event.session.telemetry`：Session 保存后广播同一份 `{ sessionId, rounds, todos }` 快照。
+- `event.session.task-active`：`{ active: boolean, taskId }`，TUI 据此维护 busy 状态。
+- `event.mcp.connected`：`{ servers: { name, online, toolCount }[], toolInfos }`，全局广播。
+- `event.mcp.tool.status`：`{ servers: { name, online, toolNames[] }[] }`，全局广播。
+- `event.task.created`：仅 WS `task.submit` 成功后返回给提交者。
 
 ### 4.1 `task.created`
 
@@ -132,7 +176,7 @@ Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation
   ts: 1700000000002,
   payload: {
     taskId: string;
-    previousState: string;
+    previousState?: string;
     currentState: string;    // waiting|pending|processing|completed|failed|cancelled|follow_up|dispatched|suspended
   }
 }
@@ -146,7 +190,7 @@ Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation
   seq: 3,
   ts: 1700000000003,
   payload: {
-    taskId: string;
+    pipelineName: string;
     elementName: string;
     elementKind: string;    // source | transform | boundary | sink
   }
@@ -161,7 +205,7 @@ Task 调度顺序，也不会让 Prediction、Conversation 或 post-conversation
   seq: 4,
   ts: 1700000000004,
   payload: {
-    taskId: string;
+    pipelineName: string;
     elementName: string;
     elementKind: string;
     durationMs: number;
@@ -336,6 +380,8 @@ Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客�
 
 ## 5. Pipeline Replay Events
 
+> **状态：未实现（规划中）。** `event.pipeline.replay-start` / `event.pipeline.replay-end` 只在共享协议类型中声明，当前没有 server 生产者；`replay.event` **未定义、未实现**，客户端不应依赖。
+
 ### 5.1 `replay.start`
 
 ```typescript
@@ -344,16 +390,16 @@ Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客�
   seq: 0,
   ts: 1700000000000,
   payload: {
-    sessionId: string;
     taskId: string;
+    eventCount: number;
   }
 }
 ```
 
-### 5.2 `replay.event`
+### 5.2 `replay.event`（未实现）
 
 ```typescript
-// Emitted for each recorded event during replay
+// 规划中的事件；当前共享协议与 server 均未定义/发送
 {
   type: "replay.event",
   seq: 1,
@@ -373,45 +419,48 @@ Context Compress 完成后 Core 会广播重新计算的 `contextTokens`，客�
   seq: 999,
   ts: 1700000000100,
   payload: {
-    sessionId: string;
     taskId: string;
-    totalEvents: number;
+    durationMs: number;
   }
 }
 ```
 
 ---
 
-## 6. Event Type Registry (Do Not Edit Manually)
+## 6. Event Type Registry (derived from constants, do not edit manually)
+
+事件字符串只允许在 `src/packages/shared/src/constants/events.ts` 的 `EVENTS` 中声明；
+`BusEvents` 与 `WsMessages` 是它的两个视图。`src/packages/shared/src/protocol.ts`
+从 `WsMessages` 派生判别联合：
 
 ```typescript
-// src/packages/shared/src/protocol.ts
+import { WsMessages } from "./constants/events";
 
-export const ClientEventTypes = [
-  "task.submit",
-  "task.cancel",
-  "ping",
-] as const;
+export type ClientEvent =
+  | { type: typeof WsMessages.Client.TaskSubmit; payload: TaskSubmitPayload }
+  | { type: typeof WsMessages.Client.TaskCancel; payload: TaskCancelPayload }
+  | { type: typeof WsMessages.Client.Compact; payload?: CompactPayload }
+  | { type: typeof WsMessages.Control.Ping; payload?: Record<string, never> };
 
-export const ServerEventTypes = [
-  "task.created",
-  "task.state-changed",
-  "pipeline.element.started",
-  "pipeline.element.finished",
-  "transport.delta",
-  "transport.tool.started",
-  "transport.tool.finished",
-  "task.completed",
-  "task.failed",
-  "pong",
-  "replay.start",
-  "replay.event",
-  "replay.end",
-] as const;
-
-export type ClientEventType = (typeof ClientEventTypes)[number];
-export type ServerEventType = (typeof ServerEventTypes)[number];
+export type ClientEventType = ClientEvent["type"];
+export type ServerEventType = ServerEvent["type"];
+export type ServerEventPayload<K extends ServerEventType> =
+  Extract<ServerEvent, { type: K }>["payload"];
 ```
+
+`CLIENT_EVENT_TYPES` / `SERVER_EVENT_TYPES` 与 `isClientEventType` / `isServerEventType`
+是同一文件的运行时辅助导出，供 Core 入站解析和 TUI 路由使用。
+
+| 分组 | `WsMessages` 中的 wire strings |
+|------|------|
+| Client | `event.task.submit`, `event.task.cancel`, `event.task.compact` |
+| Control | `ping`, `pong`, `error` |
+| Session | `session.ready`, `event.session.telemetry`, `event.session.task-active` |
+| Task | `event.task.created`, `event.task.completed`, `event.task.failed`, `event.task.state-changed` |
+| Transport | `event.transport.delta`, `event.transport.reason`, `event.transport.tool.started`, `event.transport.tool.finished`, `event.transport.tool.step-finished`, `event.transport.tool.group-complete` |
+| Pipeline | `event.pipeline.element.started`, `event.pipeline.element.finished`, `event.decision.updated` |
+| MCP | `event.mcp.connected`, `event.mcp.tool.status` |
+| Replay | `event.pipeline.replay-start`, `event.pipeline.replay-end`（见第 5 节，未实现） |
 
 ---
 

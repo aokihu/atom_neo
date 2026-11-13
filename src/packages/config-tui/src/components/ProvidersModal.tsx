@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../modal";
-import { FieldInput } from "./FieldInput";
-import { useTheme } from "../theme";
+import { FieldInput, SelectableRow } from "@atom-neo/tui-kit";
 import { OPENROUTER_JEV } from "../wizard-logic";
 
 export function ProvidersModal({ providers, allowJev, onSelect, onAdd, onBack }: {
@@ -11,7 +10,6 @@ export function ProvidersModal({ providers, allowJev, onSelect, onAdd, onBack }:
   onAdd: (id: string) => void;
   onBack: () => void;
 }) {
-  const { colors } = useTheme();
   const [adding, setAdding] = useState(false);
   const [newId, setNewId] = useState("");
   const [selected, setSelected] = useState(0);
@@ -73,15 +71,9 @@ export function ProvidersModal({ providers, allowJev, onSelect, onAdd, onBack }:
       hint="↑/↓ select · Enter edit · Esc back"
     >
       <box flexDirection="column">
-        {items.map((v, i) => {
-          const isSelected = i === selected;
-          return (
-            <box key={v} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>
-              <text fg={isSelected ? colors.text.bright : colors.text.secondary} width={2}>{isSelected ? "▸" : " "}</text>
-              <text fg={isSelected ? colors.accent.brand : colors.text.primary}>{label(v)}</text>
-            </box>
-          );
-        })}
+        {items.map((v, i) => (
+          <SelectableRow key={v} selected={i === selected} label={label(v)} />
+        ))}
       </box>
     </Modal>
   );

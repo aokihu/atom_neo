@@ -1,7 +1,9 @@
 import { localUrl, publishRuntimeFile, readRuntimeFile, readAttachToken } from "./bootstrap/runtime-file";
 import { statSync } from "node:fs";
-import { Logger, StdoutSink, LogHub, FileSink, PipeSink } from "@atom-neo/shared";
-import type { LogLevel } from "@atom-neo/shared";
+import type { LogWarningsFunction } from "ai";
+import { Logger, StdoutSink, LogHub, FileSink, PipeSink, createHttpServer, resolveHttpRuntime } from "@atom-neo/shared";
+import type { HttpServer, LogLevel } from "@atom-neo/shared";
+import type { CoreServices } from "@atom-neo/core";
 import { VERSION } from "./version";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
@@ -9,17 +11,17 @@ import { loadConfig } from "./bootstrap/config";
 import { loadEnv } from "./bootstrap/env";
 import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
 import { isFirstRun, runFirstRunWizard, markInstalled } from "./bootstrap/first-run";
-import { RuntimeService } from "./services/runtime-service";
-import { ServiceManager } from "./services/service-manager";
-import { AgentsCompilerService } from "./services/agents-compiler";
-import { MemoryService } from "./services/memory-service";
-import { SkillService } from "./services/skill-service";
+import { RuntimeService } from "./services/runtime/runtime-service";
+import { ServiceManager } from "./services/base/service-manager";
+import { AgentsCompilerService } from "./services/agents/agents-compiler";
+import { MemoryService } from "./services/memory/memory-service";
+import { SkillService } from "./services/skill/skill-service";
 import { NetworkService } from "./services/network/network-service";
 import { formatMenuCommand, MenuFlow } from "./bootstrap/menu-flow";
 import { readMenuHistory, saveMenuHistory } from "./bootstrap/menu-history";
 
 declare global {
-  var AI_SDK_LOG_WARNINGS: boolean;
+  var AI_SDK_LOG_WARNINGS: LogWarningsFunction | false | undefined;
 }
 
 function isFifo(path: string): boolean {
@@ -53,7 +55,7 @@ function createLogger(args: BootArguments) {
 }
 
 export async function main(): Promise<void> {
-  const parsed = parseArguments(Bun.argv.slice(2));
+  const parsed = parseArguments(process.argv.slice(2));
   if (parsed === "help") {
     printHelp();
     process.exit(0);
@@ -97,7 +99,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   }
 
   // --wizard subprocess: run setup wizard and exit
-  if (Bun.argv.includes("--wizard")) {
+  if (args.wizard) {
     const { startWizard } = await import("@atom-neo/config-tui");
     await startWizard(args.sandbox, "first-run");
     return;
@@ -156,7 +158,6 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   initAtomDir(args.sandbox);
   initAgentsMd(args.sandbox);
 
-  const apiKey = process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
   // TUI-only admin token: config endpoints reject any caller without it (gateway/clients never receive it)
   const remoteAdminToken = process.env.ATOM_ADMIN_TOKEN?.trim();
   const adminToken = remoteAdminToken || crypto.randomUUID();
@@ -167,19 +168,23 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     port: args.port,
     host: args.host,
     sandbox: args.sandbox,
-    apiKey,
     config: loaded,
   });
 
   // Services
   const sm = new ServiceManager({ logger });
-  sm.register("agents-compiler", new AgentsCompilerService({ runtime }));
-  sm.register("memory", new MemoryService({
+  const compiler = new AgentsCompilerService({ runtime });
+  const memory = new MemoryService({
     dbPath: runtime.atomDir + "/memory/memory.db",
     legacyNodesPath: runtime.atomDir + "/memory/nodes",
-  }));
-  sm.register("skill", new SkillService({ sandbox: args.sandbox }));
-  sm.register("network", new NetworkService());
+  });
+  const skill = new SkillService({ sandbox: args.sandbox });
+  const network = new NetworkService();
+  sm.register("agents-compiler", compiler);
+  sm.register("memory", memory);
+  sm.register("skill", skill);
+  sm.register("network", network);
+  const services: CoreServices = { memory, network, skill, compiler };
   let core: Awaited<ReturnType<typeof import("@atom-neo/core").startCore>> | undefined;
   let gateway: Awaited<ReturnType<typeof import("@atom-neo/gateway").startGateway>> | undefined;
   const cleanupFiles: (() => void)[] = [];
@@ -196,15 +201,18 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     }
   })();
   try {
+    const runtimeKind = resolveHttpRuntime();
+    logger.info("http runtime selected", { runtime: runtimeKind });
+    const httpServer: HttpServer = await createHttpServer(runtimeKind);
     await sm.startAll();
     const { startCore } = await import("@atom-neo/core");
-    core = await startCore({ port: args.port, host: args.host, logger, sm, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION });
+    core = await startCore({ port: args.port, host: args.host, logger, services, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer });
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {
       const { startGateway } = await import("@atom-neo/gateway");
       const gatewayToken = crypto.randomUUID();
-      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken });
+      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken, logger, httpServer });
       cleanupFiles.push(publishRuntimeFile(args.sandbox, "gateway", { url: localUrl("127.0.0.1", gateway.port), token: gatewayToken, instanceId: crypto.randomUUID() }));
     }
     const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };

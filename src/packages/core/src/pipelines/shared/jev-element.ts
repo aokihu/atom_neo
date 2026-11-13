@@ -1,10 +1,10 @@
 import { getProgressFacts } from "./progress-evidence";
 /** Optional typed-decision transform for Prediction and Post-Conversation. */
 import { BaseElement, BusEvents, substringWellFormed } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus, IntentPredictionResult } from "@atom-neo/shared";
-import type { DecisionModel, SimulateDecision } from "../../decision/choose";
-import { chooseDecision } from "../../decision/choose";
-import type { JevQuestion } from "../../decision/jev-client";
+import type { PipelineEventMap, PipelineEventBus, IntentPredictionResult, PromptResolver } from "@atom-neo/shared";
+import type { DecisionModel, SimulateDecision } from "@core/decision/choose";
+import { chooseDecision } from "@core/decision/choose";
+import type { JevQuestion } from "@core/decision/jev-client";
 import type { PredictionFlowState } from "../prediction/elements/types";
 import type { PostConversationFlowState, AnalysisResult } from "../post-conversation/elements/types";
 import { buildProgressQuestions, readProgressAssessment } from "./progress-questions";
@@ -74,6 +74,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
   #maxTokens: number;
   #fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
   #simulate?: SimulateDecision;
+  #promptResolver: PromptResolver;
 
   constructor(params: {
     name: string;
@@ -82,6 +83,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     purpose: "prediction" | "post-conversation";
     model: DecisionModel;
     fallback: DecisionModel;
+    promptResolver: PromptResolver;
     maxTokens?: number;
     fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
     simulate?: SimulateDecision;
@@ -93,6 +95,7 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     this.#maxTokens = params.maxTokens ?? 512;
     this.#fetchImpl = params.fetchImpl;
     this.#simulate = params.simulate;
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: PredictionFlowState | PostConversationFlowState): Promise<PredictionFlowState | PostConversationFlowState> {
@@ -121,7 +124,8 @@ export class JevElement extends BaseElement<PredictionFlowState | PostConversati
     this.report(BusEvents.Element.Data, { step: "decision-updated", ...decision, state: "run" });
     try {
       const { choices } = await chooseDecision({ state, questions, model: this.#model, fallback: this.#fallback,
-        maxTokens: this.#maxTokens, abortSignal: input.abortSignal, fetchImpl: this.#fetchImpl, simulate: this.#simulate,
+        promptResolver: this.#promptResolver, maxTokens: this.#maxTokens, abortSignal: input.abortSignal,
+        fetchImpl: this.#fetchImpl, simulate: this.#simulate,
         onRequest: request => this.report(BusEvents.Element.Data, { step: "decision-request", ...decision, ...request }) });
       if (isPrediction) {
         const prediction: IntentPredictionResult = {

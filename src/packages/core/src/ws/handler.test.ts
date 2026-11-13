@@ -6,6 +6,7 @@ import { TaskQueue } from "../task-queue";
 import { Broadcaster } from "./broadcaster";
 import { buildSessionTelemetry, createWsHandlers } from "./handler";
 import { startExecutionGoal } from "../session/execution-budget";
+import type { TaskSubmissionService } from "../task/task-submission-service";
 
 const createWebSocket = (sessionId: string) => ({
   data: { sessionId },
@@ -91,6 +92,88 @@ describe("WebSocket session persistence", () => {
     expect(queue.waiting).toBe(1);
   });
 
+  test("uses payload.pipeline and defaults to prediction", () => {
+    const bus = new PipelineEventBus<FullEventMap>();
+    const pipelines: string[] = [];
+    bus.on(BusEvents.Task.Enqueued, ({ task }) => { pipelines.push(task.pipeline); });
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      bus,
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { sessionId: "url-session", chatId: "chat", pipeline: "conversation", data: { text: "go" } },
+    }));
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { sessionId: "url-session", chatId: "chat", data: { text: "go" } },
+    }));
+
+    expect(pipelines).toEqual(["conversation", "prediction"]);
+  });
+
+  test("delegates submission to an injected service using the URL session", () => {
+    const submit = mock(() => ({ id: "task-injected", state: "waiting", chatId: "chat" }));
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      taskSubmission: { submit } as unknown as TaskSubmissionService,
+    });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { sessionId: "payload-session", chatId: "chat", pipeline: "conversation", data: { text: "go" } },
+    }));
+
+    expect(submit).toHaveBeenCalledWith({
+      sessionId: "url-session",
+      chatId: "chat",
+      pipeline: "conversation",
+      text: "go",
+      initiator: { type: "unknown" },
+    });
+    expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("\"taskId\":\"task-injected\""))).toBe(true);
+  });
+
+  test("rejects invalid task submission payloads before creating a task", () => {
+    const queue = new TaskQueue();
+    const handlers = createWsHandlers({ broadcaster: new Broadcaster(), taskQueue: queue });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { chatId: 42, pipeline: "", data: { text: 7 } },
+    }));
+    handlers.message(ws, JSON.stringify({
+      type: WsMessages.Client.TaskSubmit,
+      payload: { data: "not-an-object" },
+    }));
+
+    expect(queue.waiting).toBe(0);
+    expect(ws.send.mock.calls.some(([value]: [string]) =>
+      value.includes("Invalid task submission payload") && value.includes("INVALID_INPUT"))).toBe(true);
+  });
+
+  test("does not submit while the core is stopping", () => {
+    const submitTask = mock(() => ({ id: "task-stopped", state: "waiting", chatId: "chat" }));
+    const handlers = createWsHandlers({
+      broadcaster: new Broadcaster(),
+      taskQueue: new TaskQueue(),
+      taskSubmission: { submit: submitTask } as unknown as TaskSubmissionService,
+      isStopping: () => true,
+    });
+    const ws = createWebSocket("url-session");
+
+    submit(handlers, ws);
+
+    expect(submitTask).not.toHaveBeenCalled();
+    expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("Core is stopping"))).toBe(true);
+  });
+
   test("does not enqueue when the message checkpoint fails", () => {
     const store = new SessionStore(10, undefined, 0, {
       restore: () => null,
@@ -144,6 +227,15 @@ describe("WebSocket session persistence", () => {
     }));
 
     expect(ws.send.mock.calls.some(([value]: [string]) => value.includes("Task not found"))).toBe(true);
+  });
+
+  test("decodes binary frames before parsing", () => {
+    const handlers = createWsHandlers({ broadcaster: new Broadcaster(), taskQueue: new TaskQueue() });
+    const ws = createWebSocket("url-session");
+
+    handlers.message(ws, new TextEncoder().encode(JSON.stringify({ type: WsMessages.Control.Ping })));
+
+    expect(ws.send.mock.calls.some(([value]: [string]) => value.includes(WsMessages.Control.Pong))).toBe(true);
   });
 
   test("manual compact logs its scope and never requests conversation resume", () => {

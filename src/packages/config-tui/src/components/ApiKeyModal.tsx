@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../modal";
-import { FieldInput } from "./FieldInput";
-import { useTheme } from "../theme";
+import { FieldInput } from "@atom-neo/tui-kit";
+import { useTheme } from "@atom-neo/tui-kit";
 
 type Phase = "key" | "env" | "baseUrl";
 

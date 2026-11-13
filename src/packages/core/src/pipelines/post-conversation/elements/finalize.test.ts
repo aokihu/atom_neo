@@ -1,19 +1,17 @@
-import { beforeAll, describe, expect, test } from "bun:test";
-import { BusEvents, initPromptRegistry } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import { makeBus } from "../../test-helpers";
+import { describe, expect, test } from "bun:test";
+import { BusEvents, PipelineResultType } from "@atom-neo/shared";
+import { ContextService } from "@core/context/context-service";
+import { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import { makeBus, makePromptResolver } from "@core/pipelines/test-helpers";
 import { CollectInputElement } from "./collect-input";
 import { PostConversationFinalizeElement } from "./finalize";
 import { FALLBACK_ANALYSIS } from "./types";
-
-beforeAll(initPromptRegistry);
 
 describe("PostConversationFinalizeElement", () => {
   test("only confirmed completion reports the reviewed goal; fallback and conflict do not", async () => {
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
-    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService });
+    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService, promptResolver: makePromptResolver() });
     const base = { mode: "acting", task: { id: "post" }, session: { originalSource: "external" }, executionGoalId: "reviewed-goal" };
     const result = await element.doProcess({ ...base, analysis: { status: "satisfactory", confirmed: true, reason: "requirements_met", assessment: { contentState: "complete" } } } as any);
     expect(result).toHaveProperty("completedGoalId", "reviewed-goal");
@@ -25,6 +23,29 @@ describe("PostConversationFinalizeElement", () => {
       expect(await element.doProcess({ ...base, analysis } as any)).not.toHaveProperty("completedGoalId");
     }
   });
+  test("reports stall similarity as a percentage", async () => {
+    const bus = makeBus();
+    const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
+    const element = new PostConversationFinalizeElement({ name: "post-finalize", kind: "sink", bus, contextService, promptResolver: makePromptResolver() });
+    const session = {
+      sessionId: "s1",
+      originalSource: "internal",
+      postCheckFingerprints: ["repeated-fingerprint"],
+      addPostCheckFingerprint: () => {},
+      todoState: [],
+    };
+
+    const result = await element.doProcess({
+      mode: "acting",
+      task: { id: "t1", chatId: "c1" },
+      session,
+      analysis: { status: "blocked", reason: "no progress", fingerprint: "repeated-fingerprint" },
+    } as any);
+
+    expect(result.type).toBe(PipelineResultType.Complete);
+    expect((result as any).output).toContain("100.00% similar to previous");
+  });
+
   test("records retry guidance in topic context", async () => {
     const bus = makeBus();
     const contextService = new ContextService(bus, { sweepIntervalMs: 0 });
@@ -34,6 +55,7 @@ describe("PostConversationFinalizeElement", () => {
       kind: "sink",
       bus,
       contextService,
+      promptResolver: makePromptResolver(),
     });
     const session = {
       sessionId: "s1",
@@ -89,12 +111,13 @@ describe("PostConversationFinalizeElement", () => {
     };
     const task = { id: "post-1", chainId: "root-1", parentTaskId: "root-1", chatId: "c1" };
     orchestrator.beginTask(task as any);
-    const collect = new CollectInputElement({ name: "post-collect", kind: "source", bus, session });
+    const collect = new CollectInputElement({ name: "post-collect", kind: "source", bus, session: session as any });
     const finalize = new PostConversationFinalizeElement({
       name: "post-finalize",
       kind: "sink",
       bus,
       contextService,
+      promptResolver: makePromptResolver(),
     });
 
     const collected = await collect.process({ mode: "initial", task, session } as any);

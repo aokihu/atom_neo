@@ -1,8 +1,9 @@
 // Last successful startup parameters; credentials never enter this file.
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { writeFileAtomic } from "@atom-neo/shared";
 
 export const MENU_COMMANDS = ["chat", "core", "config", "core-gateway", "gateway-start", "gateway-stop", "attach", "export", "import"] as const;
 export type MenuCommand = typeof MENU_COMMANDS[number];
@@ -57,11 +58,5 @@ export function readMenuHistory(path = menuHistoryPath()): { commands: MenuHisto
 export function saveMenuHistory(command: MenuCommand, parameters: MenuParameters, path = menuHistoryPath()): void {
   const commands = { ...readMenuHistory(path).commands, [command]: parseMenuParameters(command, parameters) };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporary, JSON.stringify({ version: 1, commands }, null, 2) + "\n", { mode: 0o600, flag: "wx" });
-    renameSync(temporary, path);
-  } finally {
-    rmSync(temporary, { force: true });
-  }
+  writeFileAtomic(path, JSON.stringify({ version: 1, commands }, null, 2) + "\n", { mode: 0o600, createDirs: false });
 }

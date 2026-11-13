@@ -1,3 +1,5 @@
+import type { ElementTask, PipelineSession } from "@core/session/element-session";
+
 export type EvaluatorMode = "initial" | "analyzing" | "intervening";
 
 export type EvaluatorResult = {
@@ -16,8 +18,8 @@ export const FALLBACK_EVALUATOR: EvaluatorResult = {
 
 export type EvaluatorFlowState = {
   mode: EvaluatorMode;
-  task: any;
-  session: any;
+  task: ElementTask;
+  session: PipelineSession;
   recentSummary: string;
   evaluation?: EvaluatorResult;
   evidence?: Record<string, unknown>;

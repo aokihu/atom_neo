@@ -1,7 +1,7 @@
 import { substringWellFormed } from "@atom-neo/shared";
 import type { TodoTarget } from "@atom-neo/shared";
-import type { TodoItem } from "../../session/context";
-import { findTodoTarget } from "../../session/context";
+import type { TodoItem } from "@atom-neo/shared";
+import { findTodoTarget } from "@core/session/context";
 
 export type ProgressTrace = {
   target?: TodoTarget; before?: TodoItem["status"]; after?: TodoItem["status"];

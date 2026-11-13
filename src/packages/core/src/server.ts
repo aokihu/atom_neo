@@ -1,647 +1,82 @@
-import type { SessionInitiator } from "@atom-neo/shared";
-import { PipelineEventBus } from "@atom-neo/shared";
-import type { ContinuationDecision, ConversationChainAction, ConversationContinuationAction, FullEventMap, NetworkServiceLike } from "@atom-neo/shared";
-import type { ToolEffectSummary } from "./pipelines/conversation/elements/types";
-import type { Logger } from "@atom-neo/shared";
-import type { PipelineResult, SessionMessage, TaskCompletedPayload } from "@atom-neo/shared";
-import { BusEvents, TaskFailureCodes, WsMessages, sanitizeForJSON, substringWellFormed } from "@atom-neo/shared";
-import { initPromptRegistry } from "@atom-neo/shared";
-import { TaskSource, TaskState } from "@atom-neo/shared";
-import { createTaskItem } from "./task-factory";
-import { TaskQueue } from "./task-queue";
-import { TaskEngine } from "./task-engine";
-import { SessionStore } from "./session/store";
-import { Broadcaster } from "./ws/broadcaster";
-import { buildSessionTelemetry, createWsHandlers } from "./ws/handler";
-import { registerTransportBridge } from "./ws/transport-bridge";
-import { registerDecisionBridge } from "./ws/decision-bridge";
-import { healthHandler, metricsHandler } from "./api/health";
-import { createTaskHandler, taskCancelHandler, taskStatusHandler } from "./api/tasks";
-import { configGetHandler, configPatchHandler, configResetHandler, isAdminRequest } from "./api/config";
-import { ToolRegistry } from "./tools/registry";
-import { registerBuiltinTools, createAllTools } from "./tools/bootstrap";
-import { BackgroundShellService, formatBackgroundShellCompletion } from "./tools/builtin/shell";
-import { initMCPClients, fetchMCPTools, closeMCPClients, startMCPHealthCheck } from "./tools/mcp-manager";
-import type { MCPServerConfig } from "./tools/mcp-manager";
-import { ScheduleService } from "./tools/schedule-service";
-import { HookManager } from "./hooks/hook-manager";
-import { createScheduleTools } from "./tools/builtin/schedule";
-import { createSkillTools } from "./tools/builtin/skill";
-import type { SkillServiceLike } from "./skills/types";
-import { registerConversationElements } from "./pipelines/conversation";
-import { registerPredictionElements } from "./pipelines/prediction";
-import { registerFollowUpElements } from "./pipelines/follow-up";
-import { registerFollowUpEvaluatorElements, followUpEvaluatorPipeline } from "./pipelines/follow-up-evaluator";
-import { registerContextCompressElements, contextCompressPipeline } from "./pipelines/context-compress";
-import { registerPostConversationElements, postConversationPipeline } from "./pipelines/post-conversation";
-import { registerSharedElements } from "./pipelines/shared";
-import { deepSeekProviderOptions } from "./pipelines/shared/llm";
-import { conversationPipeline } from "./pipelines/conversation";
-import { predictionPipeline } from "./pipelines/prediction";
-import { InternalTaskOrchestrator } from "./task/internal-task-orchestrator";
-import { DEFAULT_MAX_TOKENS, resolveContextLimit } from "./constants";
-import { ContextService } from "./context/context-service";
-import { hasActiveTodos } from "./session/context";
-import { prepareBudgetRelease, resumeExecutionBudget } from "./session/execution-budget";
-import { SessionPersistenceService } from "./session/persistence-service";
-import { decodePathParam } from "./url-path";
+/**
+ * Core composition root and HTTP/WebSocket lifecycle.
+ * Transport details live behind the injected `HttpServer` adapter.
+ */
+import { BusEvents, createHttpServer } from "@atom-neo/shared";
+import type { HttpServer, HttpServerHandle } from "@atom-neo/shared";
+import { createCoreBootstrap } from "./bootstrap";
+import type { CoreDeps } from "./bootstrap";
+import { resolveCoreServices } from "./core-services";
+import { createHttpRouter } from "./http-router";
 
-const API_PREFIX = "/api/";
-const SESSION_API_PREFIX = `${API_PREFIX}sessions/`;
-const LOG_OUTPUT_MAX_LEN = 200;
+export type { CoreDeps } from "./bootstrap";
+export type { CoreServices, MemoryServiceLike } from "./core-services";
+export { resolveTaskFailureCode } from "./task-lifecycle";
 
-interface RuntimeLike {
-  sandbox: string;
-  apiKey: string;
-  appConfig: Record<string, any>;
-  maxTokens: number;
-  getResolvedModel(level?: string): {
-    provider: string; model: string; type?: "llm" | "jev"; apiKey: string; baseUrl?: string; thinking?: string; beforeCall?: (signal?: AbortSignal) => Promise<void>;
-  };
-  updateRuntimeConfig?(patch: unknown): Record<string, any>;
-  resetRuntimeConfig?(): Record<string, any>;
-}
-
-interface CompilerLike {
-  getCompiledPrompt(): string;
-}
-
-interface TaskRequestBody {
-  sessionId?: string;
-  chatId?: string;
-  initiator?: SessionInitiator;
-  platform?: string;
-  data?: { text?: string };
-}
-
-type CompletedResult = PipelineResult & {
-  budgetPauseText?: string;
-  budgetBefore?: import("./session/types").ExecutionBudget;
-  output?: string;
-  responseText?: string;
-  reasoningContent?: string;
-  tokenUsage?: { total: number };
-  chainAction?: ConversationContinuationAction;
-  continuationDecision?: ContinuationDecision;
-  progressTrace?: import("./pipelines/shared/progress-evidence").ProgressTrace;
-  shouldPostCheck?: boolean;
-  finishReason?: string;
-  completeDetected?: boolean;
-  toolEffectSummary?: ToolEffectSummary;
-};
-
-interface ServiceProvider {
-  get<T>(name: string): T | undefined;
-}
-
-export function resolveTaskFailureCode(error: unknown, cancelled: boolean): string | undefined {
-  if (cancelled) return TaskFailureCodes.PipelineAborted;
-  return typeof (error as { code?: unknown } | null)?.code === "string"
-    ? (error as { code: string }).code
-    : undefined;
-}
-
-export type CoreDeps = {
+type CoreHandle = {
   port: number;
-  host: string;
-  logger: Logger;
-  sm: ServiceProvider;
-  runtime: RuntimeLike;
-  version?: string;
-  adminToken?: string;
-  allowRemoteAdmin?: boolean;
+  tools: string[];
+  toolInfos: { name: string; source: string; description: string; online?: boolean }[];
+  mcpServerInfos: { name: string; online: boolean; toolCount: number }[];
+  stop: () => Promise<void>;
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
-export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: string[]; toolInfos: { name: string; source: string; description: string; online?: boolean }[]; mcpServerInfos: { name: string; online: boolean; toolCount: number }[]; stop: () => Promise<void> }> {
-  const { port, host, logger, sm, runtime, adminToken } = deps;
-  const sandbox: string = runtime.sandbox ?? "";
-  const resolved = runtime?.getResolvedModel?.("balanced") ?? {
-    provider: "deepseek", model: "deepseek-v4-flash", apiKey: runtime?.apiKey ?? "",
-  };
-  const getModel = (level: string) => runtime?.getResolvedModel?.(level) ?? resolved;
-  const getContextLimit = (selected: typeof resolved) => resolveContextLimit(
-    `${selected.provider}/${selected.model}`, runtime?.appConfig?.providers?.[selected.provider]?.contextLimit,
-  );
-  const decisionDeps = (purpose: "prediction" | "postConversation" | "continuation") => {
-    const selected = getModel("fast");
-    const fallback = getModel("basic");
-    return {
-      decisionMode: runtime.appConfig?.decisionMode?.[purpose],
-      decisionModel: { type: selected.type ?? "llm", apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, beforeCall: selected.beforeCall },
-      fallbackModel: { apiKey: fallback.apiKey, model: fallback.model, baseUrl: fallback.baseUrl, thinking: fallback.thinking, beforeCall: fallback.beforeCall },
-    };
-  };
-  const budgetLimits = () => ({
-    maxGlobalRounds: runtime.appConfig?.conversation?.maxGlobalRounds
-      ?? (runtime.appConfig?.conversation?.maxChainDepth === undefined ? 100 : runtime.appConfig.conversation.maxChainDepth + 1),
-    maxLocalRounds: runtime.appConfig?.conversation?.maxLocalRounds ?? 5,
-  });
-  const memory = sm.get("memory");
-  const skillService = sm.get<SkillServiceLike>("skill");
-  const network = sm.get<NetworkServiceLike>("network");
-  if (!network) throw new Error('Required service "network" is not registered');
-  const getCompiledPrompt = () => {
-    const compiler = sm.get<CompilerLike>("agents-compiler");
-    return compiler?.getCompiledPrompt() ?? "";
-  };
-
-  const bus = new PipelineEventBus<FullEventMap>();
-  bus.onHandlerError((eventName, error) => logger.error("event handler failed", { eventName, error: String(error) }));
-  const taskQueue = new TaskQueue();
-  const orchestrator = new InternalTaskOrchestrator(taskQueue, bus);
-  const contextService = new ContextService(bus);
-  contextService.start();
-  const persistence = new SessionPersistenceService(sandbox, contextService);
-  const sessionStore = new SessionStore(1000, (msg, ctx) => logger.debug(msg, ctx), undefined, persistence);
-  orchestrator.setReleaseGuard(task => prepareBudgetRelease({
-    session: sessionStore.get(task.sessionId), task, limits: budgetLimits(),
-    save: () => sessionStore.save(task.sessionId, "task_completed"),
-    report: (step, data) => logger.debug(`execution budget: ${step}`, data),
-    notify: text => bus.emit(BusEvents.Transport.Delta as any, { name: "execution-budget", payload: {
-      sessionId: task.sessionId, taskId: task.parentTaskId ?? task.id, textDelta: `\n\n${text}`, offset: 0,
-    } }),
-  }));
-  const backgroundShell = new BackgroundShellService({
-    sandbox,
-    onComplete: result => orchestrator.scheduleConversation(
-      result.sessionId,
-      result.chatId,
-      result.parentTaskId,
-      [{ type: "text", data: formatBackgroundShellCompletion(result) }],
-    ),
-  });
-
-  const toolDependencies = {
-    sandbox,
-    network,
-    whitelist: runtime?.appConfig?.permission?.whitelist ?? [],
-    persistence,
-    backgroundShell,
-  };
-  const allTools = createAllTools({ ...toolDependencies, memory });
-  if (skillService) {
-    allTools.push(...createSkillTools(skillService));
-  }
-
-  const mcpToolsRef: { current: Record<string, any> } = { current: {} };
-  let mcpServerInfos: { name: string; online: boolean; toolCount: number }[] = [];
-  let mcpClients: Array<Awaited<ReturnType<typeof initMCPClients>>["clients"][number]> = [];
-
-  const hookManagerRef: { current: HookManager | null } = { current: null };
-
-  const toolInfos = allTools.map(t => ({ name: t.name, source: t.source as string, description: t.description, online: undefined as boolean | undefined }));
-
-  const mcpConfigs: MCPServerConfig[] = runtime?.appConfig?.mcpServers ?? [];
-  if (mcpConfigs.length > 0) {
-    initMCPClients(mcpConfigs, logger).then(async ({ clients, matchedConfigs }) => {
-      mcpClients = clients;
-      if (clients.length === 0) return;
-      const { tools, toolServers } = await fetchMCPTools(clients, matchedConfigs, logger);
-      mcpToolsRef.current = tools;
-      const names = Object.keys(tools);
-      logger.info("mcp tools loaded", { mcpToolCount: names.length, totalTools: allTools.length + names.length });
-
-      mcpServerInfos = matchedConfigs.map(cfg => ({
-        name: cfg.name,
-        online: true,
-        toolCount: names.filter(n => toolServers[n] === cfg.name).length,
-      }));
-
-      broadcaster.broadcast(WsMessages.Server.MCPConnected, {
-        servers: mcpServerInfos,
-        toolInfos: names.map(name => ({ name, source: "mcp" as const, description: (tools[name] as any)?.description ?? "", online: true })),
-      });
-
-      const healthStop = startMCPHealthCheck(clients, matchedConfigs, toolServers, (statuses) => {
-        broadcaster.broadcast(WsMessages.Server.MCPToolStatus, { servers: statuses });
-        for (const s of statuses) {
-          const info = mcpServerInfos.find(i => i.name === s.name);
-          if (info) info.online = s.online;
-        }
-      }, logger);
-      mcpHealthStopRef.current = healthStop;
-    }).catch(err => logger.warn("mcp async init failed", { error: String(err) }));
-  }
-
-  const mcpHealthStopRef = { current: () => {} };
-
-  const pipelineBuilders: Record<string, (task: any) => any> = {
-    prediction: (task: any) => {
-      const session = sessionStore.get(task.sessionId);
-      const selected = getModel("balanced");
-      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
-      return predictionPipeline({
-        maxGlobalRounds: budgetLimits().maxGlobalRounds,
-        session,
-        task,
-        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, maxTokens,
-        ...decisionDeps("prediction"),
-        orchestrator,
-        configContextLimit: getContextLimit(selected),
-        skillService,
-      }).build(bus);
-    },
-
-    conversation: (task: any) => {
-      const session = sessionStore.get(task.sessionId);
-      const prediction = session.pendingPrediction ?? {
-        difficulty: "medium",
-        modelProfile: "balanced",
-        intent: "conversation",
-        contextRelevance: "standalone",
-        reasoning: "default",
-      };
-
-      const DIFFICULTY_PROFILE: Record<string, string> = { mygod: "advanced", hard: "balanced" };
-      const topicId = session.currentTopic || undefined;
-      const upgradeModel = contextService.get(
-        topicId ? "topic" : "session",
-        { sessionId: session.sessionId, ...(topicId ? { topicId } : {}) },
-        "model-upgrade",
-      );
-      const effectiveProfile = upgradeModel
-        ? "advanced"
-        : DIFFICULTY_PROFILE[prediction.difficulty] ?? prediction.modelProfile;
-
-      const resolvedModel = runtime.getResolvedModel
-        ? runtime.getResolvedModel(effectiveProfile)
-        : resolved;
-      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
-
-      return conversationPipeline({
-        ...decisionDeps("continuation"),
-        session,
-        task,
-        apiKey: resolvedModel.apiKey,
-        model: resolvedModel.model,
-        baseUrl: resolvedModel.baseUrl,
-        beforeCall: resolvedModel.beforeCall,
-        providerModel: `${resolvedModel.provider}/${resolvedModel.model}`,
-        configContextLimit: getContextLimit(resolvedModel),
-        providerOptions: deepSeekProviderOptions(resolvedModel.thinking),
-        tools: allTools,
-        mcpToolsRef,
-        getCompiledPrompt,
-        maxTokens,
-        maxSteps: runtime.appConfig?.conversation?.maxSteps ?? 50,
-        memory,
-        intent: prediction.intent,
-        contextRelevance: prediction.contextRelevance,
-        sandbox,
-        orchestrator,
-        skillService,
-        contextService,
-        toolRecordStore: persistence.toolRecords,
-      }).build(bus);
-    },
-
-    "follow-up-evaluator": (task: any) => {
-      const session = sessionStore.get(task.sessionId);
-      const selected = getModel("balanced");
-      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
-      return followUpEvaluatorPipeline({
-        ...decisionDeps("continuation"),
-        toolRecordStore: persistence.toolRecords,
-        session,
-        task,
-        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, maxTokens,
-        orchestrator,
-        configContextLimit: getContextLimit(selected),
-        contextService,
-      }).build(bus);
-    },
-
-    "context-compress": (task: any) => {
-      const session = sessionStore.get(task.sessionId);
-      const selected = getModel("basic");
-      return contextCompressPipeline({
-        session,
-        task,
-        apiKey: selected.apiKey,
-        model: selected.model,
-        baseUrl: selected.baseUrl,
-        thinking: selected.thinking,
-        orchestrator,
-        sandbox,
-        configContextLimit: getContextLimit(selected),
-        maxTokens: runtime.maxTokens ?? DEFAULT_MAX_TOKENS,
-        contextService,
-        persistence,
-      }).build(bus);
-    },
-
-    "post-conversation": (task: any) => {
-      const session = sessionStore.get(task.sessionId);
-      const selected = getModel("balanced");
-      const maxTokens = runtime.maxTokens ?? DEFAULT_MAX_TOKENS;
-      return postConversationPipeline({
-        session,
-        task,
-        apiKey: selected.apiKey, model: selected.model, baseUrl: selected.baseUrl, thinking: selected.thinking, maxTokens,
-        ...decisionDeps("postConversation"),
-        configContextLimit: getContextLimit(selected),
-        contextService,
-      }).build(bus);
-    },
-  };
-
-  const toolRegistry = new ToolRegistry();
-  registerBuiltinTools(toolRegistry, toolDependencies);
-  logger.info("tools registered", { count: toolRegistry.getAll().length });
-
-  initPromptRegistry();
-  registerConversationElements();
-  registerPredictionElements();
-  registerFollowUpElements();
-  registerFollowUpEvaluatorElements();
-  registerContextCompressElements();
-  registerPostConversationElements();
-  registerSharedElements();
-
-  bus.on(BusEvents.Task.Enqueued, ({ task }) => {
-    if (task.sessionId) sessionStore.acquireTask(task.id, task.sessionId);
-  });
-  bus.on(BusEvents.Task.Activated, (p) => {
-    orchestrator.beginTask(p.task);
-    const sid = p.task.sessionId;
-    if (sid) {
-      sessionStore.acquireTask(p.task.id, sid);
-      sessionRef.current = { sessionId: sid, chatId: p.task.chatId ?? "default" };
-      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
-        active: true,
-        taskId: p.task.id,
-      });
-    }
-  });
-  bus.on(BusEvents.Task.Completed, (p) => {
-    const result = p.result as CompletedResult;
-
-    logger.info("task pipeline completed", {
-      taskId: p.task.id,
-      output: result.output ? substringWellFormed(result.output, 0, LOG_OUTPUT_MAX_LEN) : undefined,
-    });
-    const sid = p.task.sessionId;
-    const output = sanitizeForJSON(result.responseText || result.output || "");
-    const reasoningContent = result.reasoningContent || "";
-    if (sid && output) {
-      const msg = {
-        role: "assistant" as const,
-        content: output,
-        timestamp: Date.now(),
-        pipeline: p.task.pipeline,
-        visible: p.task.pipeline === "conversation",
-        metadata: {
-          finishReason: result.finishReason ?? "",
-          completeDetected: result.completeDetected ?? false,
-          ...(result.progressTrace ? { progress: result.progressTrace } : {}),
-          ...(result.toolEffectSummary ? { toolEffectSummary: result.toolEffectSummary } : {}),
-        },
-        ...(reasoningContent ? { reasoningContent } : {}),
-      };
-      sessionStore.get(sid).addMessage(msg);
-      logger.debug("task completed: message added to session", { sessionId: sid, msgCount: sessionStore.get(sid).messages.length, pipeline: p.task.pipeline });
-      if (p.task.pipeline === "conversation") {
-        sessionStore.get(sid).markSafeMessageCount();
-      }
-    }
-    if (sid && result.tokenUsage) {
-      sessionStore.get(sid).addTokenUsage(result.tokenUsage.total);
-    }
-    const completedBudget = sid ? sessionStore.get(sid).executionBudget : undefined;
-    const releasedReceipt = completedBudget?.lastReleasedTask;
-    const previouslyCompleted = completedBudget?.completed;
-    if (p.task.pipeline === "post-conversation" && result.type === "complete" && result.completedGoalId === completedBudget?.goalId
-      && completedBudget && !completedBudget.pause && !completedBudget.pendingTask && !completedBudget.lastReleasedTask
-      && !sessionStore.get(sid).todoState.some(todo => todo.status === "pending" || todo.status === "in_progress")) {
-      completedBudget.completed = true;
-    }
-    if (p.task.pipeline === "conversation" && releasedReceipt?.id === p.task.id) completedBudget!.lastReleasedTask = undefined;
-    const checkpointed = !sid || sessionStore.save(sid, "task_completed");
-    if (!checkpointed) {
-      if (completedBudget) completedBudget.completed = previouslyCompleted;
-      if (completedBudget && releasedReceipt) completedBudget.lastReleasedTask = releasedReceipt;
-      if (sid && result.budgetBefore) {
-        sessionStore.get(sid).executionBudget = result.budgetBefore;
-        result.budgetBefore.pause = "unknown"; result.budgetBefore.resuming = false;
-      }
-      const error = "Session checkpoint failed after task completion";
-      p.task.state = TaskState.FAILED;
-      taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.FAILED, error });
-      logger.warn("session checkpoint failed after task completion", { sessionId: sid, taskId: p.task.id,
-        rootTaskId: p.task.chainId, continuation: result.continuationDecision });
-      orchestrator.discardTask(p.task.id);
-      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
-        taskId: p.task.id,
-        rootTaskId: p.task.chainId,
-        error,
-      });
-      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
-        active: false,
-        taskId: p.task.id,
-      });
-      return;
-    }
-    if (sid && result.budgetPauseText) bus.emit(BusEvents.Transport.Delta as any, { name: "execution-budget", payload: {
-      sessionId: sid, taskId: p.task.id, textDelta: `\n\n${result.budgetPauseText}`, offset: 0,
-    } });
-    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: TaskState.COMPLETED, result });
-    bus.emit(BusEvents.Task.Committed, { task: p.task, result: p.result });
-    if (sid && (p.task.pipeline === "conversation" || result.chainAction)) {
-      const payload = {
-        sessionId: sid,
-        chatId: p.task.chatId,
-        parentTaskId: p.task.parentTaskId ?? p.task.id,
-        ownerTaskId: p.task.id,
-      };
-      if (result.chainAction) {
-        logger.debug("conversation completed: scheduling chain after persistence", { action: result.chainAction, sessionId: sid,
-          taskId: p.task.id, parentTaskId: p.task.parentTaskId, rootTaskId: p.task.chainId, continuation: result.continuationDecision });
-        bus.emit(BusEvents.Conversation.Chain as any, {
-          name: "task-completed",
-          payload: { ...payload, action: result.chainAction, continuation: result.continuationDecision },
-        } as any);
-      } else if (p.task.pipeline === "conversation" && result.shouldPostCheck) {
-        logger.debug("conversation completed: scheduling post-conversation after persistence", { sessionId: sid });
-        bus.emit(BusEvents.Conversation.Idle as any, {
-          name: "task-completed",
-          payload,
-        } as any);
-      }
-    }
-    const hasDownstreamTask = orchestrator.commitTask(p.task.id);
-    if (sid) {
-      const accumulated = sessionStore.get(sid).tokenUsage;
-      const payload: TaskCompletedPayload = {
-        taskId: p.task.id,
-        rootTaskId: p.task.chainId,
-        parentTaskId: p.task.parentTaskId,
-        terminal: !hasDownstreamTask,
-        output: result.output ?? "",
-        reasoningContent,
-        tokenUsage: accumulated,
-        contextTokens: sessionStore.get(sid).contextTokens,
-      };
-      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskCompleted, payload);
-      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
-        active: false,
-        taskId: p.task.id,
-      });
-    }
-  });
-  bus.on(BusEvents.Task.Failed, (p) => {
-    orchestrator.discardTask(p.task.id);
-    const cancelled = p.task.state === TaskState.CANCELLED;
-    const budget = sessionStore.get(p.task.sessionId).executionBudget;
-    if (cancelled && budget && (budget.releasedTaskIds.includes(p.task.id) || budget.goalId === p.task.chainId || p.task.pipeline === "follow-up-evaluator")) {
-      budget.pause = "cancelled"; budget.resuming = false;
-    } else if (budget?.pause === "health_check" && p.task.pipeline === "follow-up-evaluator") {
-      budget.pause = "unknown"; budget.resuming = false;
-    }
-    taskQueue.storeResult(p.task.id, { taskId: p.task.id, state: p.task.state, error: String(p.error) });
-    const failureCode = resolveTaskFailureCode(p.error, cancelled);
-    const logContext = {
-      taskId: p.task.id,
-      error: substringWellFormed(String(p.error), 0, 200),
-      ...(failureCode ? { code: failureCode } : {}),
-    };
-    if (cancelled) logger.info("task cancelled", logContext);
-    else logger.error("task failed", logContext);
-    const sid = p.task.sessionId;
-    if (sid && !sessionStore.save(sid, "task_failed")) {
-      logger.warn("session checkpoint failed after task failure", { sessionId: sid, taskId: p.task.id });
-    }
-    if (sid) {
-      broadcaster.broadcastToSession(sid, WsMessages.Server.TaskFailed, {
-        taskId: p.task.id,
-        rootTaskId: p.task.chainId,
-        ...(failureCode ? { code: failureCode } : {}),
-        error: String(p.error),
-      });
-      broadcaster.broadcastToSession(sid, WsMessages.Server.SessionTaskActive, {
-        active: false,
-        taskId: p.task.id,
-      });
-    }
-  });
-  bus.on(BusEvents.Task.Completed, ({ task }) => {
-    sessionStore.releaseTask(task.id);
-  });
-  bus.on(BusEvents.Task.Failed, ({ task }) => {
-    sessionStore.releaseTask(task.id);
-  });
-
-  bus.on(BusEvents.Pipeline.ElementStarted, (p) => {
-    logger.debug("pipeline element started", { pipeline: p.pipelineName, element: p.elementName, kind: p.elementKind });
-  });
-  bus.on(BusEvents.Pipeline.ElementFinished, (p) => {
-    logger.debug("pipeline element done", { pipeline: p.pipelineName, element: p.elementName, durationMs: p.durationMs });
-  });
-  bus.on(BusEvents.Pipeline.ElementFailed, (p) => {
-    logger.warn("pipeline element failed", { pipeline: p.pipelineName, element: p.elementName, error: substringWellFormed(String(p.error), 0, 200) });
-  });
-  bus.on(BusEvents.Element.Data, (e) => {
-    const { step, level, ...data } = e.payload;
-    const msg = `${e.name}: ${step}`;
-    if (level === "warn") logger.warn(msg, data);
-    else if (level === "error") logger.error(msg, data);
-    else logger.debug(msg, data);
-  });
-
-  const schedulePersistPath = `${sandbox}/${runtime?.appConfig?.schedule?.persistPath ?? "schedule-tasks.json"}`;
-  const scheduleService = new ScheduleService(taskQueue, schedulePersistPath, logger, task => orchestrator.releaseTask(task));
-
-  const hookPersistPath = `${sandbox}/hooks.json`;
-  const hookManager = new HookManager(scheduleService, bus, taskQueue, hookPersistPath, logger, task => orchestrator.releaseTask(task));
-  hookManagerRef.current = hookManager;
-  hookManager.restore();
-
-  const sessionRef: { current: { sessionId: string; chatId: string } | null } = { current: null };
-  const scheduleTools = createScheduleTools(hookManagerRef, sessionRef);
-  for (const t of scheduleTools) {
-    toolRegistry.register(t);
-    allTools.push(t);
-    toolInfos.push({ name: t.name, source: t.source, description: t.description, online: undefined as boolean | undefined });
-  }
-  logger.info("schedule tools registered", { count: scheduleTools.length, restored: hookManager.list().length });
-
-  sessionStore.onCreated((sid) => bus.emit(BusEvents.Session.Started as any, { sessionId: sid }));
-  sessionStore.onClosed((sid) => {
-    skillService?.clearScope?.(sid);
-    bus.emit(BusEvents.Session.Closed as any, { sessionId: sid });
-  });
-  const sessionSweepTimer = setInterval(() => sessionStore.sweepIdle(), 60_000);
-  sessionSweepTimer.unref?.();
-
-  bus.on(BusEvents.Conversation.Chain as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string; action: ConversationChainAction; continuation?: ContinuationDecision } }) => {
-    const p = e.payload;
-    const session = sessionStore.get(p.sessionId);
-    logger.debug("conversation chain: handler entered", { sessionId: p.sessionId, action: p.action,
-      taskId: p.ownerTaskId, continuation: p.continuation, budget: session.executionBudget });
-    if (p.action === "continue_todo" && !hasActiveTodos(session.todoState)) return;
-    if (session.pendingPrediction) session.pendingPrediction.contextRelevance = "continuation";
-    orchestrator.scheduleContinuation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId, p.continuation,
-      p.action === "continue_todo" ? "请继续执行当前 TODO；完成后更新 TODO 状态。" : undefined);
-  });
-
-  bus.on(BusEvents.Conversation.Idle as any, (e: { name: string; payload: { sessionId: string; chatId: string; parentTaskId: string; ownerTaskId?: string } }) => {
-    const p = e.payload;
-    logger.debug("conversation idle: scheduling post-conversation check", { sessionId: p.sessionId });
-    orchestrator.schedulePostConversation(p.sessionId, p.chatId, p.parentTaskId, p.ownerTaskId);
-  });
-
-  const taskEngine = new TaskEngine({
-    bus,
-    queue: taskQueue,
-    pipelineBuilders,
-    discardChain: (chainId, sessionId) => orchestrator.discardChain(chainId, sessionId),
-  });
-  taskEngine.start();
-
-  const broadcaster = new Broadcaster();
-  sessionStore.onSaved(session => broadcaster.broadcastToSession(session.sessionId,
-    WsMessages.Server.SessionTelemetry, buildSessionTelemetry(session, budgetLimits().maxLocalRounds)));
-  registerTransportBridge(bus, broadcaster);
-  registerDecisionBridge(bus, broadcaster);
-  const wsHandlers = createWsHandlers({
-    getLocalRoundLimit: () => budgetLimits().maxLocalRounds,
-    broadcaster,
-    taskQueue,
-    bus,
+export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): Promise<CoreHandle> {
+  const { port, host, logger } = deps;
+  const services = resolveCoreServices({ services: deps.services });
+  const httpServer = deps.httpServer ?? await createHttpServer();
+  const stopping = { value: false };
+  const isStopping = () => stopping.value;
+  const core = createCoreBootstrap({ ...deps, services, isStopping });
+  const router = createHttpRouter({
     logger,
-    orchestrator,
-    sessionStore,
-    taskEngine,
-    isStopping: () => stopping,
+    adminToken: deps.adminToken,
+    allowRemoteAdmin: deps.allowRemoteAdmin,
+    version: deps.version,
+    host,
+    sandbox: deps.runtime.sandbox ?? "",
+    runtime: deps.runtime,
+    fallbackModel: core.fallbackModel,
+    sessionStore: core.sessionStore,
+    taskQueue: core.taskQueue,
+    taskEngine: core.taskEngine,
+    taskSubmission: core.taskSubmission,
+    orchestrator: core.orchestrator,
+    hookManager: core.hookManager,
+    allTools: core.allTools,
+    toolInfos: core.toolInfos,
+    getMcpServerInfos: core.getMcpServerInfos,
+    budgetLimits: core.budgetLimits,
+    isStopping,
   });
 
-  let stopping = false;
-  let server: Bun.Server<unknown> | undefined;
+  let handle: HttpServerHandle | undefined;
   let stopPromise: Promise<void> | null = null;
   const stop = (): Promise<void> => {
     if (stopPromise) return stopPromise;
     stopPromise = (async () => {
-      stopping = true;
-      clearInterval(sessionSweepTimer);
-      server?.stop(false);
-      hookManager.stop();
-      scheduleService.stop();
-      for (const task of taskQueue.getHookTasks()) taskEngine.cancel(task.id, task.sessionId);
-      await backgroundShell.stop();
-      while (!await taskEngine.drain({ timeoutMs: 30_000 })) {
+      stopping.value = true;
+      clearInterval(core.sessionSweepTimer);
+      handle?.stop(false);
+      core.hookManager.stop();
+      core.scheduleService.stop();
+      for (const task of core.taskQueue.getHookTasks()) core.taskEngine.cancel(task.id, task.sessionId);
+      await core.backgroundShell.stop();
+      while (!await core.taskEngine.drain({ timeoutMs: 30_000 })) {
         logger.warn("waiting for queued and active tasks before shutdown");
       }
-      sessionStore.suspendAll("shutdown");
-      const failedCheckpoints = sessionStore.size;
+      core.sessionStore.suspendAll("shutdown");
+      const failedCheckpoints = core.sessionStore.size;
       if (failedCheckpoints > 0) {
         logger.error("session checkpoint failed during shutdown", { remaining: failedCheckpoints });
         throw new Error(`Failed to persist ${failedCheckpoints} session(s) during shutdown`);
       }
-      mcpHealthStopRef.current();
-      bus.emit(BusEvents.Context.CoreStopped, {});
-      contextService.stop();
-      await closeMCPClients(mcpClients);
-      await server?.stop(true);
+      core.mcp.stopHealth();
+      core.bus.emit(BusEvents.Context.CoreStopped, {});
+      core.contextService.stop();
+      await core.mcp.close();
+      await handle?.stop(true);
     })().catch(error => {
       stopPromise = null;
       throw error;
@@ -649,145 +84,25 @@ export async function startCore(deps: CoreDeps): Promise<{ port: number; tools: 
     return stopPromise;
   };
 
-
   try {
-    server = Bun.serve<unknown>({
+    handle = await httpServer.serve({
       port,
-      hostname: host,
-      async fetch(req, srv) {
-        const url = new URL(req.url);
-
-        // WebSocket upgrade for /ws/:sessionId
-        if (url.pathname.startsWith("/ws/")) {
-          const sid = decodePathParam(url.pathname, "/ws/");
-          if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-          srv.upgrade(req, { data: { sessionId: sid } });
-          return; // handled by websocket handlers
-        }
-
-        const method = req.method;
-
-        if (url.pathname === `${API_PREFIX}tui/attach` && method === "POST") {
-          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
-          if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
-          let options: unknown;
-          try {
-            const body = await req.text();
-            options = body.trim() ? JSON.parse(body) : {};
-          } catch {
-            return Response.json({ error: "Invalid attach JSON" }, { status: 400 });
-          }
-          if (!options || typeof options !== "object" || Array.isArray(options)
-            || ("continue" in options && typeof options.continue !== "boolean")) {
-            return Response.json({ error: "continue must be a boolean" }, { status: 400 });
-          }
-          const session = sessionStore.attachTui("continue" in options && options.continue === true);
-          const model = runtime.getResolvedModel?.("balanced") ?? resolved;
-          return Response.json({ sessionId: session.sessionId, serverInfo: {
-            port: srv.port, host, sandbox, version: deps.version ?? "unknown", model: model.model,
-            tools: allTools.map(t => t.name), toolInfos, mcpServerInfos,
-            theme: runtime.appConfig?.tui?.theme ?? "edex", thinking: model.thinking,
-            contextLimit: resolveContextLimit(`${model.provider}/${model.model}`, runtime.appConfig?.providers?.[model.provider]?.contextLimit),
-          } });
-        }
-        if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
-        if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
-
-        if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
-          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
-          if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
-          return Response.json(hookManager.list().filter(h => h.trigger.type.startsWith("time:")).map(({ prompt, ...summary }) => summary));
-        }
-
-        if (url.pathname === `${API_PREFIX}config` && method === "GET") {
-          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
-          return configGetHandler(runtime);
-        }
-        if (url.pathname === `${API_PREFIX}config/runtime` && method === "PATCH") {
-          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
-          return configPatchHandler(runtime, req);
-        }
-        if (url.pathname === `${API_PREFIX}config/runtime` && method === "DELETE") {
-          if (!isAdminRequest(req, srv, adminToken, deps.allowRemoteAdmin)) return Response.json({ error: "Forbidden" }, { status: 403 });
-          return configResetHandler(runtime);
-        }
-
-        if (url.pathname === `${API_PREFIX}tasks` && method === "POST") {
-          if (stopping) return Response.json({ error: "Core is stopping" }, { status: 503 });
-          const body = await req.json().catch(() => ({})) as TaskRequestBody;
-          const normalized = {
-            ...body,
-            sessionId: body.sessionId ?? "default",
-            chatId: body.chatId ?? "default",
-          };
-          const origin = body.initiator;
-          if (origin !== undefined && (!origin || typeof origin !== "object")) return Response.json({ error: "Invalid initiator" }, { status: 400 });
-          if (origin && (origin.type !== "tui" && origin.type !== "gateway" && origin.type !== "internal" && origin.type !== "unknown")) return Response.json({ error: "Invalid initiator" }, { status: 400 });
-          if (origin?.type === "gateway" && (typeof origin.clientId !== "string" || !origin.clientId.trim() || typeof origin.platform !== "string" || !origin.platform.trim())) return Response.json({ error: "Invalid gateway initiator" }, { status: 400 });
-          const session = sessionStore.get(normalized.sessionId, origin ?? { type: "unknown" });
-          if (origin?.type === "gateway" && session.initiator.type !== "unknown" && (session.initiator.type !== "gateway" || session.initiator.clientId !== origin.clientId || session.initiator.platform !== origin.platform)) return Response.json({ error: "Session initiator conflict" }, { status: 409 });
-          if (body.platform === "tui" && session.initiator.type === "tui") session.lastTuiUsedAt = Date.now();
-          if (body.data?.text && !sessionStore.checkpointUserMessage(normalized.sessionId, body.data.text,
-            /^(继续|continue)$/i.test(body.data.text) && session.executionBudget ? { controlRequest: "resume_budget" } : undefined)) {
-            return Response.json({ error: "Failed to persist session message" }, { status: 500 });
-          }
-          if (/^(继续|continue)$/i.test(body.data?.text ?? "") && session.executionBudget && (session.executionBudget.pause || sessionStore.isActive(session.sessionId))) {
-            if (!session.executionBudget.pause) return Response.json({
-              taskId: session.executionBudget.releasedTaskIds.at(-1), state: "processing", reason: "already_running",
-            });
-            const before = structuredClone(session.executionBudget);
-            const task = resumeExecutionBudget(session, budgetLimits().maxGlobalRounds);
-            if (!task) return Response.json({ taskId: before.pendingTask?.id, state: "suspended", reason: before.pause });
-            if (!sessionStore.save(session.sessionId, "message")) {
-              session.executionBudget = before;
-              return Response.json({ error: "Failed to persist budget authorization" }, { status: 500 });
-            }
-            logger.debug("execution budget: resume-authorized", { sessionId: session.sessionId, before, after: structuredClone(session.executionBudget) });
-            orchestrator.releaseTask(task);
-            return Response.json({ taskId: task.id, state: task.state }, { status: 201 });
-          }
-          return createTaskHandler(taskQueue, normalized, bus, undefined, task => orchestrator.releaseTask(task));
-        }
-        if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
-          const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
-          if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-          const session = sessionStore.load(sid);
-          return session
-            ? Response.json(session.messages)
-            : Response.json({ error: "Session not found" }, { status: 404 });
-        }
-        if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
-          const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
-          if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
-          if (!sessionStore.delete(sid)) {
-            return Response.json({ error: "Session is active" }, { status: 409 });
-          }
-          return Response.json({ ok: true, sessionId: sid });
-        }
-        if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "DELETE") {
-          const taskId = url.pathname.split("/").pop()!;
-          return taskCancelHandler(taskEngine, req, taskId);
-        }
-        if (url.pathname.startsWith(`${API_PREFIX}tasks/`) && method === "GET") {
-          return taskStatusHandler(taskQueue, url.pathname.split("/").pop()!);
-        }
-        return new Response("Not Found", { status: 404 });
-      },
-      websocket: wsHandlers,
+      host,
+      fetch: router.fetch,
+      upgrade: router.upgrade,
+      websocket: core.wsHandlers,
     });
-
-
   } catch (error) {
     await stop();
     throw error;
   }
 
-  logger.info("core ready", { port: server.port, address: host });
+  logger.info("core ready", { port: handle.port, address: host });
   return {
-    port: server.port!,
-    tools: allTools.map((t: any) => t.name),
-    toolInfos,
-    mcpServerInfos,
+    port: handle.port,
+    tools: core.allTools.map(t => t.name),
+    toolInfos: core.toolInfos,
+    mcpServerInfos: core.getMcpServerInfos(),
     stop,
   };
 }

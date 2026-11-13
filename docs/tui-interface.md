@@ -6,6 +6,10 @@
 
 > v1.21.2：收紧 User 正文、分隔线与 Assistant 标题之间的空行。
 
+> v1.24.1：S12 结构重构，面板/输入/Modal/Wizard 拆分为组合组件与纯逻辑；视觉与交互不变。
+
+> v1.25.0：新增 TUI 焦点管理（终端激活回到输入框、Modal 打开接管焦点、关闭恢复并把后台快捷键隔离），OpenTUI 升级到 0.8.4。
+
 ## 1. 设计目标
 
 定时任务栏显示当前 Core 的全部时间任务（跨 session），使用 /api/schedules 每 2 秒读取真实摘要：总数、启用数、名称、session/global 范围、等待/完成/过期/停用状态、下次执行时间。栏位位于右侧 Telemetry 栏，随右侧栏显示；内容可滚动，无任务显示空态，断连显示不可用，不保留看似实时的旧数据。独立 attach 与默认 TUI 行为一致，不显示任务 prompt。
@@ -125,15 +129,34 @@ Wide
 - `Esc` 关闭菜单；Session busy 时双击 `Esc` 取消 Task。
 - 面板折叠功能必须提供键盘路径，不能只绑定 `onMouseUp`。
 
+### 焦点管理
+
+- 焦点优先级固定为：顶层 Modal > InputBar > 其他可聚焦区域；任意时刻只有一个 focused renderable。
+- 终端重新激活时，若无 Modal，App 显式调用输入框 `focus()`；OpenTUI 的终端焦点事件不会自动恢复组件焦点。
+- Modal 打开时输入框 `blur()`，Modal 面板通过 `focusRef` 成为焦点承载点；关闭后焦点回到输入框。
+- Modal 打开期间后台全局快捷键不响应；Modal 内的列表项或 ActionBar 高亮表示当前焦点。
+- 打开或关闭 Modal 不清空输入框草稿；只有发送消息或执行命令后才清空。
+
 ## 7. 实现文件
 
 ```text
 src/packages/tui/src/components/App.tsx
+src/packages/tui/src/components/app/AppModal.tsx
 src/packages/tui/src/components/StatusBar.tsx
 src/packages/tui/src/components/RuntimeSidebar.tsx
+src/packages/tui/src/components/runtime/*
 src/packages/tui/src/components/Sidebar.tsx
+src/packages/tui/src/components/sidebar/*
 src/packages/tui/src/components/ToolMessageBox.tsx
 src/packages/tui/src/components/InputBar.tsx
+src/packages/tui/src/components/input/*
+src/packages/tui/src/components/SettingsModal.tsx
+src/packages/tui/src/components/settings/*
 src/packages/tui/src/components/StatusLine.tsx
-src/packages/tui/src/theme.ts
+src/packages/tui/src/stores/chat.ts + stores/chat/*
+src/packages/tui/src/hooks/useChat.ts + chat-connection.ts + chat-messages.ts
+src/packages/tui-kit/src/theme.tsx
 ```
+
+Wizard 的结构化 view/reducer 位于 `src/packages/config-tui/src/wizard/`，`WizardApp.tsx`
+只负责 state/reducer 编排与 view 组合。

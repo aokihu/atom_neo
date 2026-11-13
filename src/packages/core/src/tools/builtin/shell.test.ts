@@ -10,7 +10,7 @@ import {
   formatBackgroundShellCompletion,
 } from "./shell";
 import type { BackgroundShellCompletion } from "./shell";
-import { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
+import { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
 
 const executionContext = {
   sessionId: "session-1",

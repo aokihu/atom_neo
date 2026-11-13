@@ -1,6 +1,6 @@
 import type { Message, ToolGroupMessage } from "../types";
 import { SyntaxStyle } from "@opentui/core";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { UserMessage } from "./UserMessage";
 import { AssistantMessage } from "./AssistantMessage";
 import { ToolMessageBox } from "./ToolMessageBox";

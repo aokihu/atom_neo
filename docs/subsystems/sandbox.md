@@ -64,12 +64,15 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 
 ```typescript
 // src/bootstrap/first-run.ts
-export async function isFirstRun(sandboxPath: string): Promise<boolean> {
-  return !(await Bun.file(`${sandboxPath}/.atom/installed`).exists());
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+
+export function isFirstRun(sandboxPath: string): boolean {
+  return !existsSync(`${sandboxPath}/.atom/installed`);
 }
 
-export async function markInstalled(sandboxPath: string): Promise<void> {
-  await Bun.write(`${sandboxPath}/.atom/installed`, "");
+export function markInstalled(sandboxPath: string): void {
+  mkdirSync(`${sandboxPath}/.atom`, { recursive: true });
+  writeFileSync(`${sandboxPath}/.atom/installed`, "", "utf8");
 }
 ```
 
@@ -84,13 +87,15 @@ Agent 启动时检查 `SANDBOX/AGENTS.md` 是否存在：
 
 ```typescript
 // src/bootstrap/agents.ts
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import agentsMdTemplate from "@assets/prompts/agents_md_sample.md";
 
-export async function initAgentsMd(sandboxPath: string): Promise<void> {
+export function initAgentsMd(sandboxPath: string): void {
   const agentsPath = `${sandboxPath}/AGENTS.md`;
-  if (!(await Bun.file(agentsPath).exists())) {
-    // Bun.write 自动创建中间目录
-    await Bun.write(agentsPath, agentsMdTemplate);
+  if (!existsSync(agentsPath)) {
+    mkdirSync(dirname(agentsPath), { recursive: true });
+    writeFileSync(agentsPath, agentsMdTemplate, "utf8");
   }
 }
 ```
@@ -99,9 +104,11 @@ export async function initAgentsMd(sandboxPath: string): Promise<void> {
 
 ```typescript
 // 在启动序列中执行
-export async function initAtomDir(sandboxPath: string): Promise<void> {
-  // Bun.write 自动创建中间目录
-  await Bun.write(`${sandboxPath}/.atom/compiled_prompts/.gitkeep`, "");
+export function initAtomDir(sandboxPath: string): void {
+  const atomPath = `${sandboxPath}/.atom`;
+  mkdirSync(atomPath, { recursive: true });
+  mkdirSync(`${atomPath}/compiled_prompts`, { recursive: true });
+  mkdirSync(`${atomPath}/memory/nodes`, { recursive: true });
 }
 ```
 
@@ -119,8 +126,8 @@ src/main.ts
   ├── 6. initAtomDir(args.sandbox)        → 创建 .atom/
   ├── 7. initAgentsMd(args.sandbox)       → 检查/创建 AGENTS.md
   ├── 8. new RuntimeService({...})        → 统一环境入口
-  ├── 9. sm.register() + sm.startAll()    → ServiceManager 管理
-  └── 10. startCore({ port, host, logger, sm }) → HTTP 服务器
+  ├── 9. sm.register() + sm.startAll()    → ServiceManager 管理生命周期
+  └── 10. startCore({ port, host, logger, services }) → HTTP 服务器
 ```
 
 首次启动时，若 `$SANDBOX/.atom/installed` 不存在，进入 Ink 交互式安装向导。向导完成后创建此空文件作为「已安装」标记，后续启动直接跳过向导。详见 [first-run-wizard.md](./first-run-wizard.md)。

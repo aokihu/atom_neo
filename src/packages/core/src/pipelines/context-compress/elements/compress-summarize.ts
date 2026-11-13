@@ -1,29 +1,41 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { CompressFlowState } from "./types";
-import { callLLM } from "../../shared";
+import { callLLM } from "@core/pipelines/shared";
 
 export class CompressSummarizeElement extends BaseElement<CompressFlowState, CompressFlowState> {
   #apiKey: string;
   #model: string;
+  #provider: string;
+  #protocol?: ProviderProtocol;
   #baseUrl?: string;
   #thinking?: string;
+  #options?: Record<string, unknown>;
+  #promptResolver: PromptResolver;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    promptResolver: PromptResolver;
     apiKey: string;
     model: string;
+    provider?: string;
+    protocol?: ProviderProtocol;
     baseUrl?: string;
     thinking?: string;
+    options?: Record<string, unknown>;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#provider = params.provider ?? "deepseek";
+    this.#protocol = params.protocol;
     this.#baseUrl = params.baseUrl;
     this.#thinking = params.thinking;
+    this.#options = params.options;
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: CompressFlowState): Promise<CompressFlowState> {
@@ -56,10 +68,14 @@ export class CompressSummarizeElement extends BaseElement<CompressFlowState, Com
         maxTokens: input.summaryMaxTokens || 600,
       });
       const summary = await callLLM({
+        promptResolver: this.#promptResolver,
         apiKey: this.#apiKey,
         model: this.#model,
+        provider: this.#provider,
+        protocol: this.#protocol,
         baseUrl: this.#baseUrl,
         thinking: this.#thinking,
+        options: this.#options,
         systemKey: PromptKey.COMPRESS_SUMMARIZE,
         prompt: input.summaryText,
         maxTokens: input.summaryMaxTokens || 600,

@@ -1,10 +1,11 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import { BusEvents, TaskFailureCodes } from "@atom-neo/shared";
-import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "@core/constants";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { PipelineSession } from "@core/session/element-session";
 import type { ConversationFlowState } from "./types";
-import { calcTokenRatio, applyCompressRatio } from "../../shared";
+import { calcTokenRatio, applyCompressRatio } from "@core/pipelines/shared";
 
 export class ApiKeyInvalidError extends Error {
   readonly code = TaskFailureCodes.ApiKeyInvalid;
@@ -17,7 +18,7 @@ export class ApiKeyInvalidError extends Error {
 
 export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
   #orchestrator?: InternalTaskOrchestrator;
-  #session: any;
+  #session: PipelineSession;
   #configContextLimit: number;
   #maxTokens: number;
 
@@ -26,7 +27,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     orchestrator?: InternalTaskOrchestrator;
-    session?: any;
+    session: PipelineSession;
     configContextLimit?: number;
     maxTokens?: number;
   }) {
@@ -122,7 +123,7 @@ export class FinalizeElement extends BaseElement<ConversationFlowState, any> {
     const event = input.contextSnapshotAccepted && !input.tokenOverflow
       ? BusEvents.Context.SnapshotCommit
       : BusEvents.Context.SnapshotRelease;
-    this.bus.emit(event as any, { snapshotId: input.contextSnapshot.id } as any);
+    this.emitDomain(event, { snapshotId: input.contextSnapshot.id });
     this.report(BusEvents.Element.Data, {
       step: event === BusEvents.Context.SnapshotCommit ? "snapshot-committed" : "snapshot-released",
       snapshotId: input.contextSnapshot.id,

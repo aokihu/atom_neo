@@ -1,22 +1,22 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from "react";
+import { useRef, useCallback } from "react";
+import type { RefObject } from "react";
 import { TextAttributes } from "@opentui/core";
-import type { KeyBinding, KeyEvent, TextareaRenderable } from "@opentui/core";
-import { useTheme } from "./App";
-import { useInputHistory } from "../stores/inputHistory";
+import type { KeyBinding, TextareaRenderable } from "@opentui/core";
+import { useTheme } from "@atom-neo/tui-kit";
 import { useChatStore } from "../stores/chat";
-import { CommandMenu, CMDS, matchCommands } from "./CommandMenu";
+import { CommandMenu } from "./CommandMenu";
 import type { Command } from "./CommandMenu";
+import { dispatchCommand, resolveCommand, useCommandMenu } from "./input/use-command-menu";
+import { useDoubleEscape } from "./input/use-double-escape";
+import { useInputKeyDown } from "./input/use-input-keydown";
 
 const keyBindings: KeyBinding[] = [
   { name: "enter", action: "submit" },
   { name: "enter", shift: true, action: "newline" },
 ];
 
-function resolveCommand(text: string): Command | null {
-  return CMDS.find(c => c.name === text) ?? null;
-}
-
 interface InputBarProps {
+  inputRef?: RefObject<TextareaRenderable | null>;
   onSend: (text: string) => void;
   onQuit?: () => void;
   onHelp?: () => void;
@@ -28,71 +28,23 @@ interface InputBarProps {
   disabled?: boolean;
 }
 
-export function isDoubleEscape(lastPressTime: number, now: number, windowMs = 2000): boolean {
-  return lastPressTime > 0 && now - lastPressTime < windowMs;
-}
+export { isDoubleEscape } from "./input/use-double-escape";
 
-export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onSettings, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
+export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact, onSettings, onCancelTask, onCancelHint, disabled = false }: InputBarProps) {
   const { colors } = useTheme();
   const sessionBusy = useChatStore(s => s.busy);
-  const taRef = useRef<TextareaRenderable>(null);
-  const [content, setContent] = useState("");
-  const [menuSelected, setMenuSelected] = useState(0);
-  const navigatingRef = useRef(false);
-  const menuSelectedRef = useRef(0);
-  const fillFlag = useRef(0);
-  const lastCancelPressRef = useRef(0);
-  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { push, navigateUp, navigateDown, resetIndex, setDraft } = useInputHistory();
+  const internalRef = useRef<TextareaRenderable>(null);
+  const taRef = inputRef ?? internalRef;
+  const { content, showMenu, cmdMatches, menuSelected, push, clearInput, handleContentChange, handleMenuKey, handleHistoryKey } =
+    useCommandMenu({ textarea: taRef, disabled });
+  const { handleEscape } = useDoubleEscape({ busy: sessionBusy, onCancelTask, onCancelHint });
 
-  const [filter, setFilter] = useState("");
-
-  const showMenu = filter.startsWith("/");
   const borderColor = sessionBusy ? colors.status.warning : colors.decoration.subtle;
 
-  const cmdMatches = useMemo(() => {
-    if (!showMenu || filter.length < 1) return [];
-    return matchCommands(filter);
-  }, [filter, showMenu]);
-
-  useEffect(() => { menuSelectedRef.current = menuSelected; }, [menuSelected]);
-
-  useEffect(() => { if (disabled) taRef.current?.setText(""); }, [disabled]);
-  useEffect(() => {
-    if (sessionBusy) return;
-    lastCancelPressRef.current = 0;
-    if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
-    cancelTimerRef.current = null;
-    onCancelHint?.(null);
-  }, [sessionBusy, onCancelHint]);
-  useEffect(() => () => {
-    if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
-  }, []);
-
-  const handleContentChange = useCallback(() => {
-    if (disabled) return;
-    const text = taRef.current?.plainText ?? "";
-    setContent(text);
-    if (fillFlag.current > 0) { fillFlag.current--; return; }
-    setFilter(text);
-    setMenuSelected(0);
-    menuSelectedRef.current = 0;
-    if (navigatingRef.current) return;
-    resetIndex();
-  }, [disabled, resetIndex]);
-
   const doCommand = useCallback((cmd: Command) => {
-    switch (cmd.name) {
-      case "/quit": onQuit?.(); break;
-      case "/help": onHelp?.(); break;
-      case "/clear": onClear?.(); break;
-      case "/compact": onCompact?.(); break;
-      case "/settings": onSettings?.(); break;
-    }
-    taRef.current?.setText("");
-    setContent("");
-    setFilter("");
-  }, [onQuit, onHelp, onClear, onCompact, onSettings]);
+    dispatchCommand(cmd.name, { onQuit, onHelp, onClear, onCompact, onSettings });
+    clearInput();
+  }, [onQuit, onHelp, onClear, onCompact, onSettings, clearInput]);
 
   const handleSubmit = useCallback(() => {
     if (disabled) return;
@@ -104,101 +56,22 @@ export function InputBar({ onSend, onQuit, onHelp, onClear, onCompact, onSetting
 
     push(text);
     onSend(text);
-    taRef.current?.setText("");
-    setContent("");
-    setFilter("");
-  }, [disabled, onSend, push, doCommand]);
+    clearInput();
+  }, [disabled, onSend, push, doCommand, clearInput]);
 
-  const handleKeyDown = useCallback((event: KeyEvent) => {
-    if (disabled) { event.preventDefault(); return; }
-
-    if (event.name === "escape" && showMenu) {
-      event.preventDefault();
-      taRef.current?.setText("");
-      setContent("");
-      setFilter("");
-      return;
-    }
-
-    if (event.name === "escape" && sessionBusy) {
-      event.preventDefault();
-      const now = Date.now();
-      if (isDoubleEscape(lastCancelPressRef.current, now)) {
-        lastCancelPressRef.current = 0;
-        if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
-        cancelTimerRef.current = null;
-        onCancelHint?.("Cancelling current task...");
-        onCancelTask?.();
-        return;
-      }
-
-      lastCancelPressRef.current = now;
-      if (cancelTimerRef.current) clearTimeout(cancelTimerRef.current);
-      cancelTimerRef.current = setTimeout(() => {
-        lastCancelPressRef.current = 0;
-        cancelTimerRef.current = null;
-        onCancelHint?.(null);
-      }, 2000);
-      onCancelHint?.("Press ESC again within 2s to cancel current task");
-      return;
-    }
-
-    if (showMenu && cmdMatches.length > 0) {
-      if (event.name === "tab") {
-        event.preventDefault();
-        fillFlag.current++;
-        const idx = menuSelectedRef.current;
-        taRef.current?.setText(cmdMatches[idx]?.name ?? "");
-        return;
-      }
-      if (event.name === "up") {
-        event.preventDefault();
-        fillFlag.current++;
-        const next = Math.max(0, menuSelectedRef.current - 1);
-        menuSelectedRef.current = next;
-        setMenuSelected(next);
-        taRef.current?.setText(cmdMatches[next]?.name ?? "");
-        return;
-      }
-      if (event.name === "down") {
-        event.preventDefault();
-        fillFlag.current++;
-        const next = Math.min(cmdMatches.length - 1, menuSelectedRef.current + 1);
-        menuSelectedRef.current = next;
-        setMenuSelected(next);
-        taRef.current?.setText(cmdMatches[next]?.name ?? "");
-        return;
-      }
-      return;
-    }
-
-    if (event.ctrl || event.meta) return;
-
-    if (event.name === "up") {
-      event.preventDefault();
-      const ta = taRef.current;
-      if (!ta) return;
-      const result = navigateUp();
-      if (result.idx === 0) setDraft(ta.plainText);
-      if (result.idx >= 0) {
-        navigatingRef.current = true;
-        ta.replaceText(result.prev);
-        navigatingRef.current = false;
-      }
-    } else if (event.name === "down") {
-      event.preventDefault();
-      const ta = taRef.current;
-      if (!ta) return;
-      const result = navigateDown();
-      navigatingRef.current = true;
-      ta.replaceText(result === null ? useInputHistory.getState().draft : result.text);
-      navigatingRef.current = false;
-    }
-  }, [disabled, showMenu, sessionBusy, cmdMatches, navigateUp, navigateDown, setDraft, onCancelTask, onCancelHint]);
+  const handleKeyDown = useInputKeyDown({
+    disabled,
+    showMenu,
+    sessionBusy,
+    onEscape: handleEscape,
+    onClear: clearInput,
+    onMenuKey: handleMenuKey,
+    onHistoryKey: handleHistoryKey,
+  });
 
   return (
     <box flexShrink={0}>
-      {showMenu && cmdMatches.length > 0 && (
+      {!disabled && showMenu && cmdMatches.length > 0 && (
         <box
           position="absolute"
           bottom={6}

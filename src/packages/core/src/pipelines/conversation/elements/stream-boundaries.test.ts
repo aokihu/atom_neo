@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
-import { ContextService } from "../../../context/context-service";
-import { SessionContext } from "../../../session/context";
-import { createIntentTool } from "../../../tools/builtin/intent";
-import { createTodoWriteTool } from "../../../tools/builtin/todowrite";
-import { makeBus } from "../../test-helpers";
+import { ContextService } from "@core/context/context-service";
+import { SessionContext } from "@core/session/context";
+import { createIntentTool } from "@core/tools/builtin/intent";
+import { createTodoWriteTool } from "@core/tools/builtin/todowrite";
+import { makeBus, makePromptResolver } from "@core/pipelines/test-helpers";
 import { StreamLLMElement } from "./stream-llm";
 import { CheckFollowUpElement } from "./check-follow-up";
 
@@ -45,10 +45,11 @@ async function run(steps: Step[], options: { todos?: any[]; request?: any; memor
       execute: async () => { dangerousCalls++; return { metadata: { ok: true, effect: "state_changed" } }; } }];
     const element = new StreamLLMElement({ name: "stream-llm", kind: "transform", bus,
       apiKey: "local-test", model: "deepseek-flash", baseUrl: server.url.toString(),
-      beforeCall: options.beforeCall, tools, contextService: context, session, memory: options.memory, task, maxSteps: 5 });
+      beforeCall: options.beforeCall, tools, contextService: context, session, memory: options.memory, task: task as any, maxSteps: 5 });
     const result = await element.doProcess({ mode: "formatted", task: task as any, systemText: "Test task boundaries",
       userMessages: [{ role: "user", content: "世界文明史" }], abortSignal: options.abortSignal });
-    const arbitrated = await new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus, session, decisionMode: "rules" }).doProcess(result);
+    const arbitrated = await new CheckFollowUpElement({ name: "check-follow-up", kind: "boundary", bus, session,
+      promptResolver: makePromptResolver(), decisionMode: "rules" }).doProcess(result);
     return { requests, result, arbitrated, todos: session.todoState, deltas, dangerousCalls, events };
   } finally { server.stop(true); context.stop(); }
 }

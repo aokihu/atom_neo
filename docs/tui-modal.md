@@ -6,7 +6,7 @@
 
 ## 概览
 
-`Modal` 是位于 `src/packages/tui/src/components/modal/` 的可复用浮层组件，独立于 chat store，UI 状态由调用方（当前为 `App.tsx`）局部持有。它在屏幕上以绝对定位覆盖整个终端区域，并通过全局键盘订阅接管按键，打开期间底部 `InputBar` 释放焦点。
+`Modal` 是位于 `src/packages/tui-kit/src/modal/` 的可复用浮层组件，由 `@atom-neo/tui`（聊天界面）与 `@atom-neo/config-tui`（配置向导）共享。它独立于 chat store，UI 状态由调用方局部持有。它在屏幕上以绝对定位覆盖整个终端区域，并通过全局键盘订阅接管按键，打开期间底部 `InputBar` 释放焦点。
 
 ```
 ┌──────────────────────────────────────────────┐  ← 全屏 overlay (zIndex 1000)
@@ -25,12 +25,19 @@
 
 ## 组件构成
 
+实现位于 `src/packages/tui-kit/src/modal/`：
+
 | 文件 | 职责 |
 |------|------|
-| `types.ts` | 类型定义：`ModalProps` / `ModalAction` / `ModalPlacement` 等 |
-| `Modal.tsx` | 主组件：定位计算、键盘订阅、布局渲染 |
+| `types.ts` | 类型定义：`ModalProps` / `ModalAction` / `ModalPlacement` / `ModalChrome` 等 |
+| `Modal.tsx` | 主组件：定位计算、键盘订阅、布局渲染、`hint` / `chrome` |
 | `ModalActionBar.tsx` | 底部按钮条，按 `selectedIndex` 高亮当前选项 |
 | `index.ts` | 统一导出入口 |
+
+两个使用方只保留薄包装：
+
+- `src/packages/tui/src/components/modal/index.ts` 直接 re-export `@atom-neo/tui-kit`（兼容既有 `./modal` 导入）。
+- `src/packages/config-tui/src/modal/index.tsx` 包装 `Modal` 并固定 `chrome="bordered"`，保持向导的边框外观。
 
 ## API — `ModalProps`
 
@@ -50,12 +57,18 @@
 | `defaultActionKey` | `string?` | 初始选中的按钮 `key` |
 | `children` | `ReactNode?` | 自定义内容区 |
 | `zIndex` | `number` | 层级，默认 `1000` |
+| `focusRef` | `Ref<BoxRenderable>?` | 可选。传入时 Modal 面板变为可聚焦节点，供 App 显式转移焦点 |
 | `onAction` | `(key, action) => void` | 触发某个按钮时回调 |
 | `onClose` | `() => void` | Esc 关闭时回调 |
 | `listLength` | `number?` | 列表模式：可选项数量，提供后启用 ↑/↓/Enter 列表导航 |
 | `selectedListIndex` | `number?` | 列表模式：当前选中项下标（受控，默认 `0`） |
 | `onListNavigate` | `(index) => void` | 列表模式：↑/↓ 导航回调（已自动环绕） |
 | `onListActivate` | `(index) => void` | 列表模式：Enter 激活当前项回调 |
+| `interactive` | `boolean` | 默认 `true`；为 `false` 时忽略 Modal 键盘（表单自行处理按键） |
+| `titlePadding` | `number` | 标题内边距，默认 `1` |
+| `contentPaddingX` | `number` | 内容水平内边距，默认 `1` |
+| `hint` | `string?` | 在 ActionBar 下方渲染的灰色提示行 |
+| `chrome` | `"plain" \| "bordered"` | 默认 `plain`（聊天 TUI 无边框）；`bordered` 为配置向导的单线边框样式 |
 
 ### `ModalAction`
 
@@ -132,35 +145,29 @@ Modal 有两种交互模式，由是否传入 `listLength` 决定：
 | `Tab` / `→` | 选中下一个可用 Action（跳过 `disabled`） |
 | `←` | 选中上一个可用 Action |
 
-**列表模式（传入 `listLength` 时，命令面板等）**
+**列表模式（传入 `listLength` 时，菜单/选择器）**
 
 | 按键 | 行为 |
 |------|------|
 | `Esc` | 调用 `onClose` |
-| `↑` / `↓` | `onListNavigate(下标)`，自动环绕 |
-| `Enter` | `onListActivate(当前下标)` |
+| `↑` / `↓` | `onListNavigate(下标)`，自动环绕，并把焦点交回列表 |
+| `Enter` | 列表焦点时 `onListActivate(当前下标)`；ActionBar 焦点时 `onAction` |
+| `Tab` / `→` / `←` | 先把焦点移到 ActionBar，**不移动列表选择** |
+| ActionBar 已聚焦时 `←` / `→` / `Tab` | 循环 Action（跳过 `disabled`） |
 
-> 列表模式优先于 ActionBar：传入 `listLength` 后 ↑/↓/Enter 走列表回调；此时通常不再传 `actions`。
+> 列表模式与 ActionBar 可同时存在：首次 `Tab`/`←`/`→` 只切换焦点，之后左右键才在 Action 之间移动，避免一次按键同时改变列表与按钮选择。
 
-**焦点模型**：Modal 不依赖元素焦点，而是使用 `@opentui/react` 的全局 `useKeyboard` 钩子订阅按键。打开期间 `App` 给 `InputBar` 传入 `disabled`，使底部 `textarea` `focused={false}`，从而不抢按键、不响应提交。
+**焦点模型**：Modal 通过 `@opentui/react` 的全局 `useKeyboard` 订阅按键；打开期间 App 给 `InputBar` 传入 `disabled` 并显式 `blur()` 输入框。TUI 传入 `focusRef` 时，Modal 面板本身成为 OpenTUI 的 focused renderable，列表项或 ActionBar 高亮表示 Modal 内的焦点。关闭后 App 调用输入框 `focus()`，恢复文本光标。`config-tui` 不传 `focusRef`，继续由表单自身的 `textarea` 持有焦点。
 
-初始选中项规则（`findInitialIndex`，仅 ActionBar 模式）：`defaultActionKey` → 首个 `confirm`/`primary` → 首个未禁用项。
+**状态重置**：`open` 变为 `true`、`defaultActionKey` 变化或 Action 集合变化时，`selectedIndex` 会重置为 `findInitialIndex` 的结果；打开/关闭都会清除 ActionBar 焦点。
+
+初始选中项规则（`findInitialIndex`）：`defaultActionKey` → 首个 `confirm`/`primary` → 首个未禁用项。
 
 ## 命令面板（Command Palette）
 
-`CommandPalette`（`src/packages/tui/src/components/CommandPalette.tsx`）是基于 Modal **列表模式**构建的独立命令面板，替代旧的内联下拉菜单。
+> **状态：未接线。** `src/packages/tui/src/components/CommandPalette.tsx` 组件仍保留（代码审查禁区，暂不删除），但当前 `App` 没有 `paletteOpen` / `paletteSeed` / `anchorRef` 状态，也没有挂载它。输入 `/` 时由 `InputBar` 内联渲染 `CommandMenu`（`src/packages/tui/src/components/CommandMenu.tsx`）。
 
-**交互流程**：
-
-1. 用户在 `InputBar` 输入首字符 `/`，`InputBar` 调用 `onOpenPalette(seed)` 并清空输入框。
-2. `App` 持有 `paletteOpen` / `paletteSeed` 状态，在根节点渲染 `CommandPalette`，同时把 `InputBar` 置为 `disabled`（`textarea` 失焦）。
-3. **锚点定位**：`App` 用 `anchorRef`（指向 `InputBar` 内层输入框 box）作为锚点对象，`CommandPalette` 经 `el.screenX/screenY/width/height` 测得其屏幕矩形（首次打开 + 终端 `useOnResize` 重测），以 `anchorPosition="bottom-left"` / `position="bottom-left"` / `matchAnchorWidth` 传给 `Modal` —— 面板覆盖在输入框上、左对齐、满输入框宽。
-4. 面板内：
-   - **过滤**：`CommandPalette` 自身用全局 `useKeyboard` 收集可打印字符与 `Backspace`，构建 `filter`（无独立输入框元素，避免焦点争用）。
-   - **导航/执行/关闭**：交给 Modal 列表模式 —— `↑/↓` 切换、`Enter` 执行、`Esc` 关闭。
-5. 选中命令后 `onRun(cmd)` 由 `App` 分发到对应处理器（`/clear`、`/quit` 打开确认框；`/help`、`/compact` 直接执行），随后关闭面板，`InputBar` 恢复焦点。
-
-> 列表渲染复用既有 `CommandMenu`（高亮匹配子串 + 描述列）；过滤逻辑复用 `matchCommands`。两个全局 `useKeyboard`（面板过滤 vs Modal 导航）处理**互不相交**的按键，无冲突。
+`CommandPalette` 的设计基于 Modal 列表模式 + 锚点对齐；如果后续启用，入口应由 `InputBar` 的 `/` 触发，状态由 `components/App.tsx` 局部持有，打开期间 `InputBar` 禁用。当前实际行为以 `InputBar.tsx` 为准。
 
 ## 使用示例
 
@@ -194,10 +201,11 @@ const modalActions: ModalAction[] = [
 ## 设计约束
 
 - Modal 状态属 UI 状态，放在 `App.tsx` 局部，**不进 chat store**。
+- 主题、Modal、表单/列表行组件统一由 `@atom-neo/tui-kit` 提供；`tui` 与 `config-tui` 不再各自维护调色板或 Modal 实现。
 - **布局间距以 1 个单位为基准**：面板底部/两侧内边距为 1、`paddingTop={0}`（标题贴紧顶部边框）；标题用底部分隔线紧贴文字，内容无额外内边距，避免间距叠加。
 - 复用现有 `theme.colors`，不引入新颜色体系。
-- 命令面板复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。
-- 仅在 `open` 时拦截按键；关闭后 `InputBar` 自动恢复焦点。
+- 当前命令菜单由 `InputBar` 内联复用 `CommandMenu` 渲染与 `matchCommands` 过滤；`/help`、`/compact` 行为保持不变。`CommandPalette` 尚未接线。
+- 仅在 `open` 时拦截按键；关闭后 App 显式恢复 `InputBar` 焦点。
 
 ## API Key 无效错误框
 

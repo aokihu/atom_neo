@@ -176,14 +176,15 @@ test("processes and transitions on matching mode", async () => {
 ## 1. API
 
 ```typescript
-export function pipeline(name: string): PipelineBuilder;
+export function pipeline(name: string, registry: ElementRegistry): PipelineBuilder;
 
 class PipelineBuilder {
+  constructor(name: string, registry: ElementRegistry);
   source(elementName: string, deps?: ElementDeps): this;
   transform(elementName: string, deps?: ElementDeps): this;
   boundary(elementName: string, deps?: ElementDeps): this;
   sink(elementName: string, deps?: ElementDeps): this;
-  build(): Pipeline;
+  build(bus: PipelineEventBus<PipelineEventMap>): Pipeline;
 }
 ```
 
@@ -191,7 +192,7 @@ class PipelineBuilder {
 
 ```typescript
 export const conversationPipeline = (deps: ConversationPipelineDeps) =>
-  pipeline("conversation")
+  pipeline("conversation", deps.elementRegistry)
     .source("collect-prompts", { session: deps.session })
     .transform("load-system-prompt", {})
     .transform("fetch-agents-prompt", { getCompiledPrompt: deps.getCompiledPrompt })
@@ -201,25 +202,36 @@ export const conversationPipeline = (deps: ConversationPipelineDeps) =>
     .transform("stream-llm", { apiKey: deps.apiKey, model: deps.model, tools: deps.tools })
     .boundary("check-follow-up", {})
     .sink("finalize", {})
-    .build();
+    .build(bus);
 ```
 
 ## 3. Element Registry
 
 ```typescript
-const elementRegistry = new Map<string, ElementConstructor>();
+export class ElementRegistry {
+  #elements = new Map<string, ElementConstructor>();
 
-export function registerElement(name: string, ctor: ElementConstructor): void {
-  if (elementRegistry.has(name)) throw new Error(`Element "${name}" already registered`);
-  elementRegistry.set(name, ctor);
+  register(name: string, ctor: ElementConstructor): void {
+    if (this.#elements.has(name)) throw new Error(`Element "${name}" already registered`);
+    this.#elements.set(name, ctor);
+  }
+
+  resolve(name: string): ElementConstructor {
+    const ctor = this.#elements.get(name);
+    if (!ctor) throw new Error(`Element "${name}" not found. Registered: [${this.names().join(", ")}]`);
+    return ctor;
+  }
+
+  names(): string[] { ... }
+  clear(): void { ... }
 }
 
-export function resolveElement(name: string): ElementConstructor {
-  const ctor = elementRegistry.get(name);
-  if (!ctor) throw new Error(`Element "${name}" not found`);
-  return ctor;
-}
+export function createElementRegistry(): ElementRegistry;
 ```
+
+每个 Core 通过 `createCoreBootstrap` 创建一个独立实例，传给 7 个
+`register*Elements(registry)` 与 `createPipelineFactory({ elementRegistry })`。
+不存在模块级 registry/自由函数，测试直接构造自己的实例。
 
 ## 4. Pipeline Manager
 
@@ -248,9 +260,9 @@ export class PipelineManager {
 1. 创建 src/packages/core/src/pipelines/<name>/
 2. 定义 types.ts (Mode enum + FlowState)
 3. 定义 elements/*.ts (每个 Element 一个文件)
-4. 注册所有 elements
-5. 定义 pipeline builder (index.ts)
-6. 注册 builder 到 PipelineManager
+4. 在 `register*Elements(registry)` 中注册所有 elements
+5. 定义 pipeline builder (index.ts)，`pipeline(name, deps.elementRegistry)`
+6. 在 `pipeline-factory.ts` 的 builder 中注入 `elementRegistry`
 7. 写测试
 ```
 
@@ -284,31 +296,56 @@ export class PipelineEventBus<TEvents extends Record<string, any>> {
 
 ## 2. 事件类型映射
 
+事件名不再手写字符串，而是从 `src/packages/shared/src/constants/events.ts` 的
+`BusEvents` 计算键派生；新增事件必须先加入 `EVENTS`。
+
 ```typescript
+import { BusEvents } from "../constants/events";
+
+/** BaseElement.report 或直接 bus.emit 产生的包装 envelope。 */
+export type ReportedEvent<T> = { name: string; payload: T };
+export type ReportedTransportEvent<T extends Record<string, unknown>> = {
+  name: string;
+  payload: { sessionId: string; taskId: string } & T;
+};
+
 export type PipelineEventMap = {
-  "element.state-changed": { name: string; payload: { state: string } };
-  "pipeline.element.started": { pipelineName: string; elementName: string; elementKind: string };
-  "pipeline.element.finished": { pipelineName: string; elementName: string; elementKind: string; durationMs: number };
-  "pipeline.element.failed": { pipelineName: string; elementName: string; elementKind: string; durationMs: number; error: unknown };
-  "element.data": { name: string; payload: Record<string, unknown> };
+  [BusEvents.Element.StateChanged]: ReportedEvent<{ state: "READY" | "WORKING" | "DONE" | "FAILED" }>;
+  [BusEvents.Pipeline.ElementStarted]: { pipelineName: string; elementName: string; elementKind: string };
+  [BusEvents.Pipeline.ElementFinished]: { pipelineName: string; elementName: string; elementKind: string; durationMs: number };
+  [BusEvents.Pipeline.ElementFailed]: { pipelineName: string; elementName: string; elementKind: string; durationMs: number; error: unknown };
+  [BusEvents.Element.Data]: ReportedEvent<Record<string, unknown>>;
 };
 
 export type CoreEventMap = {
-  "task.enqueued": { task: TaskItem };
-  "task.activated": { task: TaskItem };
-  "task.completed": { task: TaskItem; result: PipelineResult };
-  "task.committed": { task: TaskItem; result: PipelineResult };
-  "task.failed": { task: TaskItem; error: unknown };
+  [BusEvents.Task.Enqueued]: { task: TaskItem };
+  [BusEvents.Task.Activated]: { task: TaskItem };
+  [BusEvents.Task.Completed]: { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Committed]: { task: TaskItem; result: PipelineResult };
+  [BusEvents.Task.Failed]: { task: TaskItem; error: unknown };
+  [BusEvents.Pipeline.Result]: { task: TaskItem; result: PipelineResult };
 };
 
 export type DomainEventMap = {
-  "transport.delta": { textDelta: string };
-  "transport.tool.started": { toolName: string; toolCallId: string; input: unknown };
-  "transport.tool.finished": { toolName: string; toolCallId: string; result?: unknown };
+  [BusEvents.Transport.Delta]: ReportedTransportEvent<{ textDelta: string; offset: number }>;
+  [BusEvents.Transport.ToolStarted]: ReportedTransportEvent<{ toolName: string; toolCallId: string; input: unknown }>;
+  [BusEvents.Transport.ToolFinished]: ReportedTransportEvent<{ toolName: string; toolCallId: string; result?: unknown }>;
+  [BusEvents.Conversation.Chain]: ReportedEvent<{ sessionId: string; chatId: string; parentTaskId: string; action: ConversationChainAction }>;
+  [BusEvents.Conversation.Idle]: ReportedEvent<{ sessionId: string; chatId: string; parentTaskId: string }>;
+  [BusEvents.Context.TopicChanged]: { sessionId: string; previousTopicId?: string; topicId: string };
 };
 
 export type FullEventMap = PipelineEventMap & CoreEventMap & DomainEventMap;
 ```
+
+**Envelope 约定**：
+
+| 事件组 | Envelope |
+|--------|----------|
+| `element.state-changed` / `element.data` | `{ name, payload }`（由 `BaseElement.report()` 生成） |
+| `conversation.chain` / `conversation.idle` | `{ name, payload }`（与 `BaseElement.report()` 的发送方约定一致） |
+| `pipeline.*` / `task.*` / `intent.*` / `session.*` / `context.*` / `replay.*` | 扁平 payload |
+| `transport.*` | `{ name, payload }`，payload 必须带 `sessionId` / `taskId` |
 
 ## 3. 自定义事件
 

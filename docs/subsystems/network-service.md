@@ -64,14 +64,15 @@ interface NetworkServiceLike {
 ```text
 main.ts
   → new NetworkService()
-  → ServiceManager.register("network", service)
+  → ServiceManager.register("network", service)   // 只负责生命周期
   → await ServiceManager.startAll()
-  → startCore({ sm })
-  → Core 获取 NetworkServiceLike
+  → const services: CoreServices = { memory, network, skill, compiler }
+  → startCore({ services })
+  → Core 从 services.network 获取 NetworkServiceLike
   → createWebFetchTool(network)
 ```
 
-生产启动缺少 NetworkService 时应立即失败，不能把不可执行的 WebFetch 暴露给模型。
+生产启动缺少 `services.network` 时 `startCore` 立即抛错，不能把不可执行的 WebFetch 暴露给模型。
 测试通过注入 `fetch`、时钟和等待函数控制网络与时间，不使用全局单例。
 
 ## 6. 日志

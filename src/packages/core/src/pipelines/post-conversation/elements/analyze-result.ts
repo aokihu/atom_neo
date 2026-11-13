@@ -1,36 +1,48 @@
-import { getProgressFacts } from "../../shared/progress-evidence";
+import { getProgressFacts } from "@core/pipelines/shared/progress-evidence";
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
 import { BusEvents, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState, AnalysisResult } from "./types";
 import { FALLBACK_ANALYSIS } from "./types";
-import { callLLM, parseJsonFromLLMResponse } from "../../shared";
+import { callLLM, parseJsonFromLLMResponse } from "@core/pipelines/shared";
 
 const NON_RETRY_TASK_INTENTS = new Set(["creative", "conversation"]);
 
 export class AnalyzeResultElement extends BaseElement<PostConversationFlowState, PostConversationFlowState> {
   #apiKey: string;
   #model: string;
+  #provider: string;
+  #protocol?: ProviderProtocol;
   #baseUrl?: string;
   #thinking?: string;
+  #options?: Record<string, unknown>;
   #maxTokens: number;
+  #promptResolver: PromptResolver;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
+    promptResolver: PromptResolver;
     apiKey: string;
     model: string;
+    provider?: string;
+    protocol?: ProviderProtocol;
     baseUrl?: string;
     thinking?: string;
+    options?: Record<string, unknown>;
     maxTokens?: number;
   }) {
     super({ name: params.name, kind: "transform", bus: params.bus });
     this.#apiKey = params.apiKey;
     this.#model = params.model;
+    this.#provider = params.provider ?? "deepseek";
+    this.#protocol = params.protocol;
     this.#baseUrl = params.baseUrl;
     this.#thinking = params.thinking;
+    this.#options = params.options;
     this.#maxTokens = params.maxTokens ?? 256;
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: PostConversationFlowState): Promise<PostConversationFlowState> {
@@ -67,10 +79,14 @@ export class AnalyzeResultElement extends BaseElement<PostConversationFlowState,
       this.report(BusEvents.Element.Data, { step: "analyzing", userMsgLen: input.userMessage.length, assistantMsgLen: input.assistantResponse.length });
 
       const raw = await callLLM({
+        promptResolver: this.#promptResolver,
         apiKey: this.#apiKey,
         model: this.#model,
+        provider: this.#provider,
+        protocol: this.#protocol,
         baseUrl: this.#baseUrl,
         thinking: this.#thinking,
+        options: this.#options,
         systemKey: PromptKey.ANALYZE_RESULT,
         prompt,
         maxTokens: this.#maxTokens,

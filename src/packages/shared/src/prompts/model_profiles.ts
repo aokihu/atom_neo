@@ -2,6 +2,7 @@ export const LANGUAGE_MAP: Record<string, "zh" | "en"> = {
   deepseek: "zh",
   openai: "en",
   anthropic: "en",
+  "openai-compatible": "en",
 };
 
 export const MODEL_REFINEMENT_MAP: Record<string, string[]> = {

@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "moduleSuffixes": [".node", ""],
+    "paths": {
+      "@assets/*": ["./src/assets/*"],
+      "@core/*": ["./src/packages/core/src/*"],
+      "@opentui/react/runtime-plugin-support": ["./scripts/types/opentui-runtime-plugin-support.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/dist/**",
+    "src/packages/shared/src/http/bun-http-server.ts"
+  ]
+}

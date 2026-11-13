@@ -1,5 +1,5 @@
-import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import { BaseElement, PipelineEventBus } from "@atom-neo/shared";
 import type { PipelineEventMap } from "@atom-neo/shared";
 import { BusEvents } from "@atom-neo/shared";
@@ -25,13 +25,13 @@ class FollowUpSinkElement extends BaseElement<any, any> {
   }
 }
 
-export function registerFollowUpElements(): void {
-  registerElement("follow-up-source", FollowUpSourceElement);
-  registerElement("follow-up-sink", FollowUpSinkElement);
+export function registerFollowUpElements(registry: ElementRegistry): void {
+  registry.register("follow-up-source", FollowUpSourceElement);
+  registry.register("follow-up-sink", FollowUpSinkElement);
 }
 
-export function followUpPipeline() {
-  return pipeline("follow-up")
+export function followUpPipeline(elementRegistry: ElementRegistry) {
+  return pipeline("follow-up", elementRegistry)
     .source("follow-up-source", {})
     .sink("follow-up-sink", {});
 }

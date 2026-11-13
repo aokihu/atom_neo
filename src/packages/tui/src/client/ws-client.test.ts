@@ -255,6 +255,25 @@ describe("TuiClient task correlation", () => {
     client.close();
   });
 
+  test("ignores unknown server events and malformed frames while dispatching known events", async () => {
+    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    const client = new TuiClient({ url: "http://localhost:3100", sessionId: "s1" });
+    const busy: boolean[] = [];
+    client.onBusyChange(value => busy.push(value));
+    const connected = client.connect();
+    const socket = FakeWebSocket.current!;
+    socket.emit(WsMessages.Server.SessionReady, { sessionId: "s1" });
+    await connected;
+
+    socket.emit("event.unknown", { anything: true });
+    socket.emit(WsMessages.Server.TaskCreated, { taskId: "task-1", state: "waiting" });
+    socket.onmessage?.({ data: "not json" });
+    socket.emit(WsMessages.Server.SessionTaskActive, { active: true, taskId: "task-1" });
+
+    expect(busy.at(-1)).toBe(true);
+    client.close();
+  });
+
   test("preserves API_KEY_INVALID for TUI error presentation", async () => {
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
     globalThis.fetch = (async () => Response.json({ taskId: "root-1" })) as unknown as typeof fetch;

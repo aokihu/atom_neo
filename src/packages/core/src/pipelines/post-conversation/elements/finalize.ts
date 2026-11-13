@@ -1,22 +1,28 @@
 import { BaseElement } from "@atom-neo/shared";
-import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import { BusEvents, PipelineResultType, PromptKey, resolvePrompt, substringWellFormed } from "@atom-neo/shared";
+import type { PipelineEventMap, PipelineEventBus, PipelineResult, PromptResolver } from "@atom-neo/shared";
+import { BusEvents, PipelineResultType, PromptKey, substringWellFormed } from "@atom-neo/shared";
 import type { PostConversationFlowState } from "./types";
 import { FALLBACK_ANALYSIS, STALL_THRESHOLD } from "./types";
-import { trigramSimilarity } from "../../shared/trigram";
-import type { ContextService } from "../../../context/context-service";
+import { trigramSimilarity } from "@core/pipelines/shared/trigram";
+import type { ContextService } from "@core/context/context-service";
 
 export class PostConversationFinalizeElement extends BaseElement<PostConversationFlowState, PipelineResult> {
   #contextService: ContextService;
+  #providerModel: string;
+  #promptResolver: PromptResolver;
 
   constructor(params: {
     name: string;
     kind: string;
     bus: PipelineEventBus<PipelineEventMap>;
     contextService: ContextService;
+    promptResolver: PromptResolver;
+    providerModel?: string;
   }) {
     super({ name: params.name, kind: "sink", bus: params.bus });
     this.#contextService = params.contextService;
+    this.#providerModel = params.providerModel ?? "deepseek/deepseek-v4-pro";
+    this.#promptResolver = params.promptResolver;
   }
 
   async doProcess(input: PostConversationFlowState): Promise<PipelineResult> {
@@ -44,7 +50,7 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
         }
         if (maxSim > STALL_THRESHOLD) {
           this.report(BusEvents.Element.Data, { step: "stalled", maxSimilarity: +maxSim.toFixed(3), threshold: STALL_THRESHOLD, fingerprint: fp, prevCount: prev.length });
-          return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: stalled — ${+maxSim.toFixed(2)}% similar to previous (reason: ${reason})` };
+          return { type: PipelineResultType.Complete, task: input.task, output: `post-conversation: stalled — ${(maxSim * 100).toFixed(2)}% similar to previous (reason: ${reason})` };
         }
         input.session.addPostCheckFingerprint(fp);
       }
@@ -62,7 +68,7 @@ export class PostConversationFinalizeElement extends BaseElement<PostConversatio
           consumeOnCommit: true,
           content: [{
             role: "assistant",
-            content: `Post-check reference (unverified): ${resolvePrompt(PromptKey.GUIDANCE_RETRY)}`,
+            content: `Post-check reference (unverified): ${this.#promptResolver(PromptKey.GUIDANCE_RETRY, this.#providerModel)}`,
           }],
         },
       });

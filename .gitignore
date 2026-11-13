@@ -41,3 +41,8 @@ data/
 sandbox/
 clients/telegram-bot/telegram-bot
 .bun-build
+
+# Runtime state (created by the app in the current working directory)
+.atom/
+/hooks.json
+/schedule-tasks.json

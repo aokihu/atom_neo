@@ -1,10 +1,11 @@
-import { startExecutionGoal } from "../../../session/execution-budget";
+import { startExecutionGoal } from "@core/session/execution-budget";
+import { getTaskPayload } from "@core/session/element-session";
 import { BaseElement } from "@atom-neo/shared";
 import type { IntentPredictionResult, PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
 import { BusEvents, PipelineResultType } from "@atom-neo/shared";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
 import type { PredictionFlowState } from "./types";
-import type { SkillServiceLike } from "../../../skills/types";
+import type { SkillServiceLike } from "@core/skills/types";
 
 export function resolveEffectiveTopic(
   prediction: Pick<IntentPredictionResult, "contextRelevance" | "topic">,
@@ -58,11 +59,11 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     }
     if (effectiveTopic && effectiveTopic !== session.currentTopic) {
       this.report(BusEvents.Element.Data, { step: "topic-changed", from: session.currentTopic, to: effectiveTopic });
-      this.bus.emit(BusEvents.Context.TopicChanged as any, {
+      this.emitDomain(BusEvents.Context.TopicChanged, {
         sessionId: session.sessionId,
         ...(session.currentTopic ? { previousTopicId: session.currentTopic } : {}),
         topicId: effectiveTopic,
-      } as any);
+      });
       this.#skillService?.clearScope?.(session.sessionId);
       session.resetForNewTopic(effectiveTopic);
     }
@@ -70,7 +71,7 @@ export class PredictFinalizeElement extends BaseElement<PredictionFlowState, Pip
     // Goal lifecycle is independent of Topic; related turns retain the original goal.
     if ((!session.executionBudget && session.legacyBudgetDepth === undefined) || prediction.contextRelevance === "standalone") {
       if (prediction.contextRelevance === "standalone") { session.setTodoState?.([]); session.clearContinuationContext?.(); }
-      const goal = input.task.payload?.find((part: any) => part.type === "text")?.data ?? "";
+      const goal = getTaskPayload(input.task, "text") ?? "";
       const allowance = this.#maxGlobalRounds;
       startExecutionGoal(session, input.task.chainId ?? input.task.id, goal, allowance);
     }

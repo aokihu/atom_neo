@@ -1,54 +1,64 @@
 import { TaskState, BusEvents } from "@atom-neo/shared";
 import type { TaskItem, CoreEventMap } from "@atom-neo/shared";
 import type { PipelineEventBus } from "@atom-neo/shared";
-import type { TaskQueue } from "./task-queue";
-import { getPipeline, removePipeline, setPipeline } from "./api/tasks";
-import type { Pipeline } from "./pipeline/builder";
+import type { TaskQueue, TaskChainCancellation } from "./task-queue";
+import type { PipelineInstanceStore } from "./pipeline/instance-store";
+import { TaskCancelledError, TaskRunner, throwIfCancelled } from "./task/task-runner";
+import type { PipelineBuilder } from "./task/task-runner";
+import { Wakeup } from "./task/wakeup";
 
-type PipelineBuilder = (task: TaskItem) => Pipeline | undefined;
-
-export class TaskCancelledError extends Error {
-  readonly code = "PIPELINE_ABORTED";
-
-  constructor() {
-    super("Task cancelled by user");
-    this.name = "TaskCancelledError";
-  }
-}
+export { TaskCancelledError } from "./task/task-runner";
 
 export class TaskEngine {
   #bus: PipelineEventBus<CoreEventMap>;
   #queue: TaskQueue;
   #running = false;
-  #processing = false;
-  #timeoutMs: number;
-  #pipelineBuilders: Record<string, PipelineBuilder>;
+  #wake = new Wakeup();
+  #epoch = 0;
+  #loopPromise?: Promise<void>;
+  #pipelineStore: PipelineInstanceStore;
+  #taskRunner: TaskRunner;
   #abortControllers = new Map<string, AbortController>();
   #discardChain?: (chainId: string, sessionId: string) => void;
 
   constructor(params: {
     bus: PipelineEventBus<CoreEventMap>;
     queue: TaskQueue;
+    pipelineStore: PipelineInstanceStore;
     pipelineBuilders?: Record<string, PipelineBuilder>;
-    timeoutMs?: number;
     discardChain?: (chainId: string, sessionId: string) => void;
   }) {
     this.#bus = params.bus;
     this.#queue = params.queue;
-    this.#pipelineBuilders = params.pipelineBuilders ?? {};
-    this.#timeoutMs = params.timeoutMs ?? 120_000;
+    this.#pipelineStore = params.pipelineStore;
+    this.#taskRunner = new TaskRunner({
+      pipelineStore: params.pipelineStore,
+      pipelineBuilders: params.pipelineBuilders,
+    });
     this.#discardChain = params.discardChain;
 
     this.#bus.on(BusEvents.Task.Enqueued, () => this.#onTaskEnqueued());
   }
 
   start(): void {
+    if (this.#running) {
+      this.#wake.notify();
+      return;
+    }
     this.#running = true;
-    this.#onTaskEnqueued();
+    const epoch = ++this.#epoch;
+    const previous = this.#loopPromise;
+    this.#loopPromise = (async () => {
+      if (previous) await previous.catch(() => {});
+      await this.#runLoop(epoch);
+    })();
+    this.#wake.notify();
   }
 
   stop(): void {
+    if (!this.#running) return;
     this.#running = false;
+    this.#wake.notify();
   }
 
   cancel(taskId: string, sessionId: string): boolean {
@@ -57,23 +67,7 @@ export class TaskEngine {
 
     const error = new TaskCancelledError();
     this.#discardChain?.(cancellation.chainId, sessionId);
-
-    for (const task of cancellation.queued) {
-      task.state = TaskState.CANCELLED;
-      task.updatedAt = Date.now();
-      this.#queue.storeResult(task.id, {
-        taskId: task.id,
-        state: TaskState.CANCELLED,
-        error: error.message,
-      });
-      removePipeline(task.id);
-      this.#bus.emit(BusEvents.Task.Failed, { task, error });
-    }
-
-    for (const task of cancellation.processing) {
-      this.#abortControllers.get(task.id)?.abort(error);
-    }
-
+    this.#applyCancellation(cancellation, error);
     return true;
   }
 
@@ -81,7 +75,7 @@ export class TaskEngine {
     const deadline = Date.now() + (params.timeoutMs ?? 30_000);
     this.#onTaskEnqueued();
     while (this.#queue.size > 0 && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     const drained = this.#queue.size === 0;
     if (drained) this.stop();
@@ -89,22 +83,21 @@ export class TaskEngine {
   }
 
   #onTaskEnqueued(): void {
-    if (!this.#running || this.#processing || this.#queue.size === 0) return;
-    this.#processing = true;
-    Promise.resolve()
-      .then(() => this.#processNext())
-      .finally(() => {
-        this.#processing = false;
-        this.#onTaskEnqueued();
-      });
+    if (this.#running) this.#wake.notify();
   }
 
-  async #processNext(): Promise<void> {
-    if (!this.#running) return;
+  async #runLoop(epoch: number): Promise<void> {
+    while (this.#running && epoch === this.#epoch) {
+      const task = this.#queue.dequeue();
+      if (!task) {
+        await this.#wake.wait();
+        continue;
+      }
+      await this.#processTask(task);
+    }
+  }
 
-    const task = this.#queue.dequeue();
-    if (!task) return;
-
+  async #processTask(task: TaskItem): Promise<void> {
     const abortController = new AbortController();
     this.#abortControllers.set(task.id, abortController);
     this.#queue.markProcessing(task);
@@ -114,8 +107,8 @@ export class TaskEngine {
     this.#bus.emit(BusEvents.Task.Activated, { task });
 
     try {
-      const result = await this.#executeTask(task, abortController.signal);
-      this.#throwIfCancelled(abortController.signal);
+      const result = await this.#taskRunner.run(task, abortController.signal);
+      throwIfCancelled(abortController.signal);
 
       this.#queue.markDone(task.id);
       task.state = TaskState.COMPLETED;
@@ -135,38 +128,25 @@ export class TaskEngine {
       });
     } finally {
       this.#abortControllers.delete(task.id);
-      removePipeline(task.id);
+      this.#pipelineStore.delete(task.id);
     }
   }
 
-  async #executeTask(task: TaskItem, abortSignal: AbortSignal): Promise<any> {
-    let pipeline = getPipeline(task.id);
-
-    if (!pipeline && task.pipeline) {
-      const builder = this.#pipelineBuilders[task.pipeline];
-      if (builder) {
-        pipeline = builder(task);
-        if (pipeline) setPipeline(task.id, pipeline);
-      }
+  #applyCancellation(cancellation: TaskChainCancellation, error: TaskCancelledError): void {
+    for (const task of cancellation.queued) {
+      task.state = TaskState.CANCELLED;
+      task.updatedAt = Date.now();
+      this.#queue.storeResult(task.id, {
+        taskId: task.id,
+        state: TaskState.CANCELLED,
+        error: error.message,
+      });
+      this.#pipelineStore.delete(task.id);
+      this.#bus.emit(BusEvents.Task.Failed, { task, error });
     }
 
-    if (!pipeline) return { type: "complete", task };
-
-    let current: any = { mode: "initial", task };
-
-    for (const element of pipeline.elements) {
-      this.#throwIfCancelled(abortSignal);
-      current.abortSignal = abortSignal;
-      current = await element.process(current);
-      this.#throwIfCancelled(abortSignal);
+    for (const task of cancellation.processing) {
+      this.#abortControllers.get(task.id)?.abort(error);
     }
-
-    if (!current || typeof current !== "object") return current;
-    const { abortSignal: _abortSignal, ...result } = current;
-    return result;
-  }
-
-  #throwIfCancelled(signal: AbortSignal): void {
-    if (signal.aborted) throw signal.reason ?? new TaskCancelledError();
   }
 }

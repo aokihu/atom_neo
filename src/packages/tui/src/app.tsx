@@ -1,8 +1,8 @@
-import "@opentui/react/runtime-plugin-support";
 import { createCliRenderer, type KeyEvent } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import React, { useState } from "react";
 import { spawnSync } from "node:child_process";
+import { ensureBunRuntimePluginSupport } from "@atom-neo/tui-kit";
 import { App } from "./components/App";
 import type { ServerInfo } from "./types";
 import { useCopied } from "./stores/copied";
@@ -23,13 +23,14 @@ function copyToClipboard(text: string) {
 }
 
 /** Launch the terminal UI using OpenTUI React renderer. */
-export function startTui(params: {
+export async function startTui(params: {
   url: string;
   sessionId?: string;
   adminToken?: string;
   historySandbox?: string;
   serverInfo: ServerInfo;
 }): Promise<void> {
+  await ensureBunRuntimePluginSupport();
   return new Promise<void>((resolve, reject) => {
     createCliRenderer({
       exitOnCtrlC: false,

@@ -177,7 +177,7 @@ ratio = contextTokens / effectiveLimit
 
 ## 6. 续写仲裁与 TODO 交接
 
-跟踪参数先完整验证，再比较精简组合与 JEV 承担更多判断的方案，见 [参数对照实验](./progress-evidence-experiment.md)。仲裁与整体检查共享正文引用、当前任务事实和裁剪范围；消息 metadata 保存 target、before/after、terminalCause。已删除字数累计、长度解析、相似度和续写统计；JEV 保留 contentState、reasonCode、evidenceRef，续写增加 intentScope。原因码只用于诊断，调度由专门判断与 Runtime 约束校验；正文只提供一次。
+跟踪参数先完整验证，再比较精简组合与 JEV 承担更多判断的方案，见 [参数对照实验](../records/progress-evidence-experiment.md)。仲裁与整体检查共享正文引用、当前任务事实和裁剪范围；消息 metadata 保存 target、before/after、terminalCause。已删除字数累计、长度解析、相似度和续写统计；JEV 保留 contentState、reasonCode、evidenceRef，续写增加 intentScope。原因码只用于诊断，调度由专门判断与 Runtime 约束校验；正文只提供一次。
 
 `check-follow-up` 是唯一续写决策入口：Runtime 提供事实，规则优先，冲突时使用 Jev。
 Agent 通过 TODO 保存进度，通过 `intent.follow_up` 请求继续当前内容；intent 不自行推进计划。

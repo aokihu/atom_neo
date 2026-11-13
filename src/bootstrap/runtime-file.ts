@@ -1,5 +1,6 @@
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "@atom-neo/shared";
 
 export type RuntimeFile = { url: string; token: string; instanceId: string };
 export function readRuntimeFile(sandbox: string, service: "core" | "gateway"): RuntimeFile {
@@ -11,10 +12,7 @@ export function publishRuntimeFile(sandbox: string, service: "core" | "gateway",
   const dir = join(sandbox, ".atom");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, `${service}-runtime.json`);
-  const temp = `${path}.${value.instanceId}`;
-  writeFileSync(temp, JSON.stringify(value), { mode: 0o600, flag: "wx" });
-  chmodSync(temp, 0o600);
-  renameSync(temp, path);
+  writeFileAtomic(path, JSON.stringify(value), { mode: 0o600, fsync: true, createDirs: false });
   return () => {
     try { if (readRuntimeFile(sandbox, service).instanceId === value.instanceId) rmSync(path); } catch { /* absent or replaced */ }
   };

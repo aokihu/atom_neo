@@ -1,5 +1,5 @@
 import type { Message } from "../types";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { fmtTime } from "./format";
 
 export function UserMessage({ message }: { message: Message & { role: "user" } }) {

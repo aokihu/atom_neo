@@ -112,6 +112,36 @@ describe("SessionStore", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("releases tool records after a successful suspend checkpoint", () => {
+    const removeSession = mock(() => {});
+    const persistence = {
+      restore: () => null,
+      checkpoint: () => {},
+      remove: () => {},
+      toolRecords: { removeSession },
+    } as any;
+    const store = new SessionStore(1, undefined, 0, persistence);
+    store.get("one");
+    store.get("two");
+
+    expect(removeSession).toHaveBeenCalledWith("one");
+  });
+
+  test("keeps tool records when a suspend checkpoint fails", () => {
+    const removeSession = mock(() => {});
+    const persistence = {
+      restore: () => null,
+      checkpoint: () => { throw new Error("disk full"); },
+      remove: () => {},
+      toolRecords: { removeSession },
+    } as any;
+    const store = new SessionStore(1, undefined, 0, persistence);
+    store.get("one");
+    store.get("two");
+
+    expect(removeSession).not.toHaveBeenCalled();
+  });
+
   test("does not evict, sweep, or delete a leased session", () => {
     const store = new SessionStore(1, undefined, 100);
     store.get("active");

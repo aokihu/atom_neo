@@ -1,31 +1,40 @@
 import { generateText } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import type { PromptKey } from "@atom-neo/shared";
-import { resolvePrompt } from "@atom-neo/shared";
+import type { PromptKey, PromptResolver, ProviderProtocol } from "@atom-neo/shared";
+import { inferProviderProtocol } from "@atom-neo/shared";
+import { createLanguageModel, providerOptionsFor } from "./model-provider";
 
-export function deepSeekProviderOptions(thinking?: string) {
-  return { deepseek: { thinking: { type: thinking === "adaptive" ? "enabled" : thinking ?? "disabled" } } };
-}
+export { deepSeekProviderOptions } from "./model-provider";
 
 export async function callLLM(params: {
+  promptResolver: PromptResolver;
   apiKey: string;
   model: string;
+  provider?: string;
+  protocol?: ProviderProtocol;
   baseUrl?: string;
   thinking?: string;
+  options?: Record<string, unknown>;
   systemKey: PromptKey;
   prompt: string;
   maxTokens: number;
   abortSignal?: AbortSignal;
 }): Promise<string> {
-  const provider = createDeepSeek({ apiKey: params.apiKey, baseURL: params.baseUrl });
-  const model = provider(params.model);
+  const provider = params.provider ?? "deepseek";
+  const protocol = params.protocol ?? inferProviderProtocol(provider);
+  const model = createLanguageModel({
+    provider,
+    protocol,
+    apiKey: params.apiKey,
+    model: params.model,
+    baseUrl: params.baseUrl,
+  });
   const result = await generateText({
     model,
-    instructions: resolvePrompt(params.systemKey),
+    instructions: params.promptResolver(params.systemKey, `${provider}/${params.model}`),
     prompt: params.prompt,
     maxOutputTokens: params.maxTokens,
     temperature: 0,
-    providerOptions: deepSeekProviderOptions(params.thinking),
+    providerOptions: providerOptionsFor({ protocol, thinking: params.thinking, options: params.options }),
     abortSignal: params.abortSignal,
   });
   return result.text.trim();

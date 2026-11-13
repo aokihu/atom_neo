@@ -1,33 +1,12 @@
-type DeltaCallback = (delta: string, offset: number) => void;
-type ReasonCallback = (delta: string, offset: number) => void;
-type ToolCallback = (event: { name: string; callId: string; input?: unknown; result?: unknown; error?: unknown }) => void;
-type ToolStepCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
-type ToolGroupCompleteCallback = (event: { total: number; success: number; failed: number; toolNames: string[] }) => void;
-type ContextTokensCallback = (total: number) => void;
-type BusyChangeCallback = (busy: boolean) => void;
-type MCPStatusCallback = (servers: { name: string; online: boolean; toolNames: string[] }[]) => void;
-type MCPConnectedCallback = (data: { servers: { name: string; online: boolean; toolCount: number }[]; toolInfos: { name: string; source: string; description: string; online: boolean }[] }) => void;
+import { WsMessages } from "@atom-neo/shared";
+import type { DecisionUpdatePayload, ServerEvent, SessionTelemetry } from "@atom-neo/shared";
+import { parseServerEvent, TuiTaskError } from "./ws-client-protocol";
+import type {
+  BusyChangeCallback, ContextTokensCallback, DeltaCallback, MCPConnectedCallback, MCPStatusCallback,
+  ReasonCallback, ToolCallback, ToolGroupCompleteCallback, ToolStepCallback,
+} from "./ws-client-protocol";
 
-import { TaskFailureCodes, WsMessages } from "@atom-neo/shared";
-import type { DecisionUpdatePayload, SessionTelemetry } from "@atom-neo/shared";
-
-type PendingRequest = {
-  resolve: (text: string) => void;
-  reject: (err: Error) => void;
-  text: string;
-  rootTaskId: string;
-};
-
-export class TuiTaskError extends Error {
-  readonly code?: string;
-
-  constructor(message: string, code?: string) {
-    super(message);
-    this.code = code;
-    if (code === TaskFailureCodes.PipelineAborted) this.name = "TaskCancelledError";
-    if (code === TaskFailureCodes.ApiKeyInvalid) this.name = "ApiKeyInvalidError";
-  }
-}
+export { TuiTaskError } from "./ws-client-protocol";
 
 export class TuiClient {
   #url: string;
@@ -51,7 +30,7 @@ export class TuiClient {
   #currentRootTaskId: string | null = null;
   #earlyDecisions: DecisionUpdatePayload[] = [];
   #activeTaskIds: Set<string> = new Set();
-  #pending: PendingRequest[] = [];
+  #pending: { resolve: (text: string) => void; reject: (err: Error) => void; text: string; rootTaskId: string }[] = [];
 
   constructor(params: { url?: string; sessionId?: string; chatId?: string } = {}) {
     this.#url = (params.url ?? "http://127.0.0.1:3100").replace(/^http/, "ws");
@@ -73,102 +52,9 @@ export class TuiClient {
 
       this.#ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(event.data as string);
-          const p = msg.payload ?? {};
-          const t = msg.type as string;
-
-          const handle = (handlers as any)[t];
-          if (handle) handle(p);
+          const parsed = parseServerEvent(JSON.parse(event.data as string));
+          if (parsed) this.#handleServerEvent(parsed, resolve, timer);
         } catch { /* ignore */ }
-      };
-
-      const handlers: Record<string, (p: Record<string, any>) => void> = {
-        [WsMessages.Server.SessionReady]: (p) => {
-          this.#currentRootTaskId = null;
-          this.#earlyDecisions = [];
-          this.#activeTaskIds = new Set(p.activeTaskIds ?? []);
-          this.#onSnapshot?.(p.messages ?? []);
-          this.#onTelemetry?.(p.telemetry ?? { sessionId: this.#sessionId, rounds: null, todos: [] });
-          this.#onBusyChange?.(this.#activeTaskIds.size > 0);
-          clearTimeout(timer);
-          if (typeof p.contextTokens === "number") this.#onContextTokens?.(p.contextTokens);
-          this.#ready = true;
-          resolve();
-        },
-        [WsMessages.Server.SessionTelemetry]: (p) => {
-          if (p.sessionId === this.#sessionId) this.#onTelemetry?.(p as SessionTelemetry);
-        },
-        [WsMessages.Server.TransportDelta]: (p) => {
-          const delta = p.textDelta ?? "";
-          const offset = p.offset ?? 0;
-          if (delta) {
-            const head = this.#pending[0];
-            if (head) head.text += delta;
-            this.#onDelta?.(delta, offset);
-          }
-        },
-        [WsMessages.Server.TransportReason]: (p) => {
-          const delta = p.textDelta ?? "";
-          if (delta) this.#onReason?.(delta, p.offset ?? 0);
-        },
-        [WsMessages.Server.TransportToolStarted]: (p) => {
-          this.#onTool?.({ name: p.toolName ?? "", callId: p.toolCallId ?? "", input: p.input });
-        },
-        [WsMessages.Server.TransportToolFinished]: (p) => {
-          this.#onTool?.({ name: p.toolName ?? "", callId: p.toolCallId ?? "", result: p.result, error: p.error });
-        },
-        [WsMessages.Server.TransportToolStepFinished]: (p) => {
-          this.#onToolStep?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
-        },
-        [WsMessages.Server.TransportToolGroupComplete]: (p) => {
-          this.#onToolGroupComplete?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
-        },
-        [WsMessages.Server.TaskCompleted]: (p) => {
-          if (p.terminal === true) {
-            const index = this.#pending.findIndex(pending => pending.rootTaskId === p.rootTaskId);
-            if (index >= 0) {
-              const done = this.#pending.splice(index, 1)[0];
-              done.resolve(done.text);
-            }
-          }
-          const contextTokens = p.contextTokens ?? p.tokenUsage?.total;
-          if (typeof contextTokens === "number") this.#onContextTokens?.(contextTokens);
-        },
-        [WsMessages.Server.TaskFailed]: (p) => {
-          const rootTaskId = p.rootTaskId ?? p.taskId;
-          const index = this.#pending.findIndex(pending => pending.rootTaskId === rootTaskId);
-          if (index < 0) return;
-          const pending = this.#pending.splice(index, 1)[0];
-          const err = p.error ?? "Unknown error";
-          const error = new TuiTaskError(String(err), typeof p.code === "string" ? p.code : undefined);
-          pending.reject(error);
-        },
-        [WsMessages.Server.SessionTaskActive]: (p) => {
-          const { active, taskId } = p;
-          if (active === false) {
-            this.#activeTaskIds.delete(taskId ?? "");
-          } else {
-            this.#activeTaskIds.add(taskId ?? "");
-          }
-          this.#onBusyChange?.(this.#activeTaskIds.size > 0);
-        },
-        [WsMessages.Server.MCPToolStatus]: (p) => {
-          const servers = p.servers ?? [];
-          if (servers.length > 0) this.#onMCPStatus?.(servers);
-        },
-        [WsMessages.Server.MCPConnected]: (p) => {
-          this.#onMCPConnected?.({ servers: p.servers ?? [], toolInfos: p.toolInfos ?? [] });
-        },
-        [WsMessages.Server.DecisionUpdated]: (p) => {
-          if (p.sessionId !== this.#sessionId || typeof p.rootTaskId !== "string") return;
-          const update = p as DecisionUpdatePayload;
-          if (this.#currentRootTaskId === null) {
-            this.#earlyDecisions.push(update);
-            this.#earlyDecisions = this.#earlyDecisions.slice(-8);
-          } else if (update.rootTaskId === this.#currentRootTaskId) {
-            this.#onDecisionUpdate?.(update);
-          }
-        },
       };
 
       this.#ws.onerror = () => { clearTimeout(timer); reject(new Error("WebSocket connection failed")); };
@@ -183,6 +69,136 @@ export class TuiClient {
         this.#onDisconnect?.();
       };
     });
+  }
+
+  #handleServerEvent(event: ServerEvent, resolveReady: () => void, readyTimer: ReturnType<typeof setTimeout>): void {
+    switch (event.type) {
+      case WsMessages.Server.SessionReady: {
+        const p = event.payload;
+        this.#currentRootTaskId = null;
+        this.#earlyDecisions = [];
+        this.#activeTaskIds = new Set(p.activeTaskIds ?? []);
+        this.#onSnapshot?.(p.messages ?? []);
+        this.#onTelemetry?.(p.telemetry ?? { sessionId: this.#sessionId, rounds: null, todos: [] });
+        this.#onBusyChange?.(this.#activeTaskIds.size > 0);
+        clearTimeout(readyTimer);
+        if (typeof p.contextTokens === "number") this.#onContextTokens?.(p.contextTokens);
+        this.#ready = true;
+        resolveReady();
+        return;
+      }
+      case WsMessages.Server.SessionTelemetry: {
+        const p = event.payload;
+        if (p.sessionId === this.#sessionId) this.#onTelemetry?.(p);
+        return;
+      }
+      case WsMessages.Server.TransportDelta: {
+        const p = event.payload;
+        const delta = p.textDelta ?? "";
+        const offset = p.offset ?? 0;
+        if (delta) {
+          const head = this.#pending[0];
+          if (head) head.text += delta;
+          this.#onDelta?.(delta, offset);
+        }
+        return;
+      }
+      case WsMessages.Server.TransportReason: {
+        const p = event.payload;
+        const delta = p.textDelta ?? "";
+        if (delta) this.#onReason?.(delta, p.offset ?? 0);
+        return;
+      }
+      case WsMessages.Server.TransportToolStarted: {
+        const p = event.payload;
+        this.#onTool?.({ name: p.toolName ?? "", callId: p.toolCallId ?? "", input: p.input });
+        return;
+      }
+      case WsMessages.Server.TransportToolFinished: {
+        const p = event.payload;
+        this.#onTool?.({ name: p.toolName ?? "", callId: p.toolCallId ?? "", result: p.result, error: p.error });
+        return;
+      }
+      case WsMessages.Server.TransportToolStepFinished: {
+        const p = event.payload;
+        this.#onToolStep?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
+        return;
+      }
+      case WsMessages.Server.TransportToolGroupComplete: {
+        const p = event.payload;
+        this.#onToolGroupComplete?.({ total: p.total ?? 0, success: p.success ?? 0, failed: p.failed ?? 0, toolNames: p.toolNames ?? [] });
+        return;
+      }
+      case WsMessages.Server.TaskCompleted: {
+        const p = event.payload;
+        if (p.terminal === true) {
+          const index = this.#pending.findIndex(pending => pending.rootTaskId === p.rootTaskId);
+          if (index >= 0) {
+            const done = this.#pending.splice(index, 1)[0];
+            done.resolve(done.text);
+          }
+        }
+        const contextTokens = p.contextTokens ?? p.tokenUsage?.total;
+        if (typeof contextTokens === "number") this.#onContextTokens?.(contextTokens);
+        return;
+      }
+      case WsMessages.Server.TaskFailed: {
+        const p = event.payload;
+        const rootTaskId = p.rootTaskId ?? p.taskId;
+        const index = this.#pending.findIndex(pending => pending.rootTaskId === rootTaskId);
+        if (index < 0) return;
+        const pending = this.#pending.splice(index, 1)[0];
+        const err = p.error ?? "Unknown error";
+        const error = new TuiTaskError(String(err), typeof p.code === "string" ? p.code : undefined);
+        pending.reject(error);
+        return;
+      }
+      case WsMessages.Server.SessionTaskActive: {
+        const { active, taskId } = event.payload;
+        if (active === false) {
+          this.#activeTaskIds.delete(taskId ?? "");
+        } else {
+          this.#activeTaskIds.add(taskId ?? "");
+        }
+        this.#onBusyChange?.(this.#activeTaskIds.size > 0);
+        return;
+      }
+      case WsMessages.Server.MCPToolStatus: {
+        const servers = event.payload.servers ?? [];
+        if (servers.length > 0) this.#onMCPStatus?.(servers);
+        return;
+      }
+      case WsMessages.Server.MCPConnected: {
+        const p = event.payload;
+        this.#onMCPConnected?.({ servers: p.servers ?? [], toolInfos: p.toolInfos ?? [] });
+        return;
+      }
+      case WsMessages.Server.DecisionUpdated: {
+        const p = event.payload;
+        if (p.sessionId !== this.#sessionId || typeof p.rootTaskId !== "string") return;
+        const update: DecisionUpdatePayload = p;
+        if (this.#currentRootTaskId === null) {
+          this.#earlyDecisions.push(update);
+          this.#earlyDecisions = this.#earlyDecisions.slice(-8);
+        } else if (update.rootTaskId === this.#currentRootTaskId) {
+          this.#onDecisionUpdate?.(update);
+        }
+        return;
+      }
+      case WsMessages.Server.TaskCreated:
+      case WsMessages.Server.TaskStateChanged:
+      case WsMessages.Server.PipelineElementStarted:
+      case WsMessages.Server.PipelineElementFinished:
+      case WsMessages.Server.ReplayStart:
+      case WsMessages.Server.ReplayEnd:
+      case WsMessages.Control.Pong:
+      case WsMessages.Control.Error:
+        return;
+      default: {
+        const unhandled: never = event;
+        void unhandled;
+      }
+    }
   }
 
   async send(text: string): Promise<string> {

@@ -1,14 +1,6 @@
-export type SkillListItem = {
-  name: string;
-  description: string;
-  capabilities: string[];
-};
+import type { SkillListItem, SkillLoadResult } from "@atom-neo/shared";
 
-export type SkillLoadResult = {
-  ok: boolean;
-  sections?: string[];
-  error?: string;
-};
+export type { SkillListItem, SkillLoadResult };
 
 export type SkillServiceLike = {
   list(): SkillListItem[];

@@ -9,8 +9,10 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@opentui/core": "0.5.8",
-    "@opentui/react": "0.5.8",
+    "@atom-neo/shared": "workspace:*",
+    "@atom-neo/tui-kit": "workspace:*",
+    "@opentui/core": "0.8.4",
+    "@opentui/react": "0.8.4",
     "react": "^19.2.8"
   },
   "devDependencies": {

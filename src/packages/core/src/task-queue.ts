@@ -14,6 +14,9 @@ export type TaskChainCancellation = {
   processing: TaskItem[];
 };
 
+const MAX_TRACKED_COMPLETED = 5000;
+const MAX_TRACKED_IDENTITIES = 5000;
+
 export class TaskQueue {
   #waitingQueue: TaskItem[] = [];
   #activeQueue: TaskItem[] = [];
@@ -22,7 +25,7 @@ export class TaskQueue {
   #taskIdentity = new Map<string, Pick<TaskItem, "chainId" | "sessionId">>();
 
   enqueue(task: TaskItem): void {
-    this.#taskIdentity.set(task.id, task);
+    this.#trackIdentity(task.id, task);
     if (task.source === TaskSource.EXTERNAL) {
       this.#waitingQueue.push(task);
     } else {
@@ -77,7 +80,7 @@ export class TaskQueue {
   }
 
   markProcessing(task: TaskItem): void {
-    this.#taskIdentity.set(task.id, task);
+    this.#trackIdentity(task.id, task);
     this.#processing.set(task.id, task);
   }
 
@@ -114,13 +117,25 @@ export class TaskQueue {
   }
 
   storeResult(taskId: string, status: TaskStatus): void {
-    this.#completed.set(taskId, status);
+    this.#setBounded(this.#completed, taskId, status, MAX_TRACKED_COMPLETED);
   }
 
   getStatus(taskId: string): TaskStatus | undefined {
     const task = this.#findInQueues(taskId);
     if (task) return { taskId: task.id, state: task.state };
     return this.#completed.get(taskId);
+  }
+
+  #trackIdentity(taskId: string, task: TaskItem): void {
+    this.#setBounded(this.#taskIdentity, taskId, task, MAX_TRACKED_IDENTITIES);
+  }
+
+  #setBounded<K, V>(map: Map<K, V>, key: K, value: V, max: number): void {
+    map.delete(key);
+    map.set(key, value);
+    if (map.size <= max) return;
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
   }
 
   #findInQueues(taskId: string): TaskItem | undefined {

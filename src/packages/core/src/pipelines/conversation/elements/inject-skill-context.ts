@@ -1,7 +1,7 @@
 import { BaseElement } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
 import type { ConversationFlowState } from "./types";
-import type { SkillServiceLike } from "../../../skills/types";
+import type { SkillServiceLike } from "@core/skills/types";
 
 export class InjectSkillContextElement extends BaseElement<ConversationFlowState, ConversationFlowState> {
   #skillService: SkillServiceLike;

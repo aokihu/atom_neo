@@ -37,7 +37,7 @@
 
 ## 判断边界
 
-Post 与 continuation 的跟踪参数实验复用本调用模块，最终保留限定选项 contentState、reasonCode、evidenceRef，续写增加 intentScope。reasonCode 只用于诊断，不能另行否决专门的内容/范围判断。Runtime 校验 status/behavior/contentState 的完成一致性；缺少证据标记 unknown，不将裁剪内容推断为缺少交付。删除字数、长度解析、相似度及续写统计计算。实验见 [progress-evidence-experiment.md](../pipelines/progress-evidence-experiment.md)。
+Post 与 continuation 的跟踪参数实验复用本调用模块，最终保留限定选项 contentState、reasonCode、evidenceRef，续写增加 intentScope。reasonCode 只用于诊断，不能另行否决专门的内容/范围判断。Runtime 校验 status/behavior/contentState 的完成一致性；缺少证据标记 unknown，不将裁剪内容推断为缺少交付。删除字数、长度解析、相似度及续写统计计算。实验见 [progress-evidence-experiment.md](../records/progress-evidence-experiment.md)。
 
 - Prediction 继续原样使用当前 User 文本和上一轮有界参考。Jev 选择固定的难度、模型档位、意图、上下文关系，以及 Topic 的 category、domain、specific 三组候选。代码按各组选项概率给注册表中的完整 Topic 排序，只输出合法的 `<category>.<domain>.<specific>` 组合；跟进请求仍由 finalize 继承当前 Topic。注册表包含 `other` 选项。
 - Post-Conversation 继续使用现有输入摘要。Jev 选择三态质量和固定行为类别；代码将类别转换为旧 finalize 能消费的 `fingerprint`，不要求 Jev 生成文本。

@@ -1,15 +1,16 @@
-/** Foreground and background Shell tools backed by Bun subprocesses. */
+/** Foreground and background Shell tools backed by node:child_process. */
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import type { Readable } from "node:stream";
 import { z } from "zod";
-import { PermissionLevel, substringWellFormed, createChildProcessEnv } from "@atom-neo/shared";
-import type { ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
+import { PermissionLevel, substringWellFormed, createChildProcessEnv, createId, sleep, spawnProcess } from "@atom-neo/shared";
+import type { ProcessHandle, ToolDefinition, ToolExecuteOptions } from "@atom-neo/shared";
 import { toolResult } from "../outcome";
 
 const OUTPUT_LIMIT = 65_536;
 const STOP_GRACE_MS = 3_000;
 
-type ShellProcess = Bun.Subprocess<"ignore", "pipe", "pipe">;
+type ShellProcess = ProcessHandle;
 
 export type BackgroundShellCompletion = {
   jobId: string;
@@ -47,8 +48,7 @@ function spawnShell(params: {
   command: string;
   abortSignal?: AbortSignal;
 }): ShellProcess {
-  return Bun.spawn({
-    cmd: ["sh", "-c", params.command],
+  return spawnProcess(["sh", "-c", params.command], {
     cwd: params.root,
     env: createChildProcessEnv(),
     stdin: "ignore",
@@ -56,21 +56,21 @@ function spawnShell(params: {
     stderr: "pipe",
     ...(params.abortSignal ? { signal: params.abortSignal } : {}),
     killSignal: "SIGKILL",
+    killTree: true,
   });
 }
 
-async function collectOutput(stream: ReadableStream<Uint8Array>): Promise<string> {
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
+async function collectOutput(stream: Readable | null): Promise<string> {
+  if (!stream) return "";
+  const chunks: Buffer[] = [];
   let retained = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  for await (const chunk of stream) {
+    if (retained >= OUTPUT_LIMIT) continue;
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     const remaining = OUTPUT_LIMIT - retained;
-    if (remaining <= 0) continue;
-    const chunk = Buffer.from(value.subarray(0, remaining));
-    chunks.push(chunk);
-    retained += chunk.length;
+    const kept = Buffer.from(buffer.subarray(0, remaining));
+    chunks.push(kept);
+    retained += kept.length;
   }
   return Buffer.concat(chunks, retained).toString();
 }
@@ -121,7 +121,6 @@ export class BackgroundShellService {
   #root: string;
   #onComplete: (result: BackgroundShellCompletion) => void | Promise<void>;
   #jobs = new Map<string, RunningShellJob>();
-  #nextId = 0;
   #stopping = false;
 
   constructor(params: {
@@ -134,7 +133,7 @@ export class BackgroundShellService {
 
   start(command: string, context: BackgroundShellContext): { jobId: string; pid: number } {
     if (this.#stopping) throw new Error("Background shell service is stopping");
-    const jobId = `shell-job-${Date.now()}-${this.#nextId++}`;
+    const jobId = createId("shell-job");
     const startedAt = Date.now();
     const process = spawnShell({ root: this.#root, command });
     const completion = this.#watch({ jobId, command, context, process, startedAt });
@@ -151,7 +150,7 @@ export class BackgroundShellService {
     const completed = Promise.allSettled(jobs.map(job => job.completion));
     const exited = await Promise.race([
       completed.then(() => true),
-      Bun.sleep(STOP_GRACE_MS).then(() => false),
+      sleep(STOP_GRACE_MS).then(() => false),
     ]);
     if (!exited) {
       for (const job of jobs) {

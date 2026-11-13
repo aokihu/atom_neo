@@ -1,4 +1,4 @@
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 
 /** Keep empty widgets quieter than their labels in both light and dark themes. */
 export function EmptyState() {

@@ -1,14 +1,16 @@
 import { BaseElement, BusEvents } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus } from "@atom-neo/shared";
-import type { ToolRecordStore } from "../../../tools/tool-record-store";
-import { buildProgressEvidence } from "../../shared/progress-evidence";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import type { PipelineSession } from "@core/session/element-session";
+import { getTaskPayload } from "@core/session/element-session";
+import { buildProgressEvidence } from "@core/pipelines/shared/progress-evidence";
 import type { EvaluatorFlowState } from "./types";
 
 export class EvaluatorInputElement extends BaseElement<any, EvaluatorFlowState> {
-  #session: any;
+  #session: PipelineSession;
   #tools?: ToolRecordStore;
 
-  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap>; session: any; toolRecordStore?: ToolRecordStore }) {
+  constructor(params: { name: string; kind: string; bus: PipelineEventBus<PipelineEventMap>; session: PipelineSession; toolRecordStore?: ToolRecordStore }) {
     super({ name: params.name, kind: "source", bus: params.bus });
     this.#session = params.session;
     this.#tools = params.toolRecordStore;
@@ -16,7 +18,7 @@ export class EvaluatorInputElement extends BaseElement<any, EvaluatorFlowState> 
 
   async doProcess(input: any): Promise<EvaluatorFlowState> {
     const budget = this.#session.executionBudget;
-    const check = input.task?.payload?.find((part: any) => part.type === "budget_check")?.data;
+    const check = getTaskPayload(input.task, "budget_check");
     const messages = this.#session.messages ?? [];
     const parts = messages.filter((message: any) => message.role === "assistant" && message.pipeline === "conversation"
       && (message.seq ?? 0) >= (budget?.windowStartSeq ?? 0));

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ToolEntry, ToolGroupMessage } from "../types";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 
 function truncate(s: unknown, n: number): string {
   let t: string;

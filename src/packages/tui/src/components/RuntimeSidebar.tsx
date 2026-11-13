@@ -1,58 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message, ToolPhase } from "../types";
+import { useTheme } from "@atom-neo/tui-kit";
 import { useChatStore } from "../stores/chat";
-import { useTheme } from "./App";
-import { EmptyState } from "./EmptyState";
-import {
-  buildNormalizedStreamActivity,
-  estimateReceivedTokens,
-  formatUptime,
-} from "./format";
 import { PanelTitle } from "./PanelTitle";
+import { RuntimeDecisionSection } from "./runtime/RuntimeDecisionSection";
+import { RuntimePipelineSection } from "./runtime/RuntimePipelineSection";
+import { RuntimeSessionSection } from "./runtime/RuntimeSessionSection";
+import { RuntimeStatsSection } from "./runtime/RuntimeStatsSection";
+import { RuntimeStreamSection } from "./runtime/RuntimeStreamSection";
+import { derivePipelineSteps, phaseCount } from "./runtime/runtime-steps";
 
-type PipelineState = "IDLE" | "WAIT" | "RUN" | "OK" | "ERR";
-
-export type PipelineStep = {
-  label: string;
-  state: PipelineState;
-};
-
-function currentTurn(messages: Message[]): Message[] {
-  const lastUser = messages.findLastIndex(message => message.role === "user");
-  return lastUser < 0 ? messages : messages.slice(lastUser);
-}
-
-export function derivePipelineSteps(messages: Message[], busy: boolean, preparing: boolean): PipelineStep[] {
-  const turn = currentTurn(messages);
-  const tools = turn.flatMap(message => message.role === "tool-group" ? message.entries : []);
-  const hasToolError = tools.some(tool => tool.phase === "error");
-  const toolsRunning = tools.some(tool => tool.phase === "preparing" || tool.phase === "executing");
-  const hasTools = tools.length > 0;
-  const responseRunning = turn.some(message => message.role === "assistant" && message.streaming);
-  const hasResponse = turn.some(message => message.role === "assistant" && message.content.length > 0);
-  const hasInput = turn.some(message => message.role === "user");
-
-  return [
-    { label: "RECEIVE", state: hasInput ? "OK" : "IDLE" },
-    { label: "THINK", state: preparing ? "RUN" : busy ? "OK" : hasResponse || hasTools ? "OK" : "IDLE" },
-    {
-      label: "TOOLS",
-      state: hasToolError ? "ERR" : toolsRunning ? "RUN" : hasTools ? "OK" : busy ? "WAIT" : "IDLE",
-    },
-    {
-      label: "RESPOND",
-      state: responseRunning ? "RUN" : hasResponse ? "OK" : busy ? "WAIT" : "IDLE",
-    },
-  ];
-}
-
-function phaseCount(messages: Message[], phase: ToolPhase): number {
-  return messages.reduce((count, message) => (
-    message.role === "tool-group"
-      ? count + message.entries.filter(entry => entry.phase === phase).length
-      : count
-  ), 0);
-}
+export type { PipelineState, PipelineStep } from "./runtime/runtime-steps";
+export { derivePipelineSteps } from "./runtime/runtime-steps";
 
 export function RuntimeSidebar() {
   const { colors } = useTheme();
@@ -73,16 +31,6 @@ export function RuntimeSidebar() {
   }, []);
 
   const steps = derivePipelineSteps(messages, busy, preparing);
-  const completed = phaseCount(messages, "done");
-  const failed = phaseCount(messages, "error");
-  const receivedTokens = estimateReceivedTokens(streamReceivedChars);
-
-  const stateColor = (state: PipelineState) => (
-    state === "RUN" ? colors.status.warning
-      : state === "OK" ? colors.status.success
-        : state === "ERR" ? colors.status.error
-          : colors.text.muted
-  );
 
   return (
     <box
@@ -96,113 +44,11 @@ export function RuntimeSidebar() {
       backgroundColor={colors.bg.page}
     >
       <PanelTitle title="RUNTIME" />
-
-      <box
-        flexDirection="column"
-        marginBottom={1}
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>SESSION</text>
-          <text fg={busy ? colors.status.warning : colors.text.muted}>{busy ? "ACTIVE" : "IDLE"}</text>
-        </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>UPTIME</text>
-          <text fg={colors.text.muted}>{formatUptime(uptime)}</text>
-        </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>QUEUE</text>
-          {busy ? <text fg={colors.text.muted}>1 ACTIVE</text> : <EmptyState />}
-        </box>
-      </box>
-
-      <box
-        flexDirection="column"
-        marginBottom={1}
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <text fg={colors.text.muted}>PIPELINE</text>
-        {steps.map((step, index) => (
-          <box key={step.label} flexDirection="row">
-            <text width={3} fg={step.state === "RUN" ? colors.accent.brand : colors.text.muted}>
-              {step.state === "RUN" ? "›" : String(index + 1).padStart(2, "0")}
-            </text>
-            <text flexGrow={1} fg={step.state === "RUN" ? colors.text.secondary : colors.text.muted}>
-              {step.label}
-            </text>
-            <text fg={step.state === "OK" ? colors.text.muted : stateColor(step.state)}>{step.state}</text>
-          </box>
-        ))}
-      </box>
-
-      <box
-        flexDirection="column"
-        marginBottom={1}
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <text fg={colors.text.muted}>DECISION</text>
-        {([
-          { label: "PREDICT", update: predictionDecision },
-          { label: "POST CHECK", update: postDecision },
-        ] as const).map(({ label, update }) => (
-          <box key={label} flexDirection="column">
-            <box flexDirection="row" justifyContent="space-between">
-              <text fg={colors.text.muted}>{label}</text>
-              <text fg={update ? stateColor(update.state.toUpperCase() as PipelineState) : colors.text.muted}>
-                {update ? `${update.source.toUpperCase()} ${update.state.toUpperCase()}` : "—"}
-              </text>
-            </box>
-            {update?.state === "ok" && update.purpose === "prediction" && <>
-              <text fg={colors.text.secondary}>{`INTENT ${update.intent ?? "—"}`}</text>
-              <text fg={colors.text.secondary}>{`MODEL  ${update.modelProfile ?? "—"}`}</text>
-              <text fg={colors.text.secondary}>{`TOPIC  ${(update.topic ?? "—").slice(0, 16)}`}</text>
-            </>}
-            {update?.state === "ok" && update.purpose === "post-conversation" && (
-              <text fg={colors.text.secondary}>{`STATUS ${update.analysisStatus ?? "—"}`}</text>
-            )}
-          </box>
-        ))}
-      </box>
-
-      <box
-        flexDirection="column"
-        marginBottom={1}
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <text fg={colors.text.muted}>STREAM</text>
-        <text fg={streamChunkCount > 0 ? colors.text.secondary : colors.text.muted}>
-          {buildNormalizedStreamActivity(streamTokenBatches)}
-        </text>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>{`≈${receivedTokens.toLocaleString()} TOK`}</text>
-          <text fg={colors.text.muted}>{`${streamChunkCount} CH`}</text>
-        </box>
-      </box>
-
-      <box
-        flexDirection="column"
-        marginBottom={1}
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <text fg={colors.text.muted}>STATS</text>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>MESSAGES</text>
-          <text fg={colors.text.muted}>{messages.length}</text>
-        </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>TOOLS OK</text>
-          <text fg={colors.text.muted}>{completed}</text>
-        </box>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={colors.text.muted}>TOOLS ERR</text>
-          <text fg={failed > 0 ? colors.status.error : colors.text.muted}>{failed}</text>
-        </box>
-      </box>
+      <RuntimeSessionSection busy={busy} uptime={uptime} />
+      <RuntimePipelineSection steps={steps} />
+      <RuntimeDecisionSection prediction={predictionDecision} post={postDecision} />
+      <RuntimeStreamSection receivedChars={streamReceivedChars} chunkCount={streamChunkCount} tokenBatches={streamTokenBatches} />
+      <RuntimeStatsSection messages={messages.length} completed={phaseCount(messages, "done")} failed={phaseCount(messages, "error")} />
     </box>
   );
 }

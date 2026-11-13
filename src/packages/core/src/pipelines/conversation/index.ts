@@ -1,5 +1,5 @@
-import { pipeline } from "../../pipeline/builder";
-import { registerElement } from "../../pipeline/registry";
+import { pipeline } from "@core/pipeline/builder";
+import type { ElementRegistry } from "@core/pipeline/registry";
 import {
   CollectPromptsElement,
   LoadSystemPromptElement,
@@ -15,35 +15,41 @@ import {
   ApplySourceContextElement,
 } from "./elements";
 
-import { DEFAULT_MAX_TOKENS } from "../../constants";
-import type { InternalTaskOrchestrator } from "../../task/internal-task-orchestrator";
-import type { SkillServiceLike } from "../../skills/types";
-import type { ContextService } from "../../context/context-service";
-import type { ToolRecordStore } from "../../tools/tool-record-store";
+import { DEFAULT_MAX_TOKENS } from "@core/constants";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import type { SkillServiceLike } from "@core/skills/types";
+import type { ContextService } from "@core/context/context-service";
+import type { ToolRecordStore } from "@core/tools/tool-record-store";
+import type { PromptResolver } from "@atom-neo/shared";
+import type { ElementMemory, ElementTask, PipelineSession } from "@core/session/element-session";
 
-export function registerConversationElements(): void {
-  registerElement("collect-prompts", CollectPromptsElement);
-  registerElement("load-system-prompt", LoadSystemPromptElement);
-  registerElement("fetch-agents-prompt", FetchAgentsPromptElement);
-  registerElement("collect-context", CollectContextElement);
-  registerElement("record-context", RecordContextElement);
-  registerElement("format-system-messages", FormatSystemMessagesElement);
-  registerElement("format-user-messages", FormatUserMessagesElement);
-  registerElement("stream-llm", StreamLLMElement);
-  registerElement("check-follow-up", CheckFollowUpElement);
-  registerElement("finalize", FinalizeElement);
-  registerElement("inject-skill-context", InjectSkillContextElement);
-  registerElement("apply-source-context", ApplySourceContextElement);
+export function registerConversationElements(registry: ElementRegistry): void {
+  registry.register("collect-prompts", CollectPromptsElement);
+  registry.register("load-system-prompt", LoadSystemPromptElement);
+  registry.register("fetch-agents-prompt", FetchAgentsPromptElement);
+  registry.register("collect-context", CollectContextElement);
+  registry.register("record-context", RecordContextElement);
+  registry.register("format-system-messages", FormatSystemMessagesElement);
+  registry.register("format-user-messages", FormatUserMessagesElement);
+  registry.register("stream-llm", StreamLLMElement);
+  registry.register("check-follow-up", CheckFollowUpElement);
+  registry.register("finalize", FinalizeElement);
+  registry.register("inject-skill-context", InjectSkillContextElement);
+  registry.register("apply-source-context", ApplySourceContextElement);
 }
 
 export type ConversationPipelineDeps = {
+  elementRegistry: ElementRegistry;
+  promptResolver: PromptResolver;
   decisionMode?: "jev" | "rules";
-  decisionModel?: import("../../decision/choose").DecisionModel;
-  fallbackModel?: import("../../decision/choose").DecisionModel;
-  session: any;
-  task: any;
+  decisionModel?: import("@core/decision/choose").DecisionModel;
+  fallbackModel?: import("@core/decision/choose").DecisionModel;
+  session: PipelineSession;
+  task: ElementTask;
   apiKey?: string;
   model?: string;
+  provider?: string;
+  protocol?: import("@atom-neo/shared").ProviderProtocol;
   baseUrl?: string;
   beforeCall?: (signal?: AbortSignal) => Promise<void>;
   thinking?: string;
@@ -55,7 +61,7 @@ export type ConversationPipelineDeps = {
   getCompiledPrompt?: () => string;
   maxTokens?: number;
   maxSteps?: number;
-  memory?: any;
+  memory?: ElementMemory;
   intent?: string;
   contextRelevance?: string;
   sandbox?: string;
@@ -66,10 +72,11 @@ export type ConversationPipelineDeps = {
 };
 
 export function conversationPipeline(deps: ConversationPipelineDeps) {
-  return pipeline("conversation")
+  return pipeline("conversation", deps.elementRegistry)
     .source("collect-prompts", { session: deps.session, task: deps.task, contextRelevance: deps.contextRelevance })
     .transform("record-context", {
       contextService: deps.contextService,
+      promptResolver: deps.promptResolver,
       sandbox: deps.sandbox,
       session: deps.session,
       providerModel: deps.providerModel,
@@ -81,6 +88,8 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     })
     .transform("apply-source-context", {
       contextService: deps.contextService,
+      promptResolver: deps.promptResolver,
+      providerModel: deps.providerModel,
     })
     .transform("collect-context", {
       contextService: deps.contextService,
@@ -90,6 +99,8 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
     .transform("stream-llm", {
       apiKey: deps.apiKey ?? "",
       model: deps.model ?? "deepseek-v4-flash",
+      provider: deps.provider,
+      protocol: deps.protocol,
       baseUrl: deps.baseUrl,
       beforeCall: deps.beforeCall,
       tools: deps.tools ?? [],
@@ -107,6 +118,6 @@ export function conversationPipeline(deps: ConversationPipelineDeps) {
       memory: deps.memory,
     })
     .boundary("token-ratio", { session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens })
-    .boundary("check-follow-up", { memory: deps.memory, session: deps.session, decisionMode: deps.decisionMode, decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel })
+    .boundary("check-follow-up", { memory: deps.memory, session: deps.session, promptResolver: deps.promptResolver, decisionMode: deps.decisionMode, decisionModel: deps.decisionModel, fallbackModel: deps.fallbackModel })
     .sink("finalize", { orchestrator: deps.orchestrator, session: deps.session, configContextLimit: deps.configContextLimit, maxTokens: deps.maxTokens });
 }

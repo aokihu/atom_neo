@@ -1,177 +1,36 @@
-import type { TaskItem, TaskState } from "./types/task";
-import type { TransportEventIdentity } from "./types/pipeline";
+/**
+ * Protocol barrel.
+ *
+ * The wire-event unions, payload types, and runtime guards live in
+ * `./protocol/*`. This module preserves the original import surface, so
+ * consumers keep importing every protocol type and guard from `./protocol`.
+ */
 
-// Client → Core
-export type ClientEvent =
-  | {
-      type: "event.task.submit";
-      payload: TaskSubmitPayload;
-    }
-  | {
-      type: "event.task.cancel";
-      payload: { taskId: string };
-    };
-
-export type TaskSubmitPayload = {
-  sessionId: string;
-  chatId: string;
-  pipeline: string;
-  source: "external";
-  data: { text: string };
-};
-
-// Core → Client (broadcast)
-export type ServerEvent =
-  | {
-      type: "event.pipeline.element.started";
-      payload: ElementStartedPayload;
-    }
-  | {
-      type: "event.pipeline.element.finished";
-      payload: ElementFinishedPayload;
-    }
-  | {
-      type: "event.decision.updated";
-      payload: DecisionUpdatePayload;
-    }
-  | {
-      type: "event.transport.reason";
-      payload: TransportReasonPayload;
-    }
-  | {
-      type: "event.transport.delta";
-      payload: TransportDeltaPayload;
-    }
-  | {
-      type: "event.transport.tool.started";
-      payload: ToolStartedPayload;
-    }
-  | {
-      type: "event.transport.tool.finished";
-      payload: ToolFinishedPayload;
-    }
-  | {
-      type: "event.transport.tool.step-finished";
-      payload: ToolStepFinishedPayload;
-    }
-  | {
-      type: "event.transport.tool.group-complete";
-      payload: ToolGroupCompletePayload;
-    }
-  | {
-      type: "event.task.completed";
-      payload: TaskCompletedPayload;
-    }
-  | {
-      type: "event.task.failed";
-      payload: TaskFailedPayload;
-    }
-  | {
-      type: "event.task.state-changed";
-      payload: TaskStatePayload;
-    }
-  | {
-      type: "event.pipeline.replay-start";
-      payload: ReplayStartPayload;
-    }
-  | {
-      type: "event.pipeline.replay-end";
-      payload: ReplayEndPayload;
-    };
-
-export type ElementStartedPayload = {
-  pipelineName: string;
-  elementName: string;
-  elementKind: string;
-};
-
-export type ElementFinishedPayload = {
-  pipelineName: string;
-  elementName: string;
-  elementKind: string;
-  durationMs: number;
-};
-
-export type DecisionUpdatePayload = {
-  sessionId: string;
-  taskId: string;
-  rootTaskId: string;
-  purpose: "prediction" | "post-conversation";
-  source: "jev" | "llm";
-  state: "run" | "ok" | "err";
-  intent?: string;
-  modelProfile?: string;
-  topic?: string;
-  analysisStatus?: string;
-};
-
-export type TransportReasonPayload = TransportEventIdentity & {
-  textDelta: string;
-  offset: number;
-};
-
-export type TransportDeltaPayload = TransportEventIdentity & {
-  textDelta: string;
-  offset: number;
-};
-
-export type ToolStartedPayload = TransportEventIdentity & {
-  toolName: string;
-  toolCallId: string;
-  input: unknown;
-};
-
-export type ToolFinishedPayload = TransportEventIdentity & {
-  toolName: string;
-  toolCallId: string;
-  result?: unknown;
-  error?: unknown;
-};
-
-export type ToolStepFinishedPayload = TransportEventIdentity & {
-  stepNumber: number;
-  total: number;
-  success: number;
-  failed: number;
-  toolNames: string[];
-};
-
-export type ToolGroupCompletePayload = TransportEventIdentity & {
-  total: number;
-  success: number;
-  failed: number;
-  toolNames: string[];
-};
-
-export type TaskCompletedPayload = {
-  taskId: string;
-  rootTaskId: string;
-  parentTaskId: string | null;
-  terminal: boolean;
-  output: string;
-  reasoningContent: string;
-  tokenUsage: { total: number };
-  contextTokens: number;
-};
-
-export type TaskFailedPayload = {
-  taskId: string;
-  rootTaskId: string;
-  code?: string;
-  error: string;
-};
-
-export type TaskStatePayload = {
-  taskId: string;
-  currentState: TaskState;
-};
-
-export type ReplayStartPayload = {
-  taskId: string;
-  eventCount: number;
-};
-
-export type ReplayEndPayload = {
-  taskId: string;
-  durationMs: number;
-};
+export { CLIENT_EVENT_TYPES, SERVER_EVENT_TYPES, isClientEventType, isServerEventType } from "./protocol/guards";
+export type { ClientEvent, ClientEventType } from "./protocol/client-events";
+export type { ServerEvent, ServerEventType, ServerEventPayload } from "./protocol/server-events";
+export type {
+  TaskSubmitPayload,
+  TaskCancelPayload,
+  CompactPayload,
+  SessionReadyPayload,
+  TaskCreatedPayload,
+  SessionTaskActivePayload,
+  MCPConnectedPayload,
+  MCPToolStatusPayload,
+  ControlErrorPayload,
+  ElementStartedPayload,
+  ElementFinishedPayload,
+  DecisionUpdatePayload,
+  TransportReasonPayload,
+  TransportDeltaPayload,
+  ToolStartedPayload,
+  ToolFinishedPayload,
+  ToolStepFinishedPayload,
+  ToolGroupCompletePayload,
+  TaskCompletedPayload,
+  TaskFailedPayload,
+  TaskStatePayload,
+  ReplayStartPayload,
+  ReplayEndPayload,
+} from "./protocol/payloads";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { modelOptions, serverInfoFromConfig, buildRuntimePatch } from "./SettingsModal";
+import { modelOptions, serverInfoFromConfig, buildRuntimePatch, headers } from "./SettingsModal";
 import type { ServerInfo } from "../types";
 
 const baseInfo: ServerInfo = {
@@ -42,6 +42,17 @@ describe("modelOptions", () => {
   test("falls back to the balanced profile when no providers are configured", () => {
     expect(modelOptions({ providers: {}, providerProfiles: { balanced: "deepseek/deepseek-v4-flash" } }))
       .toEqual(["deepseek/deepseek-v4-flash"]);
+  });
+
+  test("falls back to the shared default when the balanced profile is missing", () => {
+    expect(modelOptions({ providers: {} })).toEqual(["deepseek/deepseek-v4-flash"]);
+  });
+});
+
+describe("headers", () => {
+  test("only adds the admin token header when a token exists", () => {
+    expect(headers()).toEqual({});
+    expect(headers("secret")).toEqual({ "x-atom-admin-token": "secret" });
   });
 });
 

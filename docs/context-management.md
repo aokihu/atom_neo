@@ -2,8 +2,10 @@
 
 > **Purpose**: 定义 Agent Context 的分层所有权、Snapshot 注入、事务消费、自动卸载和可观测性。
 
-> 已采用静态普通文本与动态 TOON。实施与实测边界见 [缓存优化方案](./context-snapshot-cache-plan.md)。
+> 已采用静态普通文本与动态 TOON。实施与实测边界见 [缓存优化方案](./records/context-snapshot-cache-plan.md)。
 > 文档以 Markdown 为准，不再维护 HTML/Web 版本。
+
+**文档边界**：本文负责 Context 的分层所有权、Snapshot、生命周期与预算；Tool Result 的数据契约与防污染治理见 [context-outcome-governance.md](./context-outcome-governance.md)。历史缓存实验见 [records/context-snapshot-cache-plan.md](./records/context-snapshot-cache-plan.md)。
 
 ## 1. 核心原则
 
@@ -250,3 +252,16 @@ ContextService 通过 Snapshot ID 保存 SnapshotState 与紧凑 Manifest；Pipe
 | 大型 Tool Artifact 引用 | ToolRecord 对详情设有上限，超大结果仍待外置 | 需要开发 |
 
 ContextBucket 负责管理，SnapshotState 负责追踪，ContextSnapshot 只负责给模型看。
+
+## 13. 模块布局（v1.24.1）
+
+| 文件 | 职责 |
+|---|---|
+| `context-service.ts` | facade：生命周期、Bus 订阅、Session 导出/恢复、公共方法委托 |
+| `bucket-store.ts` | Bucket/Entry CRUD、revision、过期、lease 与 dispose |
+| `snapshot-manager.ts` | Snapshot 创建/commit/release、refs/manifest/receipts、TTL 清扫 |
+| `context-codec.ts` | bucket/context id 编码、owner 过滤、冻结与 Entry 比较 |
+| `context-types.ts` | Mutable/Persisted 类型、scope retention 与默认 `expireOn` |
+| `compiler.ts` | 混合 Snapshot 编译与 token 估算 |
+
+拆分保持 `ContextService` 公共签名、事件订阅顺序、snapshot `refs/receipts/manifest/prefixHash/inputBudget` 与 `exportSessionState` JSON 不变。

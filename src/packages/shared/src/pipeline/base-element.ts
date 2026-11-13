@@ -1,6 +1,6 @@
 import type { PipelineElementKind } from "./types";
 import type { PipelineEventBus } from "./event-bus";
-import type { PipelineEventMap } from "../types/pipeline";
+import type { FullEventMap, PipelineEventMap } from "../types/pipeline";
 import { BusEvents } from "../constants/events";
 
 export abstract class BaseElement<I = any, O = any> {
@@ -40,6 +40,11 @@ export abstract class BaseElement<I = any, O = any> {
       name: this.name,
       payload,
     } as any);
+  }
+
+  /** Emit a flat domain event (pipeline.*, task.*, context.*, session.*). */
+  protected emitDomain<E extends keyof FullEventMap & string>(eventName: E, payload: FullEventMap[E]): void {
+    (this.bus as unknown as PipelineEventBus<FullEventMap>).emit(eventName, payload);
   }
 
   #reportState(state: string): void {

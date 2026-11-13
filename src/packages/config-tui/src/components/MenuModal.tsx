@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../modal";
-import { useTheme } from "../theme";
+import { SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import type { WizardState } from "../wizard-logic";
 import { describeDecisions } from "./DecisionsModal";
 
@@ -115,15 +115,9 @@ export function MenuModal({ state, onSelect, onClose }: {
           borderStyle="single"
           borderColor={colors.border.default}
         >
-          {items.map((item, i) => {
-            const isSelected = i === selected;
-            return (
-              <box key={item.value} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>
-                <text fg={isSelected ? colors.text.bright : colors.text.secondary} width={2}>{isSelected ? "▸" : " "}</text>
-                <text fg={isSelected ? colors.accent.brand : colors.text.primary}>{item.label}</text>
-              </box>
-            );
-          })}
+          {items.map((item, i) => (
+            <SelectableRow key={item.value} selected={i === selected} label={item.label} />
+          ))}
         </box>
         <box flexDirection="column" flexGrow={1} flexBasis={0} paddingLeft={1}>
           <text fg={colors.text.secondary}>{items[selected].label}</text>

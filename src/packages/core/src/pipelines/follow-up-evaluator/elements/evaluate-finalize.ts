@@ -1,11 +1,11 @@
 import { BaseElement, BusEvents, PipelineResultType } from "@atom-neo/shared";
 import type { PipelineEventMap, PipelineEventBus, PipelineResult } from "@atom-neo/shared";
-import type { InternalTaskOrchestrator } from "../../../task/internal-task-orchestrator";
-import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "../../../constants";
-import { calcTokenRatio, applyCompressRatio } from "../../shared";
-import { budgetPauseMessage } from "../../../session/execution-budget";
-import type { ExecutionBudget } from "../../../session/types";
-import type { ContextService } from "../../../context/context-service";
+import type { InternalTaskOrchestrator } from "@core/task/internal-task-orchestrator";
+import { DEFAULT_CONTEXT_LIMIT, DEFAULT_MAX_TOKENS } from "@core/constants";
+import { calcTokenRatio, applyCompressRatio } from "@core/pipelines/shared";
+import { budgetPauseMessage } from "@core/session/execution-budget";
+import type { ExecutionBudget } from "@core/session/types";
+import type { ContextService } from "@core/context/context-service";
 import type { EvaluatorFlowState } from "./types";
 import { FALLBACK_EVALUATOR } from "./types";
 

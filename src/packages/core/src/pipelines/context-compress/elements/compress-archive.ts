@@ -1,6 +1,6 @@
 import { BaseElement, BusEvents } from "@atom-neo/shared";
 import type { PipelineEventBus, PipelineEventMap } from "@atom-neo/shared";
-import type { SessionPersistenceService } from "../../../session/persistence-service";
+import type { SessionPersistenceService } from "@core/session/persistence-service";
 import type { CompressFlowState } from "./types";
 
 export class CompressArchiveElement extends BaseElement<CompressFlowState, CompressFlowState> {

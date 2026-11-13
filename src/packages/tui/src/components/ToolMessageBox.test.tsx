@@ -5,7 +5,7 @@ import { createRoot } from "@opentui/react";
 import { RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { ToolMessageBox } from "./ToolMessageBox";
-import { getTheme } from "../theme";
+import { getTheme } from "@atom-neo/tui-kit";
 import type { ToolGroupMessage } from "../types";
 
 const toolGroup = (): ToolGroupMessage => ({

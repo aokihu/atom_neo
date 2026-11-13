@@ -5,6 +5,7 @@ import { buildNormalizedStreamActivity, estimateReceivedTokens } from "./format"
 import { buildGauge, SIDEBAR_CONTENT_WIDTH } from "./Sidebar";
 import { placeCompletedToolGroups } from "./ChatView";
 import { summarizeToolGroups } from "./ToolMessageBox";
+import { MODAL_CONFIG } from "./app/app-modal-config";
 import type { Message } from "../types";
 
 const user = (content = "hello"): Message => ({
@@ -49,6 +50,52 @@ describe("resolveTuiLayout", () => {
 
   test("adds runtime at 150 columns", () => {
     expect(resolveTuiLayout(150)).toBe("wide");
+  });
+});
+
+describe("app modal config", () => {
+  const actionKeys = (kind: keyof typeof MODAL_CONFIG) =>
+    MODAL_CONFIG[kind].actions.map(action => action.key);
+
+  test("covers every active modal kind", () => {
+    expect(Object.keys(MODAL_CONFIG).sort()).toEqual([
+      "confirm-clear", "confirm-quit", "error", "settings", "tool-details",
+    ]);
+  });
+
+  test("keeps confirmation dimensions and the safe default action", () => {
+    expect(MODAL_CONFIG["confirm-clear"].title()).toBe("Clear conversation?");
+    expect(MODAL_CONFIG["confirm-quit"].title()).toBe("Exit Atom Neo?");
+    for (const kind of ["confirm-clear", "confirm-quit"] as const) {
+      expect(MODAL_CONFIG[kind]).toMatchObject({ width: 56, defaultActionKey: "cancel" });
+      expect(MODAL_CONFIG[kind].actions).toEqual([
+        { key: "cancel", label: "Cancel", role: "cancel" },
+        { key: "ok", label: "OK", role: "confirm", variant: "primary" },
+      ]);
+    }
+  });
+
+  test("keeps error and tool-detail action sets", () => {
+    expect(MODAL_CONFIG.error).toMatchObject({ width: 56, defaultActionKey: "ok" });
+    expect(MODAL_CONFIG.error.actions).toEqual([
+      { key: "ok", label: "OK", role: "confirm", variant: "primary" },
+    ]);
+    expect(MODAL_CONFIG["tool-details"]).toMatchObject({
+      width: 84, height: 20, defaultActionKey: "close",
+    });
+    expect(MODAL_CONFIG["tool-details"].actions).toEqual([
+      { key: "close", label: "Close", role: "confirm", variant: "primary" },
+    ]);
+    expect(MODAL_CONFIG.settings).toMatchObject({
+      width: 66, height: 16, defaultActionKey: "save",
+    });
+    expect(actionKeys("settings")).toEqual(["cancel", "reset", "save"]);
+  });
+
+  test("derives the dynamic modal titles", () => {
+    expect(MODAL_CONFIG["tool-details"].title({ kind: "tool-details", groups: [toolGroup("one") as Extract<Message, { role: "tool-group" }>] }))
+      .toBe("TOOLS 1/2");
+    expect(MODAL_CONFIG.error.title({ kind: "error", title: "BOOM", message: "details" })).toBe("BOOM");
   });
 });
 

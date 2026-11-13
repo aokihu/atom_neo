@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@atom-neo/shared";
 import { PermissionLevel } from "@atom-neo/shared";
-import type { HookManager } from "../../hooks/hook-manager";
+import type { HookManager } from "@core/hooks/hook-manager";
 import { toolResult } from "../outcome";
 
 const createInput = z.object({

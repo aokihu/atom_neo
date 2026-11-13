@@ -2,11 +2,11 @@ import { resolve } from "node:path";
 import { createRequire } from "node:module";
 const { encode } = createRequire(resolve(import.meta.dir, "../src/packages/core/package.json"))("@toon-format/toon");
 import { generateText } from "ai";
-import { createDeepSeek } from "@ai-sdk/deepseek";
+import { createLanguageModel } from "../src/packages/core/src/pipelines/shared/model-provider";
 import type { ContextFragment } from "@atom-neo/shared";
 import { loadConfig } from "../src/bootstrap/config";
 import { loadEnv } from "../src/bootstrap/env";
-import { RuntimeService } from "../src/services/runtime-service";
+import { RuntimeService } from "../src/services/runtime/runtime-service";
 import { compileContextSnapshot } from "../src/packages/core/src/context/compiler";
 
 if (!Bun.argv.includes("--live")) {
@@ -17,10 +17,10 @@ if (!Bun.argv.includes("--live")) {
 const sandbox = resolve("sandbox");
 loadEnv(sandbox);
 const runtime = new RuntimeService({ mode: "core", sandbox, port: 0, host: "127.0.0.1",
-  apiKey: "", config: loadConfig(sandbox) });
+  config: loadConfig(sandbox) });
 const config = runtime.getResolvedModel("balanced");
 if (!config.apiKey) throw new Error("No API key configured for balanced profile");
-const model = createDeepSeek({ apiKey: config.apiKey, baseURL: config.baseUrl })(config.model);
+const model = createLanguageModel(config);
 const stable: ContextFragment = {
   key: "system", source: "prompt-registry", scope: "system", channel: "instructions",
   trust: "trusted", format: "text", retention: "pinned", priority: 1000, revision: 1,

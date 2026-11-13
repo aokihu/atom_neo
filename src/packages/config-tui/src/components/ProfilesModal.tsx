@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
-import { useTheme } from "../theme";
+import { SelectableRow } from "@atom-neo/tui-kit";
 
 const LEVELS = ["advanced", "balanced", "basic"] as const;
 
@@ -22,7 +22,6 @@ export function ProfilesModal({ profiles, modelIds, onSubmit, onBack }: {
   onSubmit: (profiles: { advanced: string; balanced: string; basic: string }) => void;
   onBack: () => void;
 }) {
-  const { colors } = useTheme();
   const [draft, setDraft] = useState({ ...profiles });
   const [levelIndex, setLevelIndex] = useState(0);
 
@@ -55,16 +54,15 @@ export function ProfilesModal({ profiles, modelIds, onSubmit, onBack }: {
       hint="↑/↓ level · Enter cycle model · Tab actions"
     >
       <box flexDirection="column">
-        {LEVELS.map((level, i) => {
-          const isSelected = i === levelIndex;
-          return (
-            <box key={level} flexDirection="row" backgroundColor={isSelected ? colors.decoration.subtle : undefined}>
-              <text fg={isSelected ? colors.text.bright : colors.text.secondary} width={2}>{isSelected ? "▸" : " "}</text>
-              <text fg={isSelected ? colors.accent.brand : colors.text.primary} width={28}>{LEVEL_LABELS[level]}</text>
-              <text fg={isSelected ? colors.text.bright : colors.text.primary}>{draft[level]}</text>
-            </box>
-          );
-        })}
+        {LEVELS.map((level, i) => (
+          <SelectableRow
+            key={level}
+            selected={i === levelIndex}
+            label={LEVEL_LABELS[level]}
+            labelWidth={28}
+            detail={draft[level]}
+          />
+        ))}
       </box>
     </Modal>
   );

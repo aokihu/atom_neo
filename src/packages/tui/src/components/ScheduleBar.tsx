@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Hook } from "@atom-neo/shared";
-import { useTheme } from "./App";
+import { useTheme } from "@atom-neo/tui-kit";
 import { TelemetrySection } from "./Sidebar";
 import { EmptyState } from "./EmptyState";
 

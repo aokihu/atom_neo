@@ -234,7 +234,7 @@ SkillService.start()
   ├── 缓存到内存
   └── 返回（同步阻塞，毫秒级）
   ↓
-Core.sm.get("skill") → SkillServiceLike
+Core services.skill → SkillServiceLike
   ↓
 Agent 调用 tool → SkillService.load() / loadSection() ... → 更新运行时状态
   ↓
@@ -417,12 +417,18 @@ if (input.contextData) parts.push(input.contextData);
 
 ```typescript
 // main.ts
-import { SkillService } from "./services/skill-service";
+import { SkillService } from "./services/skill/skill-service";
 
 const sm = new ServiceManager({ logger });
-sm.register("memory", new MemoryService({ ... }));
-sm.register("agents-compiler", new AgentsCompilerService({ runtime }));
-sm.register("skill", new SkillService({ sandbox: runtime.sandbox }));  // NEW
+const compiler = new AgentsCompilerService({ runtime });
+const memory = new MemoryService({ ... });
+const skill = new SkillService({ sandbox: runtime.sandbox });  // NEW
+const network = new NetworkService();
+sm.register("agents-compiler", compiler);
+sm.register("memory", memory);
+sm.register("skill", skill);
+sm.register("network", network);
+const services: CoreServices = { memory, network, skill, compiler };
 
 await sm.startAll();  // 遍历所有 service → 逐一调用 start()
 ```
@@ -430,10 +436,8 @@ await sm.startAll();  // 遍历所有 service → 逐一调用 start()
 ### 在 `startCore()` 中注入
 
 ```typescript
-// core/src/server.ts
-import type { SkillServiceLike } from "./skills/types";
-
-const skillService = sm.get<SkillServiceLike>("skill");
+// core/src/bootstrap.ts
+const { skill: skillService } = resolveCoreServices({ services: options.services });
 const skillTools = createSkillTools(skillService);
 
 // 注入 pipeline deps
@@ -456,7 +460,7 @@ export type ConversationPipelineDeps = {
 
 ### 容错：service 未注册
 
-`sm.get("skill")` 返回 `undefined` 时，5 个 tool 不注册，`buildContext()` 返回空字符串。整个 Core 不受影响。
+`services.skill` 为 `undefined` 时，5 个 tool 不注册，`buildContext()` 返回空字符串。整个 Core 不受影响。
 
 ### 懒扫描
 
@@ -526,13 +530,13 @@ export type ConversationPipelineDeps = {
 | 文件 | 包 | 说明 |
 |------|-----|------|
 | `shared/src/types/skill.ts` | `@atom-neo/shared` | SkillDef, SkillListItem, SkillSectionMeta, SkillLoadResult, SkillServiceLike 类型 |
-| `services/skill-service.ts` | app-level | SkillService — extends BaseService, 生命周期管理，持 parser |
-| `services/skill-parser.ts` | app-level | MechanicalParser + SkillParser 接口（为 LLM 解析预留） |
+| `services/skill/skill-service.ts` | app-level | SkillService — extends BaseService, 生命周期管理，持 parser |
+| `services/skill/skill-parser.ts` | app-level | MechanicalParser + SkillParser 接口（为 LLM 解析预留） |
 | `core/src/skills/types.ts` | `@atom-neo/core` | SkillServiceLike 接口定义 |
 | `core/src/tools/builtin/skill.ts` | `@atom-neo/core` | 5 个 tool 定义函数 (createSkillTools) |
 | `core/src/pipelines/conversation/elements/inject-skill-context.ts` | `@atom-neo/core` | 新 Pipeline Element |
 | `src/main.ts` (修改) | app-level | sm.register("skill", new SkillService({ sandbox })) |
-| `core/src/server.ts` (修改) | `@atom-neo/core` | 通过 sm.get("skill") 获取 service，注册 tools，传入 pipeline |
+| `core/src/bootstrap.ts` (修改) | `@atom-neo/core` | 从 `services.skill` 获取 service，注册 tools，传入 pipeline |
 | `core/src/pipelines/conversation/elements/types.ts` (修改) | `@atom-neo/core` | FlowState 追加 skillContext 字段 |
 | `core/src/pipelines/conversation/elements/format-system-messages.ts` (修改) | `@atom-neo/core` | 拼接 skillContext |
 | `core/src/pipelines/conversation/index.ts` (修改) | `@atom-neo/core` | 注册 inject-skill-context element，追加 skillService deps |

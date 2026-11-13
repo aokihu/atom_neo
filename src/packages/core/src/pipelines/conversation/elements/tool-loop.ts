@@ -102,7 +102,7 @@ export function stripToolCallMarkup(text: string): string {
   return (index < 0 ? text : text.slice(0, index)).trim();
 }
 
-function stringifyToolOutput(output: unknown): string {
+export function stringifyToolOutput(output: unknown): string {
   if (typeof output === "string") return output;
   if (output === undefined) return "";
   try {
