@@ -36,9 +36,11 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
             borderColor={active ? colors.accent.brand : colors.bg.popup}
             backgroundColor={active ? colors.decoration.subtle : undefined}
           >
-            <text fg={action.disabled || !focused ? colors.text.muted : fg}>
-              {action.label}
-            </text>
+            <box id={`modal-action-label-${action.key}`} minWidth={4} justifyContent="center">
+              <text fg={action.disabled || !focused ? colors.text.muted : fg}>
+                {action.label}
+              </text>
+            </box>
           </box>
         );
       })}

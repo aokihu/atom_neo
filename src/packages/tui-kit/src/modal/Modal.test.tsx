@@ -155,3 +155,14 @@ test("draws a panel border and highlights the selected action border", async () 
     await cleanup(ctx);
   }
 });
+
+test("action labels keep a four-cell minimum content width", async () => {
+  const ctx = await mountModal();
+  try {
+    await ctx.render(true);
+    const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-ok") as BoxRenderable;
+    expect(label.width).toBeGreaterThanOrEqual(4);
+  } finally {
+    await cleanup(ctx);
+  }
+});
