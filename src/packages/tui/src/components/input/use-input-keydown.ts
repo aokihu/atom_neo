@@ -7,6 +7,7 @@ export function useInputKeyDown({
   sessionBusy,
   onEscape,
   onClear,
+  onSubmit,
   onMenuKey,
   onHistoryKey,
 }: {
@@ -15,6 +16,7 @@ export function useInputKeyDown({
   sessionBusy: boolean;
   onEscape: () => void;
   onClear: () => void;
+  onSubmit: () => void;
   onMenuKey: (event: KeyEvent) => boolean;
   onHistoryKey: (event: KeyEvent) => boolean;
 }) {
@@ -33,8 +35,14 @@ export function useInputKeyDown({
       return;
     }
 
+    if (!event.shift && (event.name === "return" || event.name === "enter")) {
+      event.preventDefault();
+      onSubmit();
+      return;
+    }
+
     if (onMenuKey(event)) return;
     if (event.ctrl || event.meta) return;
     onHistoryKey(event);
-  }, [disabled, showMenu, sessionBusy, onEscape, onClear, onMenuKey, onHistoryKey]);
+  }, [disabled, showMenu, sessionBusy, onEscape, onClear, onSubmit, onMenuKey, onHistoryKey]);
 }

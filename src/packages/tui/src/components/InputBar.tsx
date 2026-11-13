@@ -65,6 +65,7 @@ export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact,
     sessionBusy,
     onEscape: handleEscape,
     onClear: clearInput,
+    onSubmit: handleSubmit,
     onMenuKey: handleMenuKey,
     onHistoryKey: handleHistoryKey,
   });
