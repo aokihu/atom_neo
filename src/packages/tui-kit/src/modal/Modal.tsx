@@ -220,7 +220,7 @@ export function Modal({
         borderStyle="single"
         borderColor={colors.border.default}
         paddingTop={0}
-        paddingBottom={1}
+        paddingBottom={0}
         paddingX={1}
         backgroundColor={colors.bg.popup}
       >

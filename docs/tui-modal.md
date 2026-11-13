@@ -23,7 +23,7 @@
 └──────────────────────────────────────────────┘
 ```
 
-Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 的每个按钮也绘制单线边框：选中且 ActionBar 聚焦时使用 `accent.brand` 边框与 `decoration.subtle` 背景，未选中使用 `border.default`，禁用项使用 `decoration.subtle`。
+Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与内容区之间保留 1 行间隔。ActionBar 的每个按钮也绘制单线边框：选中且 ActionBar 聚焦时使用 `accent.brand` 边框与 `decoration.subtle` 背景，未选中使用 `border.default`，禁用项使用 `decoration.subtle`。
 
 ## 组件构成
 

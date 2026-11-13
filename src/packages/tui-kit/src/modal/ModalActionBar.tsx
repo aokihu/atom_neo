@@ -15,6 +15,7 @@ export function ModalActionBar({ actions, selectedIndex, focused = true }: Modal
       flexShrink={0}
       flexDirection="row"
       justifyContent="flex-end"
+      paddingTop={1}
     >
       {actions.map((action, index) => {
         const selected = index === selectedIndex;
