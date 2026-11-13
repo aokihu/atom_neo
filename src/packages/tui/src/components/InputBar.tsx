@@ -74,7 +74,7 @@ export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact,
       {!disabled && showMenu && cmdMatches.length > 0 && (
         <box
           position="absolute"
-          bottom={6}
+          bottom={8}
           left={0}
           right={1}
           zIndex={1000}
@@ -94,21 +94,19 @@ export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact,
         </box>
       )}
       <box
+        id="input-bar"
         marginTop={1}
         marginLeft={1}
         marginRight={1}
         paddingLeft={1}
         paddingRight={1}
+        paddingY={1}
         border
         borderColor={borderColor}
         borderStyle="single"
         backgroundColor={colors.bg.popup}
         flexDirection="column"
       >
-        <box height={1} flexDirection="row" justifyContent="space-between">
-          <text fg={colors.accent.brand}>COMMAND</text>
-          <text fg={colors.text.muted}>{sessionBusy ? "LOCKED" : "READY"}</text>
-        </box>
         <textarea
           ref={taRef}
           placeholder="Type a message..."
@@ -117,7 +115,7 @@ export function InputBar({ inputRef, onSend, onQuit, onHelp, onClear, onCompact,
           onKeyDown={handleKeyDown}
           keyBindings={keyBindings}
           focused={!disabled}
-          height={2}
+          height={3}
           backgroundColor={colors.bg.popup}
           focusedBackgroundColor={colors.bg.popup}
           textColor={colors.text.primary}

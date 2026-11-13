@@ -2,7 +2,9 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { act, createRef, useState } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
-import type { TextareaRenderable } from "@opentui/core";
+import { RGBA } from "@opentui/core";
+import type { BoxRenderable, TextareaRenderable } from "@opentui/core";
+import { getTheme } from "@atom-neo/tui-kit";
 import { InputBar } from "./InputBar";
 import { useChatStore } from "../stores/chat";
 
@@ -24,28 +26,30 @@ async function renderInputBar(busy: boolean) {
   return { setup, root };
 }
 
-test("INPUT renders the command frame and placeholder when ready", async () => {
+test("INPUT renders the minimal prompt box without header rows", async () => {
   const { setup, root } = await renderInputBar(false);
   try {
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("COMMAND");
-    expect(frame).toContain("READY");
     expect(frame).toContain("Type a message...");
+    expect(frame).not.toContain("COMMAND");
+    expect(frame).not.toContain("READY");
     expect(frame).not.toContain("LOCKED");
     expect(frame).not.toContain("Commands");
+    const bar = setup.renderer.root.findDescendantById("input-bar") as BoxRenderable;
+    expect(bar.height).toBe(7);
+    expect(bar.borderColor.equals(RGBA.fromHex(getTheme().colors.decoration.subtle))).toBe(true);
   } finally {
     await act(async () => root.unmount());
     setup.renderer.destroy();
   }
 });
 
-test("INPUT reports a locked session while a task is running", async () => {
+test("INPUT uses a warning border while a task is running", async () => {
   const { setup, root } = await renderInputBar(true);
   try {
-    const frame = setup.captureCharFrame();
-    expect(frame).toContain("COMMAND");
-    expect(frame).toContain("LOCKED");
-    expect(frame).not.toContain("READY");
+    const bar = setup.renderer.root.findDescendantById("input-bar") as BoxRenderable;
+    expect(bar.borderColor.equals(RGBA.fromHex(getTheme().colors.status.warning))).toBe(true);
+    expect(setup.captureCharFrame()).not.toContain("LOCKED");
   } finally {
     await act(async () => root.unmount());
     setup.renderer.destroy();
