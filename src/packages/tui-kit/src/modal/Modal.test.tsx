@@ -2,9 +2,11 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { act, createRef, useState, type Ref } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
+import { RGBA } from "@opentui/core";
 import type { BoxRenderable } from "@opentui/core";
 import { Modal } from "./Modal";
 import type { ModalAction } from "./types";
+import { getTheme } from "../theme";
 
 const ACTIONS: ModalAction[] = [
   { key: "cancel", label: "Cancel", role: "cancel" },
@@ -14,7 +16,7 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength, focusRef }: { listLength?: number; focusRef?: Ref<BoxRenderable> } = {}) {
+async function mountModal({ listLength, focusRef, actions = ACTIONS }: { listLength?: number; focusRef?: Ref<BoxRenderable>; actions?: ModalAction[] } = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
   const triggered: string[] = [];
@@ -29,7 +31,7 @@ async function mountModal({ listLength, focusRef }: { listLength?: number; focus
         open={open}
         title="Test"
         width={48}
-        actions={ACTIONS}
+        actions={actions}
         defaultActionKey="ok"
         onAction={key => triggered.push(key)}
         onClose={() => {}}
@@ -131,6 +133,46 @@ test("focusRef makes the modal panel the focused renderable", async () => {
     expect(ctx.setup.renderer.currentFocusedRenderable).toBe(focusRef.current);
     await ctx.render(false);
     expect(ctx.setup.renderer.currentFocusedRenderable).toBeNull();
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("draws a panel border and highlights the selected action border", async () => {
+  const ctx = await mountModal();
+  try {
+    await ctx.render(true);
+    const frame = ctx.setup.captureCharFrame();
+    expect(frame).toContain("┌");
+    const selected = ctx.setup.renderer.root.findDescendantById("modal-action-ok") as BoxRenderable;
+    const unselected = ctx.setup.renderer.root.findDescendantById("modal-action-cancel") as BoxRenderable;
+    const { colors } = getTheme();
+    expect(selected.border).toBe(true);
+    expect(unselected.border).toBe(true);
+    expect(selected.borderColor.equals(RGBA.fromHex(colors.accent.brand))).toBe(true);
+    expect(unselected.borderColor.equals(RGBA.fromHex(colors.bg.popup))).toBe(true);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("even-length labels center within a six-cell content width", async () => {
+  const ctx = await mountModal();
+  try {
+    await ctx.render(true);
+    const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-ok") as BoxRenderable;
+    expect(label.width).toBe(6);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("odd-length labels center within a seven-cell content width", async () => {
+  const ctx = await mountModal({ actions: [{ key: "run", label: "Run" }] });
+  try {
+    await ctx.render(true);
+    const label = ctx.setup.renderer.root.findDescendantById("modal-action-label-run") as BoxRenderable;
+    expect(label.width).toBe(7);
   } finally {
     await cleanup(ctx);
   }

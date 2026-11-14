@@ -18,14 +18,15 @@ afterEach(() => {
 async function renderInputBar(busy: boolean) {
   const setup = await createTestRenderer({ width: 80, height: 12 });
   const root = createRoot(setup.renderer);
+  const inputRef = createRef<TextareaRenderable>();
   useChatStore.setState({ busy });
-  await act(async () => root.render(<InputBar onSend={() => {}} />));
+  await act(async () => root.render(<InputBar inputRef={inputRef} onSend={() => {}} />));
   await setup.renderOnce();
-  return { setup, root };
+  return { setup, root, inputRef };
 }
 
-test("INPUT renders the command frame and placeholder when ready", async () => {
-  const { setup, root } = await renderInputBar(false);
+test("INPUT renders the command frame and a three-line placeholder when ready", async () => {
+  const { setup, root, inputRef } = await renderInputBar(false);
   try {
     const frame = setup.captureCharFrame();
     expect(frame).toContain("COMMAND");
@@ -33,6 +34,7 @@ test("INPUT renders the command frame and placeholder when ready", async () => {
     expect(frame).toContain("Type a message...");
     expect(frame).not.toContain("LOCKED");
     expect(frame).not.toContain("Commands");
+    expect(inputRef.current?.height).toBe(3);
   } finally {
     await act(async () => root.unmount());
     setup.renderer.destroy();
@@ -46,6 +48,25 @@ test("INPUT reports a locked session while a task is running", async () => {
     expect(frame).toContain("COMMAND");
     expect(frame).toContain("LOCKED");
     expect(frame).not.toContain("READY");
+  } finally {
+    await act(async () => root.unmount());
+    setup.renderer.destroy();
+  }
+});
+
+test("INPUT submits text and clears the prompt", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 12 });
+  const root = createRoot(setup.renderer);
+  const inputRef = createRef<TextareaRenderable>();
+  const sent: string[] = [];
+  try {
+    await act(async () => root.render(<InputBar inputRef={inputRef} onSend={text => sent.push(text)} />));
+    await setup.renderOnce();
+    await act(async () => inputRef.current?.setText("hello"));
+    await act(async () => setup.mockInput.pressEnter());
+    await setup.renderOnce();
+    expect(sent).toEqual(["hello"]);
+    expect(inputRef.current?.plainText).toBe("");
   } finally {
     await act(async () => root.unmount());
     setup.renderer.destroy();

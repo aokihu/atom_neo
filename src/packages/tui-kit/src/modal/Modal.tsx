@@ -216,11 +216,11 @@ export function Modal({
         {...layout}
         height={boxHeight}
         flexDirection="column"
-        border={bordered ? true : undefined}
-        borderStyle={bordered ? "single" : undefined}
-        borderColor={bordered ? colors.border.default : undefined}
+        border
+        borderStyle="single"
+        borderColor={colors.border.default}
         paddingTop={0}
-        paddingBottom={1}
+        paddingBottom={0}
         paddingX={1}
         backgroundColor={colors.bg.popup}
       >
