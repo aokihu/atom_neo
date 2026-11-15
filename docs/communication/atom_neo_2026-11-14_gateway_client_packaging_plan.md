@@ -366,6 +366,8 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 - drain：每实例 inbound 计数；drain 期间目标实例 `/gateway/inbound` 返回 503；reload 等待目标实例，默认 30s 超时返回 409 并保留旧进程。
 - `resolveClient(id)` 由 `main.ts` 注入：重新读取 sandbox config/.env + registry + manifest；Gateway 包不直接读 sandbox。
 - DiagnosticsStore 每实例最多 50 条；`GET /diagnostics` 可选，404/不可达分别显示 `unsupported` / `unreachable`；不使用 `/health` 代替平台认证。
+- Client `/diagnostics` 二次限界：最多 20 checks、字段 200 字符（`at` 64）、总 JSON 8 KiB、仅保留 `name|ok|at|detail`，未知字段丢弃，Token/Secret/UUID 形态脱敏。
+- `atom gateway load` 的相对路径按当前 cwd 解析，写入绝对目录；`pack`/`install` 保持 cwd 语义。
 - Telegram 入站提交抽为可测试函数；503/429 抛 `GatewayBusyError`，不推进 update offset，退避后重试。
 - CLI 新增 `atom gateway <action>`；`--mode gateway --action` 保留。离线 install/load/pack/uninstall/config 不依赖 Gateway；在线命令通过 runtime file + 管理 Token，离线明确报错。
 - G4 的 GatewayModal、菜单、日志 UI 不在 M3a 范围。

@@ -114,6 +114,58 @@ describe("readClientDiagnostics", () => {
     }
   });
 
+  test("bounds check count and serialized size", async () => {
+    const many = Array.from({ length: 25 }, (_, index) => ({ name: `check-${index}`, ok: true }));
+    const bounded = await readClientDiagnostics(client, fakeFetch(async () => Response.json({ checks: many })));
+    expect(bounded.status).toBe("ok");
+    if (bounded.status === "ok") expect(bounded.checks).toHaveLength(20);
+
+    const long = Array.from({ length: 20 }, (_, index) => ({
+      name: `check-${index}-${"n".repeat(300)}`,
+      ok: true,
+      detail: `detail-${"d".repeat(300)}`,
+    }));
+    const sized = await readClientDiagnostics(client, fakeFetch(async () => Response.json({ checks: long })));
+    expect(sized.status).toBe("ok");
+    if (sized.status === "ok") {
+      expect(sized.checks.length).toBeLessThan(20);
+      expect(new TextEncoder().encode(JSON.stringify(sized.checks)).byteLength).toBeLessThanOrEqual(8_192);
+      expect(sized.checks[0]!.name.length).toBeLessThanOrEqual(200);
+      expect(sized.checks[0]!.detail!.length).toBeLessThanOrEqual(200);
+    }
+  });
+
+  test("drops unknown fields, rejects invalid checks, and redacts common secrets", async () => {
+    const valid = await readClientDiagnostics(client, fakeFetch(async () => Response.json({
+      checks: [{
+        name: "telegram.getMe",
+        ok: true,
+        at: "2026-11-15T00:00:00.000Z",
+        detail: "token=super-secret bot123:ABC-DEF",
+        arbitrary: "drop",
+      }],
+    })));
+    expect(valid).toEqual({
+      status: "ok",
+      checks: [{
+        name: "telegram.getMe",
+        ok: true,
+        at: "2026-11-15T00:00:00.000Z",
+        detail: "[redacted] [redacted]",
+      }],
+    });
+    if (valid.status === "ok") {
+      expect(valid.checks[0]).not.toHaveProperty("arbitrary");
+      expect(JSON.stringify(valid)).not.toContain("super-secret");
+      expect(JSON.stringify(valid)).not.toContain("ABC-DEF");
+    }
+
+    for (const checks of [[{ name: "missing-ok" }], [{ ok: true }], [{ name: "", ok: true }]]) {
+      const result = await readClientDiagnostics(client, fakeFetch(async () => Response.json({ checks })));
+      expect(result.status).toBe("unreachable");
+    }
+  });
+
   test("requests only /diagnostics and never /health", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     const fetchImpl = fakeFetch(async (url, init) => {

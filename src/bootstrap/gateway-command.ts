@@ -16,6 +16,8 @@ import { readRuntimeFile } from "./runtime-file";
 export type GatewayCommandDeps = {
   fetchImpl?: typeof fetch;
   stdout?: (line: string) => void;
+  /** Base for relative install/load/pack targets; defaults to process.cwd(). */
+  cwd?: string;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -248,11 +250,12 @@ export async function runGatewayCommand(
   deps: GatewayCommandDeps = {},
 ): Promise<void> {
   const print: Print = deps.stdout ?? console.log;
+  const cwd = deps.cwd ?? process.cwd();
   const printJson = (value: unknown): void => print(JSON.stringify(value, null, 2));
 
   switch (command.action) {
     case "install": {
-      const record = await installClient(args.sandbox, command.target!);
+      const record = await installClient(args.sandbox, resolve(cwd, command.target!));
       const manifest = readManifest(join(args.sandbox, record.path));
       const installed = { id: manifest.id, version: manifest.version, ...record };
       if (command.json) {
@@ -267,7 +270,7 @@ export async function runGatewayCommand(
     }
 
     case "load": {
-      const root = resolve(args.sandbox, command.target!);
+      const root = resolve(cwd, command.target!);
       const manifest = readManifest(root);
       resolveEntry(manifest, "directory");
 
@@ -301,7 +304,7 @@ export async function runGatewayCommand(
     }
 
     case "pack": {
-      const out = await packClient(command.target!, {
+      const out = await packClient(resolve(cwd, command.target!), {
         out: command.out,
         target: command.targetPlatform,
       });

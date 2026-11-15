@@ -141,6 +141,7 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 
 - `DiagnosticsStore` 每实例保留最近 50 条事件，阶段为 `install|config|process|platform|delivery`，输出前脱敏/截断。
 - `GET /admin/clients/:id/diagnostics` 返回本地事件和 `client` 结果：Client `/diagnostics` 2xx → `ok`，404 → `unsupported`，不可达 → `unreachable`。
+- Client `/diagnostics` 有界：最多 20 条 check；`name`/`detail` 各最多 200 字符，`at` 最多 64 字符；总序列化上限 8 KiB；只保留 `name|ok|at|detail`，未知字段丢弃，常见 Token/Secret/UUID 形态脱敏，非法 check 结构按 `unreachable` 处理。
 - `/health` 只表示本机 HTTP 就绪；不能据此判定 Telegram Token 有效。真实消息往返仍需单独验证。
 - `GET /diagnostics` 是 Client 可选协议；未实现时 Gateway 显示 `unsupported`。
 

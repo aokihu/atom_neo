@@ -317,7 +317,7 @@ sequenceDiagram
 
 - `ClientManager` 动态 `register/remove/reload/status`；端口按活动集合分配；每实例队列；reload 用新 supervisor 替换旧对象。
 - `server.ts` 提供 GET 状态/诊断、POST reload；目标实例 drain 期间 inbound 503，超时 409 保留旧进程；`resolveClient` 由 `main.ts` 注入。
-- `DiagnosticsStore` 每实例 50 条；可选 Client `GET /diagnostics`，404 为 `unsupported`，不读取 `/health` 作为平台认证。
+- `DiagnosticsStore` 每实例 50 条；可选 Client `GET /diagnostics`，404 为 `unsupported`，不读取 `/health` 作为平台认证。Client checks 在 Gateway 侧限制 20 条、字段 200 字符、总 JSON 8 KiB，并脱敏未知字段之外的常见 Token/Secret/UUID 形态。
 - Telegram `submitInbound`/`processUpdateBatch`：503/429 不推进 offset；`atom gateway` CLI 离线/在线分流不初始化 Core。
 
 **不变量**

@@ -124,15 +124,17 @@ describe("offline gateway commands", () => {
     expect(existsSync(packageRoot)).toBe(true);
   });
 
-  test("loads a development directory with defaults and warns about unconfigured secrets", async () => {
+  test("loads a relative development directory from the current cwd, not the sandbox", async () => {
     const sandbox = tempDir("atom-gateway-load-");
-    const clientRoot = join(sandbox, "clients", "echo-bot");
+    const cwd = tempDir("atom-gateway-load-cwd-");
+    const clientRoot = join(cwd, "clients", "echo-bot");
     writeClient(clientRoot);
     writeFileSync(join(sandbox, ".env"), "ATOM_CLIENT_ECHO_BOT_TOKEN=super-secret-value\n");
+    expect(existsSync(join(sandbox, "clients", "echo-bot"))).toBe(false);
 
     const loaded = capture();
     const load = gatewayArgs(sandbox, "load", "clients/echo-bot");
-    await runGatewayCommand(load.command, load.args, { stdout: loaded.stdout });
+    await runGatewayCommand(load.command, load.args, { stdout: loaded.stdout, cwd });
 
     const config = JSON.parse(readFileSync(join(sandbox, "config.json"), "utf8"));
     expect(config.gateway.clients).toHaveLength(1);
@@ -152,7 +154,7 @@ describe("offline gateway commands", () => {
 
     const jsonOutput = capture();
     const jsonLoad = gatewayArgs(sandbox, "load", "clients/echo-bot", ["--json"]);
-    await runGatewayCommand(jsonLoad.command, jsonLoad.args, { stdout: jsonOutput.stdout });
+    await runGatewayCommand(jsonLoad.command, jsonLoad.args, { stdout: jsonOutput.stdout, cwd });
     const record = JSON.parse(jsonOutput.lines.join("\n"));
     expect(record).toMatchObject({
       saved: true,

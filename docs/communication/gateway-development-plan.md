@@ -90,7 +90,7 @@ M2.1 风险硬化：supervisor 在 spawn/restart 时读取 serve 后的真实 ga
 
 完成标准：Gateway 与 Core 不重启，只重载目标实例；在途消息、健康重启与手动 stop 并发时行为确定。新进程启动失败可见，其他实例继续工作。源码变更本身不保证自动回滚。
 
-M3a 实施记录：动态 ClientManager、drain/reload、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset、`atom gateway` CLI 与 gateway-command 已完成；G4 的 GatewayModal/菜单/日志 UI 未实现。
+M3a 实施记录：动态 ClientManager、drain/reload、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset、`atom gateway` CLI 与 gateway-command 已完成；G4 的 GatewayModal/菜单/日志 UI 未实现。`load` 相对路径按当前 cwd 解析；Client `/diagnostics` 在 Gateway 侧有界（20 checks / 200 字符 / 8 KiB）并脱敏。
 
 ### G4：平台接入管理、诊断与日志
 

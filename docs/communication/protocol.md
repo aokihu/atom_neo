@@ -491,6 +491,8 @@ Gateway 只提供回环地址的本机管理接口，使用 `x-atom-admin-token`
 
 `reload` 只 drain 目标实例；drain 期间 `/gateway/inbound` 返回 503，超时返回 409 并保留旧进程。诊断事件有界且脱敏，不使用 `/health` 作为平台认证。
 
+Client `GET /diagnostics` 的 `checks` 在 Gateway 侧二次限界：最多 20 条，每字段最多 200 字符（`at` 64），总 JSON 8 KiB，仅保留 `name|ok|at|detail`，未知字段丢弃，常见 Token/Secret/UUID 形态脱敏。
+
 Gateway 不向外部用户/TUI 提供 API。TUI 直连 Core 的 `/api/*` 和 `/ws/:sessionId`。
 
 ### 7.3 WebSocket
