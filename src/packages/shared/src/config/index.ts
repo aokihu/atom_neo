@@ -1,5 +1,13 @@
-export { ClientConfigSchema } from "./client";
-export type { ClientConfig } from "./client";
+export { ClientConfigSchema, clientConfigMigrationHint, clientSource } from "./client";
+export type { ClientConfig, ClientSource } from "./client";
+export {
+  credentialRef,
+  listInstances,
+  readConfigRevision,
+  removeInstance,
+  upsertInstance,
+} from "./client-instance";
+export type { InstanceFileWriter, InstanceWriteOptions, InstanceWriteResult } from "./client-instance";
 
 export {
   PROVIDERS,

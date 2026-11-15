@@ -8,7 +8,7 @@ import { VERSION } from "./version";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";
-import { loadEnv } from "./bootstrap/env";
+import { loadEnv, readSandboxEnv } from "./bootstrap/env";
 import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
 import { isFirstRun, runFirstRunWizard, markInstalled } from "./bootstrap/first-run";
 import { RuntimeService } from "./services/runtime/runtime-service";
@@ -210,9 +210,14 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {
-      const { startGateway } = await import("@atom-neo/gateway");
+      const { startGateway, resolveClients, sandboxPackageRoot } = await import("@atom-neo/gateway");
+      const clientEnv = readSandboxEnv(args.sandbox);
+      const resolvedClients = resolveClients(appConfig.gateway.clients, {
+        packageRoot: sandboxPackageRoot(args.sandbox),
+        readEnv: (key) => clientEnv[key] ?? process.env[key],
+      });
       const gatewayToken = crypto.randomUUID();
-      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken, logger, httpServer });
+      gateway = await startGateway({ port: appConfig.gateway.port, coreUrl: url, clients: appConfig.gateway.clients, resolvedClients, adminToken: gatewayToken, logger, httpServer });
       cleanupFiles.push(publishRuntimeFile(args.sandbox, "gateway", { url: localUrl("127.0.0.1", gateway.port), token: gatewayToken, instanceId: crypto.randomUUID() }));
     }
     const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };

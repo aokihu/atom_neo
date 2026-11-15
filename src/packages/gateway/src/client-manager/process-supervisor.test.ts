@@ -1,18 +1,21 @@
 /** ProcessSupervisor lifecycle, restart and concurrency tests with fake runtime. */
 import { describe, expect, test } from "bun:test";
 import { Logger } from "@atom-neo/shared";
-import type { ClientConfig } from "../config";
+import type { ResolvedClientConfig } from "../client-package/resolver";
 import { HealthProbe } from "./health-probe";
 import { buildClientArgs, ProcessSupervisor } from "./process-supervisor";
 import { RestartPolicy } from "./restart-policy";
 import { createFakeRuntime, FakeProcess } from "./test-helpers";
 import type { FakeRuntime } from "./test-helpers";
 
-const CLIENT: ClientConfig = {
+const CLIENT: ResolvedClientConfig = {
   id: "bot",
   platform: "telegram",
-  binary: "/bin/bot",
+  command: ["/bin/bot"],
+  cwd: "/tmp/bot",
+  env: { PATH: "/usr/bin", BOT_TOKEN: "token" },
   stdio: "ignore",
+  source: { type: "directory", directory: "/tmp/bot" },
 };
 
 function createSupervisor(fake: FakeRuntime, options: { maxAttempts?: number; policy?: RestartPolicy } = {}): ProcessSupervisor {
@@ -73,6 +76,13 @@ describe("ProcessSupervisor", () => {
       "--port", "4200",
       "--gateway-url", "http://127.0.0.1:3000",
     ]);
+    expect(fake.spawnCalls[0]?.options).toMatchObject({
+      env: CLIENT.env,
+      cwd: CLIENT.cwd,
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
     expect(fake.clock.pendingTimers).toBe(0);
   });
 

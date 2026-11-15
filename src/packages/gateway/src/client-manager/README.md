@@ -2,9 +2,12 @@
 
 Gateway 平台 Client 子进程管理。`ClientManager` 只做 facade，每个 Client 由一个 `ProcessSupervisor` 负责进程生命周期。
 
+`ProcessSupervisor` 只消费 `ResolvedClientConfig`（`command` / `cwd` / `env` / `platform` / `stdio` / `clientArgs`），不再理解 manifest 或实例配置。resolver 由 bootstrap 在启动前完成，`ClientManager` 只接收已解析的 Client 数组。
+
 | 文件 | 职责 |
 |---|---|
 | `index.ts` | `ClientManager` facade：`startAll/stopAll/start/stop/list/getBySecret/getById`；端口分配与心跳 |
+| `client-command.ts` | `buildClientArgs` 参数映射、`buildClientCommand` 命令拼装、`buildSpawnOptions`（env/cwd/stdio）与 readiness 轮询 |
 | `process-supervisor.ts` | 单 Client 的 spawn/readiness/stop/health/restart 与进程状态机 |
 | `process-state.ts` | 纯状态机 `idle → starting → running → stopping → idle`、`failed → starting` |
 | `restart-policy.ts` | 重启上限 5 次、`1s * 2^n` 退避、30s 上限、成功后 reset |
@@ -27,3 +30,4 @@ stop → 清 timer + desired → stopping → SIGTERM → (timeout) SIGKILL → 
 - 异常退出与健康失败共用同一个重启入口；健康成功运行 ≥60s 后重置计数。
 - `stopAll` 需要在返回后无残留 timer；测试用 `FakeClock.pendingTimers` 断言。
 - 公开 API、Gateway 路由/鉴权/状态码、端口与 secret 规则保持不变。
+- M1 仍按启动时的 `ResolvedClientConfig[]` 静态构造 supervisor，端口按数组下标分配；动态登记、移除、重载与活动端口集合属 G3。

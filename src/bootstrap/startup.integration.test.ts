@@ -10,6 +10,7 @@ const root = resolve(import.meta.dir, "../..");
 let temp: string;
 let binary: string;
 let clientBinary: string;
+let clientRoot: string;
 let model: ReturnType<typeof Bun.serve>;
 let modelCalls = 0;
 let delayNextModel = false;
@@ -43,6 +44,14 @@ function sandbox(name: string, gatewayClients: unknown[] = []) {
     providerProfiles: { advanced: "deepseek/local", balanced: "deepseek/local", basic: "deepseek/local" },
     providers: { deepseek: { apiKeyEnv: "ATOM_TEST_KEY", models: ["local"], baseUrl: `http://127.0.0.1:${model.port}/v1` } },
     conversation: { maxSteps: 1, maxChainDepth: 1 }, gateway: { port: 0, clients: gatewayClients },
+  }));
+  return path;
+}
+function clientDirectory(name: string, entry: string[], platform = "local") {
+  const path = join(temp, name);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, "manifest.json"), JSON.stringify({
+    manifest_version: 1, id: name, name, version: "0.1.0", platform, entry: { development: entry },
   }));
   return path;
 }
@@ -94,6 +103,7 @@ beforeAll(async () => {
     const result = await run([process.execPath, "build", input, "--compile", `--target=bun-${process.platform}-${process.arch}`, `--outfile=${output}`], root);
     expect(result.code, result.stderr).toBe(0);
   }
+  clientRoot = clientDirectory("local-client", [clientBinary]);
 }, 30000);
 
 afterAll(async () => {
@@ -157,8 +167,8 @@ integration("source and binary Core create new sessions by default and explicitl
 integration("Gateway controls individual/all Clients and cancels crash restart", async () => {
   const recordA = join(temp, "client-a.json"), recordB = join(temp, "client-b.json");
   const path = sandbox("gateway", [
-    { id: "a", platform: "local", binary: clientBinary, clientArgs: { record: recordA }, stdio: "ignore" },
-    { id: "b", platform: "local", binary: clientBinary, clientArgs: { record: recordB }, stdio: "ignore" },
+    { id: "a", directory: clientRoot, clientArgs: { record: recordA }, stdio: "ignore" },
+    { id: "b", directory: clientRoot, clientArgs: { record: recordB }, stdio: "ignore" },
   ]);
   const core = await start(path, "core-gateway");
   const gateway = instance(path, "gateway");
@@ -355,7 +365,7 @@ integration("occupied port and failed Client startup leave no Core resources", a
     expect(result.code).not.toBe(0);
     expect(existsSync(join(occupied, ".atom/core-runtime.json"))).toBe(false);
   } finally { blocker.stop(true); }
-  const broken = sandbox("broken-client", [{ id: "broken", platform: "local", binary: join(temp, "missing-binary") }]);
+  const broken = sandbox("broken-client", [{ id: "broken", directory: clientDirectory("broken-client-dir", [join(temp, "missing-binary")]) }]);
   const result = await run([binary, "--mode", "core-gateway", "--sandbox", broken, "--port", "0"]);
   expect(result.code).not.toBe(0);
   expect(existsSync(join(broken, ".atom/core-runtime.json"))).toBe(false);
@@ -497,7 +507,7 @@ integration("menu attach supports back, failed connection retry, handoff, and re
 }, 40000);
 
 integration("menu dispatches Gateway actions once and exits after success", async () => {
-  const path = sandbox("menu-gateway", [{ id: "local", platform: "local", binary: clientBinary }]);
+  const path = sandbox("menu-gateway", [{ id: "local", directory: clientRoot }]);
   const core = await start(path, "core-gateway");
   const home = join(temp, "menu-gateway-home");
   try {

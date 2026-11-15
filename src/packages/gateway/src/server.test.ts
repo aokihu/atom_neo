@@ -77,4 +77,31 @@ describe("startGateway", () => {
     expect(port).toBe(4322);
     expect(output).not.toContain("gateway");
   });
+
+  test("requires configured clients to be resolved before starting", async () => {
+    const error = await startGateway({
+      port: 0,
+      clients: [{ id: "bot", directory: "./bot", stdio: "ignore" }],
+    }).then(() => null, (reason: Error) => reason);
+
+    expect(error?.message).toContain("clients must be resolved before starting");
+  });
+
+  test("rejects resolved clients that do not match configured IDs", async () => {
+    const error = await startGateway({
+      port: 0,
+      clients: [{ id: "bot", directory: "./bot", stdio: "ignore" }],
+      resolvedClients: [{
+        id: "other",
+        platform: "local",
+        command: ["/bin/other"],
+        cwd: "/tmp/other",
+        env: {},
+        stdio: "ignore",
+        source: { type: "directory", directory: "./other" },
+      }],
+    }).then(() => null, (reason: Error) => reason);
+
+    expect(error?.message).toContain("resolvedClients must match");
+  });
 });

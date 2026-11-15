@@ -1,5 +1,6 @@
 /** ClientManager facade: owns supervisors, port allocation and the health heartbeat. */
 import type { Logger } from "@atom-neo/shared";
+import type { ResolvedClientConfig } from "../client-package/resolver";
 import type { GatewayConfig } from "../config";
 import { HealthProbe } from "./health-probe";
 import { ProcessSupervisor } from "./process-supervisor";
@@ -15,14 +16,24 @@ export type { ActiveClient };
 
 export class ClientManager {
   #config: GatewayConfig;
+  #clients: readonly ResolvedClientConfig[];
   #runtime: ClientManagerRuntime;
   #supervisors = new Map<string, ProcessSupervisor>();
   #stopping = false;
   #heartbeatTimer: IntervalHandle | null = null;
 
-  constructor(config: GatewayConfig, logger: Logger, runtime: ClientManagerRuntime = productionRuntime) {
+  constructor(
+    config: GatewayConfig,
+    clients: readonly ResolvedClientConfig[],
+    logger: Logger,
+    runtime: ClientManagerRuntime = productionRuntime,
+  ) {
     this.#config = config;
+    this.#clients = clients;
     this.#runtime = runtime;
+    if (new Set(clients.map((client) => client.id)).size !== clients.length) {
+      throw new Error("Gateway client IDs must be unique");
+    }
 
     const probe = new HealthProbe({
       fetch: runtime.fetch,
@@ -30,7 +41,7 @@ export class ClientManager {
       clearTimeout: runtime.clearTimeout,
       timeoutMs: HEALTH_PROBE_TIMEOUT_MS,
     });
-    this.#config.clients.forEach((client, index) => {
+    clients.forEach((client, index) => {
       this.#supervisors.set(client.id, new ProcessSupervisor({
         id: client.id,
         config: client,
@@ -57,7 +68,7 @@ export class ClientManager {
   }
 
   async startAll(): Promise<void> {
-    for (const client of this.#config.clients) await this.start(client.id);
+    for (const client of this.#clients) await this.start(client.id);
     if (this.#heartbeatTimer !== null) this.#runtime.clearInterval(this.#heartbeatTimer);
     this.#heartbeatTimer = this.#runtime.setInterval(() => {
       void this.#healthCheck();
@@ -71,13 +82,13 @@ export class ClientManager {
       this.#heartbeatTimer = null;
     }
 
-    const results = await Promise.allSettled(this.#config.clients.map((client) => this.stop(client.id)));
+    const results = await Promise.allSettled(this.#clients.map((client) => this.stop(client.id)));
     const errors = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     if (errors.length) throw new AggregateError(errors.map((result) => result.reason), "Clients failed to stop");
   }
 
   list(): { id: string; running: boolean; desired: boolean }[] {
-    return this.#config.clients.map((client) => {
+    return this.#clients.map((client) => {
       const supervisor = this.#supervisors.get(client.id);
       return {
         id: client.id,

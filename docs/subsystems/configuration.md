@@ -29,6 +29,8 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 - `config.json` 后续手动修改不会失效 —— overlay 只覆盖被改过的字段
 - **禁止运行时覆盖的字段**：`gateway` 子树（端口/客户端需重启才生效）；密钥本就只存于 `.env`（见 §7）
 
+**Gateway Client 配置（2026-11-15，M1 已实施）**：实例配置只接受 `package` / `directory` 二选一，**不再接受旧 `binary` / 实例级 `platform`**；`platform`、入口命令与 cwd 由 Client 根目录的 `manifest.json` 解析。凭据只存 `.env`，实例保存 `field -> ATOM_CLIENT_<ID>_<FIELD>` 引用。Gateway 实例配置（`gateway.clients` 与实例凭据）的唯一写入入口是 shared `config/client-instance.ts`：写入前获取 `.atom/gateway/config.lock`，成功后递增 `.atom/gateway/state.json` 的 `configRevision`，失败或取消恢复原文件；Gateway 只读。其他配置仍由 `--config` 向导等既有入口写入。包安装、在线重载与 TUI 入口仍在 G2–G4，Core runtime overlay 继续拒绝 gateway 子树，端口修改仍需重启。详见 [接入与发行规划](../communication/gateway-client-design.md) 和 [开发计划](../communication/gateway-development-plan.md)。
+
 **配置读写入口**：
 
 | 入口 | 写入层 | 时机 |
@@ -143,7 +145,8 @@ CLI args (--port, --host, --sandbox)  >  runtime-config.json  >  config.json  > 
 |------|------|
 | `config/schema.ts` | `ConfigSchema`、`RuntimeConfigSchema`、`mergeConfig`、`overlaySchema` |
 | `config/providers.ts` | `ProviderProfilesSchema`、`ProviderDefinitionSchema`、`PROVIDER_PROTOCOLS`、`inferProviderProtocol`、`PROVIDERS`、`DEFAULT_PROFILES`、`DEFAULT_DECISION_MODES` |
-| `config/client.ts` | `ClientConfigSchema`（Core 配置与 Gateway 共用的 client 条目） |
+| `config/client.ts` | `ClientConfigSchema`（Core 配置与 Gateway 共用的 client 条目：package / directory、clientArgs、credentials、stdio） |
+| `config/client-instance.ts` | 实例配置读写、凭据引用、lockfile 与 `configRevision`；本机 CLI/向导唯一写入入口 |
 | `config/theme.ts` | `THEME_NAMES`、`ThemeName`、`DEFAULT_THEME` |
 
 `src/bootstrap/config.ts` 只负责文件加载/保存，并 re-export 上述类型与函数；`config-tui` 与

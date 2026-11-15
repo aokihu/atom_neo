@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Logger } from "@atom-neo/shared";
-import type { ClientConfig } from "../config";
+import type { ResolvedClientConfig } from "../client-package/resolver";
 import { buildClientArgs, buildClientCommand } from "./client-command";
 import { HealthProbe } from "./health-probe";
 import { ProcessSupervisor } from "./process-supervisor";
@@ -14,9 +14,17 @@ import { RestartPolicy } from "./restart-policy";
 import { createFakeRuntime, FakeProcess } from "./test-helpers";
 import type { FakeRuntime } from "./test-helpers";
 
-const CLIENT: ClientConfig = { id: "bot", platform: "telegram", binary: "/bin/bot", stdio: "ignore" };
+const CLIENT: ResolvedClientConfig = {
+  id: "bot",
+  platform: "telegram",
+  command: ["/bin/bot"],
+  cwd: "/tmp/bot",
+  env: { PATH: "/usr/bin", BOT_TOKEN: "token" },
+  stdio: "ignore",
+  source: { type: "directory", directory: "/tmp/bot" },
+};
 
-function createSupervisor(fake: FakeRuntime, config: ClientConfig = CLIENT) {
+function createSupervisor(fake: FakeRuntime, config: ResolvedClientConfig = CLIENT) {
   const entries: any[] = [];
   const logger = new Logger("debug", entry => entries.push(entry));
   return {
@@ -52,20 +60,24 @@ describe("ProcessSupervisor command/termination snapshot", () => {
       "/bin/bot", "--secret", "s3", "--port", "4200", "--gateway-url", "http://127.0.0.1:3000",
       "--token", "t", "--mode", "fast",
     ]);
+    expect(buildClientCommand({ ...CLIENT, command: ["/bin/bot", "--mode", "fast"] }, client, 3_000).slice(0, 2))
+      .toEqual(["/bin/bot", "--mode"]);
   });
 
-  test("spawn passes env/stdin/stdout/stderr/onExit and logs the exit", async () => {
+  test("spawn passes env/cwd/stdin/stdout/stderr/onExit and logs the exit", async () => {
     const fake = createFakeRuntime();
     const { supervisor, entries } = createSupervisor(fake);
     await supervisor.start();
     const call = fake.spawnCalls[0]!;
     expect(call.command).toEqual(["/bin/bot", "--secret", supervisor.active!.secret, "--port", "4200",
       "--gateway-url", "http://127.0.0.1:3000"]);
-    expect(call.options).toMatchObject({ stdin: "ignore", stdout: "ignore", stderr: "ignore" });
-    expect(call.options?.env).toBeObject();
+    expect(call.options).toMatchObject({
+      stdin: "ignore", stdout: "ignore", stderr: "ignore", env: CLIENT.env, cwd: CLIENT.cwd });
     expect(typeof call.options?.onExit).toBe("function");
-    expect(entries.find(entry => entry.message === "spawning client")?.context).toMatchObject({
-      id: "bot", platform: "telegram", port: 4_200, binary: "/bin/bot", stdio: "ignore" });
+    const spawning = entries.find(entry => entry.message === "spawning client")?.context;
+    expect(spawning).toMatchObject({
+      id: "bot", platform: "telegram", port: 4_200, command: CLIENT.command, cwd: CLIENT.cwd, stdio: "ignore" });
+    expect(spawning).not.toHaveProperty("binary");
 
     const proc = fake.processes[0]!;
     proc.exit(7);
@@ -76,9 +88,31 @@ describe("ProcessSupervisor command/termination snapshot", () => {
     expect(supervisor.isRunning).toBe(false);
   });
 
-  test("stdio defaults to inherit", async () => {
+  test("snapshots the spawn command, env and cwd", async () => {
     const fake = createFakeRuntime();
-    const { supervisor } = createSupervisor(fake, { id: "bot", platform: "telegram", binary: "/bin/bot", stdio: undefined } as unknown as ClientConfig);
+    const { supervisor } = createSupervisor(fake);
+    await supervisor.start();
+    const call = fake.spawnCalls[0]!;
+    expect({ command: call.command, env: call.options?.env, cwd: call.options?.cwd }).toEqual({
+      command: ["/bin/bot", "--secret", supervisor.active!.secret, "--port", "4200",
+        "--gateway-url", "http://127.0.0.1:3000"],
+      env: { PATH: "/usr/bin", BOT_TOKEN: "token" },
+      cwd: "/tmp/bot",
+    });
+  });
+
+  test("ignores a legacy binary field and uses the resolved command", async () => {
+    const fake = createFakeRuntime();
+    const legacy = { ...CLIENT, binary: "/bin/legacy" } as unknown as ResolvedClientConfig;
+    const { supervisor } = createSupervisor(fake, legacy);
+    await supervisor.start();
+    expect(fake.spawnCalls[0]?.command[0]).toBe("/bin/bot");
+    expect(fake.spawnCalls[0]?.command).not.toContain("/bin/legacy");
+  });
+
+  test("stdio inherit passes through to stdout/stderr", async () => {
+    const fake = createFakeRuntime();
+    const { supervisor } = createSupervisor(fake, { ...CLIENT, stdio: "inherit" });
     await supervisor.start();
     expect(fake.spawnCalls[0]?.options).toMatchObject({ stdout: "inherit", stderr: "inherit" });
   });

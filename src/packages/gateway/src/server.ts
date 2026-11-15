@@ -2,6 +2,7 @@ import { Logger, LogHub, StdoutSink, createHttpServer, isAdminRequest } from "@a
 import type { HttpServer } from "@atom-neo/shared";
 import { loadGatewayConfig } from "./config";
 import type { GatewayConfig } from "./config";
+import type { ResolvedClientConfig } from "./client-package/resolver";
 import { SECRET_HEADER } from "./auth/secret";
 import { ClientManager } from "./client-manager";
 import type { ActiveClient } from "./client-manager";
@@ -24,19 +25,29 @@ export type GatewayOverrides = Partial<GatewayConfig> & {
   adminToken?: string;
   logger?: Logger;
   httpServer?: HttpServer;
+  resolvedClients?: readonly ResolvedClientConfig[];
 };
 
 export async function startGateway(configOverrides?: GatewayOverrides): Promise<{ port: number; stop: () => Promise<void> }> {
   const config = loadGatewayConfig(configOverrides);
+  const resolvedClients = configOverrides?.resolvedClients ?? [];
+  if (config.clients.length > 0) {
+    if (configOverrides?.resolvedClients === undefined) {
+      throw new Error("Gateway clients must be resolved before starting; pass resolvedClients from bootstrap");
+    }
+    if (resolvedClients.length !== config.clients.length || resolvedClients.some((client, index) => client.id !== config.clients[index]!.id)) {
+      throw new Error("Gateway resolvedClients must match configured client IDs");
+    }
+  }
   const logger = configOverrides?.logger ?? new Logger("info", () => {});
   const httpServer = configOverrides?.httpServer ?? await createHttpServer();
-  const cm = new ClientManager(config, logger);
+  const cm = new ClientManager(config, resolvedClients, logger);
   let stopping = false;
 
   // Per-client rate limiting: max 1 request per 200ms per client
   const rateLimiters = new Map<string, number>();
 
-  logger.info("gateway starting", { port: config.port, coreUrl: config.coreUrl, clientCount: config.clients.length });
+  logger.info("gateway starting", { port: config.port, coreUrl: config.coreUrl, clientCount: resolvedClients.length });
 
   async function handleInbound(client: ActiveClient, req: Request): Promise<Response> {
     try {
@@ -114,7 +125,7 @@ export async function startGateway(configOverrides?: GatewayOverrides): Promise<
         if (stopping) return Response.json({ error: "Gateway stopping" }, { status: 503 });
         const body = await req.json().catch(() => null) as { action?: string; clientId?: string } | null;
         if (!body || !["start", "stop"].includes(body.action ?? "") || (body.clientId !== undefined && (typeof body.clientId !== "string" || !body.clientId.trim()))) return Response.json({ error: "Expected action start|stop and optional clientId" }, { status: 400 });
-        const ids = body.clientId === undefined ? config.clients.map(c => c.id) : [body.clientId];
+        const ids = body.clientId === undefined ? cm.list().map(c => c.id) : [body.clientId];
         const results = [];
         for (const id of ids) {
           try {

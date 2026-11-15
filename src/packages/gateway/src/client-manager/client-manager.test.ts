@@ -1,14 +1,36 @@
 /** ClientManager facade, concurrency and timer cleanup tests with fake runtime. */
 import { describe, expect, test } from "bun:test";
 import { Logger } from "@atom-neo/shared";
+import type { ResolvedClientConfig } from "../client-package/resolver";
 import { loadGatewayConfig } from "../config";
 import { ClientManager } from "./index";
 import { createFakeRuntime, FakeProcess } from "./test-helpers";
 import type { FakeRuntime } from "./test-helpers";
 
 const CLIENTS = [
-  { id: "alpha", platform: "telegram", binary: "/bin/alpha", stdio: "ignore" as const },
-  { id: "beta", platform: "wechat", binary: "/bin/beta", stdio: "ignore" as const },
+  { id: "alpha", directory: "./alpha", stdio: "ignore" as const },
+  { id: "beta", directory: "./beta", stdio: "ignore" as const },
+];
+
+const RESOLVED_CLIENTS: readonly ResolvedClientConfig[] = [
+  {
+    id: "alpha",
+    platform: "telegram",
+    command: ["/bin/alpha"],
+    cwd: "/tmp/alpha",
+    env: { CLIENT: "alpha" },
+    stdio: "ignore",
+    source: { type: "directory", directory: "./alpha" },
+  },
+  {
+    id: "beta",
+    platform: "wechat",
+    command: ["/bin/beta"],
+    cwd: "/tmp/beta",
+    env: { CLIENT: "beta" },
+    stdio: "ignore",
+    source: { type: "directory", directory: "./beta" },
+  },
 ];
 
 function createManager(fake: FakeRuntime): ClientManager {
@@ -19,7 +41,7 @@ function createManager(fake: FakeRuntime): ClientManager {
     clients: CLIENTS,
     clientPortRangeStart: 4_200,
   });
-  return new ClientManager(config, new Logger("error", () => {}), fake.runtime);
+  return new ClientManager(config, RESOLVED_CLIENTS, new Logger("error", () => {}), fake.runtime);
 }
 
 function useImmortalProcesses(fake: FakeRuntime): void {
@@ -39,6 +61,8 @@ describe("ClientManager", () => {
 
     await Promise.all([manager.start("alpha"), manager.start("alpha")]);
     expect(fake.processes).toHaveLength(1);
+    expect(fake.spawnCalls[0]?.command[0]).toBe("/bin/alpha");
+    expect(fake.spawnCalls[0]?.options?.cwd).toBe("/tmp/alpha");
     expect(manager.getById("alpha")?.port).toBe(4_200);
     expect(manager.list()).toEqual([{ id: "alpha", running: true, desired: true }, { id: "beta", running: false, desired: false }]);
 
@@ -68,6 +92,8 @@ describe("ClientManager", () => {
 
     await manager.startAll();
     expect(fake.processes).toHaveLength(2);
+    expect(manager.getById("alpha")?.port).toBe(4_200);
+    expect(manager.getById("beta")?.port).toBe(4_201);
     expect(fake.clock.pendingTimers).toBe(1);
 
     const secret = manager.getById("alpha")?.secret;
@@ -120,12 +146,14 @@ describe("ClientManager", () => {
     expect(fake.clock.pendingTimers).toBe(0);
   });
 
-  test("rejects unknown client IDs", async () => {
+  test("rejects unknown client IDs and duplicate resolved clients", async () => {
     const fake = createFakeRuntime();
     const manager = createManager(fake);
 
     expect(await manager.start("missing").then(() => null, (error: Error) => error.message)).toBe("Unknown client: missing");
     expect(await manager.stop("missing").then(() => null, (error: Error) => error.message)).toBe("Unknown client: missing");
+    expect(() => new ClientManager(loadGatewayConfig({ clients: [] }), [RESOLVED_CLIENTS[0]!, RESOLVED_CLIENTS[0]!],
+      new Logger("error", () => {}), fake.runtime)).toThrow("Gateway client IDs must be unique");
   });
 
   test("reports stopAll failures as AggregateError", async () => {

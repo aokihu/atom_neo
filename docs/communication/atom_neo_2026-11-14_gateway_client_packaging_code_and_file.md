@@ -1,0 +1,977 @@
+# Atom Neo — Gateway Client 打包接入：文件与代码
+
+> 项目：`atom_neo`
+> 日期：2026-11-14
+> 开发目标：`gateway_client_packaging`
+> 状态：**G0 已确认；M1（G0+G1）已实施；G2–G6 待实施**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13。
+>
+> 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
+> 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
+> 示例代码用于确认职责与接口，不等于最终实现；G0 决策变化时同步更新。
+
+---
+
+## 1. 改动总览
+
+### 1.1 新增文件
+
+| 阶段 | 文件 | 职责 |
+|---|---|---|
+| G1 | <code>src/packages/shared/src/config/client-instance.ts</code> | 实例配置读写、凭据引用、并发保护 |
+| G1 | <code>src/packages/gateway/src/client-package/manifest.ts</code> | manifest v1 解析、校验、入口选择 |
+| G1 | <code>src/packages/gateway/src/client-package/resolver.ts</code> | 用户 Client 配置 → 可启动描述 |
+| G1 | <code>src/packages/gateway/src/client-package/README.md</code> | 目录摘要与边界 |
+| G2 | <code>src/packages/gateway/src/client-package/registry.ts</code> | `packages.json` 安装记录 |
+| G2 | <code>src/packages/gateway/src/client-package/archive.ts</code> | tar.gz pack / install |
+| G2 | `clients/telegram-bot/manifest.json` | 首个标准包与开发目录样例 |
+| G3 | <code>src/packages/gateway/src/client-manager/diagnostics.ts</code> | 有界诊断事件 |
+| G3 | <code>src/bootstrap/gateway-command.ts</code> | `atom gateway ...` 子命令 |
+| G2 | <code>src/packages/config-tui/src/components/GatewayInstanceForm.tsx</code> | manifest 驱动的实例表单（G4 扩展编辑模式） |
+| G4 | <code>src/packages/config-tui/src/gateway-status.ts</code> | 读取 Gateway 运行状态与诊断 |
+| G4 | <code>src/packages/shared/src/runtime-file.ts</code> | 运行描述文件路径与读取的共享实现 |
+| G3 | `clients/telegram-bot/src/gateway-client.ts` | 入站提交与响应校验（可测试） |
+
+### 1.2 修改文件
+
+| 阶段 | 文件 | 改动 |
+|---|---|---|
+| G1 | `src/packages/shared/src/config/client.ts` | 增加 `package` / `directory` / `credentials`，二来源互斥，移除 `binary` / `platform` |
+| G1 | `src/packages/shared/src/config/index.ts` | 导出实例配置模块与新类型 |
+| G1 | `src/packages/shared/src/utils/child-process-env.ts` | 过滤实例凭据与管理 Token |
+| G1 | `src/packages/gateway/src/client-manager/client-command.ts` | 从解析后的 command/cwd/env 启动 |
+| G1 | `src/packages/gateway/src/client-manager/process-supervisor.ts` | 接收 `ResolvedClientConfig` |
+| G1 | `src/packages/gateway/src/config.ts` | 解析前保持用户配置；启动时解析 |
+| G2 | `clients/telegram-bot/package.json` | 构建输出 `bin/telegram-bot` |
+| G3 | `src/packages/gateway/src/client-manager/index.ts` | 动态登记、替换、移除、端口分配 |
+| G3 | `src/packages/gateway/src/server.ts` | 管理接口、drain、诊断、状态 |
+| G3 | `src/packages/gateway/src/index.ts` | 导出 manifest/registry/resolver 供 CLI 使用 |
+| G3 | `src/bootstrap/cli.ts` | 解析 `atom gateway ...` |
+| G3 | `src/main.ts` | 新命令提前分流，不初始化 Core |
+| G4 | `src/packages/config-tui/src/components/GatewayModal.tsx` | 实例列表、状态、操作入口 |
+| G4 | `src/bootstrap/runtime-file.ts` | 复用 shared 的运行描述读取，保留发布/清理 |
+| G4 | `src/bootstrap/menu-flow.ts` / `menu-history.ts` | 菜单入口与参数记忆 |
+| G3、G4 | `clients/telegram-bot/src/main.ts` | 非 2xx 处理（G3）、可选诊断端点（G4） |
+| G6 | `docs/communication/gateway.md` 等 | 将验收通过能力迁入当前说明 |
+
+> 现有 `src/packages/gateway/src/client-manager/README.md`、`src/bootstrap/README.md` 需同步更新职责表。
+
+---
+
+## 2. Shared：配置与凭据
+
+### 2.1 `src/packages/shared/src/config/client.ts`（修改）
+
+当前 schema 只接受 `binary`。新方案改为 `package` / `directory` 二选一，**不再接受 `binary`**，`platform` 由 manifest 解析。
+
+```ts
+import { z } from "zod";
+
+const PackageRefSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+});
+
+export const ClientConfigSchema = z.object({
+  id: z.string().min(1),
+  package: PackageRefSchema.optional(),
+  directory: z.string().min(1).optional(),
+  clientArgs: z.record(z.string(), z.string()).optional(),
+  /** field -> sandbox .env 变量名，例如 bot-token -> ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN */
+  credentials: z.record(z.string(), z.string()).optional(),
+  stdio: z.enum(["inherit", "ignore"]).default("inherit"),
+}).strict().superRefine((value, ctx) => {
+  if ((value.package === undefined) === (value.directory === undefined)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "gateway.clients[] must define exactly one of package or directory; binary is not supported",
+    });
+  }
+});
+
+export type ClientConfig = z.infer<typeof ClientConfigSchema>;
+
+export type ClientSource =
+  | { type: "package"; id: string; version: string }
+  | { type: "directory"; directory: string };
+
+export function clientSource(config: ClientConfig): ClientSource {
+  if (config.package) return { type: "package", ...config.package };
+  if (config.directory) return { type: "directory", directory: config.directory };
+  throw new Error(`Client ${config.id} has no launch source`);
+}
+```
+
+**迁移要求**
+
+- `binary` / `platform` 不再属于实例配置；`.strict()` 会拒绝未知字段。
+- 配置加载器捕获 `binary` 的未知字段错误时，返回明确迁移提示：改用 `package` 或 `directory`。
+- 不自动迁移旧配置；升级后必须重新登记实例。
+- 包/目录的平台由 manifest 提供，实例配置不再重复声明。
+- 不在 shared 中解析 manifest 或读取包目录。
+
+### 2.2 <code>src/packages/shared/src/config/client-instance.ts</code>（新增）
+
+职责：本机 CLI / 配置向导的**唯一写入入口**；Gateway 只读。
+
+```ts
+import type { ClientConfig } from "./client";
+
+export type InstanceWriteResult = {
+  saved: true;
+  applied: false;
+  configPath: string;
+  envPath?: string;
+};
+
+export function listInstances(sandbox: string): ClientConfig[];
+
+export function upsertInstance(
+  sandbox: string,
+  instance: ClientConfig,
+  secrets: Record<string, string>,
+): InstanceWriteResult;
+
+export function removeInstance(sandbox: string, id: string): void;
+```
+
+实现要求：
+
+- 使用现有 `writeFileAtomic` 与 `upsertEnv`，不新建写盘工具。
+- `config.json` 保留未知字段；只替换目标 `gateway.clients[]` 条目。
+- 凭据只写 `.env`，键名使用 `ATOM_CLIENT_<ID>_<FIELD>` 规范化形式。
+- 写入前获取 sandbox 级 lockfile；写入前后比对并递增 `.atom/gateway/state.json` 的 `configRevision`（G0 D4）。
+- 取消或失败时不留下半成品实例。
+- 返回 `saved/applied` 分离状态；Gateway 离线时 `applied=false`。
+
+### 2.3 `src/packages/shared/src/config/index.ts`（修改）
+
+```ts
+export * from "./client";
+export * from "./client-instance";
+```
+
+### 2.4 `src/packages/shared/src/utils/child-process-env.ts`（修改）
+
+```ts
+const INSTANCE_CREDENTIAL_PREFIX = "ATOM_CLIENT_";
+
+export function createChildProcessEnv(
+  source: NodeJS.ProcessEnv = process.env,
+  injected: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
+  const env = { ...source };
+  delete env.ATOM_ADMIN_TOKEN;
+  for (const key of Object.keys(env)) {
+    if (key.startsWith(INSTANCE_CREDENTIAL_PREFIX)) delete env[key];
+  }
+  return { ...env, ...injected };
+}
+```
+
+> 只注入目标实例解析出的变量；`.env` 中其他实例的 `ATOM_CLIENT_*` 不得进入子进程。
+
+### 2.5 <code>src/packages/shared/src/runtime-file.ts</code>（新增）
+
+为 CLI、config-tui 和 bootstrap 提供同一份运行描述读取，避免重复路径与 JSON 解析：
+
+```ts
+export type RuntimeFile = {
+  url: string;
+  token: string;
+  instanceId: string;
+};
+
+export function runtimeFilePath(sandbox: string, kind: "core" | "gateway"): string;
+
+export function readRuntimeFile(sandbox: string, kind: "core" | "gateway"): RuntimeFile;
+```
+
+- `src/bootstrap/runtime-file.ts` 改为复用该模块，只保留发布、实例校验与清理。
+- `config-tui/src/gateway-status.ts` 使用同一读取函数。
+- 读取失败/文件不存在返回明确错误，不猜测地址。
+
+---
+
+## 3. Gateway：manifest、包与解析
+
+### 3.1 新增目录 <code>src/packages/gateway/src/client-package/</code>
+
+需要 `README.md`，说明：
+
+| 文件 | 职责 |
+|---|---|
+| `manifest.ts` | manifest v1 schema、解析、入口选择 |
+| `resolver.ts` | 用户配置 → 可启动描述、凭据注入 |
+| `registry.ts` | `packages.json` 读写与版本登记 |
+| `archive.ts` | tar.gz 打包、安装、路径边界校验 |
+
+### 3.2 `manifest.ts`（新增）
+
+```ts
+import { z } from "zod";
+
+const EntrySchema = z.object({
+  production: z.array(z.string().min(1)).min(1).optional(),
+  development: z.array(z.string().min(1)).min(1).optional(),
+}).refine((value) => value.production || value.development, {
+  message: "manifest.entry requires production or development",
+});
+
+const ConfigFieldSchema = z.object({
+  label: z.string().min(1),
+  type: z.literal("string"),
+  required: z.boolean().default(false),
+  secret: z.boolean().default(false),
+  enum: z.array(z.string()).min(1).optional(),
+  default: z.string().optional(),
+  env: z.string().min(1).optional(),
+});
+
+export const ManifestSchema = z.object({
+  manifest_version: z.literal(1),
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+  name: z.string().min(1),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  platform: z.string().min(1),
+  entry: EntrySchema,
+  config: z.record(z.string(), ConfigFieldSchema).optional(),
+  target: z.string().min(1).optional(),
+  description: z.string().optional(),
+  author: z.string().optional(),
+  homepage_url: z.string().url().optional(),
+  icons: z.array(z.string()).optional(),
+}).strict();
+
+export type Manifest = z.infer<typeof ManifestSchema>;
+
+export function parseManifest(text: string): Manifest {
+  return ManifestSchema.parse(JSON.parse(text));
+}
+
+export function resolveEntry(manifest: Manifest, mode: "package" | "directory"): readonly string[] {
+  const entry = mode === "package" ? manifest.entry.production : manifest.entry.development;
+  if (!entry) {
+    throw new Error(`manifest.entry.${mode === "package" ? "production" : "development"} is required`);
+  }
+  return entry;
+}
+```
+
+### 3.3 `resolver.ts`（新增）
+
+```ts
+import { createChildProcessEnv } from "@atom-neo/shared";
+import type { ClientConfig, ClientSource } from "@atom-neo/shared";
+import { parseManifest } from "./manifest";
+import type { Manifest } from "./manifest";
+
+export type ResolvedClientConfig = {
+  id: string;
+  platform: string;
+  command: readonly string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  clientArgs?: Record<string, string>;
+  stdio: "inherit" | "ignore";
+  source: ClientSource;
+};
+
+export type ResolveOptions = {
+  packageRoot: (id: string, version: string) => string;
+  readEnv: (key: string) => string | undefined;
+};
+
+export function resolveClient(config: ClientConfig, options: ResolveOptions): ResolvedClientConfig {
+  const root = config.directory ?? options.packageRoot(config.package!.id, config.package!.version);
+  const manifest = parseManifest(readFileSync(join(root, "manifest.json"), "utf-8"));
+  const entry = resolveEntry(manifest, config.directory ? "directory" : "package");
+
+  return {
+    id: config.id,
+    platform: manifest.platform,
+    command: entry,
+    cwd: root,
+    env: buildClientEnv(config, manifest, options.readEnv),
+    clientArgs: config.clientArgs,
+    stdio: config.stdio,
+    source: config.directory
+      ? { type: "directory", directory: config.directory }
+      : { type: "package", ...config.package! },
+  };
+}
+```
+
+凭据映射：
+
+```ts
+function buildClientEnv(
+  instance: ClientConfig,
+  manifest: Manifest,
+  readEnv: (key: string) => string | undefined,
+): NodeJS.ProcessEnv {
+  const injected: NodeJS.ProcessEnv = {};
+  for (const [field, ref] of Object.entries(instance.credentials ?? {})) {
+    if (!ref.startsWith("ATOM_CLIENT_")) {
+      throw new Error(`Client ${instance.id} credential ${field} must use ATOM_CLIENT_ prefix`);
+    }
+    const declared = manifest.config?.[field];
+    if (!declared || !declared.secret || !declared.env) {
+      throw new Error(`Client ${instance.id} field ${field} is not a secret env field`);
+    }
+    const value = readEnv(ref);
+    if (!value) throw new Error(`Client ${instance.id} missing credential ${ref}`);
+    injected[declared.env] = value;
+  }
+  return createChildProcessEnv(process.env, injected);
+}
+```
+
+### 3.4 `registry.ts`（新增）
+
+`$SANDBOX/.atom/gateway/packages.json`：
+
+```jsonc
+{
+  "version": 1,
+  "packages": {
+    "telegram-bot": {
+      "0.1.0": {
+        "target": "darwin-arm64",
+        "path": ".atom/gateway/packages/telegram-bot/0.1.0/darwin-arm64",
+        "source": "local:./telegram-bot-0.1.0-darwin-arm64.tar.gz",
+        "installedAt": "2026-11-14T00:00:00.000Z"
+      }
+    }
+  }
+}
+```
+
+接口：
+
+```ts
+export type PackageRecord = {
+  target: string;
+  path: string;
+  source: string;
+  installedAt: string;
+};
+
+export function readRegistry(sandbox: string): PackageRegistry;
+export function findPackage(sandbox: string, id: string, version: string): PackageRecord | undefined;
+export function registerPackage(sandbox: string, record: PackageRecord): void;
+export function removePackage(sandbox: string, id: string, version: string): void;
+```
+
+要求：
+
+- 写入使用临时文件 + rename。
+- 同 id/version 但内容不同拒绝覆盖。
+- 删除前检查实例引用。
+
+### 3.5 `archive.ts`（新增）
+
+```ts
+export type PackOptions = {
+  root: string;
+  out?: string;
+  target?: string;
+};
+
+export async function packClient(root: string, options?: PackOptions): Promise<string>;
+export async function installClient(sandbox: string, archive: string): Promise<PackageRecord>;
+```
+
+要求：
+
+- `pack` 读取并校验 manifest，要求 `entry.production` 存在。
+- 只收集 `manifest.json`、`bin/` 及 manifest 明确声明的运行资源；排除 `.env`、`node_modules`、`src/`、日志和运行数据。
+- `install` 解包到临时目录，校验绝对路径、`..`、符号链接逃逸，再提交到版本目录。
+- 失败清理临时目录，不覆盖已有版本。
+- 归档实现使用新增 `tar` 依赖，不拼 shell 命令（G0 D8）。
+
+### 3.6 `src/packages/gateway/src/config.ts`（修改）
+
+- `GatewayConfig.clients` 继续使用扩展后的 `ClientConfig[]`。
+- 启动时由 `resolveClients()` 解析为 `ResolvedClientConfig[]`，再交给 `ClientManager`。
+- 包/目录解析失败必须指出实例 ID、来源和缺失项。
+
+---
+
+## 4. Gateway：ClientManager 与启动
+
+### 4.1 `client-command.ts`（修改）
+
+```ts
+export function buildClientCommand(
+  client: ResolvedClientConfig,
+  active: ActiveClient,
+  gatewayPort: number,
+): string[] {
+  return [
+    ...client.command,
+    "--secret", active.secret,
+    "--port", String(active.port),
+    "--gateway-url", `http://127.0.0.1:${gatewayPort}`,
+    ...buildClientArgs(client.clientArgs),
+  ];
+}
+
+export function buildSpawnOptions(
+  stdio: "inherit" | "ignore",
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  onExit: NonNullable<SpawnProcessOptions["onExit"]>,
+): SpawnProcessOptions {
+  return { env, cwd, stdin: "ignore", stdout: stdio, stderr: stdio, onExit };
+}
+```
+
+> `cwd` 由 `ResolvedClientConfig` 提供，调用 `buildSpawnOptions` 时直接传入。
+
+### 4.2 `process-supervisor.ts`（修改）
+
+- `ProcessSupervisorDeps.config` 从 `ClientConfig` 改为 `ResolvedClientConfig`。
+- spawn 时使用 `config.command`、`config.cwd`、`config.env`。
+- 状态机、队列、重启策略、Secret 生命周期不变。
+
+### 4.3 `client-manager/index.ts`（修改）
+
+当前构造时按数组索引分配端口，`stopAll` 遍历 `config.clients`。动态实例需要改为遍历实际 supervisor。
+
+```ts
+export class ClientManager {
+  #configs = new Map<string, ResolvedClientConfig>();
+  #supervisors = new Map<string, ProcessSupervisor>();
+  #ports = new Set<number>();
+  #portStart: number;
+
+  register(config: ResolvedClientConfig): void {
+    if (this.#supervisors.has(config.id)) throw new Error(`Client already registered: ${config.id}`);
+    const port = this.#allocatePort();
+    this.#configs.set(config.id, config);
+    this.#supervisors.set(config.id, this.#createSupervisor(config, port));
+  }
+
+  async remove(id: string): Promise<void> {
+    const supervisor = this.#supervisors.get(id);
+    if (!supervisor) throw new Error(`Unknown client: ${id}`);
+    await supervisor.stop();
+    this.#supervisors.delete(id);
+    this.#configs.delete(id);
+    this.#ports.delete(supervisor.port);
+  }
+
+  async reload(id: string, config: ResolvedClientConfig): Promise<void> {
+    const previous = this.#supervisors.get(id);
+    if (!previous) throw new Error(`Unknown client: ${id}`);
+    const port = previous.port;
+    const wasDesired = previous.desired;
+    await previous.stop();
+    this.#configs.set(id, config);
+    const next = this.#createSupervisor(config, port);
+    this.#supervisors.set(id, next);
+    if (wasDesired) await next.start();
+  }
+
+  async stopAll(): Promise<void> {
+    const results = await Promise.allSettled(
+      [...this.#supervisors.values()].map((supervisor) => supervisor.stop()),
+    );
+    // AggregateError 逻辑不变
+  }
+
+  #allocatePort(): number {
+    for (let port = this.#portStart; port < this.#portStart + 10_000; port++) {
+      if (!this.#ports.has(port)) {
+        this.#ports.add(port);
+        return port;
+      }
+    }
+    throw new Error("No free client port");
+  }
+}
+```
+
+要求：
+
+- 端口按活动实例集合分配，不再按数组索引。
+- `getBySecret`、`getById`、`list` 遍历 supervisor。
+- 重载期间旧 supervisor 的 exit 回调、restart timer 不得影响新 supervisor。
+- `stopAll` 后无残留 timer；测试使用 `FakeClock.pendingTimers` 断言。
+
+---
+
+## 5. Gateway：管理接口与诊断
+
+### 5.1 `server.ts`（修改）
+
+新增：
+
+| 路由 | 方法 | 作用 |
+|---|---|---|
+| `/admin/clients` | GET | 实例列表、状态、诊断摘要 |
+| `/admin/clients` | POST | `start` / `stop` / `reload` |
+| `/admin/clients/:id/diagnostics` | GET | 指定实例诊断事件 |
+
+保留：
+
+- `/gateway/inbound`
+- `/gateway/event`
+- `/admin/clients` 现有 start/stop 语义与逐项结果
+
+drain：
+
+```ts
+const inFlight = new Map<string, number>();
+const draining = new Set<string>();
+
+function beginInbound(id: string): boolean {
+  if (draining.has(id)) return false;
+  inFlight.set(id, (inFlight.get(id) ?? 0) + 1);
+  return true;
+}
+
+function endInbound(id: string): void {
+  const count = (inFlight.get(id) ?? 1) - 1;
+  if (count <= 0) inFlight.delete(id);
+  else inFlight.set(id, count);
+}
+
+async function waitDrained(id: string, timeoutMs = 30_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while ((inFlight.get(id) ?? 0) > 0) {
+    if (Date.now() >= deadline) return false;
+    await sleep(50);
+  }
+  return true;
+}
+```
+
+reload 流程：
+
+```ts
+async function reloadClient(id: string): Promise<Response> {
+  if (!resolveClient) return Response.json({ error: "Reload unsupported" }, { status: 501 });
+  draining.add(id);
+  try {
+    const drained = await waitDrained(id);
+    if (!drained) return Response.json({ error: "Client busy" }, { status: 409 });
+    const config = await resolveClient(id);
+    await cm.reload(id, config);
+    diagnostics.record(id, { stage: "process", level: "info", message: "reloaded" });
+    return Response.json({ ok: true, clients: cm.list() });
+  } finally {
+    draining.delete(id);
+  }
+}
+```
+
+`startGateway` 增加可选 `resolveClient`：
+
+```ts
+export type GatewayOverrides = Partial<GatewayConfig> & {
+  adminToken?: string;
+  logger?: Logger;
+  httpServer?: HttpServer;
+  resolveClient?: (id: string) => Promise<ResolvedClientConfig>;
+};
+```
+
+> 由 `src/main.ts` 提供回调，Gateway 包不直接读取 sandbox 配置；这样保持包边界。
+
+### 5.2 `diagnostics.ts`（新增）
+
+```ts
+export type DiagnosticStage = "install" | "config" | "process" | "platform" | "delivery";
+export type DiagnosticEvent = {
+  at: string;
+  stage: DiagnosticStage;
+  level: "info" | "warn" | "error";
+  message: string;
+};
+
+export class DiagnosticsStore {
+  #events = new Map<string, DiagnosticEvent[]>();
+
+  record(id: string, event: DiagnosticEvent): void {
+    const list = this.#events.get(id) ?? [];
+    list.push(event);
+    if (list.length > 50) list.shift();
+    this.#events.set(id, list);
+  }
+
+  list(id: string): DiagnosticEvent[] {
+    return [...(this.#events.get(id) ?? [])];
+  }
+}
+```
+
+### 5.3 Client 可选诊断协议
+
+`GET /diagnostics`：
+
+```jsonc
+{
+  "ok": true,
+  "checks": [
+    { "name": "telegram.getMe", "ok": true, "at": "2026-11-14T00:00:00.000Z" }
+  ]
+}
+```
+
+- 未实现 `/diagnostics` 的 Client 返回 404 → Gateway 显示 `unsupported`。
+- `/health` 只证明本机 HTTP 就绪，不等于平台凭据有效。
+- 诊断结果有界，不包含 Token/Secret。
+
+---
+
+## 6. Bootstrap：CLI 与菜单
+
+### 6.1 `src/bootstrap/cli.ts`（修改）
+
+新增顶层命令：
+
+```text
+atom gateway <install|load|reload|list|start|stop|check|logs|pack|uninstall> [target]
+```
+
+示例：
+
+```bash
+atom gateway install ./telegram-bot-0.1.0-darwin-arm64.tar.gz --sandbox ./sandbox
+atom gateway install telegram --sandbox ./sandbox
+atom gateway load ./clients/telegram-bot --sandbox ./sandbox
+atom gateway reload telegram-dev --sandbox ./sandbox
+atom gateway list --sandbox ./sandbox
+atom gateway start telegram-main --sandbox ./sandbox
+atom gateway check telegram-main --sandbox ./sandbox
+atom gateway logs telegram-dev --sandbox ./sandbox
+atom gateway pack ./clients/telegram-bot
+atom gateway uninstall telegram-main --sandbox ./sandbox
+```
+
+解析要点：
+
+- `gateway` 作为第一个 positional 时进入子命令解析。
+- `--sandbox` 必填或缺省复用现有规则。
+- `--out`、`--target`、`--force`、`--json` 按子命令允许。
+- 与 `--mode gateway` 的 `--action` 不混用。
+- 非交互缺必填参数直接报错，不挂起等待输入。
+- 部分失败退出码 1，并输出逐项结果。
+
+返回类型：
+
+```ts
+export type GatewayCommand = {
+  action: "install" | "load" | "reload" | "list" | "start" | "stop" | "check" | "logs" | "pack" | "uninstall";
+  target?: string;
+  out?: string;
+  targetPlatform?: string;
+  force: boolean;
+  json: boolean;
+};
+```
+
+### 6.2 <code>src/bootstrap/gateway-command.ts</code>（新增）
+
+```ts
+export async function runGatewayCommand(command: GatewayCommand, args: BootArguments): Promise<void> {
+  switch (command.action) {
+    case "install": {
+      const record = await installClient(args.sandbox, command.target!);
+      console.log(`Installed ${record.source} (${record.target})`);
+      return;
+    }
+    case "load": {
+      const instance = await registerDevelopmentDirectory(args.sandbox, command.target!);
+      console.log(`Loaded ${instance.id}; saved, not started`);
+      return;
+    }
+    case "reload":
+      return callAdmin(args.sandbox, { action: "reload", clientId: command.target });
+    case "list":
+      return callAdmin(args.sandbox, undefined, "GET");
+    case "start":
+    case "stop":
+      return callAdmin(args.sandbox, { action: command.action, clientId: command.target });
+    case "check":
+      return callAdmin(args.sandbox, { action: "check", clientId: command.target });
+    case "logs":
+      return readInstanceLogs(args.sandbox, command.target!);
+    case "pack":
+      return packClient(command.target!, { out: command.out, target: command.targetPlatform });
+    case "uninstall":
+      return uninstallPackage(args.sandbox, command.target!);
+  }
+}
+```
+
+要求：
+
+- `install` / `load` / `pack` / `uninstall` 可离线执行。
+- `start` / `stop` / `reload` / `check` / `logs` 通过 `readRuntimeFile(sandbox, "gateway")` 发现服务；服务离线时明确报错，不自动启动。
+- 不初始化 Core 数据库、Provider、TUI。
+
+### 6.3 `src/main.ts`（修改）
+
+在 Core 初始化前分流：
+
+```ts
+if (args.gatewayCommand) {
+  const { runGatewayCommand } = await import("./bootstrap/gateway-command");
+  await runGatewayCommand(args.gatewayCommand, args);
+  return;
+}
+```
+
+### 6.4 `menu-flow.ts` / `menu-history.ts`（修改）
+
+在 `gateway` 菜单下增量增加：
+
+```text
+gateway >
+  run >
+  start clients >
+  stop clients >
+  install >
+  load directory >
+  manage instances >   # list/check/reload/logs
+  pack >
+```
+
+- 保持单列层级与执行交接。
+- 不记录 Token/Secret。
+- 新命令参数记忆仅保存 sandbox、实例 ID、目录等非敏感值。
+- 非交互失败返回明确错误。
+
+---
+
+## 7. Config TUI：实例管理
+
+### 7.1 `GatewayModal.tsx`（修改）
+
+从“仅端口”升级为：
+
+- 实例列表：ID、来源（包/目录）、版本、状态
+- 操作：添加、编辑、检查、启停、重载、打包（开发者）
+- 端口仍在高级设置中编辑
+
+### 7.2 `GatewayInstanceForm.tsx`（新增）
+
+- 由 `manifest.config` 驱动字段。
+- 复用 `FieldInput`、`Modal`、`SelectableRow`。
+- `secret` 字段遮罩，只写 `.env`。
+- `enum` 使用选择行。
+- 取消不创建实例。
+
+### 7.3 `gateway-status.ts`（新增）
+
+```ts
+export type GatewayInstanceStatus = {
+  id: string;
+  running: boolean;
+  desired: boolean;
+  state: string;
+  diagnostics: DiagnosticEvent[];
+};
+
+export async function fetchGatewayStatus(sandbox: string): Promise<GatewayInstanceStatus[] | null>;
+```
+
+- 通过 shared `runtime-file.ts` 读取 `.atom/gateway-runtime.json`，不复制路径解析逻辑。
+- 离线返回 `null`，UI 显示 `OFFLINE`。
+- 使用本机管理 Token；不把 Token 写入日志或历史。
+
+> 若 G0 决定 UI 只做离线配置，则本文件与在线状态展示顺延到 G4 后；CLI 仍提供状态与诊断。
+
+---
+
+## 8. Telegram Client
+
+### 8.1 `clients/telegram-bot/manifest.json`（新增）
+
+```json
+{
+  "manifest_version": 1,
+  "id": "telegram-bot",
+  "name": "Telegram Bot",
+  "version": "0.1.0",
+  "platform": "telegram",
+  "entry": {
+    "production": ["./bin/telegram-bot"],
+    "development": ["bun", "run", "src/main.ts"]
+  },
+  "config": {
+    "bot-token": {
+      "label": "Bot Token",
+      "type": "string",
+      "required": true,
+      "secret": true,
+      "env": "TELEGRAM_BOT_TOKEN"
+    },
+    "mode": {
+      "label": "连接方式",
+      "type": "string",
+      "enum": ["longpoll", "webhook"],
+      "default": "longpoll"
+    },
+    "webhook-url": {
+      "label": "Webhook URL",
+      "type": "string"
+    },
+    "webhook-secret": {
+      "label": "Webhook Secret",
+      "type": "string",
+      "secret": true,
+      "env": "TELEGRAM_WEBHOOK_SECRET"
+    }
+  }
+}
+```
+
+> webhook 条件必填由 Telegram Client 校验；v1 不引入通用表达式语言。
+
+### 8.2 `clients/telegram-bot/package.json`（修改）
+
+```json
+{
+  "scripts": {
+    "build": "bun build src/main.ts --compile --outfile bin/telegram-bot"
+  }
+}
+```
+
+- 构建产物路径与 manifest `entry.production` 一致。
+- 不自动安装依赖或执行构建脚本。
+
+### 8.3 `clients/telegram-bot/src/gateway-client.ts`（新增）
+
+把入站提交抽成可测试函数：
+
+```ts
+export async function submitInbound(input: {
+  gatewayUrl: string;
+  secret: string;
+  platformUserId: string;
+  text: string;
+  fetchImpl?: typeof fetch;
+}): Promise<Response> {
+  const res = await (input.fetchImpl ?? fetch)(`${input.gatewayUrl}/gateway/inbound`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Gateway-Secret": input.secret },
+    body: JSON.stringify({
+      type: "message",
+      platform: "telegram",
+      platformUserId: input.platformUserId,
+      data: { text: input.text },
+    }),
+  });
+  if (res.status === 503 || res.status === 429) {
+    throw new Error(`gateway busy or rate limited (${res.status})`);
+  }
+  if (!res.ok) throw new Error(`gateway rejected message (${res.status})`);
+  return res;
+}
+```
+
+### 8.4 `clients/telegram-bot/src/main.ts`（修改）
+
+- `handleUpdate` 使用 `submitInbound`。
+- 503/429 抛错，交由 `pollOnce` 现有重试与 `updateOffset` 逻辑处理，不推进 offset。
+- 可选 `GET /diagnostics` 调用 `getMe` 并返回有界结果。
+- 不把 Bot Token 写入日志、诊断或打包内容。
+
+---
+
+## 9. 测试文件
+
+| 测试 | 覆盖 |
+|---|---|
+| `src/packages/shared/src/config/config.test.ts`（扩展） | `binary` 拒绝、包/目录二来源互斥、凭据字段、迁移提示 |
+| <code>src/packages/gateway/src/client-package/manifest.test.ts</code> | 六字段、未知版本、entry、target、严格模式 |
+| <code>src/packages/gateway/src/client-package/resolver.test.ts</code> | package/directory、cwd、env、platform 来源、保留参数 |
+| <code>src/packages/gateway/src/client-package/registry.test.ts</code> | 登记、幂等、冲突、删除引用检查 |
+| <code>src/packages/gateway/src/client-package/archive.test.ts</code> | pack 内容、路径逃逸、链接逃逸、失败清理 |
+| `src/packages/gateway/src/client-manager/client-manager.test.ts`（扩展） | 动态登记、移除、重载、端口分配 |
+| `src/packages/gateway/src/client-manager/process-supervisor.test.ts`（扩展） | 旧回调/timer 隔离、Secret 撤销 |
+| `src/packages/gateway/src/server.test.ts`（扩展） | GET 列表、reload、drain、503、诊断 |
+| `src/bootstrap/cli.test.ts`（扩展） | 新子命令、非法参数、退出码 |
+| <code>src/bootstrap/gateway-command.test.ts</code> | 离线 install/load、在线 start/stop/reload、服务离线 |
+| `clients/telegram-bot/src/gateway-client.test.ts` | 2xx、400、429、503、网络错误 |
+| `src/packages/config-tui` 对应测试 | 实例列表、表单、取消、离线状态 |
+
+测试使用 fake spawn/fetch/clock 和临时 sandbox；不启动真实 Client 或使用真实平台凭据。
+
+---
+
+## 10. 文档更新
+
+| 文档 | 更新 |
+|---|---|
+| `docs/communication/gateway.md` | manifest、包、实例、管理接口、诊断、重载 |
+| `docs/communication/gateway-client-design.md` | 回写 G0 确认结果 |
+| `docs/communication/gateway-development-plan.md` | 标记阶段进度与实现差异 |
+| `docs/clients/telegram-bot.md` | manifest、构建产物、非 2xx、诊断 |
+| `docs/subsystems/configuration.md` | 包/目录引用、凭据引用、写入所有权 |
+| `docs/subsystems/startup-menu.md` | 新菜单入口 |
+| `docs/subsystems/sandbox.md` | `.atom/gateway/` 目录结构 |
+| `docs/overview/project-structure.md` | 新目录与文件 |
+| `docs/index.md` | 三份文档与新入口 |
+| <code>src/packages/gateway/src/client-package/README.md</code> | 新目录摘要 |
+| `src/bootstrap/README.md` | 新命令与分流 |
+| `src/packages/config-tui/src/wizard/README.md` | 新增组件 |
+
+---
+
+## 11. 实施顺序与依赖
+
+```text
+G0 契约确认
+  → shared schema + client-instance
+  → manifest + resolver
+  → client-command/process-supervisor 接入 ResolvedClientConfig
+  → registry + archive + Telegram manifest
+  → ClientManager 动态 + server admin/drain
+  → bootstrap CLI/main
+  → config-tui / menu
+  → 官方安装/升级/卸载
+  → 文档与完整验收
+```
+
+每个阶段先写/更新对应文档与测试，再改实现；每阶段结束运行定向测试与 `bun run typecheck`。
+
+---
+
+## 12. 决策状态
+
+- [x] D1–D9 已由用户确认，全部采用推荐方案；结论见 [plan §4.2](./atom_neo_2026-11-14_gateway_client_packaging_plan.md#42-g0契约收口)
+- [x] 新增 `tar` 依赖（D8；G2 使用）
+- [x] 接受 `shared/client-instance.ts` 作为唯一写盘入口（D4）
+- [x] G4 首轮包含离线配置 + CLI 状态，在线状态 UI 依赖 G3
+- [x] 多账号首版明确按现有 `platform:userId` 边界，不宣称完整多账号（D6）
+
+## 13. M1 实施记录（2026-11-15）
+
+本轮只实施 G0 + G1，不含 G2–G6。
+
+| 子任务 | 实际产出 | 测试结果 |
+|---|---|---|
+| G1-1 | `shared/config/client.ts`：package/directory 二选一、credentials、旧 `binary`/`platform` 拒绝 | `bun test src/packages/shared/src/config/config.test.ts` → 21 pass |
+| G1-2 | `shared/config/client-instance.ts`：实例读写、凭据引用、lockfile、`configRevision`、写入回滚 | `bun test src/packages/shared/src/config/client-instance.test.ts` → 18 pass |
+| G1-3 | `gateway/client-package/manifest.ts`、`README.md`：manifest v1 严格校验与入口选择 | `bun test src/packages/gateway/src/client-package/manifest.test.ts` → 17 pass |
+| G1-4 | `gateway/client-package/resolver.ts`：package/directory → command/cwd/platform/env | `bun test src/packages/gateway/src/client-package/resolver.test.ts` → 14 pass / 1 skip |
+| G1-5 | `shared/utils/child-process-env.ts`：实例凭据隔离与管理 Token 过滤 | `bun test src/packages/shared/src/utils/child-process-env.test.ts` → 7 pass |
+| G1-6 | `client-command.ts` / `process-supervisor.ts` / `client-manager/index.ts` / `server.ts` / `main.ts` 接入 `ResolvedClientConfig` | `bun test src/packages/gateway/src/client-manager src/packages/gateway/src/server.test.ts src/packages/gateway/src/config.test.ts` → 57 pass |
+| G1-7 | fake runtime 集成测试：package、directory、旧 binary 拒绝、凭据隔离、保留参数 | `bun test src/packages/gateway/src/client-package/integration.test.ts` → 5 pass |
+
+额外验证：`bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils/child-process-env.test.ts src/bootstrap/config.test.ts` → 156 pass / 1 skip；`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过。
+
+> 注意：仓库中可能存在被忽略的 `src/packages/gateway/dist` 旧编译测试；直接运行 `bun test src/packages/gateway` 会把它们一起执行并因旧 `binary` fixture 失败。M1 验证使用 `src/packages/gateway/src` 路径。
+
+实施偏差：
+
+- M1 的 `ClientManager` 仍按启动时数组构造 supervisor；动态登记/重载/活动端口集合归 G3（计划 §4.3 的 G1-6 只要求统一启动描述）。
+- `main.ts` 启动前解析实例；包安装目录通过 resolver 的 `packageRoot` 注入，`packages.json` 登记与安装归 G2。
+- `client-instance.removeInstance` 不删除 `.env` 中的凭据值，只移除实例配置；显式凭据删除归 G5 卸载流程。
+- 未实现新 CLI/TUI 入口、`registry.ts`、`archive.ts`、管理接口、drain、诊断协议与 Telegram 改动，均属于后续阶段。

@@ -2,6 +2,12 @@
 
 > **Purpose**: Gateway 是 Atom Neo 的平台 Client 中转层。通过管理平台 Client 子进程，将微信、Telegram 等外部平台的消息标准化后路由到 Core 引擎。
 
+## 接入改进（2026-11-14，M1 已实施）
+
+新增 [接入与发行规划](./gateway-client-design.md) 与独立 [开发计划](./gateway-development-plan.md)：标准 Client 发行包安装、根目录 `manifest.json`、Chrome 式开发目录加载/手动重载、配置向导和实例状态诊断。
+
+M1（G0+G1）已落地：实例配置只接受 `package` / `directory` 二选一，`binary` / 实例级 `platform` 已移除并明确拒绝；manifest v1 解析、入口选择、`ResolvedClientConfig` 统一启动描述、凭据引用注入与实例凭据隔离已接入现有 `ClientManager` / `ProcessSupervisor`。包安装、`packages.json`、CLI/TUI 入口、动态重载、诊断和日志仍属 G2–G4，尚未提供。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
+
 ## Gateway Client 控制模式（已实现）
 
 2026-09-12：本节代码已实现；测试和进程级验收已归档。详见 [启动模式计划](../records/startup-modes-plan.md) 与 [验收记录](../records/startup-validation.md)。
@@ -52,11 +58,12 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 
 ## 2. 路由
 
-当前实现仅暴露一类路由，仅供 Client 子进程使用；新增管理接口见上节：
+当前实现区分本机管理路由与平台 Client 路由：
 
 | 路由前缀 | 验证方式 | 用户 | 用途 |
 |---------|---------|------|------|
 | `/gateway/*` | `X-Gateway-Secret` Header | Client 子进程 | 消息中转 |
+| `/admin/clients`（POST） | 本机管理 Token | 本机控制命令 | 已配置 Client 的 start/stop，返回逐项结果与状态 |
 
 **Gateway 端点：**
 
@@ -158,13 +165,19 @@ failed --stop/give_up--> idle
 const secret = generateSecret();
 const port = config.clientPortRangeStart + clientIndex;
 spawnProcess([
-  binary,
+  ...resolved.command,
   "--secret", secret,
   "--port", String(port),
   "--gateway-url", `http://127.0.0.1:${config.port}`,
-  ...userArgs,
-], { onExit: (code, signal, error) => supervisor.onExit(code, signal, error) });
+  ...buildClientArgs(resolved.clientArgs),
+], {
+  cwd: resolved.cwd,
+  env: resolved.env,
+  onExit: (code, signal, error) => supervisor.onExit(code, signal, error),
+});
 ```
+
+`resolved` 是 `client-package/resolver.ts` 产出的 `ResolvedClientConfig`：`command` 来自 manifest 的 production/development 入口，`cwd` 为 Client 根目录，`platform` 来自 manifest。凭据只注入目标实例；`env` 仍继承允许的父进程变量，但会过滤其他实例的 `ATOM_CLIENT_*` 与 `ATOM_ADMIN_TOKEN`。`binary` 与实例级 `platform` 不再是实例配置字段。
 
 - 重启上限 5 次，退避 `1s * 2^attempt`，上限 30s。
 - 异常退出和健康检查失败共用同一 `failed → starting` 重启入口；达到上限后 give_up 并记录 `client restart limit reached`。
@@ -175,10 +188,11 @@ spawnProcess([
 
 ```
 Gateway 启动
-  ├── 读取 config.gateway.clients[]
+  ├── 读取 config.gateway.clients[]（package / directory）
+  ├── resolver 读取 manifest.json → ResolvedClientConfig[]
   ├── 对每个 client:
   │     ├── ProcessSupervisor 生成 secret + 使用分配端口
-  │     ├── spawnProcess([二进制, "--secret", secret, "--port", port])
+  │     ├── spawnProcess([...entry, "--secret", secret, "--port", port], { cwd, env })
   │     └── 等待 Client HTTP server 就绪
   │
   └── 运行中:
@@ -196,9 +210,9 @@ Gateway 关闭
 >
 > 测试通过 `client-manager/runtime.ts` 注入 fake spawn/fetch/now/timer，不启动真实子进程。
 
-## 6. Client 二进制规范
+## 6. Client 程序规范
 
-每个 Client 是一个独立可执行文件，必须满足以下契约：
+每个 Client 是一个独立程序（发行包或开发目录），根目录必须有 `manifest.json`，并满足以下契约：
 
 - **参数**: `--secret <uuid> --port <number> --gateway-url <url>`
 - **HTTP Server**: 监听 `127.0.0.1:{port}`
@@ -212,6 +226,8 @@ Gateway 关闭
 
 ## 7. 配置
 
+M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`binary` 与实例级 `platform` 已移除。旧 `binary` 配置在 schema 校验阶段被拒绝，错误信息提示改用 `package` 或 `directory`；不自动迁移。`platform`、启动命令与 cwd 均由 Client 根目录的 `manifest.json` 解析。
+
 ```jsonc
 // config.json
 {
@@ -219,24 +235,33 @@ Gateway 关闭
     "port": 3000,
     "clients": [
       {
-        "id": "telegram-bot",
-        "platform": "telegram",
-        "binary": "/home/user/bots/telegram-bot",
-        "clientArgs": {
-          "bot-token": "123456:ABC-DEF...",
-          "mode": "longpoll"
+        "id": "telegram-main",
+        "package": { "id": "telegram-bot", "version": "0.1.0" },
+        "clientArgs": { "mode": "longpoll" },
+        "credentials": {
+          "bot-token": "ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN"
         },
         "stdio": "inherit"
+      },
+      {
+        "id": "telegram-dev",
+        "directory": "./clients/telegram-bot",
+        "clientArgs": { "mode": "longpoll" }
       }
     ]
   }
 }
 ```
 
+- `package` 引用已安装包；`directory` 引用开发目录。二者必须恰好出现一个。
+- `credentials` 只保存字段到 `.env` 变量名的引用，例如 `bot-token -> ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN`；启动时由 resolver 注入 manifest 声明的子进程变量（如 `TELEGRAM_BOT_TOKEN`）。
+- 凭据只写 `.env`；实例写入入口为 shared `client-instance.ts`，使用 lockfile 与 `configRevision` 防止并发覆盖。Gateway 只读。
+
 **`clientArgs` 字段说明：**
 - key 必须与 client 的 CLI 参数名完全一致（kebab-case）
 - Gateway 保留 `secret`、`port`、`gateway-url` 三个内部参数，不允许覆盖
 - 所有值必须为字符串类型
+- `credentials` 中的字段不进入普通 CLI 参数
 
 **`stdio` 字段说明：**
 - 控制 Client 子进程 stdout/stderr 的处理方式
@@ -257,6 +282,10 @@ src/packages/gateway/
     config.ts                       Gateway 配置
     auth/
       secret.ts                     Secret 生成与验证
+    client-package/
+      README.md                     目录摘要与边界
+      manifest.ts                   manifest v1 解析、严格校验、入口选择
+      resolver.ts                   用户实例配置 → ResolvedClientConfig
     client-manager/
       README.md                     目录摘要与生命周期说明
       index.ts                      ClientManager facade
@@ -281,3 +310,8 @@ clients/
 | [protocol.md](./protocol.md) | WebSocket 事件协议与 HTTP API |
 | [bootstrap.md](../overview/bootstrap.md) | Gateway 启动顺序 |
 | [configuration.md](../subsystems/configuration.md) | Gateway 配置项 (port, clients) |
+| [gateway-client-design.md](./gateway-client-design.md) | manifest、发行包与开发目录流程；G0 已确认，M1 已实施 |
+| [gateway-development-plan.md](./gateway-development-plan.md) | 阶段、影响面与验收；M1 已完成 |
+| [packaging plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md) | M1 执行计划、G0 决策与 G1 子任务状态 |
+| [packaging code_and_file](./atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md) | M1 文件清单、示例代码与实施记录 |
+| [packaging graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md) | 模块依赖、启动/安装/重载序列与不变量 |

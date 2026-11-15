@@ -2,6 +2,8 @@
 
 > **Purpose**: Telegram Bot Client 是 Atom Neo 的第一个平台接入参考实现。它负责与 Telegram Bot API 交互，将用户消息标准化后转发到 Gateway，并将 Core 的回复发送回用户。
 
+> **2026-11-14 规划补充（2026-11-15 修订）**：Telegram 将作为标准发行包与开发目录加载的首个样例，统一使用根目录 `manifest.json`。目标为安装后引导配置 Token，以及开发时加载目录、手动重载和打包。M1 已实现 manifest/resolver 与统一启动描述，并**拒绝旧 `binary` 配置**；下文 CLI/二进制说明保留作历史参考，配置示例不能直接使用，需改为 `package` 或 `directory`。安装、CLI/TUI 与重载仍待 G2–G4。详见 [接入与发行规划](../communication/gateway-client-design.md) 与 [开发计划](../communication/gateway-development-plan.md)。
+
 ## 1. 架构位置
 
 ```
@@ -79,10 +81,6 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
       "id": "telegram-bot",
       "platform": "telegram",
       "binary": "/path/to/telegram-bot",
-      "clientArgs": {
-        "bot-token": "123456:ABC-DEF...",
-        "mode": "longpoll"
-      },
       "clientArgs": {
         "bot-token": "123456:ABC-DEF...",
         "mode": "longpoll"

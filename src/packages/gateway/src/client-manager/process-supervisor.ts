@@ -1,7 +1,7 @@
 /** Per-client process lifecycle: spawn, readiness, health, stop and restart. */
 import type { Logger, ProcessHandle } from "@atom-neo/shared";
 import { generateSecret } from "../auth/secret";
-import type { ClientConfig } from "../config";
+import type { ResolvedClientConfig } from "../client-package/resolver";
 import { buildClientCommand, buildSpawnOptions, waitUntilReady } from "./client-command";
 import type { ActiveClient, ProcessSupervisorDeps } from "./client-command";
 import type { HealthProbe } from "./health-probe";
@@ -19,7 +19,7 @@ const HEALTH_RESET_UPTIME_MS = 60_000;
 
 export class ProcessSupervisor {
   #id: string;
-  #config: ClientConfig;
+  #config: ResolvedClientConfig;
   #port: number;
   #gatewayPort: number;
   #logger: Logger;
@@ -139,13 +139,20 @@ export class ProcessSupervisor {
     const secret = generateSecret();
     const client: ActiveClient = { id: this.#id, platform: this.#config.platform, secret, port: this.#port, url: `http://127.0.0.1:${this.#port}` };
 
-    const stdio = this.#config.stdio ?? "inherit";
-    this.#logger.info("spawning client", { id: this.#id, platform: client.platform, port: client.port, binary: this.#config.binary, stdio });
+    const stdio = this.#config.stdio;
+    this.#logger.info("spawning client", {
+      id: this.#id,
+      platform: client.platform,
+      port: client.port,
+      command: this.#config.command,
+      cwd: this.#config.cwd,
+      stdio,
+    });
 
     let proc: ProcessHandle | undefined;
     try {
       proc = this.#runtime.spawn(buildClientCommand(this.#config, client, this.#gatewayPort),
-        buildSpawnOptions(stdio, (exitCode, signalCode, error) => this.#handleExit(generation, exitCode, signalCode, error)));
+        buildSpawnOptions(stdio, this.#config.env, this.#config.cwd, (exitCode, signalCode, error) => this.#handleExit(generation, exitCode, signalCode, error)));
       this.#proc = proc;
       this.#active = client;
       this.#startedAt = this.#runtime.now();

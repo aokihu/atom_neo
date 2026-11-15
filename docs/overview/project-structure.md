@@ -342,6 +342,10 @@ src/packages/gateway/
 │   ├── config.ts
 │   ├── auth/
 │   │   └── secret.ts
+│   ├── client-package/
+│   │   ├── README.md
+│   │   ├── manifest.ts
+│   │   └── resolver.ts
 │   └── client-manager/
 │       ├── README.md
 │       ├── index.ts

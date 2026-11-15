@@ -62,6 +62,11 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [gateway.md](./communication/gateway.md) | Gateway 平台 Client 中转层 — 子进程管理 + Secret 鉴权 + 消息路由 | 理解外部平台集成 |
+| [gateway-client-design.md](./communication/gateway-client-design.md) | Gateway 接入与发行契约：manifest.json、包/目录实例、凭据引用；G0 已确认，M1 已实施 | 确认 Gateway 改进目标与契约 |
+| [gateway-development-plan.md](./communication/gateway-development-plan.md) | Gateway 更新开发计划：G0–G6 阶段、复用边界、破坏性迁移与验收矩阵；M1 已完成 | 分阶段实施与跟踪进度 |
+| [atom_neo_2026-11-14_gateway_client_packaging_plan.md](./communication/atom_neo_2026-11-14_gateway_client_packaging_plan.md) | Gateway Client 打包接入执行计划：复杂度拆分、G0 决策、G1–G6 子任务、里程碑、风险与回滚；M1 已完成 | 确认范围与阶段跟踪 |
+| [atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md](./communication/atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md) | Gateway Client 打包接入文件与代码：修改/新增文件、示例代码、测试与 M1 实施记录 | 编码前审阅文件影响面 |
+| [atom_neo_2026-11-14_gateway_client_packaging_graph.md](./communication/atom_neo_2026-11-14_gateway_client_packaging_graph.md) | Gateway Client 打包接入关系图：模块依赖、数据模型、启动/安装/重载序列与不变量 | 理解改动关系与风险 |
 | [clients/telegram-bot.md](./clients/telegram-bot.md) | Telegram Bot Client 实现 — 长轮询/Webhook 双模式 + 消息分片 + 限流退避 | 接入 Telegram |
 | [protocol.md](./communication/protocol.md) | WebSocket 事件协议 | 通信层 |
 | [error-handling.md](./communication/error-handling.md) | 错误跨层传播模型 — Element → Pipeline → TaskEngine → Client | 写 try/catch |

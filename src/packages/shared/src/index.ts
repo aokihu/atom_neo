@@ -1,6 +1,6 @@
 export { isAdminRequest } from "./utils/admin-auth";
 export type { AdminRequestContext } from "./utils/admin-auth";
-export { createChildProcessEnv } from "./utils/child-process-env";
+export { createChildProcessEnv, INSTANCE_CREDENTIAL_PREFIX } from "./utils/child-process-env";
 export { spawnProcess } from "./utils/process";
 export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
 
@@ -126,6 +126,13 @@ export {
   ConfigSchema,
   RuntimeConfigSchema,
   ClientConfigSchema,
+  clientConfigMigrationHint,
+  clientSource,
+  credentialRef,
+  listInstances,
+  readConfigRevision,
+  removeInstance,
+  upsertInstance,
   ProviderProfilesSchema,
   ProviderDefinitionSchema,
   PROVIDERS,
@@ -148,6 +155,10 @@ export type {
   RuntimeConfig,
   DeepPartial,
   ClientConfig,
+  ClientSource,
+  InstanceFileWriter,
+  InstanceWriteOptions,
+  InstanceWriteResult,
   ProviderType,
   ProviderProtocol,
   ProviderPreset,

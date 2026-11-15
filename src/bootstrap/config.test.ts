@@ -123,8 +123,8 @@ describe("loadConfig layering", () => {
       gateway: {
         port: 3456,
         clients: [
-          { id: "valid", platform: "telegram", binary: "./bot" },
-          { id: "", platform: "telegram", binary: "./broken" },
+          { id: "valid", directory: "./bot" },
+          { id: "", directory: "./broken" },
         ],
       },
       tui: { theme: "nord" },
@@ -135,6 +135,16 @@ describe("loadConfig layering", () => {
     expect(userConfig.gateway.clients).toHaveLength(1);
     expect(userConfig.gateway.clients[0]?.id).toBe("valid");
     expect(userConfig.tui.theme).toBe("nord");
+  });
+
+  test("rejects legacy binary clients with a migration hint", () => {
+    const sandbox = makeSandbox();
+    Bun.write(`${sandbox}/config.json`, JSON.stringify({
+      version: 2,
+      gateway: { clients: [{ id: "legacy", platform: "telegram", binary: "./bot" }] },
+    }));
+
+    expect(() => loadConfig(sandbox)).toThrow(/binary.*package.*directory/i);
   });
 
   test("falls back to defaults only when sanitizing cannot fix the config", () => {

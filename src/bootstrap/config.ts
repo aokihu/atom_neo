@@ -6,6 +6,7 @@ import {
   ProviderDefinitionSchema,
   ProviderProfilesSchema,
   RuntimeConfigSchema,
+  clientConfigMigrationHint,
   mergeConfig,
   overlaySchema,
   runtimeConfigPath,
@@ -54,6 +55,8 @@ function sanitizeConfig(raw: unknown): Record<string, unknown> {
     if (Array.isArray(clients)) {
       const cleaned = clients.filter((client, index) => {
         if (ClientConfigSchema.safeParse(client).success) return true;
+        const hint = clientConfigMigrationHint(client);
+        if (hint) throw new Error(`Invalid gateway client at index ${index}: ${hint}`);
         console.error(`[config] Dropping invalid gateway client at index ${index}`);
         return false;
       });
