@@ -409,6 +409,18 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 
 **M3b 完成条件**：config-tui、gateway/shared、CLI/handler、PTY 定向测试、`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过；未进入 G5/G6。
 
+**M3b 初审修复（2026-11-15）**
+
+| 问题 | 修复 |
+|---|---|
+| Gateway 在线时 load 只写 config，新实例不进入列表 | `/admin/clients` POST 增加 `register`；用现有 `resolveClient` 读取 config/.env/registry/manifest 后 `cm.register`，不自动 start；重复登记返回 409。`gateway-command load` 检测 runtime 文件：在线调用 register，离线保持 `saved, not started`；JSON 区分 `saved/registered/offline`。 |
+| client item key 与固定动作冲突 | 列表 client key 加 `client:` 前缀，激活时解析；实例 ID 为 `refresh/install/load/pack/port/back` 不会触发固定动作。 |
+| admin 请求无超时 | `gateway-status` 的 status/diagnostics/action 统一 `AbortSignal.timeout`（默认 5s）；超时返回明确错误。 |
+
+约束不变：CLI/UI 写 config，Gateway 只读并 register/reload；不自动 start；状态仍来自 supervisor；G5/G6 未进入。
+
+注意：`register` 复用现有 `resolveClient`，因此 required 字段或 required secret 未配置时返回 400；此时 config 已保存，但实例仍只存在于磁盘。补齐配置后需再次 load 或重启 Gateway 完成登记（本轮不新增“config-only 实例”列表状态源）。
+
 **G3 完成标准**：
 
 - 在途消息、健康重启、手动 stop 并发时行为确定。

@@ -14,6 +14,8 @@ M3a（G3）已落地动态管理与重载：`ClientManager` 动态 register/remo
 
 M3b（G4）已落地管理与诊断 UI：`GatewayModal` 显示实例来源（package 版本或 directory）、supervisor 状态/端口/平台、最近错误；操作面板提供 start/stop/reload、check、diagnostics/logs、编辑、install、load、pack。`GatewayInstanceForm` 支持编辑模式，secret 使用固定宽度遮罩输入，空白 secret 表示保持已配置值；enum/default 与 resolver 契约一致。启动菜单新增 install/load/manage/pack，history 只记录 sandbox/target/id/out。`atom gateway load --id <id>` 允许同一目录创建不同实例，省略时仍使用 `manifest.id`。
 
+M3b 初审修复：`POST /admin/clients {action:"register",clientId}` 通过现有 resolver 重新读取 config/.env/registry/manifest 后动态 `cm.register`，不自动启动；重复登记返回 409，其他解析/登记失败返回 400，不影响已有实例。`gateway load` 在 Gateway 在线时写 config 后调用 register，离线时保持 `saved, not started`；JSON 输出区分 `saved/registered/offline`。UI admin 请求统一 5s 超时，client 列表 key 使用 `client:` 前缀避免与 refresh/install/load/pack/port/back 固定动作冲突。注册仍要求配置已可解析：required 字段或 required secret 缺失时返回 400，config 保留但需补齐后再次 load 或重启登记。
+
 `--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。UI 的进程状态只来自 supervisor/admin API，平台检查只来自 Client `/diagnostics`，不另建状态源；诊断仍由 Gateway 有界脱敏。
 
 ## Gateway Client 控制模式（已实现）
@@ -72,7 +74,7 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 |---------|---------|------|------|
 | `/gateway/*` | `X-Gateway-Secret` Header | Client 子进程 | 消息中转 |
 | `/admin/clients`（GET） | 本机管理 Token | 本机控制命令 | 实例状态、来源/端口与诊断摘要 |
-| `/admin/clients`（POST） | 本机管理 Token | 本机控制命令 | start/stop/reload，返回逐项结果 |
+| `/admin/clients`（POST） | 本机管理 Token | 本机控制命令 | start/stop/reload/register，返回逐项结果 |
 | `/admin/clients/:id/diagnostics`（GET） | 本机管理 Token | 本机检查/日志 | 本地诊断事件 + 可选 Client `/diagnostics` |
 
 **Gateway 端点：**

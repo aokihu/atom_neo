@@ -124,6 +124,18 @@ test("offline sandbox shows OFFLINE plus install/load/pack entry points", async 
   expect(frame).toContain("Pack client directory (developer)");
 });
 
+test("admin errors show the failure without claiming the Gateway is offline", async () => {
+  const { dir } = makeSandbox();
+  const server = startServer(() => Response.json({ error: "boom" }, { status: 500 }));
+  writeRuntime(dir, server.url.toString());
+
+  const modal = await mountModal(dir);
+  expect(modal.frame()).toContain("Gateway status failed (500)");
+  expect(modal.frame()).toContain("Unable to load Gateway status.");
+  expect(modal.frame()).not.toContain("OFFLINE");
+  expect(modal.frame()).toContain("Install client package");
+});
+
 test("lists supervisor source/state/platform and shows reload failures", async () => {
   const { dir } = makeSandbox();
   const requested: string[] = [];
@@ -213,12 +225,23 @@ test("install, load with an optional id, and pack hand off to the CLI actions", 
   const installed: string[] = [];
   const loaded: Array<{ directory: string; id?: string }> = [];
   const packed: string[] = [];
-  const server = startServer(() => Response.json({ clients: [] }));
+  const clients: GatewayInstanceStatus[] = [];
+  const server = startServer(() => Response.json({ clients }));
   writeRuntime(dir, server.url.toString());
 
   const modal = await mountModal(dir, {
     install: async (archive) => { installed.push(archive); return `installed ${archive}`; },
-    load: async (directory, id) => { loaded.push({ directory, id }); return `loaded ${directory}`; },
+    load: async (directory, id) => {
+      loaded.push({ directory, id });
+      clients.push(status({
+        id: id ?? "loaded-bot",
+        source: { type: "directory", directory },
+        state: "idle",
+        running: false,
+        desired: false,
+      }));
+      return `loaded ${directory}`;
+    },
     pack: async (directory) => { packed.push(directory); return `packed ${directory}`; },
   });
 
@@ -239,13 +262,32 @@ test("install, load with an optional id, and pack hand off to the CLI actions", 
   await modal.press("RETURN");
   await modal.settle();
   expect(loaded).toEqual([{ directory: "/clients/bot", id: undefined }]);
+  expect(modal.frame()).toContain("loaded-bot");
 
-  await modal.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await modal.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(modal.frame()).toContain("PACK CLIENT");
   await modal.type("clients/bot");
   await modal.press("RETURN");
   await modal.settle();
   expect(packed).toEqual(["clients/bot"]);
+});
+
+test("instance ids that match fixed action keys still open the instance", async () => {
+  const { dir } = makeSandbox();
+  const server = startServer(() => Response.json({
+    clients: [status({
+      id: "back",
+      source: { type: "directory", directory: "/clients/back" },
+    })],
+  }));
+  writeRuntime(dir, server.url.toString());
+
+  const modal = await mountModal(dir);
+  await modal.press("RETURN");
+
+  expect(modal.frame()).toContain("INSTANCE · back");
+  expect(modal.frame()).toContain("Edit configuration");
+  expect(modal.backs()).toBe(0);
 });
 
 test("edit mode masks configured secrets, saves args, and keeps credential refs", async () => {

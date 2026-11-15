@@ -118,6 +118,26 @@ describe("gateway status transport", () => {
     expect(calls[0]!.url).toBe("http://127.0.0.1:3100/admin/clients/alpha%2Fbeta/diagnostics");
   });
 
+  test("admin requests time out with a clear error", async () => {
+    const dir = sandbox();
+    publishRuntime(dir, "http://127.0.0.1:3100");
+    const fetchImpl = ((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) {
+        reject(new Error("missing abort signal"));
+        return;
+      }
+      signal.addEventListener("abort", () => reject(signal.reason));
+    })) as typeof fetch;
+
+    await expect(fetchGatewayStatus(dir, fetchImpl, 10))
+      .rejects.toThrow("Gateway admin request timed out after 10ms");
+    await expect(fetchGatewayDiagnostics(dir, "alpha", fetchImpl, 10))
+      .rejects.toThrow("Gateway admin request timed out after 10ms");
+    await expect(gatewayAction(dir, "reload", "alpha", fetchImpl, 10))
+      .rejects.toThrow("Gateway admin request timed out after 10ms");
+  });
+
   test("reload failures carry the server detail instead of a bare 400", async () => {
     const dir = sandbox();
     publishRuntime(dir, "http://127.0.0.1:3100");

@@ -45,7 +45,7 @@ function capture(): { lines: string[]; stdout: (line: string) => void } {
   return { lines, stdout: (line) => lines.push(line) };
 }
 
-function writeClient(root: string, options: { version?: string } = {}): void {
+function writeClient(root: string, options: { version?: string; required?: boolean } = {}): void {
   mkdirSync(join(root, "bin"), { recursive: true });
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(join(root, "bin", "echo-bot"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
@@ -61,11 +61,13 @@ function writeClient(root: string, options: { version?: string } = {}): void {
       production: ["bin/echo-bot"],
       development: ["bun", "run", "src/main.ts"],
     },
-    config: {
-      mode: { label: "Mode", type: "string", default: "longpoll" },
-      token: { label: "Token", type: "string", required: true, secret: true, env: "ECHO_BOT_TOKEN" },
-      endpoint: { label: "Endpoint", type: "string", required: true },
-    },
+    config: options.required === false
+      ? { mode: { label: "Mode", type: "string", default: "longpoll" } }
+      : {
+        mode: { label: "Mode", type: "string", default: "longpoll" },
+        token: { label: "Token", type: "string", required: true, secret: true, env: "ECHO_BOT_TOKEN" },
+        endpoint: { label: "Endpoint", type: "string", required: true },
+      },
   };
   writeFileSync(join(root, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 }
@@ -180,6 +182,80 @@ describe("offline gateway commands", () => {
     expect(config.gateway.clients.map((client: { id: string }) => client.id)).toEqual(["echo-a", "echo-b"]);
     expect(config.gateway.clients.every((client: { directory: string }) => client.directory === clientRoot)).toBe(true);
     expect(output.lines.join("\n")).toContain("echo-b");
+  });
+
+  test("load distinguishes saved/offline from online registration", async () => {
+    const sandbox = tempDir("atom-gateway-load-register-");
+    const clientRoot = join(sandbox, "client");
+    writeClient(clientRoot, { required: false });
+
+    const offline = capture();
+    const offlineJson = gatewayArgs(sandbox, "load", clientRoot, ["--json"]);
+    await runGatewayCommand(offlineJson.command, offlineJson.args, { stdout: offline.stdout });
+    expect(JSON.parse(offline.lines.join("\n"))).toMatchObject({
+      saved: true,
+      applied: false,
+      registered: false,
+      offline: true,
+    });
+
+    publishRuntimeFile(sandbox, "gateway", {
+      url: "http://127.0.0.1:4300",
+      token: "admin-token",
+      instanceId: "gateway-test",
+    });
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return Response.json({ results: [{ id: "echo-bot", ok: true }] });
+    }) as typeof fetch;
+
+    const online = capture();
+    const onlineCommand = gatewayArgs(sandbox, "load", clientRoot);
+    await runGatewayCommand(onlineCommand.command, onlineCommand.args, {
+      stdout: online.stdout,
+      fetchImpl,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("http://127.0.0.1:4300/admin/clients");
+    expect(adminHeader(calls[0]!.init)).toBe("admin-token");
+    expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({ action: "register", clientId: "echo-bot" });
+    expect(online.lines.join("\n")).toContain("saved and registered, not started");
+
+    const onlineJson = capture();
+    const jsonCommand = gatewayArgs(sandbox, "load", clientRoot, ["--json"]);
+    await runGatewayCommand(jsonCommand.command, jsonCommand.args, {
+      stdout: onlineJson.stdout,
+      fetchImpl,
+    });
+    expect(JSON.parse(onlineJson.lines.join("\n"))).toMatchObject({
+      saved: true,
+      registered: true,
+      offline: false,
+    });
+  });
+
+  test("load reports a register failure after saving the config", async () => {
+    const sandbox = tempDir("atom-gateway-load-register-fail-");
+    const clientRoot = join(sandbox, "client");
+    writeClient(clientRoot, { required: false });
+    publishRuntimeFile(sandbox, "gateway", {
+      url: "http://127.0.0.1:4300",
+      token: "admin-token",
+      instanceId: "gateway-test",
+    });
+    const fetchImpl = (async () => Response.json({
+      results: [{ id: "echo-bot", ok: false, error: "Client already registered: echo-bot" }],
+    }, { status: 409 })) as unknown as typeof fetch;
+
+    const output = capture();
+    const load = gatewayArgs(sandbox, "load", clientRoot);
+    await expect(runGatewayCommand(load.command, load.args, {
+      stdout: output.stdout,
+      fetchImpl,
+    })).rejects.toThrow("Gateway admin request failed (409)");
+    expect(output.lines.join("\n")).toContain("saved, but register failed");
+    expect(JSON.parse(readFileSync(join(sandbox, "config.json"), "utf8")).gateway.clients).toHaveLength(1);
   });
 
   test("offline actions need no runtime and online actions explain a missing one", async () => {

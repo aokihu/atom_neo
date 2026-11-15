@@ -550,11 +550,20 @@ sequenceDiagram
     G-->>S: local events + client status
     U->>M: Install / Load / Pack
     M->>A: 注入的 CLI actions
-    A-->>M: 命令输出
+    A->>G: load 在线时 POST register（不 start）
+    G->>G: resolveClient + cm.register
+    A-->>M: 命令输出（saved/registered/offline）
+    M->>S: refresh 后新实例可见
     U->>M: Edit
     M->>M: GatewayInstanceForm（secret 固定遮罩）
     M->>S: saveGatewayInstance → upsertInstance
 ```
+
+**关键边界**：
+
+- `gateway-status` 的 admin 请求统一 `AbortSignal.timeout`（默认 5s）；超时显示明确错误，不无限等待。
+- `register` 只创建 idle supervisor，不自动 start；进程状态仍来自 supervisor。
+- client 列表 key 使用 `client:${id}`，固定动作 key（refresh/install/load/pack/port/back）与实例 ID 解耦。
 
 ---
 

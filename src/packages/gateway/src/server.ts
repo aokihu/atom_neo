@@ -182,6 +182,26 @@ export async function startGateway(configOverrides?: GatewayOverrides): Promise<
     throw new Error("task timeout");
   }
 
+  async function registerClient(id: string): Promise<Response> {
+    if (!resolveClient) return Response.json({ error: "Register unsupported" }, { status: 501 });
+    if (cm.list().some((client) => client.id === id)) {
+      const text = `Client already registered: ${id}`;
+      return Response.json({ error: text, results: [{ id, ok: false, error: text }], clients: cm.list() }, { status: 409 });
+    }
+
+    try {
+      const resolved = await resolveClient(id);
+      cm.register(resolved);
+      record(id, "process", "info", "registered");
+      return Response.json({ results: [{ id, ok: true }], clients: cm.list() });
+    } catch (error) {
+      const text = message(error);
+      const status = cm.list().some((client) => client.id === id) ? 409 : 400;
+      record(id, "process", "error", `register failed: ${text}`);
+      return Response.json({ results: [{ id, ok: false, error: text }], clients: cm.list() }, { status });
+    }
+  }
+
   async function reloadClient(id: string): Promise<Response> {
     if (!resolveClient) return Response.json({ error: "Reload unsupported" }, { status: 501 });
     if (draining.has(id)) return Response.json({ error: "Client busy" }, { status: 409 });
@@ -237,12 +257,16 @@ export async function startGateway(configOverrides?: GatewayOverrides): Promise<
           const body = await req.json().catch(() => null) as { action?: string; clientId?: string } | null;
           const action = body?.action;
           const validId = body?.clientId === undefined || (typeof body.clientId === "string" && body.clientId.trim() !== "");
-          if (!body || !["start", "stop", "reload"].includes(action ?? "") || !validId) {
-            return Response.json({ error: "Expected action start|stop|reload and clientId for reload" }, { status: 400 });
+          if (!body || !["start", "stop", "reload", "register"].includes(action ?? "") || !validId) {
+            return Response.json({ error: "Expected action start|stop|reload|register and clientId for reload/register" }, { status: 400 });
           }
           if (action === "reload") {
             if (typeof body.clientId !== "string") return Response.json({ error: "reload requires clientId" }, { status: 400 });
             return reloadClient(body.clientId);
+          }
+          if (action === "register") {
+            if (typeof body.clientId !== "string") return Response.json({ error: "register requires clientId" }, { status: 400 });
+            return registerClient(body.clientId);
           }
 
           const ids = body.clientId === undefined ? cm.list().map(c => c.id) : [body.clientId];

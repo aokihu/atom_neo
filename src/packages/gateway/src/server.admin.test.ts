@@ -211,6 +211,57 @@ describe("Gateway admin and drain", () => {
     }
   });
 
+  test("register adds an idle instance without starting it and rejects duplicates", async () => {
+    const fake = createFakeRuntime();
+    const captured = captureServer();
+    const resolverCalls: string[] = [];
+    const gateway = await start(fake, captured.server, coreFetch().impl, {
+      resolveClient: async (id) => {
+        resolverCalls.push(id);
+        if (id === "broken") throw new Error("manifest missing");
+        return resolved(id, `/bin/${id}`);
+      },
+    });
+    const handler = captured.handler();
+    const post = (action: string, clientId?: string) => handler(new Request("http://gateway/admin/clients", {
+      ...admin(),
+      method: "POST",
+      body: JSON.stringify({ action, clientId }),
+    }), context());
+    try {
+      const initialProcesses = fake.processes.length;
+
+      const registered = await post("register", "gamma");
+      expect(registered.status).toBe(200);
+      const body = await registered.json() as { clients: Array<{ id: string; running: boolean; desired: boolean }> };
+      expect(body.clients.map(client => client.id)).toContain("gamma");
+      expect(body.clients.find(client => client.id === "gamma")).toMatchObject({ running: false, desired: false });
+      const status = await handler(new Request("http://gateway/admin/clients", admin()), context());
+      expect((await status.json() as { clients: Array<{ id: string; state: string }> })
+        .clients.find(client => client.id === "gamma")?.state).toBe("idle");
+      expect(fake.processes).toHaveLength(initialProcesses);
+      expect(fake.spawnCalls.some(call => call.command.includes("/bin/gamma"))).toBe(false);
+
+      const duplicate = await post("register", "gamma");
+      expect(duplicate.status).toBe(409);
+      expect(await duplicate.json() as { error: string }).toMatchObject({ error: "Client already registered: gamma" });
+
+      const broken = await post("register", "broken");
+      expect(broken.status).toBe(400);
+      expect(await broken.json() as { results: Array<{ error: string }> })
+        .toMatchObject({ results: [{ error: "manifest missing" }] });
+      expect(fake.processes).toHaveLength(initialProcesses);
+
+      const started = await post("start", "gamma");
+      expect(started.status).toBe(200);
+      expect(fake.processes).toHaveLength(initialProcesses + 1);
+      expect(fake.spawnCalls.some(call => call.command.includes("/bin/gamma"))).toBe(true);
+      expect(resolverCalls).toEqual(["gamma", "broken"]);
+    } finally {
+      await gateway.stop();
+    }
+  });
+
   test("drain blocks the target with 503, times out reload with 409 and preserves the old process", async () => {
     const fake = createFakeRuntime();
     const captured = captureServer();

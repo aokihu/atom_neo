@@ -30,9 +30,11 @@ function lastError(client: GatewayInstanceStatus): string | undefined {
   return events.length > 0 ? events[events.length - 1]!.message : undefined;
 }
 
+const CLIENT_KEY_PREFIX = "client:";
+
 function clientItems(clients: GatewayInstanceStatus[]): Item[] {
   return clients.map(client => ({
-    key: client.id,
+    key: `${CLIENT_KEY_PREFIX}${client.id}`,
     label: client.id,
     detail: `${sourceLabel(client)} · ${client.state} · ${client.platform} · :${client.port}${lastError(client) ? ` · ${lastError(client)}` : ""}`,
   }));
@@ -342,8 +344,8 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
           setDraft("");
           open(item.key === "load" ? "load-dir" : item.key);
         } else if (item.key === "port") open("port");
-        else {
-          setActiveId(item.key);
+        else if (item.key.startsWith(CLIENT_KEY_PREFIX)) {
+          setActiveId(item.key.slice(CLIENT_KEY_PREFIX.length));
           open("actions");
         }
       }}
@@ -351,7 +353,10 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
     >
       <box flexDirection="column">
         {clients === undefined ? <text fg={colors.text.muted}>Loading…</text> : null}
-        {clients === null ? <text fg={colors.status.error}>OFFLINE — Gateway is not running for this sandbox</text> : null}
+        {clients === null && !error
+          ? <text fg={colors.status.error}>OFFLINE — Gateway is not running for this sandbox</text>
+          : null}
+        {clients === null && error ? <text fg={colors.status.error}>Unable to load Gateway status.</text> : null}
         {clients !== null && clients !== undefined && clients.length === 0
           ? <text fg={colors.text.muted}>No configured clients.</text>
           : null}

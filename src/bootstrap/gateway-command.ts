@@ -82,12 +82,18 @@ function notRunning(sandbox: string): Error {
   return new Error(`Gateway is not running for sandbox ${sandbox}; start it with --mode core-gateway`);
 }
 
-function runtimeFor(sandbox: string) {
+function readGatewayRuntime(sandbox: string) {
   try {
     return readRuntimeFile(sandbox, "gateway");
   } catch {
-    throw notRunning(sandbox);
+    return undefined;
   }
+}
+
+function runtimeFor(sandbox: string) {
+  const runtime = readGatewayRuntime(sandbox);
+  if (!runtime) throw notRunning(sandbox);
+  return runtime;
 }
 
 async function adminRequest(
@@ -283,22 +289,43 @@ export async function runGatewayCommand(
       };
       const result = upsertInstance(args.sandbox, instance);
       const missingSecrets = requiredSecretFields(manifest);
+      const online = readGatewayRuntime(args.sandbox) !== undefined;
+      let registered = false;
+      let registerError: string | undefined;
+      if (online) {
+        try {
+          await adminRequest(args, deps, "/admin/clients", {
+            method: "POST",
+            body: JSON.stringify({ action: "register", clientId: instance.id }),
+          });
+          registered = true;
+        } catch (error) {
+          registerError = reasonOf(error);
+        }
+      }
 
       if (command.json) {
         printJson({
           ...result,
           instance,
+          online,
+          registered,
+          offline: !online,
+          ...(registerError === undefined ? {} : { error: registerError }),
           warnings: missingSecrets.map(field => `Required secret field "${field}" is not configured`),
         });
-        return;
+      } else {
+        const status = !online
+          ? "saved, not started (Gateway offline)"
+          : registered ? "saved and registered, not started" : `saved, but register failed: ${registerError}`;
+        print(`Loaded ${instance.id} from ${root}; ${status}`);
+        if (missingSecrets.length > 0) {
+          print(
+            `Warning: required secret fields are not configured: ${missingSecrets.join(", ")}. Configure them before starting.`,
+          );
+        }
       }
-
-      print(`Loaded ${manifest.id} from ${root}; saved, not started`);
-      if (missingSecrets.length > 0) {
-        print(
-          `Warning: required secret fields are not configured: ${missingSecrets.join(", ")}. Configure them before starting.`,
-        );
-      }
+      if (registerError !== undefined) throw new Error(registerError);
       return;
     }
 

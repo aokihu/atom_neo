@@ -51,11 +51,14 @@ export type GatewayInstanceActions = {
   pack: (directory: string) => Promise<string>;
 };
 
-function adminRequest(
+export const GATEWAY_ADMIN_TIMEOUT_MS = 5_000;
+
+async function adminRequest(
   sandbox: string,
   path: string,
   init: RequestInit,
   fetchImpl: typeof fetch,
+  timeoutMs: number,
 ): Promise<Response> {
   let runtime;
   try {
@@ -63,20 +66,29 @@ function adminRequest(
   } catch {
     throw new Error(`Gateway is offline for sandbox ${sandbox}`);
   }
-  return fetchImpl(`${runtime.url.replace(/\/+$/, "")}${path}`, {
-    ...init,
-    headers: { ...(init.headers ?? {}), "x-atom-admin-token": runtime.token },
-  });
+  try {
+    return await fetchImpl(`${runtime.url.replace(/\/+$/, "")}${path}`, {
+      ...init,
+      headers: { ...(init.headers ?? {}), "x-atom-admin-token": runtime.token },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new Error(`Gateway admin request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
 }
 
 /** Offline returns null; admin failures throw without exposing the token. */
 export async function fetchGatewayStatus(
   sandbox: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = GATEWAY_ADMIN_TIMEOUT_MS,
 ): Promise<GatewayInstanceStatus[] | null> {
   let response: Response;
   try {
-    response = await adminRequest(sandbox, "/admin/clients", { method: "GET" }, fetchImpl);
+    response = await adminRequest(sandbox, "/admin/clients", { method: "GET" }, fetchImpl, timeoutMs);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Gateway is offline")) return null;
     throw error;
@@ -91,12 +103,14 @@ export async function fetchGatewayDiagnostics(
   sandbox: string,
   id: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = GATEWAY_ADMIN_TIMEOUT_MS,
 ): Promise<GatewayDiagnostics> {
   const response = await adminRequest(
     sandbox,
     `/admin/clients/${encodeURIComponent(id)}/diagnostics`,
     { method: "GET" },
     fetchImpl,
+    timeoutMs,
   );
   if (!response.ok) throw new Error(`Gateway diagnostics failed (${response.status})`);
   return await response.json() as GatewayDiagnostics;
@@ -107,12 +121,13 @@ export async function gatewayAction(
   action: "start" | "stop" | "reload",
   id?: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = GATEWAY_ADMIN_TIMEOUT_MS,
 ): Promise<unknown> {
   const response = await adminRequest(sandbox, "/admin/clients", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ action, clientId: id }),
-  }, fetchImpl);
+  }, fetchImpl, timeoutMs);
   const body = await response.json().catch(() => null) as {
     error?: string;
     results?: Array<{ ok?: boolean; error?: string }>;

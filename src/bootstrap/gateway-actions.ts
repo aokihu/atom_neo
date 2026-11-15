@@ -6,8 +6,14 @@ import { runGatewayCommand } from "./gateway-command";
 export function createGatewayActions(sandbox: string): GatewayInstanceActions {
   const run = async (command: GatewayCommand): Promise<string> => {
     const lines: string[] = [];
-    await runGatewayCommand(command, { sandbox }, { stdout: (line) => lines.push(line) });
-    return lines.join("\n");
+    try {
+      await runGatewayCommand(command, { sandbox }, { stdout: (line) => lines.push(line) });
+      return lines.join("\n");
+    } catch (error) {
+      const output = lines.join("\n");
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(output ? `${output}\n${message}` : message);
+    }
   };
 
   return {

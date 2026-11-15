@@ -1141,3 +1141,18 @@ G0 契约确认
 - UI 的 start/stop/reload 走 admin API；install/load/pack 复用 CLI handler（`GatewayCommandDeps.cwd` 语义不变）。
 - 日志/诊断仍在 Gateway 侧有界脱敏（50 events / 5 summary / 20 checks / 8 KiB）；UI 只显示最近 12 条本地事件。
 - 已知边界：manifest 暂无字段条件显示契约，表单展示全部声明字段；条件字段留待 manifest 扩展。G5 的卸载文件清理未实现。
+
+### 17.1 M3b 初审修复（2026-11-15）
+
+| 修复项 | 文件 | 行为 |
+|---|---|---|
+| 动态登记 | `server.ts`、`gateway-command.ts`、`gateway-actions.ts` | `POST /admin/clients {action:"register",clientId}` 调 resolver + `cm.register`，不 start；重复 409；其他失败 400。`gateway load` 在线 register，离线 saved/not started；JSON `saved/registered/offline`。 |
+| client key 冲突 | `GatewayModal.tsx` | client item key 使用 `client:${id}`，激活时解析；固定动作 key 不再被实例 ID 覆盖。 |
+| admin 超时 | `gateway-status.ts` | status/diagnostics/action 统一 `AbortSignal.timeout`（默认 5000ms）；超时错误明确。 |
+
+测试：
+
+- `bun test src/packages/gateway/src/server.admin.test.ts`：register 成功/重复/失败/start。
+- `bun test src/bootstrap/gateway-command.test.ts`：离线 load、在线 register、register 失败输出。
+- `bun test src/packages/config-tui/src/components/GatewayModal.test.tsx`：`refresh/back` 实例 ID、load 后刷新可见。
+- `bun test src/packages/config-tui/src/gateway-status.test.ts`：超时错误。
