@@ -1,6 +1,6 @@
 # Gateway Client 接入与发行规划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）已实施；G3–G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施；G4–G6 待实施**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。
 > 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准，M1 已完成 manifest、resolver、实例配置与统一启动描述。
 
@@ -249,7 +249,7 @@ M2（G2）实际交付：
 - `packages.json` registry 与 `sha256` 幂等/冲突；resolver 只使用 registry 登记的包路径，并校验 target 与当前 host 一致。
 - 离线实例配置 API 与 config-tui 首次实例表单；临时 sandbox 端到端测试。
 - M2.1 硬化：supervisor 在 spawn 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock`（`.atom/gateway/packages.lock`，有界重试/超时）。
-- CLI/TUI 在线入口、动态重载与诊断仍属 G3–G4，尚未实现。
+- M3a（G3）已落地动态 register/remove/reload、drain 503/409、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset 与 `atom gateway` CLI；G4 的 GatewayModal、菜单、日志 UI 仍未实现。
 
 ## 10. 依据与关联文档
 

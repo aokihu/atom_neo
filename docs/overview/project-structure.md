@@ -359,6 +359,7 @@ src/packages/gateway/
 │       ├── process-supervisor.ts
 │       ├── client-command.ts
 │       ├── process-termination.ts
+│       ├── diagnostics.ts
 │       └── test-helpers.ts
 ```
 

@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G0+G1）与 M2（G2）已实施；G3–G6 待实施**
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施；G4–G6 待实施**
 > 2026-11-15 修订：启动方式不再兼容旧 `binary`，启动路径只保留 `package` / `directory`。
 > M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单。动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
 >
@@ -312,6 +312,13 @@ sequenceDiagram
 
 - `ClientManager` 向 supervisor 传 `gatewayPort: () => config.port`；`startGateway` 在 `serve()` 后更新 `config.port`，spawn/restart 时读取真实端口。
 - registry 的 `registerPackage` / `removePackage` 用 `.atom/gateway/packages.lock` 串行化 read-modify-write；锁有界重试/超时，registry 文件仍原子写。
+
+**M3a（G3）**
+
+- `ClientManager` 动态 `register/remove/reload/status`；端口按活动集合分配；每实例队列；reload 用新 supervisor 替换旧对象。
+- `server.ts` 提供 GET 状态/诊断、POST reload；目标实例 drain 期间 inbound 503，超时 409 保留旧进程；`resolveClient` 由 `main.ts` 注入。
+- `DiagnosticsStore` 每实例 50 条；可选 Client `GET /diagnostics`，404 为 `unsupported`，不读取 `/health` 作为平台认证。
+- Telegram `submitInbound`/`processUpdateBatch`：503/429 不推进 offset；`atom gateway` CLI 离线/在线分流不初始化 Core。
 
 **不变量**
 

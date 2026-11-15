@@ -1,6 +1,6 @@
 # Gateway 更新开发计划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0、M1（G1）、M2（G2）已完成；G3–G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0、M1（G1）、M2（G2）、M2.1、M3a（G3）已完成；G4–G6 待实施**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory`。
 > 目标与建议契约统一见 [接入与发行规划](./gateway-client-design.md)；本文负责阶段、依赖、影响面、验收与进度。
 
@@ -80,15 +80,17 @@ M2.1 风险硬化：supervisor 在 spawn/restart 时读取 serve 后的真实 ga
 
 依赖 G1、G2；先做手动重载。
 
-- [ ] 增加认证管理操作：配置快照校验、登记指定实例、重载指定实例；不放宽平台 Secret 权限。
-- [ ] ClientManager 动态创建/移除/替换 supervisor，分配不与活动实例冲突的稳定端口；stopAll 遍历实际受管实例。
-- [ ] 实现指定实例的在途请求/结果投递计数与暂停接入；重载等待完成，超时保留原进程并报告忙。
-- [ ] 修复 Telegram 对 Gateway 非 2xx 响应的处理；验证忙/拒收响应不会被当作消息成功消费。重试策略与现有限流一起验收，不承诺 exactly-once。
-- [ ] 更新命令入口与 cwd 后通过 supervisor 队列 stop/start；旧 Secret、旧 exit 回调和旧 restart timer 不得影响新进程。
-- [ ] 重新读取 manifest、配置和凭据；保留实例身份。包 ID/platform 改变、目录消失或校验失败必须明确报错。
-- [ ] 对接在线配置提交与应用结果；区分已保存、已应用、应用失败，防止多入口写盘冲突。
+- [x] 增加认证管理操作：配置快照校验、登记指定实例、重载指定实例；不放宽平台 Secret 权限。
+- [x] ClientManager 动态创建/移除/替换 supervisor，分配不与活动实例冲突的稳定端口；stopAll 遍历实际受管实例。
+- [x] 实现指定实例的在途请求/结果投递计数与暂停接入；重载等待完成，超时保留原进程并报告忙。
+- [x] 修复 Telegram 对 Gateway 非 2xx 响应的处理；验证忙/拒收响应不会被当作消息成功消费。重试策略与现有限流一起验收，不承诺 exactly-once。
+- [x] 更新命令入口与 cwd 后通过 supervisor 队列 stop/start；旧 Secret、旧 exit 回调和旧 restart timer 不得影响新进程。
+- [x] 重新读取 manifest、配置和凭据；保留实例身份。包 ID/platform 改变、目录消失或校验失败必须明确报错。
+- [x] 对接在线配置提交与应用结果；区分已保存、已应用、应用失败，防止多入口写盘冲突（M3a 通过 CLI/离线写入与 reload；UI 在线编辑归 G4）。
 
 完成标准：Gateway 与 Core 不重启，只重载目标实例；在途消息、健康重启与手动 stop 并发时行为确定。新进程启动失败可见，其他实例继续工作。源码变更本身不保证自动回滚。
+
+M3a 实施记录：动态 ClientManager、drain/reload、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset、`atom gateway` CLI 与 gateway-command 已完成；G4 的 GatewayModal/菜单/日志 UI 未实现。
 
 ### G4：平台接入管理、诊断与日志
 

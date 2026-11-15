@@ -29,8 +29,9 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。
 | --mode core-gateway | Core + Gateway，无 TUI |
 | --mode tui --core-server <host> --core-port <port> | 仅 TUI，attach 已运行 Core |
 | --mode gateway --clients <name> | 控制指定 Client；省略 clients 则全部 |
+| gateway <action> [target] | 新 CLI：install/load/reload/list/start/stop/check/logs/pack/uninstall |
 
-Gateway 为短时控制进程，不是 Gateway Server 启动模式。动作使用 `--action start|stop`；`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
+Gateway 为短时控制进程，不是 Gateway Server 启动模式。旧动作使用 `--action start|stop`；`atom gateway ...` 是增量 CLI，不初始化 Core/Provider/TUI。`install/load/pack/uninstall` 可离线执行；在线命令通过 `.atom/gateway-runtime.json` + 管理 Token 发现服务，Gateway 离线时明确报错，不自动启动。`load` 使用 manifest.id 作为开发实例 ID，并以绝对目录写入；重复 load 更新同名实例。`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
 
 ## HTTP 运行时选择
 

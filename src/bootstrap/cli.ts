@@ -9,6 +9,21 @@ export type Mode = "core" | "tui" | "core-gateway" | "gateway" | "full";
 export type LogMode = "console" | "pipe" | "file";
 export type Command = "export" | "import";
 export type BackupEnvMode = "merge" | "replace";
+export type GatewayCommandAction =
+  | "install" | "load" | "reload" | "list" | "start" | "stop"
+  | "check" | "logs" | "pack" | "uninstall";
+export type GatewayCommand = {
+  action: GatewayCommandAction;
+  target?: string;
+  out?: string;
+  targetPlatform?: string;
+  force: boolean;
+  json: boolean;
+};
+
+const GATEWAY_ACTIONS: readonly GatewayCommandAction[] = [
+  "install", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall",
+];
 
 export type BootArguments = {
   menu: boolean;
@@ -38,9 +53,12 @@ export type BootArguments = {
   action?: "start" | "stop";
   config: boolean;
   continueSession: boolean;
+  gatewayCommand?: GatewayCommand;
 };
 
 export function parseArguments(rawArgs: readonly string[]): BootArguments | "help" {
+  if (rawArgs[0] === "gateway") return parseGatewayArguments(rawArgs.slice(1));
+
   const first = rawArgs[0];
   const menu = first === "menu";
   const command: Command | undefined = first === "export" || first === "import" ? first : undefined;
@@ -138,6 +156,72 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
   };
 }
 
+function parseGatewayArguments(args: readonly string[]): BootArguments | "help" {
+  const { values, positionals } = parseGatewayArgs(args);
+  if (values.help) return "help";
+  if (positionals.length === 0) throw new Error(`gateway requires an action: ${GATEWAY_ACTIONS.join(" | ")}`);
+  if (positionals.length > 2) throw new Error("gateway accepts only an action and an optional target");
+
+  const action = validateEnum(positionals[0], GATEWAY_ACTIONS, "gateway action");
+  const target = positionals[1];
+  if (action === "list" && target !== undefined) throw new Error("gateway list does not accept a target");
+  if (action !== "list" && !target) throw new Error(`gateway ${action} requires a target`);
+  if (action !== "pack" && values.out !== undefined) throw new Error("--out is only valid for gateway pack");
+  if (action !== "pack" && values.target !== undefined) throw new Error("--target is only valid for gateway pack");
+  if (values.out === "") throw new Error("--out cannot be empty");
+  if (values.target === "") throw new Error("--target cannot be empty");
+
+  const sandboxPath = values.sandbox;
+  return {
+    menu: false,
+    wizard: false,
+    password: false,
+    force: values.force,
+    dryRun: false,
+    envMode: "merge",
+    sandboxExplicit: sandboxPath !== undefined,
+    port: 3100,
+    host: "127.0.0.1",
+    sandbox: parseSandboxPath(sandboxPath ?? process.cwd()),
+    logLevel: "debug",
+    logIgnore: [],
+    logLevelExplicit: false,
+    logIgnoreExplicit: false,
+    logModes: [],
+    config: false,
+    continueSession: false,
+    gatewayCommand: {
+      action,
+      target,
+      out: values.out,
+      targetPlatform: values.target,
+      force: values.force,
+      json: values.json,
+    },
+  };
+}
+
+function parseGatewayArgs(args: readonly string[]) {
+  try {
+    return parseArgs({
+      args: [...args],
+      options: {
+        sandbox: { type: "string" },
+        out: { type: "string" },
+        target: { type: "string" },
+        force: { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid gateway command: ${detail}`);
+  }
+}
+
 function validateCommandArguments(command: Command, tokens: readonly { kind: string; name?: string }[], positionals: readonly string[]): void {
   const allowed = command === "export"
     ? ["sandbox", "output", "password", "force", "help"]
@@ -158,11 +242,13 @@ USAGE
   ${binName} menu [--sandbox <path>]
   ${binName} export [--sandbox <path>] [-o|--output <file>] [--password] [--force]
   ${binName} import <archive> [--sandbox <path>] [--password] [--env merge|replace] [--dry-run] [--force]
+  ${binName} gateway <action> [target] [--sandbox <path>] [--out <file>] [--target <platform>] [--force] [--json]
 
 COMMANDS
   menu                   一次性启动向导（参数自动回填，完成后执行）
   export                 导出 config.json + .env 为 .atombak 归档
   import                 从 .atombak 归档导入配置
+  gateway <action>       Gateway 实例管理: install | load | reload | list | start | stop | check | logs | pack | uninstall
 
 OPTIONS
   -m, --mode <mode>      运行模式: core | core-gateway | tui | gateway (默认: core + TUI)
@@ -182,6 +268,9 @@ OPTIONS
   --log-file <path>       日志文件路径 (--log=file 时必需)
   --log-pipepath <path>   命名管道路径 (--log=pipe 时必需)
   -o, --output <file>     导出归档路径 (默认: atom-backup-<time>.atombak)
+  --out <file>            gateway pack 输出路径
+  --target <platform>     gateway pack 目标平台
+  --json                  gateway 命令以 JSON 输出
   --password              提示输入密码加密/解密归档 (或使用 ATOM_BACKUP_PASSWORD)
   --env <mode>            导入 .env 策略: merge | replace (默认: merge)
   --dry-run               仅显示导入计划，不写盘
@@ -197,6 +286,7 @@ EXAMPLES
   ${binName} --config --sandbox ./sandbox
   ${binName} export --sandbox ./sandbox --password -o ./backup.atombak
   ${binName} import ./backup.atombak --sandbox ./sandbox
+  ${binName} gateway list --sandbox ./sandbox
 `);
 }
 

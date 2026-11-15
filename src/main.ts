@@ -98,6 +98,14 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     return;
   }
 
+  // atom gateway ...: standalone CLI or menu action, never initializes Core/Providers/TUI
+  if (args.gatewayCommand) {
+    const { runGatewayCommand } = await import("./bootstrap/gateway-command");
+    await runGatewayCommand(args.gatewayCommand, args);
+    onReady();
+    return;
+  }
+
   // --wizard subprocess: run setup wizard and exit
   if (args.wizard) {
     const { startWizard } = await import("@atom-neo/config-tui");
@@ -210,15 +218,26 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {
-      const { startGateway, resolveClients, sandboxPackageRoot } = await import("@atom-neo/gateway");
+      const { startGateway, resolveClient, resolveClients, sandboxPackageRoot } = await import("@atom-neo/gateway");
       const clientEnv = readSandboxEnv(args.sandbox);
-      const resolvedClients = resolveClients(appConfig.gateway.clients, {
+      const resolveOptions = {
         packageRoot: sandboxPackageRoot(args.sandbox),
         baseDir: args.sandbox,
-        readEnv: (key) => clientEnv[key] ?? process.env[key],
-      });
+        readEnv: (key: string) => clientEnv[key] ?? process.env[key],
+      };
+      const resolvedClients = resolveClients(appConfig.gateway.clients, resolveOptions);
+      const reloadClient = async (id: string) => {
+        const current = loadConfig(args.sandbox).effective.gateway.clients.find((client) => client.id === id);
+        if (!current) throw new Error(`Unknown gateway client: ${id}`);
+        const env = readSandboxEnv(args.sandbox);
+        return resolveClient(current, {
+          packageRoot: sandboxPackageRoot(args.sandbox),
+          baseDir: args.sandbox,
+          readEnv: (key) => env[key] ?? process.env[key],
+        });
+      };
       const gatewayToken = crypto.randomUUID();
-      gateway = await startGateway({ port: appConfig.gateway.port, coreUrl: url, clients: appConfig.gateway.clients, resolvedClients, adminToken: gatewayToken, logger, httpServer });
+      gateway = await startGateway({ port: appConfig.gateway.port, coreUrl: url, clients: appConfig.gateway.clients, resolvedClients, resolveClient: reloadClient, adminToken: gatewayToken, logger, httpServer });
       cleanupFiles.push(publishRuntimeFile(args.sandbox, "gateway", { url: localUrl("127.0.0.1", gateway.port), token: gatewayToken, instanceId: crypto.randomUUID() }));
     }
     const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };

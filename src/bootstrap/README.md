@@ -1,6 +1,7 @@
 # Bootstrap
 
-- `cli.ts`：五模式参数、端口和模式适用性校验。
+- `cli.ts`：五模式参数、端口和模式适用性校验；`atom gateway <action>` 子命令解析。
+- `gateway-command.ts`：`atom gateway` 离线 install/load/pack/uninstall 与在线 list/start/stop/reload/check/logs；不初始化 Core。
 - `buildAppCommand` 统一源码/编译入口的命令前缀，由首次配置子进程与菜单执行命令显示复用；Bun 源码使用 `bun run`，编译二进制与 Node 直接执行入口。
 - `menu-flow.ts` / `menu.ts`：一次性启动向导状态与普通终端交互，含 `backup` 导出/导入子菜单。
 - `menu-history.ts`：`~/.config/atom/menu_history.json` 参数记忆与原子写入。

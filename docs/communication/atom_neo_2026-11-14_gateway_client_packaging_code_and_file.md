@@ -3,8 +3,8 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1 已实施；G3–G6 待实施**
-> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15。
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施；G4–G6 待实施**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16。
 >
 > 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
@@ -26,8 +26,11 @@
 | G2 | <code>src/packages/gateway/src/client-package/archive.ts</code> | tar.gz pack / install、路径与链接安全 |
 | G2 | <code>src/packages/gateway/src/client-package/instance-config.ts</code> | 离线实例配置库级 API（复用 client-instance） |
 | G2 | `clients/telegram-bot/manifest.json` | 首个标准包与开发目录样例 |
-| G3 | <code>src/packages/gateway/src/client-manager/diagnostics.ts</code> | 有界诊断事件 |
-| G3 | <code>src/bootstrap/gateway-command.ts</code> | `atom gateway ...` 子命令 |
+| G3 | <code>src/packages/gateway/src/client-manager/diagnostics.ts</code> | 有界诊断事件 + 可选 Client `/diagnostics` 读取 |
+| G3 | <code>src/bootstrap/gateway-command.ts</code> | `atom gateway ...` 离线/在线处理器 |
+| G3 | <code>clients/telegram-bot/src/gateway-client.ts</code> | 入站提交、503/429 分类 |
+| G3 | <code>clients/telegram-bot/src/update-loop.ts</code> | update offset / retry 纯逻辑 |
+| G3 | <code>clients/telegram-bot/src/diagnostics.ts</code> | Telegram `getMe` 诊断（脱敏） |
 | G2 | <code>src/packages/config-tui/src/components/GatewayInstanceForm.tsx</code> | manifest.config 驱动的首次实例表单 |
 | G2 | <code>src/packages/config-tui/src/gateway-instance-form.ts</code> | 表单字段状态、enum/default/secret 纯逻辑 |
 | G2 | <code>src/bootstrap/fixtures/gateway-client-e2e.ts</code> | 本地闭环 fake Client：发送 inbound、记录 task-result |
@@ -1063,3 +1066,27 @@ G0 契约确认
 - 不自动回收 stale lock；崩溃遗留锁需人工清理。
 - registry 写入仍使用 `writeFileAtomic`；锁只覆盖 read-modify-write。
 - M2.1 不进入 G3/G4/G5。
+
+## 16. M3a 实施记录（G3，2026-11-15）
+
+| 子任务 | 实际产出 | 测试 |
+|---|---|---|
+| G3-1/G3-2/G3-10 | `ClientManager` 动态 register/remove/reload/status；活动端口集合；每实例队列；supervisor 替换；`stopAll` 等待队列并遍历实际 supervisor | `bun test src/packages/gateway/src/client-manager` → 67 pass |
+| G3-3/G3-4/G3-5/G3-6 | `GET /admin/clients`、`GET /admin/clients/:id/diagnostics`、`POST reload`、drain 503/409、`DiagnosticsStore`、可选 Client `/diagnostics` | `bun test src/packages/gateway/src/server.admin.test.ts` → 5 pass；diagnostics 8 pass |
+| G3-7 | Telegram `gateway-client.ts`、`update-loop.ts`、`diagnostics.ts`；503/429 分类、offset 不推进、`/diagnostics` | `bun test clients/telegram-bot/src` → 14 pass |
+| G3-8 | `atom gateway <action>` 解析；旧 `--mode gateway` 保留 | `bun test src/bootstrap/cli.test.ts` → 42 pass |
+| G3-9 | `gateway-command.ts` 离线 install/load/pack/uninstall；在线 list/start/stop/reload/check/logs | `bun test src/bootstrap/gateway-command.test.ts` → 6 pass |
+| G3-10 | 并发/端口/drain/旧 timer/Secret 回归 | client-manager + server.admin 定向测试 |
+
+实现说明：
+
+- `main.ts` 在 Core 初始化前分流 `gatewayCommand`；在线 reload 由 `main.ts` 注入 `resolveClient`，重新读取 sandbox config/.env、registry 与 manifest。
+- Gateway 包不读取 sandbox 配置；诊断事件有界 50 条并脱敏 UUID/截断。
+- 管理接口仍使用本机管理 Token；GET 状态不包含 secret。
+- G4 的 GatewayModal、菜单、日志 UI 未实现；G5 卸载文件清理未实现。
+
+额外验证：
+
+- `bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils` → 285 pass / 1 skip
+- `bun test src/bootstrap/cli.test.ts src/bootstrap/gateway-command.test.ts src/bootstrap/gateway-package.e2e.test.ts clients/telegram-bot/src` → 63 pass
+- `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` → 通过

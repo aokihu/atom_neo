@@ -111,6 +111,13 @@ Token 值只写 sandbox `.env`，例如 `ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN=123
   - `"ignore"`：丢弃输出，减少生产日志噪音
   - **注意**：`stdio` 是 Gateway 内部进程管理配置，不是 Client 的 CLI 参数
 
+## 3.1 Gateway 响应与诊断
+
+- Inbound 提交抽为 `gateway-client.ts`：2xx 成功；503/429 抛 `GatewayBusyError`，按 `Retry-After` 或默认 1s/2s 退避；其他非 2xx 抛 `GatewayRejectedError`。
+- 长轮询 `processUpdateBatch` 在 503/429 时不推进 update offset；其他错误按 3 次重试后跳过，避免永久卡住。
+- Webhook 在 Gateway busy 时返回 503 + `Retry-After`，其他错误返回 500，让 Telegram 重试。
+- 可选 `GET /diagnostics` 调用 Telegram `getMe`，返回 `telegram.getMe` 检查；Token 不进入响应；`/health` 仅表示本机 HTTP 就绪。
+
 ## 4. 两种模式对比
 
 | 维度 | Long Polling | Webhook |

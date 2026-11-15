@@ -8,7 +8,9 @@
 
 M1（G0+G1）已落地：实例配置只接受 `package` / `directory` 二选一，`binary` / 实例级 `platform` 已移除并明确拒绝；manifest v1 解析、入口选择、`ResolvedClientConfig` 统一启动描述、凭据引用注入与实例凭据隔离已接入现有 `ClientManager` / `ProcessSupervisor`。
 
-M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest + `bin/**` 白名单、target 注入、敏感文件排除）、安全 `installClient`（路径/链接校验、临时目录、失败回滚）、`packages.json` registry（`sha256` 幂等/冲突）、离线实例配置 API 与 config-tui 首次实例表单。M2.1 硬化了 gateway 端口延迟绑定（`--gateway-url` 使用 serve 后真实端口）与 registry 跨进程锁（`.atom/gateway/packages.lock`，有界重试/超时）。未实现 CLI 子命令、动态重载、诊断和日志；这些仍属 G3–G4。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
+M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest + `bin/**` 白名单、target 注入、敏感文件排除）、安全 `installClient`（路径/链接校验、临时目录、失败回滚）、`packages.json` registry（`sha256` 幂等/冲突）、离线实例配置 API 与 config-tui 首次实例表单。M2.1 硬化了 gateway 端口延迟绑定与 registry 跨进程锁。
+
+M3a（G3）已落地动态管理与重载：`ClientManager` 动态 register/remove/reload、活动端口集合、GET 状态/诊断、POST reload、drain 503/409、Telegram 503/429 offset 语义、`atom gateway` CLI 与离线/在线处理器。G4 的 GatewayModal、菜单和日志 UI 尚未实现。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
 
 ## Gateway Client 控制模式（已实现）
 
@@ -65,7 +67,9 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 | 路由前缀 | 验证方式 | 用户 | 用途 |
 |---------|---------|------|------|
 | `/gateway/*` | `X-Gateway-Secret` Header | Client 子进程 | 消息中转 |
-| `/admin/clients`（POST） | 本机管理 Token | 本机控制命令 | 已配置 Client 的 start/stop，返回逐项结果与状态 |
+| `/admin/clients`（GET） | 本机管理 Token | 本机控制命令 | 实例状态、来源/端口与诊断摘要 |
+| `/admin/clients`（POST） | 本机管理 Token | 本机控制命令 | start/stop/reload，返回逐项结果 |
+| `/admin/clients/:id/diagnostics`（GET） | 本机管理 Token | 本机检查/日志 | 本地诊断事件 + 可选 Client `/diagnostics` |
 
 **Gateway 端点：**
 
@@ -125,6 +129,21 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 }
 ```
 
+### 重载与 drain
+
+- 每个实例维护 inbound 在途计数；`POST /admin/clients {action:"reload", clientId}` 只 drain 目标实例。
+- drain 期间目标实例的 `/gateway/inbound` 返回 503 `{error:"Client busy"}`，其他实例不受影响。
+- 默认 30s 内等待在途请求结束；超时返回 409 并保留旧进程。
+- 成功后停止旧 supervisor（撤销 Secret/清 timer），用同一端口和 `desired` 状态创建新 supervisor；旧 exit 回调/restart timer 不影响新进程。
+- Telegram Client 对 503/429 退避重试，不推进 update offset。
+
+### 诊断
+
+- `DiagnosticsStore` 每实例保留最近 50 条事件，阶段为 `install|config|process|platform|delivery`，输出前脱敏/截断。
+- `GET /admin/clients/:id/diagnostics` 返回本地事件和 `client` 结果：Client `/diagnostics` 2xx → `ok`，404 → `unsupported`，不可达 → `unreachable`。
+- `/health` 只表示本机 HTTP 就绪；不能据此判定 Telegram Token 有效。真实消息往返仍需单独验证。
+- `GET /diagnostics` 是 Client 可选协议；未实现时 Gateway 显示 `unsupported`。
+
 ## 4. Secret 机制
 
 | 时机 | 行为 |
@@ -138,7 +157,7 @@ Secret 使用 timing-safe 比较，仅存储于 Gateway 内存。设计要求 Se
 
 ## 5. Client Manager / ProcessSupervisor
 
-`ClientManager` 保留原有公开 API（`startAll/stopAll/start/stop/list/getBySecret/getById`），内部为每个 Client 创建一个 `ProcessSupervisor`。状态机是进程生命周期的唯一来源；启动、停止、异常退出、健康失败和重启计时器不再各自维护并行状态。
+`ClientManager` 提供 `register/remove/reload/status` 动态 API，并保留 `startAll/stopAll/start/stop/list/getBySecret/getById`；内部为每个 Client 创建一个 `ProcessSupervisor`，端口按活动集合分配。状态机是进程生命周期的唯一来源；启动、停止、异常退出、健康失败和重启计时器不再各自维护并行状态。`status()` 返回 secret-free 的 active 投影。
 
 ### 5.1 进程状态机
 
@@ -284,8 +303,9 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
 src/packages/gateway/
   src/
     index.ts                        barrel exports
-    server.ts                       HTTP Server + 路由分发 + 消息中转
+    server.ts                       HTTP Server + 路由分发 + 消息中转/drain/reload/诊断
     server.test.ts                  HttpServer / logger 注入测试
+    server.admin.test.ts            管理状态/诊断/reload/drain 测试
     config.ts                       Gateway 配置
     auth/
       secret.ts                     Secret 生成与验证
@@ -304,11 +324,21 @@ src/packages/gateway/
       restart-policy.ts             重启上限/退避/reset
       health-probe.ts               健康探测（200/非 2xx/超时/网络）
       process-supervisor.ts         每 Client 的进程生命周期
+      process-termination.ts        优雅终止/强杀
+      client-command.ts             命令/参数/spawn options/readiness
+      diagnostics.ts                有界诊断事件 + Client /diagnostics
       test-helpers.ts               fake runtime/process/clock
+
+src/bootstrap/
+  cli.ts                            atom gateway 子命令解析
+  gateway-command.ts                离线/在线 gateway 处理器
 
 clients/
   telegram-bot/
     src/main.ts                     Telegram Bot Client 参考实现
+    src/gateway-client.ts           Gateway inbound 提交/非 2xx
+    src/update-loop.ts              update offset/retry
+    src/diagnostics.ts              Telegram getMe 诊断
     package.json
 ```
 

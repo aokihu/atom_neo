@@ -126,3 +126,86 @@ describe("parseArguments session continuation", () => {
     expect(parsed.continueSession).toBe(expected);
   });
 });
+
+describe("gateway command", () => {
+  const actions = [
+    "install", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall",
+  ] as const;
+  const targetActions = actions.filter(action => action !== "list");
+
+  function bootArgs(args: string[]) {
+    const parsed = parseArguments(args);
+    if (parsed === "help") throw new Error("Unexpected help");
+    return parsed;
+  }
+
+  test("parses every action with a target where required", () => {
+    for (const action of actions) {
+      const target = action === "list" ? undefined : "bot";
+      const args = bootArgs(["gateway", action, ...(target ? [target] : [])]);
+      expect(args.gatewayCommand).toMatchObject({ action, target, force: false, json: false });
+      expect(args).toMatchObject({
+        menu: false, wizard: false, password: false, dryRun: false, envMode: "merge",
+        sandboxExplicit: false, port: 3100, host: "127.0.0.1", sandbox: process.cwd(),
+        logLevel: "debug", logIgnore: [], logLevelExplicit: false, logIgnoreExplicit: false,
+        logModes: [], config: false, continueSession: false,
+      });
+      expect(args.mode).toBeUndefined();
+      expect(args.action).toBeUndefined();
+      expect(args.clients).toBeUndefined();
+    }
+  });
+
+  test("enforces target requirements", () => {
+    expect(() => parseArguments(["gateway", "list", "bot"])).toThrow("gateway list does not accept a target");
+    for (const action of targetActions) {
+      expect(() => parseArguments(["gateway", action])).toThrow(`gateway ${action} requires a target`);
+    }
+  });
+
+  test("pack accepts --out, --target, --force and --json", () => {
+    const args = bootArgs(["gateway", "pack", "bot", "--out", "bot.atompkg", "--target", "linux-x64", "--force", "--json"]);
+    expect(args.gatewayCommand).toEqual({
+      action: "pack", target: "bot", out: "bot.atompkg", targetPlatform: "linux-x64", force: true, json: true,
+    });
+    expect(bootArgs(["gateway", "pack", "bot"]).gatewayCommand).toMatchObject({ out: undefined, targetPlatform: undefined });
+    expect(() => parseArguments(["gateway", "pack", "bot", "--out="])).toThrow("--out cannot be empty");
+    expect(() => parseArguments(["gateway", "pack", "bot", "--target="])).toThrow("--target cannot be empty");
+  });
+
+  test("rejects --out and --target outside pack", () => {
+    for (const action of actions.filter(action => action !== "pack")) {
+      const target = action === "list" ? [] : ["bot"];
+      expect(() => parseArguments(["gateway", action, ...target, "--out", "x"])).toThrow("--out is only valid for gateway pack");
+      expect(() => parseArguments(["gateway", action, ...target, "--target", "linux-x64"])).toThrow("--target is only valid for gateway pack");
+    }
+  });
+
+  test("rejects unknown actions, options and extra positionals", () => {
+    expect(() => parseArguments(["gateway", "deploy", "bot"])).toThrow("Invalid gateway action");
+    expect(() => parseArguments(["gateway"])).toThrow("gateway requires an action");
+    expect(() => parseArguments(["gateway", "install", "bot", "extra"])).toThrow("only an action and an optional target");
+    expect(() => parseArguments(["gateway", "list", "--mode", "gateway"])).toThrow("Unknown option '--mode'");
+    expect(() => parseArguments(["gateway", "start", "bot", "--action", "start"])).toThrow("Unknown option '--action'");
+    expect(() => parseArguments(["gateway", "list", "--clients", "bot"])).toThrow("Unknown option '--clients'");
+    expect(() => parseArguments(["gateway", "list", "--port", "3200"])).toThrow("Unknown option '--port'");
+  });
+
+  test("accepts --sandbox and rejects an empty value", () => {
+    expect(bootArgs(["gateway", "list", "--sandbox", "./project"])).toMatchObject({
+      sandboxExplicit: true, sandbox: resolve("project"),
+    });
+    expect(() => parseArguments(["gateway", "list", "--sandbox="])).toThrow("--sandbox cannot be empty");
+  });
+
+  test("gateway --help returns help", () => {
+    expect(parseArguments(["gateway", "--help"])).toBe("help");
+    expect(parseArguments(["gateway", "pack", "--help"])).toBe("help");
+  });
+
+  test("keeps --mode gateway --action unchanged", () => {
+    const args = bootArgs(["--mode", "gateway", "--action", "start", "--clients", "bot"]);
+    expect(args).toMatchObject({ mode: "gateway", action: "start", clients: "bot" });
+    expect(args.gatewayCommand).toBeUndefined();
+  });
+});

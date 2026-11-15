@@ -50,6 +50,8 @@ export class ProcessSupervisor {
 
   get state(): ProcessState { return this.#state; }
 
+  get port(): number { return this.#port; }
+
   get desired(): boolean { return this.#desired; }
 
   get active(): ActiveClient | undefined { return this.#active ?? undefined; }

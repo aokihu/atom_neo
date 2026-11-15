@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1 已实施完成；G3–G6 待实施**。
+> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施完成；G4–G6 待实施**。
 > 本版已按复杂度规则将复杂阶段拆分为“中/轻”子任务；2026-11-15 修订：启动方式**不再兼容旧 `binary`**。决策与回写记录见 §4.2 与 §10。
 >
 > 关联文档：
@@ -356,6 +356,36 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G3-8 | CLI 子命令解析（不含处理器） | 中 | `cli.ts` + 测试 | 新旧命令不混用；非法参数无副作用 |
 | G3-9 | `gateway-command` 离线/在线处理器 | 中 | `gateway-command.ts` + 测试 | 离线保存、在线操作、服务离线报错 |
 | G3-10 | 并发回归：reload/health/stop/exit | 中 | 并发测试 | 无旧进程/计时器复活；无端口冲突；无残留 Secret |
+
+**M3a 实施决策（2026-11-15）**
+
+- ClientManager 使用 `#configs` / `#supervisors` / 活动端口集合；`register` / `remove` / `reload` 按实例串行；`stopAll` 遍历实际 supervisor。
+- `reload(id, config)` 保留原端口与 `desired`，旧 supervisor 完全停止后创建新 supervisor；旧 exit/timer/secret 只属于旧对象。
+- `ClientManager.status()` 返回 `{id, platform, source, running, desired, state, port, active}`；`list()` 保留 `{id,running,desired}` 兼容。
+- 管理接口：`GET /admin/clients`、`GET /admin/clients/:id/diagnostics`、`POST /admin/clients`（start/stop/reload）；仍使用本机管理 Token。
+- drain：每实例 inbound 计数；drain 期间目标实例 `/gateway/inbound` 返回 503；reload 等待目标实例，默认 30s 超时返回 409 并保留旧进程。
+- `resolveClient(id)` 由 `main.ts` 注入：重新读取 sandbox config/.env + registry + manifest；Gateway 包不直接读 sandbox。
+- DiagnosticsStore 每实例最多 50 条；`GET /diagnostics` 可选，404/不可达分别显示 `unsupported` / `unreachable`；不使用 `/health` 代替平台认证。
+- Telegram 入站提交抽为可测试函数；503/429 抛 `GatewayBusyError`，不推进 update offset，退避后重试。
+- CLI 新增 `atom gateway <action>`；`--mode gateway --action` 保留。离线 install/load/pack/uninstall/config 不依赖 Gateway；在线命令通过 runtime file + 管理 Token，离线明确报错。
+- G4 的 GatewayModal、菜单、日志 UI 不在 M3a 范围。
+
+**M3a 实施状态（2026-11-15）**
+
+| ID | 状态 | 实际产出 |
+|---|---|---|
+| G3-1 | 已完成 | ClientManager 动态 register/remove/reload + 活动端口集合；client-manager 19 个测试 |
+| G3-2 | 已完成 | supervisor 替换与代际隔离；旧 exit/timer/Secret 测试通过 |
+| G3-3 | 已完成 | GET /admin/clients 状态/诊断摘要；secret-free active |
+| G3-4 | 已完成 | inbound drain + 503/409；server.admin 测试 |
+| G3-5 | 已完成 | POST reload + main resolveClient；目标失败不影响其他实例 |
+| G3-6 | 已完成 | DiagnosticsStore + 诊断接口；可选 Client `/diagnostics` |
+| G3-7 | 已完成 | Telegram 503/429 与 offset；14 个 Telegram 测试 |
+| G3-8 | 已完成 | atom gateway CLI 解析；42 个 cli 测试 |
+| G3-9 | 已完成 | gateway-command 离线/在线处理器；6 个测试 |
+| G3-10 | 已完成 | 并发/端口/drain 回归；旧 timer/Secret/端口测试通过 |
+
+**M3a 完成条件**：`bun test src/packages/gateway/src`、CLI/Telegram 定向测试、typecheck、docs:check、git diff --check 通过；未进入 G4/G5/G6。
 
 **G3 完成标准**：
 
