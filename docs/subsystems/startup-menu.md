@@ -96,6 +96,7 @@ menu
 
 - 相对路径按打印命令的当前目录解析；菜单展示与执行使用同一参数。
 - `install` 的归档字段也可填写官方 `id[@version]`；官方安装/升级需要 `ATOM_GATEWAY_SOURCE_INDEX` 或显式 `--source`，来源索引地址与 checksum 由发布流程提供。菜单本轮不新增 upgrade 入口，使用 CLI 显式指定实例升级。
+- 菜单没有“开发者模式”权限开关、文件监听自动重载或后台自动更新；load/pack 仍以 developer 文案标注。真实 Telegram 平台验收和官方发布未包含在菜单验收内。
 - `load` 的实例 ID 可留空，留空时使用 manifest.id；填写时允许同一目录登记多个实例。
 - `load` 先写 config；Gateway 在线时再调用 admin `register`，新实例立即出现在管理列表但不会自动 start；Gateway 离线时保持 `saved, not started`。required secret/参数未配置时 register 失败，但 config-only 实例仍会显示为 `configured / unregistered`，可在配置 UI 补齐后 register/start。重复登记返回明确错误。
 - `manage instances` 执行 `gateway list`：离线时读取 config 并显示 configured/unregistered；在线时合并 supervisor 状态，JSON 区分 `configured`、`registered`、`running/state` 与 `offline`。

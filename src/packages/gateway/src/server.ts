@@ -12,6 +12,7 @@ import type { ClientManagerRuntime } from "./client-manager/runtime";
 
 const DRAIN_TIMEOUT_MS = 30_000;
 const DRAIN_POLL_MS = 50;
+const DRAIN_RETRY_AFTER_SECONDS = 1;
 const MAX_DIAGNOSTIC_MESSAGE = 300;
 const SECRET_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -299,7 +300,12 @@ export async function startGateway(configOverrides?: GatewayOverrides): Promise<
         }
 
         if (url.pathname === "/gateway/inbound" && req.method === "POST") {
-          if (!beginInbound(client.id)) return Response.json({ error: "Client busy" }, { status: 503 });
+          if (!beginInbound(client.id)) {
+            return Response.json(
+              { error: "Client busy" },
+              { status: 503, headers: { "Retry-After": String(DRAIN_RETRY_AFTER_SECONDS) } },
+            );
+          }
           try {
             // Rate limit after the drain check so a draining instance answers 503, not 429.
             if (cacheBypass(client.id)) {

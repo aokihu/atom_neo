@@ -67,8 +67,8 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 | `.atom/gateway/packages.json` | 包安装记录、target、来源与 `sha256` 内容标识（G2） |
 | `.atom/gateway/tmp/` | pack/install 临时目录；成功或失败后清理 |
 | `.atom/gateway/state.json` | `configRevision` 等配置修订状态 |
-| `.atom/gateway/config.lock` | `config.json` / `.env` 写入互斥锁 |
-| `.atom/gateway/packages.lock` | `packages.json` read-modify-write 互斥锁（有界重试/超时） |
+| `.atom/gateway/config.lock` | `config.json` / `.env` 写入互斥锁；busy 立即失败，stale lock 需确认 PID 退出后手动删除 |
+| `.atom/gateway/packages.lock` | `packages.json` read-modify-write 互斥锁（5s 有界重试/超时；stale lock 不自动回收） |
 | `.atom/gateway/logs/` | 实例级有界日志（G4） |
 
 **规则**：除 `AGENTS.md` 和 `.env` 外，所有 Agent 运行时数据文件必须存储在 `.atom/` 下。

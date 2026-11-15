@@ -3,8 +3,8 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 待实施**
-> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16，M3b 见 §17，G5 见 §18。
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 代码与文档完成，真实平台/官方发布待执行**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16，M3b 见 §17，G5 见 §18，G6 见 §19。
 >
 > 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
@@ -1029,7 +1029,7 @@ G0 契约确认
 
 额外验证：`bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils/child-process-env.test.ts src/bootstrap/config.test.ts` → 159 pass / 1 skip；`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过。
 
-> 注意：仓库中可能存在被忽略的 `src/packages/gateway/dist` 旧编译测试；直接运行 `bun test src/packages/gateway` 会把它们一起执行并因旧 `binary` fixture 失败。M1 验证使用 `src/packages/gateway/src` 路径。
+> 注意：gateway 包的本地构建输出 `dist` 可能包含旧编译测试；直接运行 `bun test src/packages/gateway` 会把它们一起执行并因旧 fixture 失败。验证固定使用 `src/packages/gateway/src` 路径。
 
 实施偏差：
 
@@ -1222,3 +1222,26 @@ upgradeClientInstance(sandbox, instanceId, version, { apply? }): Promise<Upgrade
 | config-only 操作 | `GatewayModal.tsx` | 提供 Edit / Register / Pack（目录） / Back；register 成功刷新后显示 Start/Stop/Reload/Check/Logs。 |
 | CLI list 合并 | `gateway-command.ts` | `gateway list` 离线读 config；在线合并 admin 状态。文本与 JSON 增加 `configured`、`registered`、`offline`。 |
 | 测试 | `GatewayModal.test.tsx`、`gateway-status.test.ts`、`gateway-actions.test.ts`、`gateway-command.test.ts` | 覆盖离线 load → configured → 填 secret → register → start、目录/package describe、离线/在线 list。 |
+
+---
+
+## 19. G6 集成收口（2026-11-15）
+
+**代码/文档状态**：G6-1..G6-4 完成；G6-5 等待用户最终检查。真实 Telegram 平台与官方发布验收 **PENDING**。
+
+交付口径：
+
+- 同平台多账号：沿用 `platform:userId`，不宣称完整隔离。
+- 消息可靠性：不承诺 exactly-once；Telegram 非 busy 错误最多 3 次后推进 offset。
+- 官方分发：代码/脚本完成；真实制品、生产索引 URL/checksum 与下载待发布环境。
+- 开发者模式/条件字段/完整 stdout/stderr：按当前限制交付，不新增功能。
+- `drain` 503 增加 `Retry-After: 1`。
+- `config.lock` 立即 busy，stale lock 手动确认 PID 后删除；`packages.lock` 5s 有界重试。
+- `gateway list --json` 兼容说明：新增 `offline` 与每项 `configured/registered`；config-only `state:"unregistered"`。
+
+验证记录：
+
+- 本地矩阵：[gateway-g6-validation.md](../records/gateway-g6-validation.md)
+- 真实 Telegram 待执行清单：[telegram-platform-acceptance.md](../records/telegram-platform-acceptance.md)
+
+本地结果摘要：Gateway 203 pass / 1 skip；shared 114 pass；bootstrap 定向 65 pass；config-tui/Telegram/release 137 pass；PTY 25 pass；typecheck/typecheck:node/docs:check/diff check 通过；`build:node` 通过。gateway 包本地构建输出中的旧忽略测试产物已删除，验证固定 `src` 路径。

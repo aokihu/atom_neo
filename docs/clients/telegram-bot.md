@@ -2,7 +2,7 @@
 
 > **Purpose**: Telegram Bot Client 是 Atom Neo 的第一个平台接入参考实现。它负责与 Telegram Bot API 交互，将用户消息标准化后转发到 Gateway，并将 Core 的回复发送回用户。
 
-> **2026-11-14 规划补充（2026-11-15 修订）**：Telegram 将作为标准发行包与开发目录加载的首个样例，统一使用根目录 `manifest.json`。目标为安装后引导配置 Token，以及开发时加载目录、手动重载和打包。M1 已实现 manifest/resolver 与统一启动描述，并**拒绝旧 `binary` 配置**；下文 CLI/二进制说明保留作历史参考，配置示例不能直接使用，需改为 `package` 或 `directory`。安装、CLI/TUI 与重载仍待 G2–G4。详见 [接入与发行规划](../communication/gateway-client-design.md) 与 [开发计划](../communication/gateway-development-plan.md)。
+> **2026-11-15 状态**：Telegram 已作为标准发行包/开发目录样例接入。manifest、目录/包实例、本地 pack/install、官方来源索引/下载/升级/卸载、Gateway 管理 UI、诊断与重载均已实现；真实 Telegram 平台消息验收和官方制品/生产索引发布**待执行**。旧 `binary` 配置明确拒绝；下文 CLI/二进制说明保留作开发参考。凭据必须通过实例 `.env` credential ref 注入，不作为普通 `clientArgs` 写入日志或历史。详见 [接入与发行规划](../communication/gateway-client-design.md) 与 [开发计划](../communication/gateway-development-plan.md)。
 
 ## 1. 架构位置
 
@@ -28,7 +28,7 @@ Core (127.0.0.1:3100)
 
 构建：`bun run build` 输出 `./bin/telegram-bot`；根目录 `manifest.json` 的 `entry.production` 指向该文件，`entry.development` 为 `bun run src/main.ts`。发行包由 Gateway `packClient` 生成，不要求用户手写 binary 路径。
 
-Client 通过 CLI 参数接收普通配置；secret 字段由 manifest 声明 env 映射，实例只保存 `.env` 引用。Gateway 在 `config.json` 中通过 `clientArgs` 管理普通参数。
+Client 通过 CLI 参数接收普通配置；secret 字段由 manifest 声明 env 映射，实例只保存 `.env` 引用。Gateway 在 `config.json` 中通过 `clientArgs` 管理普通参数。下方 `--bot-token` 仅用于直接开发运行；通过 Gateway 实例启动时使用 `credentials:{"bot-token":"ATOM_CLIENT_<INSTANCE>_BOT_TOKEN"}`，实际值只写入 sandbox `.env`。
 
 ### 2.1 内部参数（Gateway 注入，用户不应手动指定）
 

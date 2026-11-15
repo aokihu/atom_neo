@@ -1,6 +1,6 @@
 # Gateway 更新开发计划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0、M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已完成；G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0、M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已完成；G6 代码与文档完成，真实平台/官方发布验收待执行**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory`。
 > 目标与建议契约统一见 [接入与发行规划](./gateway-client-design.md)；本文负责阶段、依赖、影响面、验收与进度。
 
@@ -129,10 +129,13 @@ M4/G5 实施记录：`source-index.ts`、`download.ts`、`source-install.ts`、`
 
 依赖 G1–G5；本地闭环可在 G4 后独立交付，官方分发在 G5 后交付。
 
-- [ ] 更新 Gateway、Telegram、配置、Sandbox、启动菜单和开发环境文档，将通过验收的能力从规划迁入当前说明。
-- [ ] 对新增复杂目录补 README；源码路径、CLI 帮助、索引与包示例一致。
-- [ ] 完成下述验证矩阵，记录测试结果、运行时、制品、已知限制及真实平台验收状态。
-- [ ] 所有必需阶段通过后再标记对应交付完成；提交、推送或发布按届时授权范围执行。
+- [x] 更新 Gateway、Telegram、配置、Sandbox、启动菜单和开发环境文档，将通过验收的能力从规划迁入当前说明。
+- [x] 对新增复杂目录补 README；源码路径、CLI 帮助、索引与包示例一致。
+- [x] 完成本地验证矩阵，记录测试结果、运行时、已知限制；真实平台/发布验收标记 PENDING。
+- [x] 代码与文档交付完成；真实 Telegram 平台验收、各 target 官方制品、生产索引/URL/checksum **待执行**。
+- [x] `drain` 503 增加 `Retry-After: 1`；config.lock stale 指引、`gateway list --json` 兼容说明、tar/download/source-index 安全复核完成。
+
+M4/G6 实施记录：文档收口、范围冻结、本地验证矩阵和真实验收清单已完成；删除 gateway 包本地构建输出中的旧忽略测试产物，验证固定 `src` 路径。真实账号消息往返、限流/重载/恢复人工验收和官方发布仍为 PENDING。
 
 ## 4. 验证矩阵
 
@@ -163,7 +166,7 @@ bun run build:node
 ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts
 ```
 
-> Gateway 测试固定使用 `src/packages/gateway/src`，避免执行被 `.gitignore` 忽略的 `src/packages/gateway/dist` 旧编译测试；dist 制品不作为验证来源。
+> Gateway 测试固定使用 `src/packages/gateway/src`，避免执行 gateway 包本地构建输出中的旧忽略测试；构建制品不作为验证来源。
 
 新命令、安装制品和 UI/菜单另增加对应定向验收；Node 制品调用已有 smoke 工具，不另造一套平台检查。假平台通过仅证明协议链路，Telegram 凭据检查与真实消息往返需使用明确指定的测试账号单独记录。
 

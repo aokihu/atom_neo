@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施完成；G6 待实施**。
+> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 代码与文档完成，真实 Telegram 平台验收和官方制品/生产索引发布待执行**。
 > 本版已按复杂度规则将复杂阶段拆分为“中/轻”子任务；2026-11-15 修订：启动方式**不再兼容旧 `binary`**。决策与回写记录见 §4.2 与 §10。
 >
 > 关联文档：
@@ -553,6 +553,30 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 
 **G6 完成标准**：文档、CLI 帮助、索引、示例与实际行为一致；未做真实平台验证时明确标注。
 
+**G6 范围冻结（2026-11-15）**
+
+| 事项 | 交付口径 |
+|---|---|
+| 同平台多账号 | 首版**不支持**账号级会话隔离；保持现有 `platform:userId` 兼容基线，不同发起者冲突仍拒绝。不得宣称完整多账号。 |
+| 消息可靠投递 | 不承诺 exactly-once、持久投递队列或无限重试。Telegram 非 busy 错误同一 update 最多 3 次，之后推进 offset 并跳过；busy/429 不推进 offset，按 `Retry-After` 返回批次。 |
+| 官方分发 | 代码、脚本、索引/下载/升级/卸载已完成；真实 Telegram 制品、生产索引 URL、真实下载与 checksum 发布**待发布环境执行**，当前不标记“完整交付已验收”。 |
+| 开发者模式 | load/pack 入口以 developer 标注并可见；没有独立权限/环境开关，也没有文件监听自动重载。 |
+| 条件字段 | manifest v1 无字段条件显示契约；表单展示全部声明字段。 |
+| 完整 stdout/stderr 日志 | 保持 `inherit/ignore` 与 Gateway 有界诊断事件；没有按实例采集完整 stdout/stderr 文件的能力。 |
+| 真实平台验收 | 使用独立测试账号、真实 bot token 的验收清单已提供，**待执行**；本轮不连接真实 Telegram。 |
+
+**G6 实施状态（代码与文档完成，真实发布/平台验收待执行）**
+
+| ID | 状态 | 产出 |
+|---|---|---|
+| G6-1 | 已完成 | Gateway/Telegram/配置/Sandbox/菜单/开发文档与范围冻结 |
+| G6-2 | 已完成 | 索引、CLI help、README、包示例、docs:check |
+| G6-3 | 已完成（本地） | 本地验证矩阵与结果记录；未执行真实平台/生产发布 |
+| G6-4 | 已完成 | 已知限制、真实平台待办、发布待办 |
+| G6-5 | 代码/文档完成 | 最终评审等待用户检查；真实平台/发布验收仍为 pending |
+
+> 结论：**代码与文档交付完成**；真实 Telegram 平台验收、各 target 官方制品、生产索引/URL/checksum 尚未执行，不能写成“完整交付已验收”。本地验证矩阵见 [gateway-g6-validation.md](../records/gateway-g6-validation.md)，真实验收清单见 [telegram-platform-acceptance.md](../records/telegram-platform-acceptance.md)。
+
 ---
 
 ## 5. 里程碑
@@ -564,7 +588,7 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | M3 在线管理 | G3、G4 | 17 | 不重启 Gateway 重载目标实例；列表、检查、诊断、日志 |
 | M4 分发闭环 | G5、G6 | 11 | 官方安装、升级/卸载、完整文档与验收 |
 
-第一轮交付 = M3 完成；完整交付 = M4 完成。
+第一轮交付 = M3 完成。M4 的代码/文档完成不等于完整交付验收：真实 Telegram 平台验收与官方制品/生产索引发布仍待执行。
 
 ---
 
@@ -597,7 +621,7 @@ bun run build:node
 ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts
 ```
 
-> Gateway 测试固定使用 `src/packages/gateway/src`：仓库可能残留被 `.gitignore` 忽略的 `src/packages/gateway/dist` 旧编译测试，`bun test src/packages/gateway` 会把它们一起执行并产生与当前源码无关的失败。dist 不作为验证来源。
+> Gateway 测试固定使用 `src/packages/gateway/src`：gateway 包本地构建输出中的旧忽略测试可能被 `bun test src/packages/gateway` 一起执行并产生与当前源码无关的失败。构建输出不作为验证来源。
 
 假平台通过只证明协议链路；Telegram 凭据检查与真实消息往返需使用明确指定的测试账号单独记录。
 

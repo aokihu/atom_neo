@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 待实施**
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 代码与文档完成，真实平台/官方发布待执行**
 > 2026-11-15 修订：启动方式不再兼容旧 `binary`，启动路径只保留 `package` / `directory`。
 > M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单。动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
 >
@@ -663,6 +663,23 @@ sequenceDiagram
 **URL 边界**：远程索引/归档只允许 HTTPS；HTTP 仅 loopback。索引流式读取并执行 maxBytes。
 
 **Reload 恢复**：新 supervisor 启动失败时，ClientManager 恢复旧 config 与旧 supervisor 并重新 start；旧版本也失败时报告双失败。升级 apply 失败因此同时恢复 config 与运行中的旧进程。
+
+---
+
+## 13.2 G6 收口与待验收边界
+
+```mermaid
+graph LR
+    Code["代码/文档完成"] --> Local["本地验证矩阵"]
+    Local --> Pending["待执行：真实 Telegram 平台"]
+    Local --> Release["待执行：官方制品/生产索引"]
+    Pending --> Acceptance["真实账号/消息往返/限流/重载/恢复"]
+    Release --> Artifacts["各 target 构建 + URL + sha256/size"]
+```
+
+- 本地矩阵与真实平台清单见 [gateway-g6-validation.md](../records/gateway-g6-validation.md) 与 [telegram-platform-acceptance.md](../records/telegram-platform-acceptance.md)。
+- 代码层已覆盖 drain `Retry-After: 1`、registry/config lock 指引、source/index/download 安全边界、reload 旧 supervisor 恢复。
+- 不新增插件市场、权限沙箱、后台自动更新；多账号、exactly-once、完整 stdout/stderr、条件字段仍按 G6 范围冻结。
 
 ---
 

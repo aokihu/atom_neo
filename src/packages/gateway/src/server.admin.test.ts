@@ -284,6 +284,7 @@ describe("Gateway admin and drain", () => {
       await Bun.sleep(5);
       const blocked = await handler(new Request("http://gateway/gateway/inbound", inbound(secret)), context());
       expect(blocked.status).toBe(503);
+      expect(blocked.headers.get("retry-after")).toBe("1");
 
       const reload = await reloading;
       expect(reload.status).toBe(409);

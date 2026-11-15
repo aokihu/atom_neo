@@ -12,11 +12,15 @@ M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest
 
 M3a（G3）已落地动态管理与重载：`ClientManager` 动态 register/remove/reload、活动端口集合、GET 状态/诊断、POST reload、drain 503/409、Telegram 503/429 offset 语义、`atom gateway` CLI 与离线/在线处理器。
 
+**G6 交付口径（2026-11-15）**：代码与文档完成，但真实 Telegram 平台验收、真实制品、生产来源索引/URL/checksum **待执行**，不得写成完整交付已验收。首版不支持同平台多账号会话隔离；不承诺 exactly-once；Telegram 非 busy 错误最多重试 3 次后推进 offset；没有独立开发者权限开关、文件监听自动重载、字段条件显示或完整 stdout/stderr 采集。drain 503 返回 `Retry-After: 1`。本地矩阵见 [gateway-g6-validation.md](../records/gateway-g6-validation.md)，真实平台步骤见 [telegram-platform-acceptance.md](../records/telegram-platform-acceptance.md)。
+
 M3b（G4）已落地管理与诊断 UI：`GatewayModal` 显示实例来源（package 版本或 directory）、supervisor 状态/端口/平台、最近错误；操作面板提供 start/stop/reload、check、diagnostics/logs、编辑、install、load、pack。`GatewayInstanceForm` 支持编辑模式，secret 使用固定宽度遮罩输入，空白 secret 表示保持已配置值；enum/default 与 resolver 契约一致。启动菜单新增 install/load/manage/pack，history 只记录 sandbox/target/id/out。`atom gateway load --id <id>` 允许同一目录创建不同实例，省略时仍使用 `manifest.id`。
 
 M3b 初审修复：`POST /admin/clients {action:"register",clientId}` 通过现有 resolver 重新读取 config/.env/registry/manifest 后动态 `cm.register`，不自动启动；重复登记返回 409，其他解析/登记失败返回 400，不影响已有实例。`gateway load` 在 Gateway 在线时写 config 后调用 register，离线时保持 `saved, not started`；JSON 输出区分 `saved/registered/offline`。UI admin 请求统一 5s 超时，client 列表 key 使用 `client:` 前缀避免与 refresh/install/load/pack/port/back 固定动作冲突。注册仍要求配置已可解析：required 字段或 required secret 缺失时返回 400。
 
 M3b 复审修复（config-only 闭环）：`GatewayModal` 将 `listInstances(sandbox)` 与 supervisor 状态按 id 合并；仅存在于 config 的实例显示 `configured / unregistered`，`registered=false`，不伪造 running/idle/port。此类实例可编辑配置、保存、register，成功后显示 start/stop/reload/check/logs。manifest 元数据由注入的 `GatewayInstanceActions.describe(id)` 读取目录或 registry manifest；config-tui 不直接依赖 gateway 包。`atom gateway list` 离线读取 config，在线合并 admin 状态，文本与 JSON 使用 `configured` / `registered` / `state` / `offline` 区分。进程状态仍只来自 supervisor。
+
+**`gateway list --json` 兼容说明**：输出从裸 `{clients}` 扩展为 `{clients, offline}`；每个 client 额外包含 `configured`、`registered`，config-only 的 `state` 为 `unregistered`。已有字段保持不变；直接比较完整 JSON 的脚本需要适配新增字段。离线时 `offline:true`，`clients` 来自 config；在线时 admin 状态优先，config-only 条目补齐。
 
 `--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。UI 的进程状态只来自 supervisor/admin API，平台检查只来自 Client `/diagnostics`，不另建状态源；诊断仍由 Gateway 有界脱敏。
 
@@ -140,7 +144,7 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 ### 重载与 drain
 
 - 每个实例维护 inbound 在途计数；`POST /admin/clients {action:"reload", clientId}` 只 drain 目标实例。
-- drain 期间目标实例的 `/gateway/inbound` 返回 503 `{error:"Client busy"}`，其他实例不受影响。
+- drain 期间目标实例的 `/gateway/inbound` 返回 503 `{error:"Client busy"}` 和 `Retry-After: 1`，其他实例不受影响。
 - 默认 30s 内等待在途请求结束；超时返回 409 并保留旧进程。
 - 成功后停止旧 supervisor（撤销 Secret/清 timer），用同一端口和 `desired` 状态创建新 supervisor；旧 exit 回调/restart timer 不影响新进程。
 - 新 supervisor 启动/就绪失败时，恢复旧配置与旧 supervisor 并重新启动旧版本；恢复成功错误信息明确写 `previous version restored and running`。恢复也失败时报告 `restoring the previous version also failed`，不伪装成功。
@@ -317,6 +321,17 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
 - `atom gateway upgrade <instance> [--version <version>]` 只更新指定实例；新版本未安装时先下载安装；在线 reload/register 失败恢复旧实例配置，并自动恢复/启动旧 supervisor（恢复失败明确报告双失败），已安装新版本保留。
 - `atom gateway uninstall <id>[@version]` 在 registry 锁内检查实例引用；未被引用时删除 registry 和包目录。写入失败恢复目录，删除残留报告路径；`.env` 凭据、开发源码、会话不删除。
 - 发布：`bun run gateway:release -- --client clients/telegram-bot --base-url <url> [--no-build]` 只生成当前 host target；输出索引默认与已有文件按 `id@version/target` 合并，相同 URL+sha256 幂等，同键冲突拒绝。其他 target 必须在对应真实环境分别构建后合并。
+
+### 7.2 G6 安全复核
+
+| 边界 | 结论 |
+|---|---|
+| tar pack | 只收集 `manifest.json` + `bin/**`；拒绝绝对路径、`..`、反斜杠、符号链接和非白名单条目；归档写入临时文件后 rename。 |
+| tar install | 先校验每个 entry 类型/路径/重复项，再解包到 sandbox 临时目录；拒绝链接逃逸、敏感文件、非 host target；失败清理临时目录。 |
+| download | HTTPS 或 loopback HTTP；临时目录 + 0600 文件；超时、大小上限、流式 sha256；任何失败删除临时目录；不经过 shell。 |
+| source-index | 严格 v1 schema、重复/缺失 sha256/非法 URL 拒绝；远程加载流式 maxBytes；索引合并同键不同 URL/sha256 拒绝；无生产 URL 默认值。 |
+| 依赖 | 继续使用现有 `tar`、`zod`、Node/Bun 内建 API；G6 未新增第三方依赖。 |
+| 残余风险 | sha256 只证明下载内容与索引一致，不证明发布者身份；生产索引分发通道与应用更新签名仍需部署侧保护。未做恶意包静态扫描。 |
 
 ## 8. 文件
 

@@ -1,6 +1,6 @@
 # Gateway Client 接入与发行规划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 代码与文档完成，真实 Telegram 平台/官方发布验收待执行**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。
 > 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准，M1 已完成 manifest、resolver、实例配置与统一启动描述。
 
@@ -247,6 +247,16 @@ M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-
 第一轮交付 Telegram 的本地安装和目录开发闭环，再补齐官方名称下载、升级与卸载。平台接入列表统一管理包来源、实例配置、检查与启停；端口、可执行路径与 webhook 参数归入高级设置。保留已有 `--mode` 与菜单入口，新命令是增量入口。
 
 官方来源映射、下载校验与多平台制品单独交付；不在首轮引入插件市场、权限沙箱、通用热更新框架或新消息队列。现有 HTTP 适配器、配置校验与生命周期职责优先复用。
+
+### 8.1 G6 范围冻结
+
+- **同平台多账号**：首版不支持账号级会话隔离，继续使用 `platform:userId` 兼容基线；不同 Client 的发起者冲突仍拒绝。不得宣称完整多账号。
+- **消息可靠投递**：不承诺 exactly-once 或持久投递队列。Telegram 同一 update 的非 busy 错误最多 3 次，之后推进 offset 跳过；busy/429 不推进 offset，按 `Retry-After` 重试批次。
+- **官方分发**：代码/脚本/索引/下载/升级/卸载已完成；真实 Telegram 制品、生产索引 URL/checksum、真实下载待发布环境执行。当前只可标记“代码与文档完成”，不能标记“完整交付已验收”。
+- **开发者模式**：load/pack 入口以 developer 标注可见；没有独立权限开关或文件监听自动重载。
+- **条件字段**：manifest v1 没有条件显示契约，表单展示全部声明字段。
+- **日志**：保持继承/丢弃 stdout/stderr 与 Gateway 有界诊断事件，不提供完整实例 stdout/stderr 采集。
+- **真实平台验收**：测试账号/bot token/消息往返/限流/重启重载/失败恢复清单见 [telegram-platform-acceptance.md](../records/telegram-platform-acceptance.md)，待执行；本地矩阵见 [gateway-g6-validation.md](../records/gateway-g6-validation.md)。
 
 ## 9. G0 决策结论与 M1 实施范围
 
