@@ -1,6 +1,6 @@
 # Gateway Client 接入与发行规划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G0+G1）已实施；G2–G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）已实施；G3–G6 待实施**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。
 > 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准，M1 已完成 manifest、resolver、实例配置与统一启动描述。
 
@@ -189,9 +189,9 @@ $SANDBOX/
 
 M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-instance.ts`：写入前获取 `.atom/gateway/config.lock`，成功后递增 `.atom/gateway/state.json` 的 `configRevision`；失败或取消时恢复原文件，不留下半成品实例。凭据只写 `.env`，实例保存 `field -> ATOM_CLIENT_<ID>_<FIELD>` 引用。
 
-第一版 pack 面向预构建的独立二进制，收集 manifest 与 bin/，排除源码依赖、`.env` 和运行数据；需要额外运行资源的包在明确需求后扩展收集规则。pack 不安装依赖、不自动构建。development 入口可从打包后的 manifest 移除，生产加载不依赖源码或开发工具。
+第一版 pack 面向预构建的独立二进制，只收集 `manifest.json` 与 `bin/**`，排除源码依赖、`.env`、日志和运行数据；pack 按本次 target 写入归档 manifest，默认输出 Client 根目录下的 `dist/<id>-<version>-<target>.tar.gz`。pack 不安装依赖、不自动构建。development 入口可从打包后的 manifest 移除，生产加载不依赖源码或开发工具。
 
-安装先校验 manifest、target、生产入口和解包路径边界，再从临时目录提交到版本目录；禁止路径越界与归档链接逃逸。失败不替换已有版本。已有同版本不同内容应拒绝静默覆盖。卸载包前检查实例引用，不删除开发源码、账号凭据或会话数据。
+安装先校验 manifest、target、生产入口和解包路径边界，再从临时目录提交到版本目录；禁止路径越界与归档链接逃逸。失败不替换已有版本。registry 使用 `sha256` 内容标识：同内容幂等，同版本不同内容拒绝覆盖；卸载包前检查实例引用，不删除开发源码、账号凭据或会话数据。
 
 实例配置继续归属用户配置。`gateway.clients` 只保留 `package` / `directory` 两种来源，二者互斥；`binary` 与实例级 `platform` 移除，platform、启动数组和 cwd 均由 manifest 解析。旧配置不自动迁移，升级后需重新登记。各实例显式固定安装版本。
 
@@ -238,11 +238,17 @@ M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-
 | D8 | 默认 `./dist/<id>-<version>-<target>.tar.gz`；新增 `tar` 依赖，禁止 shell 拼 tar |
 | D9 | 可选 `GET /diagnostics`；未实现返回 404 显示 `unsupported`；`/health` 不等于凭据有效 |
 
-M1（G0+G1）实际交付边界：
+M1（G0+G1）实际交付：
 
-- 已实现 shared 实例 schema（包/目录二选一、凭据引用、旧 `binary` 拒绝）、`client-instance` 读写与 revision、manifest v1、resolver、凭据 env 隔离、`ResolvedClientConfig` 启动链路和 fake runtime 测试。
-- 包安装、`packages.json` 登记、CLI/TUI 入口、动态重载与诊断属于 G2–G4，尚未实现。
-- M1 的包路径通过 resolver 注入的 `packageRoot` 解析；G2 接入包登记后由 `registry.ts` 提供实际安装目录。
+- shared 实例 schema（包/目录二选一、凭据引用、旧 `binary` 拒绝）、`client-instance` 读写与 revision、manifest v1、resolver、凭据 env 隔离、`ResolvedClientConfig` 启动链路和 fake runtime 测试。
+
+M2（G2）实际交付：
+
+- Telegram manifest 与 `bin/telegram-bot` 构建；tar.gz pack 白名单、target 注入、敏感文件排除。
+- 安全 install：路径/链接/类型校验、临时目录、target/production 校验、失败回滚。
+- `packages.json` registry 与 `sha256` 幂等/冲突；resolver 优先使用 registry 路径。
+- 离线实例配置 API 与 config-tui 首次实例表单；临时 sandbox 端到端测试。
+- CLI/TUI 在线入口、动态重载与诊断仍属 G3–G4，尚未实现。
 
 ## 10. 依据与关联文档
 

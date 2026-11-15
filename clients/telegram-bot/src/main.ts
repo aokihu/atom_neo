@@ -65,7 +65,7 @@ function parseArgs(): ClientArgs {
   const webhookPort = parseInt(webhookPortStr);
   if (isNaN(webhookPort) || webhookPort < 1 || webhookPort > 65535) { console.error(`--webhook-port must be a valid port number (1-65535), got: ${webhookPortStr}`); process.exit(1); }
 
-  const webhookSecret = getArg("webhook-secret") ?? crypto.randomUUID();
+  const webhookSecret = getArg("webhook-secret") ?? Bun.env.TELEGRAM_WEBHOOK_SECRET ?? crypto.randomUUID();
 
   return {
     secret,

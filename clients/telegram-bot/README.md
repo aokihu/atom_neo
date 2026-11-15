@@ -13,8 +13,10 @@ Atom Neo 的 Telegram 平台接入实现。
 
 ```bash
 bun run build
-# 产出二进制文件：./telegram-bot
+# 产出二进制文件：./bin/telegram-bot
 ```
+
+Client 根目录的 `manifest.json` 声明运行时入口：发行包使用 `entry.production`（`./bin/telegram-bot`），开发目录使用 `entry.development`（`bun run src/main.ts`）。
 
 ## 运行
 
@@ -22,14 +24,14 @@ bun run build
 
 ```bash
 # Long Polling（默认）
-./telegram-bot \
+./bin/telegram-bot \
   --secret <uuid> \
   --port 4200 \
   --gateway-url http://127.0.0.1:3000 \
   --bot-token <your-bot-token>
 
 # Webhook 模式
-./telegram-bot \
+./bin/telegram-bot \
   --secret <uuid> \
   --port 4200 \
   --gateway-url http://127.0.0.1:3000 \
@@ -48,17 +50,25 @@ bun run build
 {
   "gateway": {
     "clients": [{
-      "id": "telegram-bot",
-      "platform": "telegram",
-      "binary": "/path/to/telegram-bot",
-      "clientArgs": {
-        "bot-token": "123456:ABC-DEF...",
-        "mode": "longpoll"
+      "id": "telegram-main",
+      "package": { "id": "telegram-bot", "version": "0.1.0" },
+      "clientArgs": { "mode": "longpoll" },
+      "credentials": {
+        "bot-token": "ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN"
+      }
+    }, {
+      "id": "telegram-dev",
+      "directory": "/absolute/path/to/clients/telegram-bot",
+      "clientArgs": { "mode": "longpoll" },
+      "credentials": {
+        "bot-token": "ATOM_CLIENT_TELEGRAM_DEV_BOT_TOKEN"
       }
     }]
   }
 }
 ```
+
+Token 值只写 sandbox `.env`，例如 `ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN=123456:ABC-DEF...`。`binary` 与实例级 `platform` 已不支持。
 
 ## 参数
 

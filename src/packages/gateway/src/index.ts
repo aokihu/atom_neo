@@ -9,3 +9,20 @@ export { resolveClient, resolveClients, sandboxPackageRoot } from "./client-pack
 export type { ResolvedClientConfig } from "./client-package/resolver";
 export { parseManifest, resolveEntry } from "./client-package/manifest";
 export type { Manifest } from "./client-package/manifest";
+export { installClient, packClient } from "./client-package/archive";
+export type { InstallResult, PackOptions } from "./client-package/archive";
+export {
+  findPackage,
+  listPackages,
+  readRegistry,
+  registerPackage,
+  registryPath,
+  removePackage,
+} from "./client-package/registry";
+export type { PackageRecord, PackageRegistration, PackageRegistry } from "./client-package/registry";
+export { configureInstance } from "./client-package/instance-config";
+export type {
+  ConfigureInstanceInput,
+  ConfigureInstanceResult,
+  ConfigureInstanceSource,
+} from "./client-package/instance-config";

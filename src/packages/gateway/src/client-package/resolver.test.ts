@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ClientConfig } from "@atom-neo/shared";
+import { registerPackage } from "./registry";
 import { resolveClient, resolveClients, sandboxPackageRoot } from "./resolver";
 import type { ResolveOptions } from "./resolver";
 
@@ -384,5 +385,22 @@ describe("sandboxPackageRoot", () => {
 
     expect(packageRoot("telegram-bot", "0.1.0")).toBe(root);
     expect(() => packageRoot("telegram-bot", "9.9.9")).toThrow(`not installed for ${target}`);
+  });
+
+  test("prefers the registry record path", () => {
+    const sandbox = join(temp, "registry-sandbox");
+    const installed = join(sandbox, ".atom", "gateway", "packages", "telegram-bot", "0.1.0", "custom-target");
+    writeManifest(installed);
+    registerPackage(sandbox, {
+      id: "telegram-bot",
+      version: "0.1.0",
+      target: "custom-target",
+      path: ".atom/gateway/packages/telegram-bot/0.1.0/custom-target",
+      source: "local:test",
+      sha256: "a".repeat(64),
+      installedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(sandboxPackageRoot(sandbox)("telegram-bot", "0.1.0")).toBe(installed);
   });
 });

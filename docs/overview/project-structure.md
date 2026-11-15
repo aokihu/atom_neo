@@ -345,7 +345,10 @@ src/packages/gateway/
 │   ├── client-package/
 │   │   ├── README.md
 │   │   ├── manifest.ts
-│   │   └── resolver.ts
+│   │   ├── resolver.ts
+│   │   ├── registry.ts
+│   │   ├── archive.ts
+│   │   └── instance-config.ts
 │   └── client-manager/
 │       ├── README.md
 │       ├── index.ts

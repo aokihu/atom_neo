@@ -13,10 +13,11 @@ passed to `spawnProcess` without shell concatenation.
 | `resolver.ts` | User client config → `ResolvedClientConfig` (command/cwd/platform/env) |
 | `resolver.test.ts` | Package/directory, credentials, error and package-root coverage |
 | `integration.test.ts` | Fake-runtime package/directory startup, credentials and reserved args |
-| `registry.ts` | `.atom/gateway/packages.json` read/write (G2) |
-| `archive.ts` | tar.gz pack/install and path-escape checks (G2) |
+| `registry.ts` | `.atom/gateway/packages.json` read/write, `sha256` idempotency/conflicts, reference checks |
+| `archive.ts` | tar.gz pack/install, target injection, path/link safety, commit/rollback |
+| `instance-config.ts` | Offline package/directory instance configuration via shared `client-instance` |
 
-`registry.ts` and `archive.ts` are planned for G2. `sandboxPackageRoot()` in `resolver.ts` is the temporary M1 package lookup and will be replaced by the registry.
+`sandboxPackageRoot()` prefers the registry record path and keeps a compatibility fallback for manually placed packages. `archive.test.ts` covers pack and install; the end-to-end round-trip lives in `src/bootstrap/gateway-package.e2e.test.ts`.
 
 ## Manifest v1
 

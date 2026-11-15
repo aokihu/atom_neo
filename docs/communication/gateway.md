@@ -6,7 +6,9 @@
 
 新增 [接入与发行规划](./gateway-client-design.md) 与独立 [开发计划](./gateway-development-plan.md)：标准 Client 发行包安装、根目录 `manifest.json`、Chrome 式开发目录加载/手动重载、配置向导和实例状态诊断。
 
-M1（G0+G1）已落地：实例配置只接受 `package` / `directory` 二选一，`binary` / 实例级 `platform` 已移除并明确拒绝；manifest v1 解析、入口选择、`ResolvedClientConfig` 统一启动描述、凭据引用注入与实例凭据隔离已接入现有 `ClientManager` / `ProcessSupervisor`。包安装、`packages.json`、CLI/TUI 入口、动态重载、诊断和日志仍属 G2–G4，尚未提供。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
+M1（G0+G1）已落地：实例配置只接受 `package` / `directory` 二选一，`binary` / 实例级 `platform` 已移除并明确拒绝；manifest v1 解析、入口选择、`ResolvedClientConfig` 统一启动描述、凭据引用注入与实例凭据隔离已接入现有 `ClientManager` / `ProcessSupervisor`。
+
+M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest + `bin/**` 白名单、target 注入、敏感文件排除）、安全 `installClient`（路径/链接校验、临时目录、失败回滚）、`packages.json` registry（`sha256` 幂等/冲突）、离线实例配置 API 与 config-tui 首次实例表单。未实现 CLI 子命令、动态重载、诊断和日志；这些仍属 G3–G4。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
 
 ## Gateway Client 控制模式（已实现）
 
@@ -291,6 +293,9 @@ src/packages/gateway/
       README.md                     目录摘要与边界
       manifest.ts                   manifest v1 解析、严格校验、入口选择
       resolver.ts                   用户实例配置 → ResolvedClientConfig
+      registry.ts                   packages.json 登记、sha256 幂等/冲突
+      archive.ts                    tar.gz pack/install、目标与路径安全
+      instance-config.ts            离线实例配置 API
     client-manager/
       README.md                     目录摘要与生命周期说明
       index.ts                      ClientManager facade

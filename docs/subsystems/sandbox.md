@@ -43,7 +43,8 @@ sandbox/                          # 工作目录（--sandbox 指定或默认 CWD
 │   ├── compiled_prompts/        # 缓存的编译后提示词
 │   └── gateway/                 # Gateway Client 包、配置修订与实例日志
 │       ├── packages/<id>/<version>/<target>/
-│       ├── packages.json        # 包安装记录（G2）
+│       ├── packages.json        # 包安装记录（含 target / sha256）
+│       ├── tmp/                 # pack/install 临时目录
 │       ├── state.json           # configRevision
 │       ├── config.lock          # 实例配置写入互斥锁
 │       └── logs/<instance-id>/
@@ -62,7 +63,8 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 | `.atom/compiled_prompts/` | 缓存的编译后提示词 |
 | `.atom/agents_meta.json` | 编译元数据追踪 |
 | `.atom/gateway/packages/` | 已安装 Client 包（`<id>/<version>/<target>`） |
-| `.atom/gateway/packages.json` | 包安装记录与来源（G2） |
+| `.atom/gateway/packages.json` | 包安装记录、target、来源与 `sha256` 内容标识（G2） |
+| `.atom/gateway/tmp/` | pack/install 临时目录；成功或失败后清理 |
 | `.atom/gateway/state.json` | `configRevision` 等配置修订状态 |
 | `.atom/gateway/config.lock` | `config.json` / `.env` 写入互斥锁 |
 | `.atom/gateway/logs/` | 实例级有界日志（G4） |

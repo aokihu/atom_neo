@@ -1,0 +1,36 @@
+{
+  "manifest_version": 1,
+  "id": "telegram-bot",
+  "name": "Telegram Bot",
+  "version": "0.1.0",
+  "platform": "telegram",
+  "entry": {
+    "production": ["./bin/telegram-bot"],
+    "development": ["bun", "run", "src/main.ts"]
+  },
+  "config": {
+    "bot-token": {
+      "label": "Bot Token",
+      "type": "string",
+      "required": true,
+      "secret": true,
+      "env": "TELEGRAM_BOT_TOKEN"
+    },
+    "mode": {
+      "label": "连接方式",
+      "type": "string",
+      "enum": ["longpoll", "webhook"],
+      "default": "longpoll"
+    },
+    "webhook-url": {
+      "label": "Webhook URL",
+      "type": "string"
+    },
+    "webhook-secret": {
+      "label": "Webhook Secret",
+      "type": "string",
+      "secret": true,
+      "env": "TELEGRAM_WEBHOOK_SECRET"
+    }
+  }
+}

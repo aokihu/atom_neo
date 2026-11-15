@@ -3,9 +3,9 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G0+G1）已实施；G2–G6 待实施**
+> 状态：**G0 已确认；M1（G0+G1）与 M2（G2）已实施；G3–G6 待实施**
 > 2026-11-15 修订：启动方式不再兼容旧 `binary`，启动路径只保留 `package` / `directory`。
-> M1 实际落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；`registry.ts`、`archive.ts`、动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
+> M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单。动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
 >
 > 本文用文件与代码片段说明改造关系。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，文件与示例代码见 [code_and_file](./atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md)。
@@ -112,6 +112,7 @@ graph TB
         Resolver["client-package/resolver.ts"]
         Registry["client-package/registry.ts"]
         Archive["client-package/archive.ts"]
+        InstanceConfig["client-package/instance-config.ts"]
         Diagnostics["client-manager/diagnostics.ts"]
         Command["client-manager/client-command.ts"]
         Supervisor["client-manager/process-supervisor.ts"]
@@ -150,10 +151,14 @@ graph TB
     Manifest --> Resolver
     Manifest --> Archive
     Manifest --> Registry
+    Manifest --> InstanceConfig
+    Registry --> InstanceConfig
+    InstanceIO --> InstanceConfig
     Resolver --> Command
     Resolver --> Manager
     Registry --> Archive
     Registry --> GatewayCommand
+    InstanceConfig --> GatewayCommand
     Archive --> Registry
     Diagnostics --> Server
     Command --> Supervisor

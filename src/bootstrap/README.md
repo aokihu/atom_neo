@@ -13,3 +13,5 @@
 启动分流与资源关闭由 `src/main.ts` 持有。TUI/Gateway 控制模式不初始化 Core 服务。
 
 `startup.integration.test.ts` 为隔离进程验收，使用 `fixtures/` 的假 Client 与 PTY 驱动；显式设置 `ATOM_RUN_STARTUP_VALIDATION=1` 运行。常规测试默认跳过这些较重的用例。验收结论见 docs/overview/startup-validation.md。
+
+`gateway-package.e2e.test.ts` 为 M2 本地包闭环测试：临时 sandbox 中编译 `fixtures/gateway-client-e2e.ts`，执行 pack → install → configure → Gateway 启动 → fake Core/Client 消息往返。常规 `bun test` 会运行该测试。

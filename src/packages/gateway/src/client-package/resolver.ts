@@ -8,6 +8,7 @@ import {
 import type { ClientConfig, ClientSource } from "@atom-neo/shared";
 import { ENV_NAME_PATTERN, parseManifest, resolveEntry } from "./manifest";
 import type { Manifest } from "./manifest";
+import { findPackage } from "./registry";
 
 const RESERVED_ENTRY_ARGS = new Set(["--secret", "--port", "--gateway-url"]);
 
@@ -172,11 +173,20 @@ export function resolveClients(
 }
 
 /**
- * M1 package layout: `<sandbox>/.atom/gateway/packages/<id>/<version>/<platform>-<arch>`.
- * G2's registry replaces this lookup.
+ * Registry-backed package lookup with a compatibility fallback for manually placed packages:
+ * `<sandbox>/.atom/gateway/packages/<id>/<version>/<platform>-<arch>`.
  */
 export function sandboxPackageRoot(sandbox: string): (id: string, version: string) => string {
   return (id, version) => {
+    const installed = findPackage(sandbox, id, version);
+    if (installed) {
+      const root = join(sandbox, installed.path);
+      if (!existsSync(join(root, "manifest.json"))) {
+        throw new Error(`Client package ${id}@${version} is registered but missing at ${root}`);
+      }
+      return root;
+    }
+
     const target = `${process.platform}-${process.arch}`;
     const root = join(sandbox, ".atom", "gateway", "packages", id, version, target);
     if (!existsSync(join(root, "manifest.json"))) {

@@ -3,8 +3,8 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G0+G1）已实施；G2–G6 待实施**
-> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13。
+> 状态：**G0 已确认；M1（G1）、M2（G2）已实施；G3–G6 待实施**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14。
 >
 > 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
@@ -22,12 +22,16 @@
 | G1 | <code>src/packages/gateway/src/client-package/manifest.ts</code> | manifest v1 解析、校验、入口选择 |
 | G1 | <code>src/packages/gateway/src/client-package/resolver.ts</code> | 用户 Client 配置 → 可启动描述 |
 | G1 | <code>src/packages/gateway/src/client-package/README.md</code> | 目录摘要与边界 |
-| G2 | <code>src/packages/gateway/src/client-package/registry.ts</code> | `packages.json` 安装记录 |
-| G2 | <code>src/packages/gateway/src/client-package/archive.ts</code> | tar.gz pack / install |
+| G2 | <code>src/packages/gateway/src/client-package/registry.ts</code> | `packages.json` 安装记录、内容 hash、引用检查 |
+| G2 | <code>src/packages/gateway/src/client-package/archive.ts</code> | tar.gz pack / install、路径与链接安全 |
+| G2 | <code>src/packages/gateway/src/client-package/instance-config.ts</code> | 离线实例配置库级 API（复用 client-instance） |
 | G2 | `clients/telegram-bot/manifest.json` | 首个标准包与开发目录样例 |
 | G3 | <code>src/packages/gateway/src/client-manager/diagnostics.ts</code> | 有界诊断事件 |
 | G3 | <code>src/bootstrap/gateway-command.ts</code> | `atom gateway ...` 子命令 |
-| G2 | <code>src/packages/config-tui/src/components/GatewayInstanceForm.tsx</code> | manifest 驱动的实例表单（G4 扩展编辑模式） |
+| G2 | <code>src/packages/config-tui/src/components/GatewayInstanceForm.tsx</code> | manifest.config 驱动的首次实例表单 |
+| G2 | <code>src/packages/config-tui/src/gateway-instance-form.ts</code> | 表单字段状态、enum/default/secret 纯逻辑 |
+| G2 | <code>src/bootstrap/fixtures/gateway-client-e2e.ts</code> | 本地闭环 fake Client：发送 inbound、记录 task-result |
+| G2 | <code>src/bootstrap/gateway-package.e2e.test.ts</code> | build → pack → install → configure → start → fake 往返 |
 | G4 | <code>src/packages/config-tui/src/gateway-status.ts</code> | 读取 Gateway 运行状态与诊断 |
 | G4 | <code>src/packages/shared/src/runtime-file.ts</code> | 运行描述文件路径与读取的共享实现 |
 | G3 | `clients/telegram-bot/src/gateway-client.ts` | 入站提交与响应校验（可测试） |
@@ -43,9 +47,11 @@
 | G1 | `src/packages/gateway/src/client-manager/process-supervisor.ts` | 接收 `ResolvedClientConfig` |
 | G1 | `src/packages/gateway/src/config.ts` | 解析前保持用户配置；启动时解析 |
 | G2 | `clients/telegram-bot/package.json` | 构建输出 `bin/telegram-bot` |
+| G2 | `src/packages/gateway/package.json` | 新增 `tar` 依赖（D8） |
+| G2 | `src/packages/gateway/src/index.ts` | 导出 archive/registry/instance-config 供离线配置使用 |
+| G2 | `src/packages/config-tui/src/index.ts` | 导出 `GatewayInstanceForm` 与表单逻辑 |
 | G3 | `src/packages/gateway/src/client-manager/index.ts` | 动态登记、替换、移除、端口分配 |
 | G3 | `src/packages/gateway/src/server.ts` | 管理接口、drain、诊断、状态 |
-| G3 | `src/packages/gateway/src/index.ts` | 导出 manifest/registry/resolver 供 CLI 使用 |
 | G3 | `src/bootstrap/cli.ts` | 解析 `atom gateway ...` |
 | G3 | `src/main.ts` | 新命令提前分流，不初始化 Core |
 | G4 | `src/packages/config-tui/src/components/GatewayModal.tsx` | 实例列表、状态、操作入口 |
@@ -359,7 +365,8 @@ function buildClientEnv(
         "target": "darwin-arm64",
         "path": ".atom/gateway/packages/telegram-bot/0.1.0/darwin-arm64",
         "source": "local:./telegram-bot-0.1.0-darwin-arm64.tar.gz",
-        "installedAt": "2026-11-14T00:00:00.000Z"
+        "installedAt": "2026-11-14T00:00:00.000Z",
+        "sha256": "content-hash-of-manifest-and-bin-payload"
       }
     }
   }
@@ -371,28 +378,30 @@ function buildClientEnv(
 ```ts
 export type PackageRecord = {
   target: string;
-  path: string;
+  path: string; // relative to sandbox
   source: string;
   installedAt: string;
+  sha256: string; // deterministic hash of manifest.json + bin payload
 };
 
 export function readRegistry(sandbox: string): PackageRegistry;
 export function findPackage(sandbox: string, id: string, version: string): PackageRecord | undefined;
-export function registerPackage(sandbox: string, record: PackageRecord): void;
+export function registerPackage(sandbox: string, registration: PackageRegistration): PackageRecord;
 export function removePackage(sandbox: string, id: string, version: string): void;
+export function listPackages(sandbox: string): { id: string; version: string; record: PackageRecord }[];
 ```
 
 要求：
 
 - 写入使用临时文件 + rename。
-- 同 id/version 但内容不同拒绝覆盖。
-- 删除前检查实例引用。
+- 同 id/version 但 `sha256`/target/path 不同拒绝覆盖；完全相同幂等并保留 `installedAt`。
+- `sha256` 为 `manifest.json` + `bin/**` 的确定性内容哈希，不使用 gzip 字节（tar mtime 不影响幂等）。
+- 删除前检查 `gateway.clients[].package` 引用；`removePackage` 只删登记，不删包目录。
 
 ### 3.5 `archive.ts`（新增）
 
 ```ts
 export type PackOptions = {
-  root: string;
   out?: string;
   target?: string;
 };
@@ -403,10 +412,12 @@ export async function installClient(sandbox: string, archive: string): Promise<P
 
 要求：
 
-- `pack` 读取并校验 manifest，要求 `entry.production` 存在。
-- 只收集 `manifest.json`、`bin/` 及 manifest 明确声明的运行资源；排除 `.env`、`node_modules`、`src/`、日志和运行数据。
-- `install` 解包到临时目录，校验绝对路径、`..`、符号链接逃逸，再提交到版本目录。
-- 失败清理临时目录，不覆盖已有版本。
+- `pack` 读取并校验 manifest，要求 `entry.production` 存在；生产入口必须位于 `bin/` 且为真实文件。
+- 只收集 `manifest.json` 与 `bin/**`；排除 `.env`、`node_modules`、`src/`、日志和运行数据；归档 manifest 写入本次 target。
+- 默认输出 `<root>/dist/<id>-<version>-<target>.tar.gz`。
+- `install` 解包到 `${sandbox}/.atom/gateway/tmp`，校验绝对路径、`..`、符号链接/硬链接、target 与 production 入口，再原子提交到 `packages/<id>/<version>/<target>`。
+- target 必须与当前 `${process.platform}-${process.arch}` 一致；不支持时明确报错。
+- 失败清理临时目录，不覆盖已有版本；registry 写入失败时删除已提交目录。
 - 归档实现使用新增 `tar` 依赖，不拼 shell 命令（G0 D8）。
 
 ### 3.6 `src/packages/gateway/src/config.ts`（修改）
@@ -996,3 +1007,35 @@ G0 契约确认
 - `manifest.config.required` 已在启动前校验（secret -> `credentials`，非 secret -> `clientArgs`）；`enum`/`default` 仅由 manifest 校验形状，实际选择/预填在 G2 表单完成。
 - `client-instance.removeInstance` 不删除 `.env` 中的凭据值，只移除实例配置；显式凭据删除归 G5 卸载流程。
 - 未实现新 CLI/TUI 入口、`registry.ts`、`archive.ts`、管理接口、drain、诊断协议与 Telegram 改动，均属于后续阶段。
+
+## 14. M2 实施记录（2026-11-15）
+
+本轮实施 G2-1..G2-8，不进入 G3/G4。
+
+| 子任务 | 实际产出 | 测试结果 |
+|---|---|---|
+| G2-1 | `clients/telegram-bot/manifest.json`；构建输出 `bin/telegram-bot` | `bun run --cwd clients/telegram-bot build` + typecheck |
+| G2-2 | `client-package/archive.ts` pack 白名单、target 注入、敏感文件排除 | `bun test src/packages/gateway/src/client-package/archive.test.ts` → 21 pass（含 install） |
+| G2-3 | archive 路径/链接/类型/临时目录安全校验 | 同上 |
+| G2-4 | `client-package/registry.ts` 原子读写、`sha256` 幂等/冲突、引用检查 | `bun test .../registry.test.ts` → 11 pass |
+| G2-5 | `installClient` 解包、target/production 校验、提交/回滚 | `bun test .../archive.test.ts` → 7 install tests |
+| G2-6 | `client-package/instance-config.ts` 离线配置 API | `bun test .../instance-config.test.ts` → 10 pass |
+| G2-7 | `GatewayInstanceForm.tsx` + 纯逻辑 | `bun test src/packages/config-tui/src/gateway-instance-form.test.ts` → 15 pass |
+| G2-8 | 临时 sandbox e2e | `bun test src/bootstrap/gateway-package.e2e.test.ts` → 1 pass |
+
+额外验证：
+
+- `bun test src/packages/gateway/src` → 139 pass / 1 skip
+- `bun test src/packages/config-tui/src src/bootstrap/gateway-package.e2e.test.ts src/bootstrap/config.test.ts src/bootstrap/cli.test.ts` → 146 pass
+- `bun run --cwd clients/telegram-bot typecheck`、`bun run --cwd clients/telegram-bot build` → 通过，`bin/telegram-bot` 存在
+- `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` → 通过
+
+> `dist/` 是忽略的构建产物，不作为测试来源；Gateway 验证固定使用 `src/packages/gateway/src`。
+
+实施偏差：
+
+- registry `PackageRecord` 增加 `sha256` 内容标识，以满足同版本冲突判定；D3 嵌套结构不变。
+- pack 默认输出改为 Client 根目录下的 `dist/`，`out` 可覆盖；文档已同步。
+- `installClient` 只接受当前主机 target；跨 target 安装归 G5。
+- G2-6 提供库级 API 与表单，不实现 `atom gateway` CLI；CLI 接线归 G3。
+- `removePackage` 只删除 registry 记录并检查引用，不删除包目录；完整卸载归 G5。

@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G0+G1）已实施完成；G2–G6 待实施**。
+> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）已实施完成；G3–G6 待实施**。
 > 本版已按复杂度规则将复杂阶段拆分为“中/轻”子任务；2026-11-15 修订：启动方式**不再兼容旧 `binary`**。决策与回写记录见 §4.2 与 §10。
 >
 > 关联文档：
@@ -274,6 +274,31 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G2-6 | 离线实例配置（CLI） | 中 | `client-instance.ts` + 命令测试 | 保存成功显示“未启动”；取消不创建实例 |
 | G2-7 | 首次实例配置表单（config-tui） | 中 | `GatewayInstanceForm.tsx` + 测试 | manifest.config 驱动；secret 遮罩；enum 选择与 default 预填在表单应用；required 与 resolver 启动校验一致 |
 | G2-8 | 本地闭环端到端测试 | 中 | 临时 sandbox 测试 | 构建 → pack → install → 配置 → 启动 → fake 往返通过 |
+
+**M2 实施决策（2026-11-15）**
+
+- D8：在 `@atom-neo/gateway` 新增 npm `tar` 依赖；pack/install 均使用库 API，不拼 shell `tar` 命令。
+- pack 白名单：只收集 `manifest.json` 与 `bin/**`；`.env`、`src/`、`node_modules`、日志、`dist` 不进入归档。`bin/` 内符号链接拒绝。
+- target：pack 使用显式 `target`、manifest.target 或当前 `${process.platform}-${process.arch}`；写入归档 manifest。install 校验归档 target 与当前主机一致，不支持时明确报错。
+- 默认 pack 输出：Client 根目录下 `dist/<id>-<version>-<target>.tar.gz`；`out` 可覆盖。
+- registry：沿用 D3 `{version:1, packages:{id:{version:PackageRecord}}}`；`PackageRecord` 增加 `sha256` 内容标识，以满足“同内容幂等、同版本不同内容拒绝”。删除前检查 `gateway.clients[].package` 引用。
+- install：解包到 `.atom/gateway/tmp`，校验路径/链接/manifest/target/production 入口后原子提交到 `packages/<id>/<version>/<target>`；已有版本拒绝覆盖；registry 写入失败时清理已提交目录。
+- 离线配置：`gateway/client-package/instance-config.ts` 复用 shared `client-instance` 写入，返回 `saved / applied=false`；不在 M2 实现 `atom gateway` CLI。
+- config-tui 表单只依赖 shared/tui-kit 类型，不导入 gateway；manifest.config 以结构化 prop 传入，enum/default 由表单应用。
+- G2-8 使用临时 sandbox、编译的 fake Client 与 fake Core 完成闭环，不要求用户手写 binary 路径。
+
+**M2 实施状态（2026-11-15）**
+
+| ID | 状态 | 实际产出 |
+|---|---|---|
+| G2-1 | 已完成 | `clients/telegram-bot/manifest.json`；构建输出 `bin/telegram-bot` |
+| G2-2 | 已完成 | `client-package/archive.ts` pack 白名单、target 注入、敏感文件排除；archive 21 个测试通过（含 install） |
+| G2-3 | 已完成 | archive 路径/链接/类型/临时目录安全校验 |
+| G2-4 | 已完成 | `client-package/registry.ts`；11 个测试通过；`sha256` 内容标识 |
+| G2-5 | 已完成 | `installClient` 解包、target/production 校验、提交与回滚 |
+| G2-6 | 已完成 | `client-package/instance-config.ts`；10 个测试通过；`saved / applied=false` |
+| G2-7 | 已完成 | `GatewayInstanceForm.tsx` + 纯逻辑；15 个测试通过 |
+| G2-8 | 已完成 | 临时 sandbox build→pack→install→configure→start→fake roundtrip；1 个 e2e 测试通过 |
 
 **G2 完成标准**：临时 sandbox 中完成上述闭环，不要求用户手写 binary 路径；失败路径无半成品。
 

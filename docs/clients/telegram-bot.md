@@ -26,7 +26,9 @@ Core (127.0.0.1:3100)
 
 ## 2. 启动参数
 
-Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过 `clientArgs` 字段集中管理这些参数。
+构建：`bun run build` 输出 `./bin/telegram-bot`；根目录 `manifest.json` 的 `entry.production` 指向该文件，`entry.development` 为 `bun run src/main.ts`。发行包由 Gateway `packClient` 生成，不要求用户手写 binary 路径。
+
+Client 通过 CLI 参数接收普通配置；secret 字段由 manifest 声明 env 映射，实例只保存 `.env` 引用。Gateway 在 `config.json` 中通过 `clientArgs` 管理普通参数。
 
 ### 2.1 内部参数（Gateway 注入，用户不应手动指定）
 
@@ -51,14 +53,14 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
 
 ```bash
 # Long Polling（默认，零配置）
-./telegram-bot \
+./bin/telegram-bot \
   --secret 550e8400-e29b-41d4-a716-446655440000 \
   --port 4200 \
   --gateway-url http://127.0.0.1:3000 \
   --bot-token 123456:ABC-DEF...
 
 # Webhook（配合 Cloudflare Tunnel）
-./telegram-bot \
+./bin/telegram-bot \
   --secret 550e8400-e29b-41d4-a716-446655440000 \
   --port 4200 \
   --gateway-url http://127.0.0.1:3000 \
@@ -71,29 +73,38 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
 
 ## 3. Gateway 配置
 
-在 `config.json` 中通过 `clientArgs` 字段透传所有用户参数：
+Client 根目录的 `manifest.json` 声明发行/开发入口、`config` 字段和凭据 env 映射。实例配置只使用 `package` / `directory` 二选一，`binary` 与实例级 `platform` 已移除：
 
 ```jsonc
 {
   "gateway": {
     "port": 3000,
     "clients": [{
-      "id": "telegram-bot",
-      "platform": "telegram",
-      "binary": "/path/to/telegram-bot",
-      "clientArgs": {
-        "bot-token": "123456:ABC-DEF...",
-        "mode": "longpoll"
+      "id": "telegram-main",
+      "package": { "id": "telegram-bot", "version": "0.1.0" },
+      "clientArgs": { "mode": "longpoll" },
+      "credentials": {
+        "bot-token": "ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN"
       },
       "stdio": "inherit"
+    }, {
+      "id": "telegram-dev",
+      "directory": "/absolute/path/to/clients/telegram-bot",
+      "clientArgs": { "mode": "longpoll" },
+      "credentials": {
+        "bot-token": "ATOM_CLIENT_TELEGRAM_DEV_BOT_TOKEN"
+      }
     }]
   }
 }
 ```
 
+Token 值只写 sandbox `.env`，例如 `ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN=123456:ABC-DEF...`；resolver 启动时注入 `TELEGRAM_BOT_TOKEN`。`webhook-secret` 使用 `TELEGRAM_WEBHOOK_SECRET`。
+
 **规则：**
 - `clientArgs` 的 key 必须与 client CLI 参数名完全一致（kebab-case）
 - Gateway 保留 `secret`、`port`、`gateway-url` 三个内部参数，不允许在 `clientArgs` 中覆盖
+- `credentials` 字段不进入普通 CLI 参数；required 字段必须在启动前提供
 - 所有值必须为字符串类型
 - `stdio`：控制 Client 子进程 stdout/stderr 输出方式
   - `"inherit"`（默认）：输出到 Gateway 终端，便于开发调试
