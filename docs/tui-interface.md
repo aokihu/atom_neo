@@ -161,3 +161,5 @@ src/packages/tui-kit/src/theme.tsx
 
 Wizard 的结构化 view/reducer 位于 `src/packages/config-tui/src/wizard/`，`WizardApp.tsx`
 只负责 state/reducer 编排与 view 组合。
+
+配置向导的 Gateway 视图（`GatewayModal`）显示实例来源、supervisor 状态、端口、平台和最近错误，并提供 start/stop/reload、check、diagnostics、编辑、install/load/pack。进程状态只来自 Supervisor/admin API，平台检查只来自 Client `/diagnostics`；离线时显示 `OFFLINE`，不展示旧状态。secret 编辑使用 `SecretFieldInput` 固定宽度遮罩，列表与表单均不回显原始值；`GatewayInstanceForm` 的普通字段继续使用 `FieldInput`/`SelectableRow`。

@@ -164,6 +164,24 @@ describe("offline gateway commands", () => {
     expect(JSON.stringify(record)).not.toContain("super-secret-value");
   });
 
+  test("load --id allows two instances of the same directory", async () => {
+    const sandbox = tempDir("atom-gateway-load-id-");
+    const cwd = tempDir("atom-gateway-load-id-cwd-");
+    const clientRoot = join(cwd, "clients", "echo-bot");
+    writeClient(clientRoot);
+
+    const first = gatewayArgs(sandbox, "load", "clients/echo-bot", ["--id", "echo-a"]);
+    await runGatewayCommand(first.command, first.args, { stdout: () => {}, cwd });
+    const second = gatewayArgs(sandbox, "load", "clients/echo-bot", ["--id", "echo-b", "--json"]);
+    const output = capture();
+    await runGatewayCommand(second.command, second.args, { stdout: output.stdout, cwd });
+
+    const config = JSON.parse(readFileSync(join(sandbox, "config.json"), "utf8"));
+    expect(config.gateway.clients.map((client: { id: string }) => client.id)).toEqual(["echo-a", "echo-b"]);
+    expect(config.gateway.clients.every((client: { directory: string }) => client.directory === clientRoot)).toBe(true);
+    expect(output.lines.join("\n")).toContain("echo-b");
+  });
+
   test("offline actions need no runtime and online actions explain a missing one", async () => {
     const sandbox = tempDir("atom-gateway-offline-");
     const clientRoot = join(sandbox, "client");
@@ -244,6 +262,24 @@ describe("offline gateway commands", () => {
 });
 
 describe("online gateway commands", () => {
+  test("reload failure reports the server detail instead of a bare status", async () => {
+    const sandbox = tempDir("atom-gateway-reload-error-");
+    publishRuntimeFile(sandbox, "gateway", {
+      url: "http://127.0.0.1:4200",
+      token: "admin-token",
+      instanceId: "gateway-test",
+    });
+    const fetchImpl = (async () => Response.json({
+      results: [{ id: "echo-bot", ok: false, error: "Client echo-bot argument --mode must be one of: longpoll, webhook" }],
+    }, { status: 400 })) as unknown as typeof fetch;
+    const request = gatewayArgs(sandbox, "reload", "echo-bot");
+
+    await expect(runGatewayCommand(request.command, request.args, {
+      fetchImpl,
+      stdout: () => {},
+    })).rejects.toThrow("Gateway admin request failed (400): {\"results\":[{\"id\":\"echo-bot\",\"ok\":false,\"error\":\"Client echo-bot argument --mode must be one of: longpoll, webhook\"}]}");
+  });
+
   test("list, lifecycle actions, check, and logs use the admin API", async () => {
     const sandbox = tempDir("atom-gateway-online-");
     publishRuntimeFile(sandbox, "gateway", {

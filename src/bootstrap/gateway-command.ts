@@ -91,7 +91,7 @@ function runtimeFor(sandbox: string) {
 }
 
 async function adminRequest(
-  args: BootArguments,
+  args: Pick<BootArguments, "sandbox">,
   deps: GatewayCommandDeps,
   path: string,
   init: { method: "GET" | "POST"; body?: string },
@@ -246,7 +246,7 @@ function printLogs(body: unknown, target: string, print: Print): void {
  */
 export async function runGatewayCommand(
   command: GatewayCommand,
-  args: BootArguments,
+  args: Pick<BootArguments, "sandbox">,
   deps: GatewayCommandDeps = {},
 ): Promise<void> {
   const print: Print = deps.stdout ?? console.log;
@@ -274,10 +274,9 @@ export async function runGatewayCommand(
       const manifest = readManifest(root);
       resolveEntry(manifest, "directory");
 
-      // M3a uses the manifest id as the development instance id; G4 may add an explicit --id.
       const clientArgs = defaultClientArgs(manifest);
       const instance = {
-        id: manifest.id,
+        id: command.id ?? manifest.id,
         directory: root,
         ...(Object.keys(clientArgs).length > 0 ? { clientArgs } : {}),
         stdio: "inherit" as const,

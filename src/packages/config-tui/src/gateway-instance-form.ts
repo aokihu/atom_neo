@@ -29,6 +29,11 @@ export type GatewayInstanceDraft = {
   values: GatewayInstanceValues;
 };
 
+export type GatewayInstanceValidationOptions = {
+  /** Field names whose secrets already exist; values are never passed around. */
+  configuredSecrets?: ReadonlySet<string>;
+};
+
 /** Fixed-width mask so the row never leaks the secret's value or length. */
 export const SECRET_MASK = "••••••";
 
@@ -52,11 +57,14 @@ export function maskFieldValue(field: GatewayInstanceField, value: string): stri
 
 /**
  * Apply non-secret defaults, then check required and enum constraints.
- * Unknown keys are ignored and the input object is never mutated.
+ * A blank required secret is valid when its name is already configured: blank
+ * means "keep the stored value" while editing. Unknown keys are ignored and
+ * the input objects are never mutated.
  */
 export function validateFieldValues(
   fields: GatewayInstanceFields,
   values: GatewayInstanceValues,
+  options: GatewayInstanceValidationOptions = {},
 ): GatewayInstanceValidation {
   const normalized: GatewayInstanceValues = {};
   const errors: Record<string, string> = {};
@@ -68,7 +76,11 @@ export function validateFieldValues(
       : given;
     normalized[name] = value;
 
-    if (field.required && value.trim() === "") {
+    const keptSecret = field.secret === true
+      && value.trim() === ""
+      && options.configuredSecrets?.has(name) === true;
+
+    if (field.required && value.trim() === "" && !keptSecret) {
       errors[name] = `${field.label} is required`;
     } else if (field.enum && value !== "" && !field.enum.includes(value)) {
       errors[name] = `${field.label} must be one of: ${field.enum.join(", ")}`;

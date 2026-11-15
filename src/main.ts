@@ -109,14 +109,16 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   // --wizard subprocess: run setup wizard and exit
   if (args.wizard) {
     const { startWizard } = await import("@atom-neo/config-tui");
-    await startWizard(args.sandbox, "first-run");
+    const { createGatewayActions } = await import("./bootstrap/gateway-actions");
+    await startWizard(args.sandbox, "first-run", { gatewayActions: createGatewayActions(args.sandbox) });
     return;
   }
 
   // --config: standalone config wizard (edit config.json + .env) and exit
   if (args.config) {
     const { startWizard } = await import("@atom-neo/config-tui");
-    if (await startWizard(args.sandbox, "config")) onReady();
+    const { createGatewayActions } = await import("./bootstrap/gateway-actions");
+    if (await startWizard(args.sandbox, "config", { gatewayActions: createGatewayActions(args.sandbox) })) onReady();
     return;
   }
 

@@ -60,7 +60,9 @@ src/packages/config-tui/
         ├── ProfilesModal.tsx  # 三档对话模型映射
         ├── DecisionsModal.tsx # fast 模型与三个判定模式
         ├── ThemeModal.tsx
-        ├── GatewayModal.tsx   # 端口编辑
+        ├── GatewayModal.tsx   # 实例列表/诊断/操作/安装/加载/打包
+        ├── GatewayInstanceForm.tsx # manifest.config 编辑（secret 遮罩）
+        ├── SecretFieldInput.tsx    # 固定宽度 secret 输入
         ├── ProjectModal.tsx   # 项目描述（仅 first-run）
         └── ConfirmModal.tsx   # 摘要确认
 ```
@@ -85,6 +87,7 @@ src/packages/config-tui/
         │ │ Decisions     │ │                     │ │
         │ │ Theme (edex)│ │           v4-flash    │ │
         │ │ Gateway (port)│ │   thinking: enabled │ │
+        │ │               │ │   install/load/pack │ │
         │ │ Save & Exit│ │                        │ │
         │ └───────┘ └────────────────────────────┘ │
         ├──────────────────────────────────────────┤
@@ -140,12 +143,22 @@ MenuModal
   ├─ Model Profiles    → ProfilesModal（只列出 LLM；预填）
   ├─ Decisions         → DecisionsModal（fast、Prediction、Post-Conversation、Continuation）
   ├─ Theme (edex)      → ThemeModal（预填）
-  ├─ Gateway (port)    → GatewayModal（仅端口；clients 手动编辑 config.json）
+  ├─ Gateway (port)    → GatewayModal（实例列表/诊断/操作；端口仍在高级设置）
   └─ Save & Exit       → ConfirmModal → commit
 Esc（菜单层）→ 退出确认
 ```
 
 ProjectModal 在 config 模式跳过（不重写 AGENTS.md）。
+
+### Gateway 管理视图
+
+`GatewayModal` 在保留端口编辑的同时提供实例管理；Gateway 离线时显示 `OFFLINE`，仍可执行 install/load/pack。
+
+- 列表状态来自 Gateway `GET /admin/clients`：source（package 版本或 directory）、supervisor state、端口、平台、最近 warn/error。UI 不自行推断进程状态。
+- 操作：start/stop/reload、check（Client `/diagnostics`）、diagnostics/logs、编辑配置；reload 失败直接显示服务端 detail。
+- 编辑表单由 `manifest.config` 驱动；secret 行始终显示固定 `••••••`，编辑 secret 使用 `SecretFieldInput`（原始输入不渲染），空白表示保持已配置值。
+- 安装/加载/打包复用 `atom gateway` CLI handler；`load` 可填写实例 ID，留空使用 manifest.id。
+- 保存实例复用 `upsertInstance`；成功后提示 restart/reload 生效，不伪造在线状态。
 
 ### 预填规则
 

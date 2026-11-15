@@ -19,8 +19,12 @@ export type ResolvedClientConfig = {
   cwd: string;
   env: NodeJS.ProcessEnv;
   clientArgs?: Record<string, string>;
+  /** .env credential references only; never resolved values. */
+  credentials?: Record<string, string>;
   stdio: "inherit" | "ignore";
   source: ClientSource;
+  /** Parsed manifest retained for local admin/config UI; never serialized as secret. */
+  manifest?: Manifest;
 };
 
 export type ResolveOptions = {
@@ -48,6 +52,26 @@ function readManifest(config: ClientConfig, source: ClientSource, root: string):
   } catch (error) {
     throw clientError(config, source, `${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function resolveClientArgs(config: ClientConfig, manifest: Manifest): Record<string, string> | undefined {
+  const args = { ...(config.clientArgs ?? {}) };
+  for (const [field, declared] of Object.entries(manifest.config ?? {})) {
+    if (declared.secret) {
+      if (args[field] !== undefined) {
+        throw new Error(`Client ${config.id} secret field ${field} must use credentials, not clientArgs`);
+      }
+      continue;
+    }
+    if (args[field] === undefined && !declared.required && declared.default !== undefined) {
+      args[field] = declared.default;
+    }
+    const value = args[field];
+    if (value !== undefined && declared.enum !== undefined && !declared.enum.includes(value)) {
+      throw new Error(`Client ${config.id} argument --${field} must be one of: ${declared.enum.join(", ")}`);
+    }
+  }
+  return Object.keys(args).length > 0 ? args : undefined;
 }
 
 function buildClientEnv(config: ClientConfig, manifest: Manifest, options: ResolveOptions): NodeJS.ProcessEnv {
@@ -148,15 +172,18 @@ export function resolveClient(config: ClientConfig, options: ResolveOptions): Re
     throw clientError(config, source, `entry must not define reserved argument ${reserved}`);
   }
 
+  const clientArgs = resolveClientArgs(config, manifest);
   return {
     id: config.id,
     platform: manifest.platform,
     command,
     cwd: root,
     env: buildClientEnv(config, manifest, options),
-    ...(config.clientArgs === undefined ? {} : { clientArgs: config.clientArgs }),
+    ...(clientArgs === undefined ? {} : { clientArgs }),
+    ...(config.credentials === undefined ? {} : { credentials: config.credentials }),
     stdio: config.stdio ?? "inherit",
     source,
+    manifest,
   };
 }
 

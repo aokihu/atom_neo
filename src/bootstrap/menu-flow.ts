@@ -1,9 +1,9 @@
 // Navigation and parameter collection for the one-shot startup menu.
 import { isIP } from "node:net";
-import { buildAppCommand, parsePort, parseSandboxPath, type BootArguments } from "./cli";
+import { buildAppCommand, parsePort, parseSandboxPath, type BootArguments, type GatewayCommandAction } from "./cli";
 import { MENU_COMMANDS, parseMenuParameters, type MenuCommand, type MenuHistory, type MenuParameters } from "./menu-history";
 
-type Field = "sandbox" | "host" | "port" | "coreServer" | "corePort" | "clients" | "session" | "output" | "archive" | "encrypt";
+type Field = "sandbox" | "host" | "port" | "coreServer" | "corePort" | "clients" | "session" | "output" | "archive" | "encrypt" | "target" | "id" | "out";
 type Draft = Record<Field, string>;
 type MenuPage = "menu" | "start" | "gateway" | "backup";
 type Page = MenuPage | MenuCommand;
@@ -19,13 +19,19 @@ const STEPS: Record<MenuCommand, Field[]> = {
   chat: ["sandbox", "session"], core: ["sandbox", "host", "port"], config: ["sandbox"],
   "core-gateway": ["sandbox", "host", "port"],
   "gateway-start": ["sandbox", "clients"], "gateway-stop": ["sandbox", "clients"],
+  "gateway-install": ["sandbox", "target"], "gateway-load": ["sandbox", "target", "id"],
+  "gateway-manage": ["sandbox"], "gateway-pack": ["sandbox", "target", "out"],
   attach: ["coreServer", "corePort"],
   export: ["sandbox", "output", "encrypt"], import: ["archive", "sandbox"],
+};
+const MENU_GATEWAY_ACTIONS: Partial<Record<MenuCommand, GatewayCommandAction>> = {
+  "gateway-install": "install", "gateway-load": "load", "gateway-manage": "list", "gateway-pack": "pack",
 };
 const LABELS: Record<Field, string> = {
   sandbox: "工作目录", host: "监听地址", port: "监听端口",
   coreServer: "远程地址", corePort: "端口", clients: "Client ID", session: "会话",
   output: "归档路径", archive: "归档文件", encrypt: "加密归档",
+  target: "客户端目录", id: "实例 ID (可选)", out: "输出路径 (可选)",
 };
 const FIELD_HELP: Record<Field, readonly string[]> = {
   sandbox: ["应用配置和运行数据所在的目录。", "不同目录对应各自的配置与实例。"],
@@ -38,7 +44,11 @@ const FIELD_HELP: Record<Field, readonly string[]> = {
   output: ["留空使用默认文件名。", "默认写入当前目录 atom-backup-<时间>.atombak。"],
   archive: ["填写 .atombak 归档路径。", "加密归档会在执行前提示输入密码。"],
   encrypt: ["是否使用密码保护导出文件。", "选择 yes 后输入密码；密码无法找回。"],
+  target: ["填写包含 manifest.json 的客户端目录。", "相对路径按当前目录解析。"],
+  id: ["留空时使用 manifest 中的默认实例 ID。", "同一 sandbox 内实例 ID 不可重复。"],
+  out: ["留空时输出到当前目录。", "生成可用于 install 的客户端归档。"],
 };
+const INSTALL_TARGET_HELP = ["填写 .tar.gz 客户端归档路径。", "归档平台需与当前主机一致。"];
 const BACK_ITEM: MenuItem = { label: "‹ back", target: "back", description: ["返回上一级菜单。", "已填写的内容会保留。"] };
 const MENUS: Record<MenuPage, MenuItem[]> = {
   menu: [
@@ -58,6 +68,10 @@ const MENUS: Record<MenuPage, MenuItem[]> = {
     { label: "run >", target: "core-gateway", description: ["启动 Core 与 Gateway 服务。", "按配置接入平台 Client，在当前终端保持运行。"] },
     { label: "start clients >", target: "gateway-start", description: ["启动已配置的平台 Client。", "可操作指定 Client 或全部 Client。"] },
     { label: "stop clients >", target: "gateway-stop", description: ["停止已配置的平台 Client。", "Core 和 Gateway 服务保持运行。"] },
+    { label: "install >", target: "gateway-install", description: ["安装本地客户端归档。", "归档内置 manifest，须与当前平台一致。"] },
+    { label: "load directory >", target: "gateway-load", description: ["从客户端目录直接登记实例。", "适合本地开发，无需先打包安装。"] },
+    { label: "manage instances >", target: "gateway-manage", description: ["查看已安装客户端和实例状态。", "执行 gateway list，不会启动 Gateway。"] },
+    { label: "pack >", target: "gateway-pack", description: ["把客户端目录打包成归档。", "输出可用于 install 的 tar.gz 文件。"] },
     BACK_ITEM,
   ],
   backup: [
@@ -81,7 +95,10 @@ const ITEM_LABELS: Partial<Record<Field, readonly ChoiceItem[]>> = { session: SE
 const PATHS: Record<MenuCommand, string[]> = {
   chat: ["start", "chat"], core: ["start", "core"], config: ["config"],
   "core-gateway": ["gateway", "run"], "gateway-start": ["gateway", "start clients"],
-  "gateway-stop": ["gateway", "stop clients"], attach: ["attach"],
+  "gateway-stop": ["gateway", "stop clients"],
+  "gateway-install": ["gateway", "install"], "gateway-load": ["gateway", "load directory"],
+  "gateway-manage": ["gateway", "manage instances"], "gateway-pack": ["gateway", "pack"],
+  attach: ["attach"],
   export: ["backup", "export"], import: ["backup", "import"],
 };
 
@@ -90,6 +107,9 @@ export function parseServerHost(value: string): string {
   if (!isIP(host) && !/^[a-z\d](?:[a-z\d.-]*[a-z\d])?$/i.test(host)) throw new Error("请输入 hostname 或 IP 地址，不含协议、路径和端口");
   return host;
 }
+
+const joinCommand = (prefix: readonly string[], flags: readonly string[]): string =>
+  [...prefix, ...flags].map(value => /^[\w./:@%+=,-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`).join(" ");
 
 export function formatMenuCommand(args: BootArguments, prefix = buildAppCommand([])): string {
   const flags: string[] = [];
@@ -101,7 +121,16 @@ export function formatMenuCommand(args: BootArguments, prefix = buildAppCommand(
     if (args.force) flags.push("--force");
     if (args.envMode !== "merge") flags.push("--env", args.envMode);
     flags.push("--sandbox", args.sandbox);
-    return [...prefix, ...flags].map(value => /^[\w./:@%+=,-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`).join(" ");
+    return joinCommand(prefix, flags);
+  }
+  if (args.gatewayCommand) {
+    const { action, target, id, out } = args.gatewayCommand;
+    flags.push("gateway", action);
+    if (target) flags.push(target);
+    if (id) flags.push("--id", id);
+    if (out) flags.push("--out", out);
+    flags.push("--sandbox", args.sandbox);
+    return joinCommand(prefix, flags);
   }
   if (args.config) flags.push("--config");
   else if (args.mode) flags.push("--mode", args.mode);
@@ -112,7 +141,7 @@ export function formatMenuCommand(args: BootArguments, prefix = buildAppCommand(
   } else if (!args.config) flags.push("--host", args.host, "--port", String(args.port));
   flags.push("--sandbox", args.sandbox);
   if (args.continueSession) flags.push("--continue");
-  return [...prefix, ...flags].map(value => /^[\w./:@%+=,-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`).join(" ");
+  return joinCommand(prefix, flags);
 }
 
 export class MenuFlow {
@@ -131,6 +160,7 @@ export class MenuFlow {
         coreServer: saved?.coreServer ?? "127.0.0.1", corePort: String(saved?.corePort ?? 3100),
         clients: saved?.clients ?? "", session: saved?.continueSession ? "continue" : "new",
         output: saved?.output ?? "", archive: saved?.archive ?? "", encrypt: saved?.encrypt === false ? "no" : "yes",
+        target: saved?.target ?? "", id: saved?.id ?? "", out: saved?.out ?? "",
       }];
     })) as Record<MenuCommand, Draft>;
   }
@@ -146,10 +176,12 @@ export class MenuFlow {
     const field = STEPS[this.page][this.step];
     const items = ITEM_LABELS[field];
     const value = items ? ITEM_VALUES[field]?.[this.selected] ?? this.drafts[this.page][field] : this.drafts[this.page][field];
+    const installing = this.page === "gateway-install" && field === "target";
     return {
-      title: ["menu", ...PATHS[this.page]].join(" / "), field, label: LABELS[field], value,
+      title: ["menu", ...PATHS[this.page]].join(" / "), field,
+      label: installing ? "归档文件" : LABELS[field], value,
       step: this.step + 1, total: STEPS[this.page].length,
-      help: FIELD_HELP[field],
+      help: installing ? INSTALL_TARGET_HELP : FIELD_HELP[field],
       ...(items ? { items: items.map(item => item.label), description: items[this.selected]?.description } : {}),
     };
   }
@@ -196,9 +228,10 @@ export class MenuFlow {
     } else {
       entered = (value ?? this.drafts[command][field]).trim();
       if (field === "archive" && !entered) throw new Error("请填写归档文件路径");
+      if (field === "target" && !entered) throw new Error(command === "gateway-install" ? "请填写归档文件" : "请填写客户端目录");
     }
-    const parsed = field === "sandbox" || field === "archive" ? parseSandboxPath(entered)
-      : field === "output" ? (entered ? parseSandboxPath(entered) : "")
+    const parsed = field === "sandbox" || field === "archive" || field === "target" ? parseSandboxPath(entered)
+      : field === "output" || field === "out" ? (entered ? parseSandboxPath(entered) : "")
       : field === "port" || field === "corePort" ? String(parsePort(entered, field === "port"))
       : field === "host" || field === "coreServer" ? parseServerHost(entered)
       : field === "clients" && entered === "all" ? "" : entered;
@@ -213,8 +246,9 @@ export class MenuFlow {
       sandbox: draft.sandbox, host: draft.host, port: Number(draft.port), coreServer: draft.coreServer,
       corePort: Number(draft.corePort), clients: draft.clients || undefined, continueSession: draft.session === "continue",
       archive: draft.archive || undefined, output: draft.output || undefined, encrypt: draft.encrypt === "yes",
+      target: draft.target || undefined, id: draft.id || undefined, out: draft.out || undefined,
     });
-    const { archive, output, encrypt, ...launch } = parameters;
+    const { archive, output, encrypt, target, id, out, ...launch } = parameters;
     const args: BootArguments = {
       ...this.base, ...launch, menu: false, config: command === "config", mode: undefined,
     };
@@ -233,6 +267,16 @@ export class MenuFlow {
       args.command = "import";
       args.archive = archive;
       args.password = false;
+    }
+    const gatewayAction = MENU_GATEWAY_ACTIONS[command];
+    if (gatewayAction) {
+      args.gatewayCommand = {
+        action: gatewayAction,
+        ...(gatewayAction === "list" ? {} : { target }),
+        ...(gatewayAction === "load" ? { id: id || undefined } : {}),
+        ...(gatewayAction === "pack" ? { out: out || undefined } : {}),
+        force: false, json: false,
+      };
     }
     return { command, args, parameters };
   }

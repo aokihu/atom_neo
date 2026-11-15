@@ -3,8 +3,8 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施；G4–G6 待实施**
-> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16。
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施；G5–G6 待实施**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16，M3b 见 §17。
 >
 > 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
@@ -35,8 +35,13 @@
 | G2 | <code>src/packages/config-tui/src/gateway-instance-form.ts</code> | 表单字段状态、enum/default/secret 纯逻辑 |
 | G2 | <code>src/bootstrap/fixtures/gateway-client-e2e.ts</code> | 本地闭环 fake Client：发送 inbound、记录 task-result |
 | G2 | <code>src/bootstrap/gateway-package.e2e.test.ts</code> | build → pack → install → configure → start → fake 往返 |
-| G4 | <code>src/packages/config-tui/src/gateway-status.ts</code> | 读取 Gateway 运行状态与诊断 |
+| G4 | <code>src/packages/config-tui/src/gateway-status.ts</code> | 读取 Gateway 运行状态、诊断并保存实例编辑 |
+| G4 | <code>src/packages/config-tui/src/components/SecretFieldInput.tsx</code> | 真正遮罩的单行 secret 输入 |
+| G4 | <code>src/packages/config-tui/src/components/GatewayModal.test.tsx</code> | 离线/列表/操作/reload 错误/编辑保存 UI 测试 |
+| G4 | <code>src/packages/config-tui/src/gateway-status.test.ts</code> | 管理请求、诊断、持久化测试 |
+| G4 | <code>src/bootstrap/gateway-actions.ts</code> | 配置 UI 到 CLI handler 的安装/加载/打包注入 |
 | G4 | <code>src/packages/shared/src/runtime-file.ts</code> | 运行描述文件路径与读取的共享实现 |
+| G4 | <code>src/packages/shared/src/runtime-file.test.ts</code> | 路径、解析、localUrl 测试 |
 | G3 | `clients/telegram-bot/src/gateway-client.ts` | 入站提交与响应校验（可测试） |
 
 ### 1.2 修改文件
@@ -57,9 +62,15 @@
 | G3 | `src/packages/gateway/src/server.ts` | 管理接口、drain、诊断、状态 |
 | G3 | `src/bootstrap/cli.ts` | 解析 `atom gateway ...` |
 | G3 | `src/main.ts` | 新命令提前分流，不初始化 Core |
-| G4 | `src/packages/config-tui/src/components/GatewayModal.tsx` | 实例列表、状态、操作入口 |
+| G4 | `src/packages/config-tui/src/components/GatewayModal.tsx` | 实例列表、状态、诊断、操作入口、编辑/安装/加载/打包 |
+| G4 | `src/packages/config-tui/src/components/GatewayInstanceForm.tsx` | 编辑模式、configured secret、外部持久化错误 |
+| G4 | `src/packages/config-tui/src/app.tsx` / `components/WizardApp.tsx` / `wizard/WizardViews.tsx` | 注入 `GatewayInstanceActions` 与 sandbox |
 | G4 | `src/bootstrap/runtime-file.ts` | 复用 shared 的运行描述读取，保留发布/清理 |
 | G4 | `src/bootstrap/menu-flow.ts` / `menu-history.ts` | 菜单入口与参数记忆 |
+| G4 | `src/bootstrap/cli.ts` / `gateway-command.ts` / `main.ts` | `load --id`、UI actions 注入、命令分流 |
+| G4 | `src/packages/gateway/src/client-package/resolver.ts` | enum 校验、可选 default、secret 禁止进入 clientArgs |
+| G4 | `src/packages/gateway/src/client-manager/index.ts` | 状态增加 config/clientArgs/secretFields/stdio（不含值） |
+| G4 | `src/bootstrap/fixtures/menu-terminal.py` | PTY 尺寸可配置（窄窗口验收） |
 | G3、G4 | `clients/telegram-bot/src/main.ts` | 非 2xx 处理（G3）、可选诊断端点（G4） |
 | G6 | `docs/communication/gateway.md` 等 | 将验收通过能力迁入当前说明 |
 
@@ -321,7 +332,7 @@ export function resolveClient(config: ClientConfig, options: ResolveOptions): Re
 
 包路径：`sandboxPackageRoot(sandbox)` 只读取 registry 登记记录，不提供手工目录 fallback；命中记录时要求 `record.target === ${process.platform}-${process.arch}`，否则明确报错。
 
-`manifest.config.required` 在启动前校验：secret 字段必须在 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。`default` 不会在启动时自动补参数，`enum`/`default` 由 G2 配置表单应用。
+`manifest.config.required` 在启动前校验：secret 字段必须在 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。可选非 secret 字段缺失时 resolver 应用 manifest `default`；`clientArgs` 必须满足 manifest `enum`，secret 字段不得进入 `clientArgs`。G2 配置表单仍负责预填/选择。
 
 凭据映射：
 
@@ -788,37 +799,53 @@ gateway >
 
 从“仅端口”升级为：
 
-- 实例列表：ID、来源（包/目录）、版本、状态
-- 操作：添加、编辑、检查、启停、重载、打包（开发者）
-- 端口仍在高级设置中编辑
+- 实例列表：ID、来源（包/目录）、版本或目录、supervisor 进程状态、端口、平台、最近 warn/error。
+- 操作面板：start/stop/reload、check（Client `/diagnostics`）、diagnostics/logs、编辑配置。
+- 离线入口：install、load（可选实例 ID）、pack（开发者）、Gateway 端口。
+- reload 失败直接显示服务端返回的 `results[].error`，不是裸 400；成功显示通知。
+- 不做第二套状态源：列表来自 `GET /admin/clients`；平台检查只在 check 视图中读取 Client 诊断。
 
-### 7.2 `GatewayInstanceForm.tsx`（新增）
+### 7.2 `GatewayInstanceForm.tsx` / `SecretFieldInput.tsx`
 
 - 由 `manifest.config` 驱动字段。
 - 复用 `FieldInput`、`Modal`、`SelectableRow`。
-- `secret` 字段遮罩，只写 `.env`。
-- `enum` 使用选择行。
-- 取消不创建实例。
+- `secret` 字段只写 `.env`；编辑态空白表示保持已配置值。
+- `SecretFieldInput` 使用 `useKeyboard`/`usePaste`，固定宽度 `••••••`，原始输入只存在组件状态，不渲染、不记录。
+- `enum` 使用选择行；可选非 secret 字段应用 manifest `default`。
+- 取消不提交；持久化失败在表单内显示。
 
 ### 7.3 `gateway-status.ts`（新增）
 
 ```ts
 export type GatewayInstanceStatus = {
   id: string;
+  platform: string;
+  source: { type: "package"; id: string; version: string } | { type: "directory"; directory: string };
   running: boolean;
   desired: boolean;
   state: string;
+  port: number;
   diagnostics: DiagnosticEvent[];
+  config: GatewayInstanceFields;
+  clientArgs: Record<string, string>;
+  secretFields: string[];
+  stdio: "inherit" | "ignore";
 };
 
 export async function fetchGatewayStatus(sandbox: string): Promise<GatewayInstanceStatus[] | null>;
+export async function fetchGatewayDiagnostics(sandbox: string, id: string): Promise<GatewayDiagnostics>;
+export async function gatewayAction(sandbox: string, action: "start" | "stop" | "reload", id?: string): Promise<unknown>;
+export function saveGatewayInstance(sandbox: string, status: GatewayInstanceStatus, values: Record<string, string>, secrets?: Record<string, string>): InstanceWriteResult;
 ```
 
 - 通过 shared `runtime-file.ts` 读取 `.atom/gateway-runtime.json`，不复制路径解析逻辑。
 - 离线返回 `null`，UI 显示 `OFFLINE`。
 - 使用本机管理 Token；不把 Token 写入日志或历史。
+- 保存复用 `upsertInstance` 单写入口；保留 source/credentials，只更新声明的非 secret args 与显式新 secret。
 
-> 若 G0 决定 UI 只做离线配置，则本文件与在线状态展示顺延到 G4 后；CLI 仍提供状态与诊断。
+### 7.4 `gateway-actions.ts`（新增）
+
+`createGatewayActions(sandbox)` 把 UI 的 install/load/pack 请求转成 `GatewayCommand`，复用 `runGatewayCommand` 并捕获 stdout 供 Modal 显示；secret 不经过该层。
 
 ---
 
@@ -1009,7 +1036,7 @@ G0 契约确认
 - M1 的 `ClientManager` 仍按启动时数组构造 supervisor；动态登记/重载/活动端口集合归 G3（计划 §4.3 的 G1-6 只要求统一启动描述）。
 - `main.ts` 启动前解析实例；包安装目录通过 resolver 的 `packageRoot` 注入，`packages.json` 登记与安装归 G2。
 - `directory` 相对路径以 sandbox 根目录为基准（`main.ts` 传 `baseDir`）；G2 CLI/向导应写入绝对路径。
-- `manifest.config.required` 已在启动前校验（secret -> `credentials`，非 secret -> `clientArgs`）；`enum`/`default` 仅由 manifest 校验形状，实际选择/预填在 G2 表单完成。
+- `manifest.config.required` 已在启动前校验（secret -> `credentials`，非 secret -> `clientArgs`）；可选非 secret 字段缺失时 resolver 应用 manifest `default`；`clientArgs` enum 在启动前校验，secret 字段不得进入 `clientArgs`。
 - `client-instance.removeInstance` 不删除 `.env` 中的凭据值，只移除实例配置；显式凭据删除归 G5 卸载流程。
 - 未实现新 CLI/TUI 入口、`registry.ts`、`archive.ts`、管理接口、drain、诊断协议与 Telegram 改动，均属于后续阶段。
 
@@ -1092,3 +1119,25 @@ G0 契约确认
 - `bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils` → 287 pass / 1 skip
 - `bun test src/bootstrap/cli.test.ts src/bootstrap/gateway-command.test.ts src/bootstrap/gateway-package.e2e.test.ts clients/telegram-bot/src` → 63 pass
 - `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` → 通过
+
+---
+
+## 17. M3b 实施记录（G4，2026-11-15）
+
+| 子任务 | 实际产出 | 测试 |
+|---|---|---|
+| G4-1/G4-2/G4-5 | `GatewayModal` 列表/操作/check/logs；`gateway-status.ts` 管理请求与保存；reload 错误 detail | `bun test src/packages/config-tui/src/components/GatewayModal.test.tsx` → 5 pass；`gateway-status.test.ts` → 8 pass |
+| G4-3 | `GatewayInstanceForm` 编辑模式、configured secret、外部错误；`SecretFieldInput` 真遮罩 | `bun test src/packages/config-tui/src/gateway-instance-form.test.ts` → 22 pass |
+| G4-4 | shared `runtime-file.ts`；bootstrap 复用；离线 `OFFLINE` | `bun test src/packages/shared/src/runtime-file.test.ts` → 3 pass |
+| G4-6 | 菜单 install/load/manage/pack；history 新字段；命令预览安全引用 | `bun test src/bootstrap/menu-flow.test.ts src/bootstrap/menu-history.test.ts` → 53 pass |
+| G4-7 | PTY：gateway 菜单导航/取消、窄窗口、reload 失败重试、非交互失败 | `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts -t "gateway"` → 4 pass |
+| 硬性 CLI | `atom gateway load --id`；resolver enum/default；secret 拒绝进入 clientArgs | `bun test src/bootstrap/cli.test.ts src/bootstrap/gateway-command.test.ts` → 50 pass；resolver+integration → 23 pass / 1 skip |
+
+实现说明：
+
+- `load` 使用 `command.id ?? manifest.id`；同一目录可用不同 ID 并存，同一 ID 经 `upsertInstance` 显式替换。
+- resolver 对可选非 secret 字段应用 manifest `default`；`clientArgs` enum 在启动前校验；secret 字段必须走 `credentials`。
+- `ClientStatus` 增加 `config` / `clientArgs` / `secretFields` / `stdio`；只含字段名与引用，不含 secret 值。
+- UI 的 start/stop/reload 走 admin API；install/load/pack 复用 CLI handler（`GatewayCommandDeps.cwd` 语义不变）。
+- 日志/诊断仍在 Gateway 侧有界脱敏（50 events / 5 summary / 20 checks / 8 KiB）；UI 只显示最近 12 条本地事件。
+- 已知边界：manifest 暂无字段条件显示契约，表单展示全部声明字段；条件字段留待 manifest 扩展。G5 的卸载文件清理未实现。

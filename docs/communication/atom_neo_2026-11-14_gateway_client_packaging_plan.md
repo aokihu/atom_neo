@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施完成；G4–G6 待实施**。
+> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施完成；G5–G6 待实施**。
 > 本版已按复杂度规则将复杂阶段拆分为“中/轻”子任务；2026-11-15 修订：启动方式**不再兼容旧 `binary`**。决策与回写记录见 §4.2 与 §10。
 >
 > 关联文档：
@@ -91,7 +91,7 @@
 - 包格式为 tar.gz，归档根目录直接放 `manifest.json` 与 `bin/`。
 - 实例配置继续归属用户 `config.json`；凭据只存 `.env`，实例保存变量名引用。
 - `directory` 可为绝对路径；相对路径在 Gateway 启动时相对 sandbox 根目录解析（`resolveClients({ baseDir })`）。G2 的 CLI/向导应写入绝对路径。
-- 启动前校验 `manifest.config.required`：secret 字段必须有 `credentials` 引用，非 secret 字段必须有同名 `clientArgs` 参数；`enum`/`default` 由 G2 配置表单使用。
+- 启动前校验 `manifest.config.required`：secret 字段必须有 `credentials` 引用，非 secret 字段必须有同名 `clientArgs` 参数；可选非 secret 字段缺失时应用 manifest `default`；`clientArgs` 必须满足 manifest `enum`，secret 字段不得进入 `clientArgs`。G2 配置表单仍负责预填/选择。
 - 复用 `ProcessSupervisor`、共享 `HttpServer`、`spawnProcess`、`createChildProcessEnv`、配置 schema 与启动菜单。
 
 ---
@@ -388,6 +388,26 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G3-10 | 已完成 | 并发/端口/drain 回归；旧 timer/Secret/端口测试通过 |
 
 **M3a 完成条件**：`bun test src/packages/gateway/src`、CLI/Telegram 定向测试、typecheck、docs:check、git diff --check 通过；未进入 G4/G5/G6。
+
+**M3b 实施状态（2026-11-15）**
+
+| ID | 状态 | 实际产出 |
+|---|---|---|
+| G4-1 | 已完成 | `GatewayModal` 实例列表：来源来自 `GET /admin/clients`（package 版本或 directory）、supervisor 进程状态/端口/平台、最近 warn/error；`GatewayModal.test.tsx` 覆盖 source/state/error |
+| G4-2 | 已完成 | 操作面板：start/stop/reload、check、diagnostics/logs、edit、install、load、pack；reload 失败显示服务端 detail；离线仍可安装/加载/打包 |
+| G4-3 | 已完成 | `GatewayInstanceForm` 编辑模式；`SecretFieldInput` 真实遮罩（固定宽度、不接受明文回显）；configured secret 留空＝保持；enum/default 与 resolver 契约一致；取消不提交 |
+| G4-4 | 已完成 | `@atom-neo/shared/runtime-file.ts` 统一路径/读取/localUrl；bootstrap 复用；UI 无 runtime 文件显示 `OFFLINE` |
+| G4-5 | 已完成 | `gateway-status.ts` 读取 supervisor 摘要与 Client `/diagnostics`；本地事件按 stage（process/platform/delivery）展示；UI 截取最近 12 条，Gateway 侧有界脱敏 |
+| G4-6 | 已完成 | 菜单新增 install/load/manage/pack；history 只存 sandbox/target/id/out；`formatMenuCommand` 输出 `gateway <action> ... --sandbox`，不记录 Token/Secret |
+| G4-7 | 已完成 | PTY 验收：gateway 菜单导航/取消、配置 UI 窄窗口/取消、reload 错误重试、非交互菜单与无 runtime 管理命令失败 |
+
+**M3b 契约补充**：
+
+- `atom gateway load <dir> --id <id>`：显式实例 ID；省略时使用 `manifest.id`；同一目录可用不同 `--id` 并存，重复 ID 由 registry 单写入口覆盖。
+- `clientArgs` 启动前校验：非 secret 字段必须满足 manifest `enum`；可选非 secret 字段缺失时 resolver 应用 manifest `default`；secret 字段不得进入 `clientArgs`（必须走 `credentials`）。
+- UI 不展示原始 secret；secret 只显示固定 `••••••`；空值在编辑态表示保持已配置值。
+
+**M3b 完成条件**：config-tui、gateway/shared、CLI/handler、PTY 定向测试、`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过；未进入 G5/G6。
 
 **G3 完成标准**：
 

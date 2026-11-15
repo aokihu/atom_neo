@@ -1,6 +1,6 @@
 # Gateway Client 接入与发行规划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施；G4–G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施；G5–G6 待实施**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。
 > 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准，M1 已完成 manifest、resolver、实例配置与统一启动描述。
 
@@ -65,15 +65,15 @@ flowchart TD
     K --> A
 ```
 
-以下均为**建议语法，当前未实现**；所有命令使用 `--sandbox` 选择目标，缺省规则复用现有 CLI。
+本地 install/load/pack/reload/list/start/stop/check/logs 已实现；官方名称（如 `install telegram`）与 URL 获取仍属 G5。所有命令使用 `--sandbox` 选择目标，缺省规则复用现有 CLI。
 
 ```bash
-# 本地包闭环优先交付；官方名称与 URL 获取在后续阶段接入
+# 本地包闭环已实现；官方名称与 URL 获取在 G5 接入
 atom gateway install ./telegram-bot-0.1.0-darwin-arm64.tar.gz --sandbox ./sandbox
-atom gateway install telegram --sandbox ./sandbox
 
-# 开发目录原位加载；首次引导创建实例，重复加载不能覆盖其他实例
+# 开发目录原位加载；可用 --id 为同一目录登记不同实例
 atom gateway load ./clients/telegram-bot --sandbox ./sandbox
+atom gateway load ./clients/telegram-bot --id telegram-dev --sandbox ./sandbox
 atom gateway reload telegram-dev --sandbox ./sandbox
 atom gateway logs telegram-dev --sandbox ./sandbox
 
@@ -157,7 +157,7 @@ atom gateway check telegram-main --sandbox ./sandbox
 
 v1 优先覆盖现有字符串参数、required、enum、default、secret；普通字段键与 `clientArgs` 的 kebab-case 参数名对应。选择 webhook 后才展示相关高级字段；webhook 的条件必填最终仍由 Telegram Client 校验，不在 v1 引入通用表达式语言。
 
-启动前校验 `required`：secret 字段必须在实例 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。`default` 不会在启动时自动注入，`enum` 选择与 `default` 预填由 G2 配置表单负责。
+启动前校验 `required`：secret 字段必须在实例 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。可选非 secret 字段缺失时由 resolver 应用 manifest `default`；`clientArgs` 中的 enum 值必须匹配 manifest，secret 字段不得进入 `clientArgs`。G2 配置表单仍负责预填和选择。
 
 `env` 是为 secret 字段补充的建议映射：manifest 只声明子进程使用的变量名，实际值存于目标 sandbox 的 `.env`。实例只保存字段到持久化变量名的引用，例如 `bot-token → ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN`；启动时解析该引用，并向该实例子进程注入 `TELEGRAM_BOT_TOKEN`。同一包的不同实例可使用相同子进程变量名、不同持久化变量名。
 
@@ -249,7 +249,8 @@ M2（G2）实际交付：
 - `packages.json` registry 与 `sha256` 幂等/冲突；resolver 只使用 registry 登记的包路径，并校验 target 与当前 host 一致。
 - 离线实例配置 API 与 config-tui 首次实例表单；临时 sandbox 端到端测试。
 - M2.1 硬化：supervisor 在 spawn 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock`（`.atom/gateway/packages.lock`，有界重试/超时）。
-- M3a（G3）已落地动态 register/remove/reload、drain 503/409、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset 与 `atom gateway` CLI；G4 的 GatewayModal、菜单、日志 UI 仍未实现。
+- M3a（G3）已落地动态 register/remove/reload、drain 503/409、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset 与 `atom gateway` CLI。
+- M3b（G4）已落地 GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、`load --id`、resolver enum/default 校验与 PTY 验收。
 
 ## 10. 依据与关联文档
 

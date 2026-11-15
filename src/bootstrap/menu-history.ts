@@ -5,7 +5,10 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { writeFileAtomic } from "@atom-neo/shared";
 
-export const MENU_COMMANDS = ["chat", "core", "config", "core-gateway", "gateway-start", "gateway-stop", "attach", "export", "import"] as const;
+export const MENU_COMMANDS = [
+  "chat", "core", "config", "core-gateway", "gateway-start", "gateway-stop",
+  "gateway-install", "gateway-load", "gateway-manage", "gateway-pack", "attach", "export", "import",
+] as const;
 export type MenuCommand = typeof MENU_COMMANDS[number];
 
 const parameterSchema = z.object({
@@ -15,6 +18,9 @@ const parameterSchema = z.object({
   coreServer: z.string().min(1).optional(),
   corePort: z.number().int().min(1).max(65535).optional(),
   clients: z.string().min(1).optional(),
+  target: z.string().min(1).optional(),
+  id: z.string().min(1).optional(),
+  out: z.string().min(1).optional(),
   continueSession: z.boolean().optional(),
   archive: z.string().min(1).optional(),
   output: z.string().min(1).optional(),
@@ -27,6 +33,8 @@ const FIELDS: Record<MenuCommand, (keyof MenuParameters)[]> = {
   chat: ["sandbox", "continueSession"], core: ["sandbox", "host", "port"], config: ["sandbox"],
   "core-gateway": ["sandbox", "host", "port"],
   "gateway-start": ["sandbox", "clients"], "gateway-stop": ["sandbox", "clients"],
+  "gateway-install": ["sandbox", "target"], "gateway-load": ["sandbox", "target", "id"],
+  "gateway-manage": ["sandbox"], "gateway-pack": ["sandbox", "target", "out"],
   attach: ["coreServer", "corePort"],
   export: ["sandbox", "output", "encrypt"], import: ["archive", "sandbox"],
 };

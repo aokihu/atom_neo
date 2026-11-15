@@ -173,6 +173,16 @@ describe("gateway command", () => {
     expect(() => parseArguments(["gateway", "pack", "bot", "--target="])).toThrow("--target cannot be empty");
   });
 
+  test("load accepts --id and other actions reject it", () => {
+    expect(bootArgs(["gateway", "load", "clients/bot", "--id", "bot-dev"]).gatewayCommand)
+      .toMatchObject({ action: "load", target: "clients/bot", id: "bot-dev" });
+    expect(() => parseArguments(["gateway", "load", "clients/bot", "--id="])).toThrow("--id cannot be empty");
+    for (const action of actions.filter(action => action !== "load")) {
+      const target = action === "list" ? [] : ["bot"];
+      expect(() => parseArguments(["gateway", action, ...target, "--id", "x"])).toThrow("--id is only valid for gateway load");
+    }
+  });
+
   test("rejects --out and --target outside pack", () => {
     for (const action of actions.filter(action => action !== "pack")) {
       const target = action === "list" ? [] : ["bot"];

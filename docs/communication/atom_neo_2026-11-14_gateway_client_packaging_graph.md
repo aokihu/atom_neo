@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）已实施；G4–G6 待实施**
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施；G5–G6 待实施**
 > 2026-11-15 修订：启动方式不再兼容旧 `binary`，启动路径只保留 `package` / `directory`。
 > M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单。动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
 >
@@ -503,8 +503,11 @@ graph TB
     subgraph G4["G4 管理与诊断"]
         F17["config-tui/GatewayModal.tsx"]
         F18["config-tui/GatewayInstanceForm.tsx"]
+        F18b["config-tui/SecretFieldInput.tsx"]
         F19["config-tui/gateway-status.ts"]
-        F20["bootstrap/menu-flow.ts"]
+        F20["bootstrap/menu-flow.ts / menu-history.ts"]
+        F21["bootstrap/gateway-actions.ts"]
+        F22["shared/runtime-file.ts"]
     end
 
     G1 --> G2 --> G3 --> G4
@@ -515,7 +518,43 @@ graph TB
 - G3 改动 Gateway 服务核心与 CLI 分流，回归面最大。
 - G2 改动新目录与归档，安全测试优先。
 - G4 主要影响 TUI，需 PTY 验收。
+- G4 UI 通过 `gateway-status.ts` 读取 admin API；install/load/pack 通过 `gateway-actions.ts` 复用 CLI handler，不复制命令实现。
 - 所有阶段都可能改 `docs/index.md` 和相关设计文档。
+
+### 11.1 G4 UI 数据流
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant M as GatewayModal
+    participant S as gateway-status
+    participant G as Gateway admin API
+    participant C as Client /diagnostics
+    participant A as gateway-actions / CLI
+
+    U->>M: 打开 Gateway
+    M->>S: fetchGatewayStatus(sandbox)
+    S->>G: GET /admin/clients (+ admin token)
+    G-->>S: clients[]（source/state/port/platform/diagnostics，无 secret）
+    S-->>M: 列表或 null(OFFLINE)
+    U->>M: Reload / Start / Stop
+    M->>S: gatewayAction
+    S->>G: POST /admin/clients
+    G-->>S: results[] / error detail
+    S-->>M: 成功通知或错误详情
+    U->>M: Check / Logs
+    M->>S: fetchGatewayDiagnostics
+    S->>G: GET /admin/clients/:id/diagnostics
+    G->>C: GET /diagnostics（仅运行实例）
+    C-->>G: checks（有界、脱敏）
+    G-->>S: local events + client status
+    U->>M: Install / Load / Pack
+    M->>A: 注入的 CLI actions
+    A-->>M: 命令输出
+    U->>M: Edit
+    M->>M: GatewayInstanceForm（secret 固定遮罩）
+    M->>S: saveGatewayInstance → upsertInstance
+```
 
 ---
 
@@ -534,7 +573,13 @@ graph LR
     CliTest["bootstrap/cli.test.ts"] --> Cli["cli.ts"]
     CommandTest["gateway-command.test.ts"] --> Command["gateway-command.ts"]
     TgTest["gateway-client.test.ts"] --> TgClient["telegram gateway-client.ts"]
-    UiTest["config-tui tests"] --> Modal["GatewayModal.tsx"]
+    UiTest["GatewayModal.test.tsx"] --> Modal["GatewayModal.tsx"]
+    StatusTest["gateway-status.test.ts"] --> Status["gateway-status.ts"]
+    FormTest["gateway-instance-form.test.ts"] --> Form["GatewayInstanceForm.tsx"]
+    SecretTest["form component test"] --> Secret["SecretFieldInput.tsx"]
+    RuntimeTest["shared/runtime-file.test.ts"] --> Runtime["shared/runtime-file.ts"]
+    PtyTest["startup.integration.test.ts (PTY)"] --> Modal
+    PtyTest --> Menu["menu-flow.ts"]
 ```
 
 **测试替身**

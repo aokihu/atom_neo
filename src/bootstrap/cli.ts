@@ -15,6 +15,7 @@ export type GatewayCommandAction =
 export type GatewayCommand = {
   action: GatewayCommandAction;
   target?: string;
+  id?: string;
   out?: string;
   targetPlatform?: string;
   force: boolean;
@@ -168,8 +169,10 @@ function parseGatewayArguments(args: readonly string[]): BootArguments | "help" 
   if (action !== "list" && !target) throw new Error(`gateway ${action} requires a target`);
   if (action !== "pack" && values.out !== undefined) throw new Error("--out is only valid for gateway pack");
   if (action !== "pack" && values.target !== undefined) throw new Error("--target is only valid for gateway pack");
+  if (action !== "load" && values.id !== undefined) throw new Error("--id is only valid for gateway load");
   if (values.out === "") throw new Error("--out cannot be empty");
   if (values.target === "") throw new Error("--target cannot be empty");
+  if (values.id === "") throw new Error("--id cannot be empty");
 
   const sandboxPath = values.sandbox;
   return {
@@ -193,6 +196,7 @@ function parseGatewayArguments(args: readonly string[]): BootArguments | "help" 
     gatewayCommand: {
       action,
       target,
+      id: values.id,
       out: values.out,
       targetPlatform: values.target,
       force: values.force,
@@ -207,6 +211,7 @@ function parseGatewayArgs(args: readonly string[]) {
       args: [...args],
       options: {
         sandbox: { type: "string" },
+        id: { type: "string" },
         out: { type: "string" },
         target: { type: "string" },
         force: { type: "boolean", default: false },
@@ -242,7 +247,7 @@ USAGE
   ${binName} menu [--sandbox <path>]
   ${binName} export [--sandbox <path>] [-o|--output <file>] [--password] [--force]
   ${binName} import <archive> [--sandbox <path>] [--password] [--env merge|replace] [--dry-run] [--force]
-  ${binName} gateway <action> [target] [--sandbox <path>] [--out <file>] [--target <platform>] [--force] [--json]
+  ${binName} gateway <action> [target] [--sandbox <path>] [--id <instance>] [--out <file>] [--target <platform>] [--force] [--json]
 
 COMMANDS
   menu                   一次性启动向导（参数自动回填，完成后执行）
@@ -268,6 +273,7 @@ OPTIONS
   --log-file <path>       日志文件路径 (--log=file 时必需)
   --log-pipepath <path>   命名管道路径 (--log=pipe 时必需)
   -o, --output <file>     导出归档路径 (默认: atom-backup-<time>.atombak)
+  --id <instance>         gateway load 实例 ID（默认 manifest.id）
   --out <file>            gateway pack 输出路径
   --target <platform>     gateway pack 目标平台
   --json                  gateway 命令以 JSON 输出

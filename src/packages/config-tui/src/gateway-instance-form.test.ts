@@ -126,6 +126,52 @@ describe("validateFieldValues", () => {
     expect(fields).toEqual(FIELDS);
     expect(result.values).not.toBe(values);
   });
+
+  test("a configured secret satisfies a required secret field", () => {
+    const values = {};
+    const snapshot = { ...values };
+    const configuredSecrets = new Set(["bot-token"]);
+
+    const result = validateFieldValues(FIELDS, values, { configuredSecrets });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual({});
+    expect(result.values["bot-token"]).toBe("");
+    expect(values).toEqual(snapshot);
+    expect(configuredSecrets).toEqual(new Set(["bot-token"]));
+  });
+
+  test("a configured optional secret does not hide a missing required secret", () => {
+    const result = validateFieldValues(FIELDS, {}, {
+      configuredSecrets: new Set(["webhook-secret"]),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors["bot-token"]).toBe("Bot Token is required");
+  });
+
+  test("configured secrets never satisfy required non-secret fields", () => {
+    const fields: GatewayInstanceFields = {
+      "webhook-url": { label: "Webhook URL", type: "string", required: true },
+    };
+
+    const result = validateFieldValues(fields, {}, {
+      configuredSecrets: new Set(["webhook-url"]),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors["webhook-url"]).toBe("Webhook URL is required");
+  });
+
+  test("keeps enum validation and defaults unchanged when secrets are configured", () => {
+    const result = validateFieldValues(FIELDS, { mode: "carrier-pigeon" }, {
+      configuredSecrets: new Set(["bot-token"]),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.mode).toBe("Mode must be one of: longpoll, webhook");
+    expect(result.values.mode).toBe("carrier-pigeon");
+  });
 });
 
 describe("splitFieldValues", () => {
@@ -153,6 +199,18 @@ describe("splitFieldValues", () => {
       secrets: { "bot-token": "token" },
     });
   });
+
+  test("a blank configured secret stays out of the split values", () => {
+    const validated = validateFieldValues(FIELDS, {}, {
+      configuredSecrets: new Set(["bot-token"]),
+    });
+
+    const split = splitFieldValues(FIELDS, validated.values);
+
+    expect(split.secrets).toEqual({});
+    expect(split.secrets).not.toHaveProperty("bot-token");
+    expect(split.clientArgs).toEqual({ mode: "longpoll" });
+  });
 });
 
 describe("draft helpers", () => {
@@ -179,13 +237,25 @@ describe("draft helpers", () => {
 
 const reactEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
 
-async function mountForm(onSubmit: (values: Record<string, string>) => void, onCancel: () => void) {
+async function mountForm(
+  onSubmit: (values: Record<string, string>) => void,
+  onCancel: () => void,
+  options: {
+    fields?: GatewayInstanceFields;
+    initialValues?: Record<string, string>;
+    configuredSecrets?: readonly string[];
+    mode?: "create" | "edit";
+  } = {},
+) {
   const previous = reactEnvironment.IS_REACT_ACT_ENVIRONMENT;
   reactEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
   const setup = await createTestRenderer({ width: 100, height: 36 });
   const root = createRoot(setup.renderer);
   await act(async () => root.render(createElement(GatewayInstanceForm, {
-    fields: FIELDS,
+    fields: options.fields ?? FIELDS,
+    initialValues: options.initialValues,
+    configuredSecrets: options.configuredSecrets,
+    mode: options.mode,
     onSubmit,
     onCancel,
   })));
@@ -197,11 +267,15 @@ async function mountForm(onSubmit: (values: Record<string, string>) => void, onC
       await setup.renderOnce();
     }
     // Escape is dispatched through a deferred renderer path in the test harness.
-    await Bun.sleep(50);
+    await act(async () => Bun.sleep(50));
     await setup.renderOnce();
   };
   const type = async (value: string) => {
     await act(async () => setup.mockInput.pasteBracketedText(value));
+    await setup.renderOnce();
+  };
+  const typeKeys = async (value: string) => {
+    await act(async () => setup.mockInput.typeText(value));
     await setup.renderOnce();
   };
   const cleanup = async () => {
@@ -210,7 +284,7 @@ async function mountForm(onSubmit: (values: Record<string, string>) => void, onC
     reactEnvironment.IS_REACT_ACT_ENVIRONMENT = previous;
   };
 
-  return { press, type, frame: setup.captureCharFrame, cleanup };
+  return { press, type, typeKeys, frame: setup.captureCharFrame, cleanup };
 }
 
 afterEach(() => {
@@ -246,6 +320,8 @@ test("shows required errors, masks secrets, and submits defaults and enum choice
     // Leave the action bar and open the first field.
     await form.press("ARROW_UP", "ARROW_DOWN", "RETURN");
     await form.type("123:secret");
+    expect(form.frame()).toContain(SECRET_MASK);
+    expect(form.frame()).not.toContain("123:secret");
     await form.press("RETURN");
     expect(form.frame()).toContain(SECRET_MASK);
     expect(form.frame()).not.toContain("123:secret");
@@ -261,6 +337,79 @@ test("shows required errors, masks secrets, and submits defaults and enum choice
       "webhook-url": "",
       "webhook-secret": "",
     }]);
+  } finally {
+    await form.cleanup();
+  }
+});
+
+test("masks a typed secret while editing and submits the raw value", async () => {
+  const submitted: Record<string, string>[] = [];
+  const form = await mountForm((values) => submitted.push(values), () => {});
+
+  try {
+    await form.press("RETURN");
+    expect(form.frame()).toContain("Bot Token");
+
+    // Typed keys and bracketed paste both feed the same masked buffer.
+    await form.typeKeys("super-");
+    await form.type("secret-token");
+    expect(form.frame()).toContain(SECRET_MASK);
+    expect(form.frame()).not.toContain("super-");
+    expect(form.frame()).not.toContain("super-secret-token");
+    expect(form.frame()).not.toContain("secret-token");
+
+    await form.press("RETURN");
+    expect(form.frame()).toContain(SECRET_MASK);
+    expect(form.frame()).not.toContain("super-secret-token");
+    expect(submitted).toEqual([]);
+
+    await form.press("TAB", "RETURN");
+    expect(submitted).toEqual([{
+      "bot-token": "super-secret-token",
+      mode: "longpoll",
+      "webhook-url": "",
+      "webhook-secret": "",
+    }]);
+  } finally {
+    await form.cleanup();
+  }
+});
+
+test("edit mode keeps configured secrets and cancel never submits", async () => {
+  const submitted: Record<string, string>[] = [];
+  let cancellations = 0;
+  const form = await mountForm(
+    (values) => submitted.push(values),
+    () => { cancellations += 1; },
+    { configuredSecrets: ["bot-token"], mode: "edit" },
+  );
+
+  try {
+    expect(form.frame()).toContain(`${SECRET_MASK} (configured)`);
+
+    await form.press("RETURN");
+    await form.type("replacement-token");
+    expect(form.frame()).toContain(SECRET_MASK);
+    expect(form.frame()).not.toContain("replacement-token");
+
+    await form.press("ESCAPE");
+    expect(submitted).toEqual([]);
+    expect(cancellations).toBe(0);
+    expect(form.frame()).toContain(`${SECRET_MASK} (configured)`);
+    expect(form.frame()).not.toContain("replacement-token");
+
+    // Blank means unchanged, so a configured secret satisfies the requirement.
+    await form.press("TAB", "RETURN");
+    expect(submitted).toEqual([{
+      "bot-token": "",
+      mode: "longpoll",
+      "webhook-url": "",
+      "webhook-secret": "",
+    }]);
+
+    await form.press("ESCAPE");
+    expect(cancellations).toBe(1);
+    expect(submitted).toHaveLength(1);
   } finally {
     await form.cleanup();
   }

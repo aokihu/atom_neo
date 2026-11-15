@@ -1,6 +1,6 @@
 # Gateway 更新开发计划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0、M1（G1）、M2（G2）、M2.1、M3a（G3）已完成；G4–G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0、M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已完成；G5–G6 待实施**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory`。
 > 目标与建议契约统一见 [接入与发行规划](./gateway-client-design.md)；本文负责阶段、依赖、影响面、验收与进度。
 
@@ -86,24 +86,27 @@ M2.1 风险硬化：supervisor 在 spawn/restart 时读取 serve 后的真实 ga
 - [x] 修复 Telegram 对 Gateway 非 2xx 响应的处理；验证忙/拒收响应不会被当作消息成功消费。重试策略与现有限流一起验收，不承诺 exactly-once。
 - [x] 更新命令入口与 cwd 后通过 supervisor 队列 stop/start；旧 Secret、旧 exit 回调和旧 restart timer 不得影响新进程。
 - [x] 重新读取 manifest、配置和凭据；保留实例身份。包 ID/platform 改变、目录消失或校验失败必须明确报错。
-- [x] 对接在线配置提交与应用结果；区分已保存、已应用、应用失败，防止多入口写盘冲突（M3a 通过 CLI/离线写入与 reload；UI 在线编辑归 G4）。
+- [x] 对接在线配置提交与应用结果；区分已保存、已应用、应用失败，防止多入口写盘冲突（M3a 通过 CLI/离线写入与 reload；M3b 的 UI 编辑复用 `upsertInstance`，保存后提示 reload 生效）。
 
 完成标准：Gateway 与 Core 不重启，只重载目标实例；在途消息、健康重启与手动 stop 并发时行为确定。新进程启动失败可见，其他实例继续工作。源码变更本身不保证自动回滚。
 
-M3a 实施记录：动态 ClientManager、drain/reload、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset、`atom gateway` CLI 与 gateway-command 已完成；G4 的 GatewayModal/菜单/日志 UI 未实现。`load` 相对路径按当前 cwd 解析；Client `/diagnostics` 在 Gateway 侧有界（20 checks / 200 字符 / 8 KiB）并脱敏。
+M3a 实施记录：动态 ClientManager、drain/reload、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset、`atom gateway` CLI 与 gateway-command 已完成。`load` 相对路径按当前 cwd 解析；Client `/diagnostics` 在 Gateway 侧有界（20 checks / 200 字符 / 8 KiB）并脱敏。
+
+M3b 实施记录：GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、CLI `load --id`、resolver enum/default/clientArgs 校验、PTY 验收已完成。UI 进程状态来自 supervisor/admin API，平台检查来自 Client `/diagnostics`；诊断与日志继续有界脱敏。
 
 ### G4：平台接入管理、诊断与日志
 
 依赖 G2、G3。
 
-- [ ] GatewayModal 升级为实例列表，显示来源、版本/目录、进程状态、平台诊断、最近错误。
-- [ ] 增加安装、配置编辑、检查、启停入口；开发者模式展示加载目录、重载和打包。
-- [ ] 安装表单由 manifest.config 驱动；Token 遮罩、默认 longpoll，webhook 高级字段按选择展示；编辑态实现真正的 secret 输入遮罩（G2 仅列表行遮罩）。
-- [ ] 定义有界 Client 诊断能力；未实现诊断的 Client 显示未知/不支持，不能仅凭 health 判定凭据有效。
-- [ ] 汇总经过认证的连接事件并附时间；错误按安装、配置、进程、平台和投递阶段定位。
-- [ ] 实例日志接入现有日志能力；明确 inherit/ignore 与按需采集的兼容行为、输出脱敏和有界保留。
-- [ ] CLI list/check/logs 与 UI 使用同一查询和控制实现；新命令提前分流，不初始化 Core 数据库或 Provider。
-- [ ] 扩展既有菜单，保持简洁层级和执行交接；不记录 Token/Secret。
+- [x] GatewayModal 升级为实例列表，显示来源、版本/目录、进程状态、平台诊断、最近错误。
+- [x] 增加安装、配置编辑、检查、启停入口；开发操作（加载目录/打包）在入口处标注 developer，重载在实例操作中。
+- [x] 安装表单由 manifest.config 驱动；secret 编辑使用固定宽度真实遮罩（G2 仅列表行遮罩）；enum/default 与 resolver 契约一致。manifest v1 暂无字段条件显示契约，因此展示全部声明字段。
+- [x] 定义有界 Client 诊断能力；未实现诊断的 Client 显示 unknown/unsupported，不能仅凭 health 判定凭据有效。
+- [x] 汇总经过认证的连接事件并附时间；错误按安装、配置、进程、平台和投递阶段定位。
+- [x] 实例日志接入现有日志能力；沿用 inherit/ignore 与 Gateway 有界脱敏，UI 只展示诊断事件摘要。
+- [x] CLI list/check/logs 与 UI 使用同一查询和控制实现；新命令提前分流，不初始化 Core 数据库或 Provider。
+- [x] 扩展既有菜单（install/load/manage/pack），保持简洁层级和执行交接；不记录 Token/Secret。
+- [x] `atom gateway load --id <id>`：同一目录可登记不同实例，省略时使用 manifest.id。
 
 完成标准：界面能独立完成一次接入；进程就绪、平台检查、消息往返三个结果可区分。PTY 覆盖键盘导航、取消、错误重试、窄窗口与非交互失败。
 

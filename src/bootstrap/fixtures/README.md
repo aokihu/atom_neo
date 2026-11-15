@@ -5,6 +5,6 @@
 `terminal-runner.py` 使用有尺寸的 PTY 启动 TUI/向导，并发送退出按键；最长等待 9 秒，超时终止该测试进程组。
 ## Menu terminal validation
 
-`menu-terminal.py` runs a bounded PTY script supplied as JSON steps. It verifies terminal restoration and can assert that cancelled/failed paths have not written history. Tests pass an isolated HOME and local fake services; no user settings are touched.
+`menu-terminal.py` runs a bounded PTY script supplied as JSON steps. It verifies terminal restoration and can assert that cancelled/failed paths have not written history. Tests pass an isolated HOME and local fake services; no user settings are touched. `ATOM_PTY_COLS` / `ATOM_PTY_ROWS` override the default 80×28 window for narrow-terminal acceptance.
 
 The result also captures printed execution commands separately from the final screen, to verify printing before application handoff, retries, and cancellation.

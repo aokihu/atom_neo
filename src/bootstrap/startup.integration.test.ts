@@ -522,6 +522,111 @@ integration("menu dispatches Gateway actions once and exits after success", asyn
   } finally { await finish(core.proc); }
 }, 20000);
 
+integration("gateway menu exposes install/load/manage/pack and cancels without executing", async () => {
+  const path = sandbox("menu-gateway-entries");
+  const home = join(temp, "menu-gateway-entries-home");
+  const history = join(home, ".config/atom/menu_history.json");
+  const result = await driveMenu([
+    { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
+    { wait: "pack >", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[C" },
+    { wait: "[1/3] 工作目录", send: "\r" },
+    { wait: "客户端目录", send: `\x15${clientRoot}\r` },
+    { wait: "实例 ID", send: "\x1b" },
+    { wait: "客户端目录", send: "\x1b" },
+    { wait: "[1/3] 工作目录", send: "\x1b" },
+    { wait: "❯ load directory >", send: "\x1b" },
+    { wait: "❯ gateway >", send: "\x1b" },
+  ], [binary, "menu", "--sandbox", path], home);
+  expect(result.commands).toEqual([]);
+  expect(existsSync(history)).toBe(false);
+  expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
+}, 30000);
+
+integration("gateway config UI navigates, cancels, and renders offline in a narrow PTY", async () => {
+  const path = sandbox("g4-narrow");
+  const home = join(temp, "g4-narrow-home");
+  const result = await driveMenu([
+    { wait: "CONFIGURATION", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Install client package", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Enter save · Esc cancel", send: "\x1b" },
+    { wait: "Install client package", send: "\x1b" },
+    { wait: "Providers (1)", send: "\x1b" },
+    { wait: "Cancel", send: "\t\r", keyDelay: 0.1 },
+  ], [binary, "--config", "--sandbox", path], home, { ATOM_PTY_COLS: "64", ATOM_PTY_ROWS: "26" });
+  expect(result.tail).toContain("OFFLINE");
+  expect(result.tail).toContain("Install client package");
+  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
+  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
+}, 30000);
+
+integration("gateway reload failure is visible and can be retried from the config UI", async () => {
+  const path = sandbox("g4-reload-retry");
+  const home = join(temp, "g4-reload-retry-home");
+  let reloads = 0;
+  const admin = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(req) {
+    if (req.method === "POST") {
+      const body = await req.json() as { action?: string; clientId?: string };
+      reloads += 1;
+      if (body.action !== "reload" || body.clientId !== "alpha") {
+        return Response.json({ error: "unexpected action" }, { status: 400 });
+      }
+      if (reloads === 1) {
+        return Response.json({ results: [{ id: "alpha", ok: false, error: "reload failed: invalid clientArgs" }] }, { status: 400 });
+      }
+      return Response.json({ results: [{ id: "alpha", ok: true }] });
+    }
+    return Response.json({ clients: [{
+      id: "alpha",
+      platform: "local",
+      source: { type: "directory", directory: clientRoot },
+      running: true,
+      desired: true,
+      state: "running",
+      port: 7001,
+      diagnostics: [{ at: "2026-11-15T00:00:00.000Z", stage: "process", level: "error", message: "last error" }],
+      config: {
+        mode: { label: "Mode", type: "string", enum: ["longpoll", "webhook"], default: "longpoll" },
+        "bot-token": { label: "Bot Token", type: "string", required: true, secret: true },
+      },
+      clientArgs: { mode: "longpoll" },
+      secretFields: ["bot-token"],
+      stdio: "inherit",
+    }] });
+  } });
+  writeFileSync(join(path, ".atom/gateway-runtime.json"), JSON.stringify({
+    url: admin.url.toString().replace(/\/+$/, ""), token: "g4-admin-token", instanceId: "g4-gateway",
+  }));
+  try {
+    const result = await driveMenu([
+      { wait: "CONFIGURATION", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+      { wait: "Install client package", send: "\r" },
+      { wait: "Check platform credentials", send: "\x1b[B\x1b[B\r", keyDelay: 0.1 },
+      { wait: "reload failed: invalid clientArgs", send: "\r" },
+      { wait: "reload alpha: ok", send: "\x1b" },
+      { wait: "Providers (1)", send: "\x1b" },
+      { wait: "QUIT WITHOUT SAVING?", send: "\t\r", keyDelay: 0.1 },
+    ], [binary, "--config", "--sandbox", path], home);
+    expect(reloads).toBe(2);
+    expect(result.tail).not.toContain("g4-admin-token");
+    expect(result.tail).not.toContain("bot-token");
+  } finally {
+    admin.stop(true);
+  }
+}, 30000);
+
+integration("gateway menu and admin commands fail cleanly without a terminal or runtime", async () => {
+  const path = sandbox("g4-noninteractive");
+  const home = join(temp, "g4-noninteractive-home");
+  const menu = await run([binary, "menu", "--sandbox", path], temp, { HOME: home });
+  expect(menu.code).toBe(1);
+  expect(menu.stderr).toContain("interactive terminal");
+  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
+  const list = await run([binary, "gateway", "list", "--sandbox", path], temp);
+  expect(list.code).not.toBe(0);
+  expect(list.stderr).toContain("Gateway is not running");
+  expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
+}, 15000);
+
 integration("menu configuration cancellation does not remember unsaved parameters", async () => {
   const path = sandbox("menu-config-cancel");
   const home = join(temp, "menu-config-cancel-home");

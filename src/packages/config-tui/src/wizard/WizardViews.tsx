@@ -9,6 +9,7 @@ import { ProfilesModal } from "../components/ProfilesModal";
 import { DecisionsModal } from "../components/DecisionsModal";
 import { ThemeModal } from "../components/ThemeModal";
 import { GatewayModal } from "../components/GatewayModal";
+import type { GatewayInstanceActions } from "../gateway-status";
 import { ProjectModal } from "../components/ProjectModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { collectModelIds } from "../wizard-logic";
@@ -88,8 +89,10 @@ export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch,
   );
 }
 
-export function WizardSettingsViews({ view, wizard, dispatch, onSave }: CommonProps & {
+export function WizardSettingsViews({ view, wizard, dispatch, sandboxPath, gatewayActions, onSave }: CommonProps & {
   onSave: () => void;
+  sandboxPath: string;
+  gatewayActions?: GatewayInstanceActions;
 }) {
   return (
     <>
@@ -113,7 +116,9 @@ export function WizardSettingsViews({ view, wizard, dispatch, onSave }: CommonPr
 
       {view?.kind === "gateway" && (
         <GatewayModal
+          sandbox={sandboxPath}
           port={wizard.gatewayPort}
+          gatewayActions={gatewayActions}
           onSubmit={port => dispatch({ type: "gateway-submit", port })}
           onBack={() => dispatch({ type: "gateway-back" })}
         />

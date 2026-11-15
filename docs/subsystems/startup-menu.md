@@ -11,7 +11,11 @@ menu
 ├─ config > sandbox > 现有配置编辑器
 ├─ gateway > run > sandbox > host > port > Core + Gateway
 │          ├ start clients > sandbox > client ID / all > 启用
-│          └ stop clients > sandbox > client ID / all > 停止
+│          ├ stop clients > sandbox > client ID / all > 停止
+│          ├ install > sandbox > 归档文件 > 安装本地客户端包
+│          ├ load directory > sandbox > 客户端目录 > 实例 ID（可选）> 登记开发实例
+│          ├ manage instances > sandbox > gateway list
+│          └ pack > sandbox > 客户端目录 > 输出路径（可选）> 打包
 ├─ attach > remote address > port > 连接并进入 TUI
 ├─ backup > export > sandbox > output > encrypt > 导出配置归档
 │          └ import > archive > sandbox > 导入配置归档
@@ -44,7 +48,17 @@ menu
 }
 ```
 
-按字段白名单解析，不保存 API Key、管理 Token、日志。缺失使用默认值；损坏提示后使用默认值。临时文件 + rename 原子替换，权限 0600；保存失败告警，不阻断已经成功的启动。测试使用临时文件，不读写真实用户历史。
+按字段白名单解析，不保存 API Key、管理 Token、日志。Gateway 管理入口只保存 `sandbox`、`target`、`id`、`out` 等非敏感参数。缺失使用默认值；损坏提示后使用默认值。临时文件 + rename 原子替换，权限 0600；保存失败告警，不阻断已经成功的启动。测试使用临时文件，不读写真实用户历史。
+
+```json
+{
+  "version": 1,
+  "commands": {
+    "gateway-load": { "sandbox": "/path/to/project", "target": "/path/to/client", "id": "telegram-dev" },
+    "gateway-pack": { "sandbox": "/path/to/project", "target": "/path/to/client", "out": "/tmp/client.atompkg" }
+  }
+}
+```
 
 ## 远程连接
 
@@ -68,6 +82,22 @@ menu
 - 执行前打印可复制命令时，加密导出包含 `--password`，导入只包含归档与 sandbox，不输出密码值。
 
 详见 [backup.md](./backup.md)。
+
+## Gateway 管理入口
+
+`gateway` 子菜单在原有 run/start/stop 之外增加本地包与开发目录入口：
+
+| 路径 | 步骤 | 执行 |
+|------|------|------|
+| `gateway / install` | sandbox → 归档文件 | `gateway install <archive> --sandbox ...` |
+| `gateway / load directory` | sandbox → 客户端目录 → 实例 ID（可选） | `gateway load <directory> [--id] --sandbox ...` |
+| `gateway / manage instances` | sandbox | `gateway list --sandbox ...` |
+| `gateway / pack` | sandbox → 客户端目录 → 输出路径（可选） | `gateway pack <directory> [--out] --sandbox ...` |
+
+- 相对路径按打印命令的当前目录解析；菜单展示与执行使用同一参数。
+- `load` 的实例 ID 可留空，留空时使用 manifest.id；填写时允许同一目录登记多个实例。
+- 历史只保存非敏感字段；不记录 Token、Secret、`.env` 内容或管理凭据。
+- 取消、回退或执行失败不会写入历史；成功执行后结束菜单并退出。
 
 ## 实现与验收
 
@@ -113,3 +143,7 @@ menu
 `backup > export / import` 接入菜单。定向测试 89 通过（菜单流程、历史、归档编解码、CLI）；新增 PTY 验收 1 项、36 项断言，覆盖源码与编译二进制的未加密导出/导入，确认未加密归档不出现 `Password:` 提示。加密导出/导入另以源码 PTY 实测：仅在归档 `encryption != null` 时提示密码，历史记录不含密码。
 
 完整 `bun test`：1430 通过、21 跳过、0 失败；workspace 类型检查与 `bun build --compile` 通过。
+
+### 2026-11-15 Gateway 管理入口
+
+`gateway` 子菜单新增 install/load/manage/pack。菜单流程与历史定向测试 53 通过；PTY 新增 4 项验收，覆盖 load 目录/可选实例 ID 的导航与取消、配置 UI 的窄窗口/取消、reload 失败后重试、非交互菜单与无 runtime 管理命令失败。所有 PTY 用例使用临时 HOME 与本地假服务，不写用户历史，`tail`/命令输出不包含管理 Token 或 Secret。

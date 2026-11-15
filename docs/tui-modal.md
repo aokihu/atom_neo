@@ -161,6 +161,8 @@ Modal 有两种交互模式，由是否传入 `listLength` 决定：
 
 **焦点模型**：Modal 通过 `@opentui/react` 的全局 `useKeyboard` 订阅按键；打开期间 App 给 `InputBar` 传入 `disabled` 并显式 `blur()` 输入框。TUI 传入 `focusRef` 时，Modal 面板本身成为 OpenTUI 的 focused renderable，列表项或 ActionBar 高亮表示 Modal 内的焦点。关闭后 App 调用输入框 `focus()`，恢复文本光标。`config-tui` 不传 `focusRef`，继续由表单自身的 `textarea` 持有焦点。
 
+**`interactive={false}`**：跳过 Modal 的键盘订阅，由 Modal 内的表单组件处理 `Enter`/`Esc`。配置向导的 `FieldInput` 与 `SecretFieldInput` 使用该模式，避免 Modal 与输入框同时消费按键。`SecretFieldInput` 只把原始值保存在组件状态，界面固定渲染 `••••••`；不得改用会回显内容的 textarea 处理 secret。
+
 **状态重置**：`open` 变为 `true`、`defaultActionKey` 变化或 Action 集合变化时，`selectedIndex` 会重置为 `findInitialIndex` 的结果；打开/关闭都会清除 ActionBar 焦点。
 
 初始选中项规则（`findInitialIndex`）：`defaultActionKey` → 首个 `confirm`/`primary` → 首个未禁用项。

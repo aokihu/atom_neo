@@ -18,3 +18,4 @@ export type {
   GatewayInstanceValues,
 } from "./gateway-instance-form";
 export { GatewayInstanceForm } from "./components/GatewayInstanceForm";
+export type { GatewayInstanceActions } from "./gateway-status";

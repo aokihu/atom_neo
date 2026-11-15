@@ -3,12 +3,14 @@ import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 import { FieldInput, SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import {
+  SECRET_MASK,
   beginDraft,
   maskFieldValue,
   setDraftValue,
   validateFieldValues,
 } from "../gateway-instance-form";
 import type { GatewayInstanceFields } from "../gateway-instance-form";
+import { SecretFieldInput } from "./SecretFieldInput";
 
 const ACTIONS: ModalAction[] = [
   { key: "cancel", label: "Back", role: "cancel" },
@@ -20,14 +22,27 @@ type Editing = { name: string; index: number } | null;
 /**
  * manifest.config driven instance form.
  *
- * Secrets are masked in the field list. tui-kit's FieldInput has no mask
- * support, so text is visible while the editor is focused; stored secrets are
- * never loaded back into that editor.
+ * Secrets are masked everywhere: stored values are never seeded into the
+ * draft, and the secret editor uses SecretFieldInput so even freshly typed
+ * text is never rendered. Blank secrets mean "keep the stored value".
  */
-export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initialValues, onSubmit, onCancel }: {
+export function GatewayInstanceForm({
+  title = "INSTANCE CONFIG",
+  fields,
+  initialValues,
+  configuredSecrets = [],
+  mode,
+  error,
+  onSubmit,
+  onCancel,
+}: {
   title?: string;
   fields: GatewayInstanceFields;
   initialValues?: Record<string, string>;
+  configuredSecrets?: readonly string[];
+  mode?: "create" | "edit";
+  /** Persistence error from the caller; field validation errors stay local. */
+  error?: string;
   onSubmit: (values: Record<string, string>) => void;
   onCancel: () => void;
 }) {
@@ -37,6 +52,8 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Editing>(null);
   const entries = Object.entries(fields);
+  const configured = new Set(configuredSecrets);
+  const editMode = mode === "edit" || (mode === undefined && configured.size > 0);
 
   const clearError = (name: string) => {
     setErrors((prev) => {
@@ -57,7 +74,7 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
   };
 
   const save = () => {
-    const result = validateFieldValues(fields, draft.values);
+    const result = validateFieldValues(fields, draft.values, { configuredSecrets: configured });
     setDraft({ values: result.values });
     if (!result.ok) {
       setErrors(result.errors);
@@ -73,6 +90,35 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
     const name = editing.name;
     const field = fields[name];
     const current = draft.values[name] ?? "";
+
+    if (field?.secret) {
+      return (
+        <Modal
+          open
+          title={title}
+          width={64}
+          interactive={false}
+          onClose={() => setEditing(null)}
+          hint="Enter apply · Esc back"
+        >
+          <SecretFieldInput
+            key={name}
+            label={`${field.label}${field.required ? " *" : ""}`}
+            placeholder={configured.has(name)
+              ? "Leave blank to keep the stored secret"
+              : field.required ? "Required" : "(optional)"}
+            error={errors[name]}
+            initialValue={current}
+            onSubmit={(text) => {
+              setDraft((prev) => setDraftValue(fields, prev, name, text));
+              clearError(name);
+              setEditing(null);
+            }}
+            onCancel={() => setEditing(null)}
+          />
+        </Modal>
+      );
+    }
 
     if (field?.enum && field.enum.length > 0) {
       const options = field.enum;
@@ -119,8 +165,8 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
           <FieldInput
             key={name}
             label={`${field.label}${field.required ? " *" : ""}`}
-            value={field.secret ? "" : current}
-            placeholder={field.secret ? "Enter secret (masked in list)" : field.required ? "Required" : "(optional)"}
+            value={current}
+            placeholder={field.required ? "Required" : "(optional)"}
             error={errors[name]}
             onSubmit={(text) => {
               setDraft((prev) => setDraftValue(fields, prev, name, text));
@@ -129,11 +175,6 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
             }}
             onCancel={() => setEditing(null)}
           />
-          {field.secret ? (
-            <box marginTop={1}>
-              <text fg={colors.text.muted}>Typed text is visible while editing; saved values are masked.</text>
-            </box>
-          ) : null}
         </Modal>
       );
     }
@@ -158,7 +199,9 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
         const entry = entries[index];
         if (entry) openField(entry[0]);
       }}
-      hint="↑/↓ field · Enter edit · Tab actions · Esc cancel"
+      hint={editMode
+        ? "↑/↓ field · Enter edit · Tab actions · Esc cancel · blank secret keeps stored value"
+        : "↑/↓ field · Enter edit · Tab actions · Esc cancel"}
     >
       <box flexDirection="column">
         {entries.length === 0 ? (
@@ -166,13 +209,15 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
         ) : entries.map(([name, field], index) => {
           const value = draft.values[name] ?? "";
           const masked = maskFieldValue(field, value);
+          const detail = masked
+            || (field.secret && configured.has(name) ? `${SECRET_MASK} (configured)` : "(not set)");
           return (
             <box key={name} flexDirection="column">
               <SelectableRow
                 selected={index === selected}
                 label={field.label}
                 labelWidth={22}
-                detail={masked || "(not set)"}
+                detail={detail}
                 trailing={field.required ? <text fg={colors.status.error}> *</text> : undefined}
               />
               {errors[name] ? (
@@ -183,6 +228,11 @@ export function GatewayInstanceForm({ title = "INSTANCE CONFIG", fields, initial
             </box>
           );
         })}
+        {error ? (
+          <box marginTop={1}>
+            <text fg={colors.status.error}>{error}</text>
+          </box>
+        ) : null}
       </box>
     </Modal>
   );

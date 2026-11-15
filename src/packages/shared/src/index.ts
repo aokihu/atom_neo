@@ -3,6 +3,8 @@ export type { AdminRequestContext } from "./utils/admin-auth";
 export { createChildProcessEnv, INSTANCE_CREDENTIAL_PREFIX } from "./utils/child-process-env";
 export { withFileLock } from "./utils/file-lock";
 export type { FileLockOptions } from "./utils/file-lock";
+export { localUrl, readRuntimeFile, runtimeFilePath } from "./runtime-file";
+export type { RuntimeFile } from "./runtime-file";
 export { spawnProcess } from "./utils/process";
 export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
 

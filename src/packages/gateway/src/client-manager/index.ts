@@ -28,6 +28,10 @@ export type ClientStatus = {
   state: ProcessState;
   port: number;
   active: ClientStatusActive | undefined;
+  config: NonNullable<ResolvedClientConfig["manifest"]>["config"];
+  clientArgs: Record<string, string>;
+  secretFields: string[];
+  stdio: ResolvedClientConfig["stdio"];
 };
 
 export class ClientManager {
@@ -137,6 +141,10 @@ export class ClientManager {
         state: supervisor.state,
         port: supervisor.port,
         active: active && { id: active.id, platform: active.platform, port: active.port, url: active.url },
+        config: config.manifest?.config ?? {},
+        clientArgs: { ...(config.clientArgs ?? {}) },
+        secretFields: Object.keys(config.credentials ?? {}),
+        stdio: config.stdio,
       };
     });
   }

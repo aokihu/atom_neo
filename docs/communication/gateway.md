@@ -10,7 +10,11 @@ M1（G0+G1）已落地：实例配置只接受 `package` / `directory` 二选一
 
 M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest + `bin/**` 白名单、target 注入、敏感文件排除）、安全 `installClient`（路径/链接校验、临时目录、失败回滚）、`packages.json` registry（`sha256` 幂等/冲突）、离线实例配置 API 与 config-tui 首次实例表单。M2.1 硬化了 gateway 端口延迟绑定与 registry 跨进程锁。
 
-M3a（G3）已落地动态管理与重载：`ClientManager` 动态 register/remove/reload、活动端口集合、GET 状态/诊断、POST reload、drain 503/409、Telegram 503/429 offset 语义、`atom gateway` CLI 与离线/在线处理器。G4 的 GatewayModal、菜单和日志 UI 尚未实现。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
+M3a（G3）已落地动态管理与重载：`ClientManager` 动态 register/remove/reload、活动端口集合、GET 状态/诊断、POST reload、drain 503/409、Telegram 503/429 offset 语义、`atom gateway` CLI 与离线/在线处理器。
+
+M3b（G4）已落地管理与诊断 UI：`GatewayModal` 显示实例来源（package 版本或 directory）、supervisor 状态/端口/平台、最近错误；操作面板提供 start/stop/reload、check、diagnostics/logs、编辑、install、load、pack。`GatewayInstanceForm` 支持编辑模式，secret 使用固定宽度遮罩输入，空白 secret 表示保持已配置值；enum/default 与 resolver 契约一致。启动菜单新增 install/load/manage/pack，history 只记录 sandbox/target/id/out。`atom gateway load --id <id>` 允许同一目录创建不同实例，省略时仍使用 `manifest.id`。
+
+`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。UI 的进程状态只来自 supervisor/admin API，平台检查只来自 Client `/diagnostics`，不另建状态源；诊断仍由 Gateway 有界脱敏。
 
 ## Gateway Client 控制模式（已实现）
 
@@ -281,7 +285,7 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
 - `package` 引用已安装包；`directory` 引用开发目录。二者必须恰好出现一个。
 - `directory` 可为绝对路径；相对路径在 Gateway 启动时相对 sandbox 根目录解析（`main.ts` 传入 `baseDir`）。G2 的 CLI/向导应优先写入绝对路径。
 - `credentials` 只保存字段到 `.env` 变量名的引用，例如 `bot-token -> ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN`；启动时由 resolver 注入 manifest 声明的子进程变量（如 `TELEGRAM_BOT_TOKEN`）。
-- 启动前校验 `manifest.config` 的 `required` 字段：secret 字段必须在 `credentials` 中有引用，非 secret 字段必须在 `clientArgs` 中有同名参数。`enum`/`default` 由 G2 配置表单使用，不在启动时自动填充。
+- 启动前校验 `manifest.config` 的 `required` 字段：secret 字段必须在 `credentials` 中有引用，非 secret 字段必须在 `clientArgs` 中有同名参数。可选非 secret 字段缺失时 resolver 应用 manifest `default`；`clientArgs` 必须满足 manifest `enum`，secret 字段不得进入 `clientArgs`。G2 配置表单仍负责预填和选择。
 - 凭据只写 `.env`；实例写入入口为 shared `client-instance.ts`，使用 lockfile 与 `configRevision` 防止并发覆盖。Gateway 只读。
 
 **`clientArgs` 字段说明：**
@@ -331,8 +335,16 @@ src/packages/gateway/
       test-helpers.ts               fake runtime/process/clock
 
 src/bootstrap/
-  cli.ts                            atom gateway 子命令解析
+  cli.ts                            atom gateway 子命令解析（含 load --id）
   gateway-command.ts                离线/在线 gateway 处理器
+  gateway-actions.ts                config-tui 安装/加载/打包命令注入
+  runtime-file.ts                   复用 shared runtime 读取，发布/清理
+
+src/packages/config-tui/src/
+  gateway-status.ts                 admin 状态/诊断/动作/实例保存
+  components/GatewayModal.tsx       实例列表、操作、诊断、安装/加载/打包
+  components/GatewayInstanceForm.tsx manifest.config 表单与编辑模式
+  components/SecretFieldInput.tsx   固定遮罩 secret 输入
 
 clients/
   telegram-bot/

@@ -81,6 +81,95 @@ test.each([1, 2])("gateway action %i preserves single-client and all semantics",
   expect(completed(menu.submit("")).parameters.clients).toBeUndefined();
 });
 
+test("gateway submenu lists service and packaging entries in order", () => {
+  const menu = flow();
+  choose(menu, 2);
+  expect(menu.view()).toMatchObject({
+    title: "menu / gateway",
+    items: ["run >", "start clients >", "stop clients >", "install >", "load directory >", "manage instances >", "pack >", "‹ back"],
+  });
+});
+
+test("gateway install requires an archive and launches without a mode", () => {
+  const menu = flow({ "gateway-install": { sandbox: "/saved", target: "/tmp/old.tar.gz" } });
+  choose(menu, 2); choose(menu, 3);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / install", field: "sandbox", value: "/saved" });
+  menu.submit("/project");
+  expect(menu.view()).toMatchObject({ field: "target", label: "归档文件", value: "/tmp/old.tar.gz", step: 2, total: 2 });
+  expect(() => menu.submit("")).toThrow("请填写归档文件");
+  const request = completed(menu.submit("/tmp/new.tar.gz"));
+  expect(request.args).toMatchObject({ menu: false, mode: undefined, sandbox: resolve("/project") });
+  expect(request.args.gatewayCommand).toEqual({ action: "install", target: "/tmp/new.tar.gz", force: false, json: false });
+  expect(request.parameters).toEqual({ sandbox: resolve("/project"), target: "/tmp/new.tar.gz" });
+});
+
+test("gateway load collects a directory and treats the instance id as optional", () => {
+  const menu = flow();
+  choose(menu, 2); choose(menu, 4);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / load directory", field: "sandbox", step: 1, total: 3 });
+  menu.submit("/project");
+  expect(menu.view()).toMatchObject({ field: "target", label: "客户端目录", step: 2, total: 3 });
+  expect(() => menu.submit("")).toThrow("请填写客户端目录");
+  menu.submit("/clients/bot");
+  expect(menu.view()).toMatchObject({ field: "id", label: "实例 ID (可选)", value: "", step: 3, total: 3 });
+  const request = completed(menu.submit());
+  expect(request.args).toMatchObject({ mode: undefined, sandbox: resolve("/project") });
+  expect(request.args.gatewayCommand).toEqual({ action: "load", target: "/clients/bot", force: false, json: false });
+  expect(request.parameters).toEqual({ sandbox: resolve("/project"), target: "/clients/bot" });
+});
+
+test("gateway load forwards a remembered instance id", () => {
+  const menu = flow({ "gateway-load": { sandbox: "/saved", target: "/clients/bot", id: "bot-dev" } });
+  choose(menu, 2); choose(menu, 4);
+  menu.submit(); menu.submit();
+  expect(menu.view()).toMatchObject({ field: "id", value: "bot-dev" });
+  const request = completed(menu.submit());
+  expect(request.args.gatewayCommand).toEqual({ action: "load", target: "/clients/bot", id: "bot-dev", force: false, json: false });
+});
+
+test("gateway manage lists instances after only the sandbox step", () => {
+  const menu = flow();
+  choose(menu, 2); choose(menu, 5);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / manage instances", field: "sandbox", step: 1, total: 1 });
+  const request = completed(menu.submit("/project"));
+  expect(request.args).toMatchObject({ menu: false, mode: undefined, sandbox: resolve("/project") });
+  expect(request.args.gatewayCommand).toEqual({ action: "list", force: false, json: false });
+  expect(request.parameters).toEqual({ sandbox: resolve("/project") });
+});
+
+test("gateway pack requires a directory and treats the output path as optional", () => {
+  const menu = flow();
+  choose(menu, 2); choose(menu, 6);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / pack", field: "sandbox" });
+  menu.submit("/project");
+  expect(() => menu.submit("")).toThrow("请填写客户端目录");
+  menu.submit("/clients/bot");
+  expect(menu.view()).toMatchObject({ field: "out", label: "输出路径 (可选)", value: "", step: 3, total: 3 });
+  expect(completed(menu.submit("/tmp/bot.tar.gz")).args.gatewayCommand)
+    .toEqual({ action: "pack", target: "/clients/bot", out: "/tmp/bot.tar.gz", force: false, json: false });
+  const request = completed(menu.submit(""));
+  expect(request.args.gatewayCommand).toEqual({ action: "pack", target: "/clients/bot", force: false, json: false });
+  expect(request.parameters).toEqual({ sandbox: resolve("/project"), target: "/clients/bot" });
+});
+
+test("printed gateway commands stay copyable and contain no credentials", () => {
+  const menu = flow();
+  choose(menu, 2); choose(menu, 4);
+  menu.submit("/tmp/项目 O'Brien $(printf BAD)");
+  menu.submit("clients/it's bot");
+  menu.submit("bot-dev");
+  const request = completed(menu.submit());
+  const printed = formatMenuCommand(request.args, ["printf", "%s\\n"]);
+  expect(printed).toContain("gateway load");
+  expect(printed).not.toMatch(/secret|token/i);
+  const shell = Bun.spawnSync(["/bin/sh", "-c", printed]);
+  expect(shell.exitCode).toBe(0);
+  const parsed = parseArguments(shell.stdout.toString().trimEnd().split("\n"));
+  if (parsed === "help") throw new Error("Unexpected help");
+  expect(parsed.sandbox).toBe(request.args.sandbox);
+  expect(parsed.gatewayCommand).toEqual(request.args.gatewayCommand);
+});
+
 test("root cancellation and exit do not produce a launch request", () => {
   const menu = flow();
   expect(menu.back()).toBe(false);
@@ -148,7 +237,7 @@ test("returning to a parent restores the entry that opened the child", () => {
 test("back entries navigate without executing, including the final session step", () => {
   const menu = flow({ chat: { continueSession: true } });
   choose(menu, 2);
-  expect(choose(menu, 3)).toBeUndefined();
+  expect(choose(menu, 7)).toBeUndefined();
   expect(menu.page).toBe("menu");
   choose(menu, 0); choose(menu, 0); menu.submit();
   expect(menu.view()).toMatchObject({ title: "menu / start / chat", items: ["new", "continue", "‹ back"], step: 2, total: 2 });
@@ -183,6 +272,10 @@ test.each([
   ["--mode", "gateway", "--action", "stop", "--clients", "telegram's $(printf BAD)"],
   ["export", "--output", "backup.atombak", "--password"],
   ["import", "backup.atombak"],
+  ["gateway", "install", "bot.tar.gz"],
+  ["gateway", "load", "clients/bot", "--id", "bot-dev"],
+  ["gateway", "list"],
+  ["gateway", "pack", "clients/bot", "--out", "dist/bot.tar.gz"],
 ].map(argv => ({ argv })))("printed command preserves CLI behavior and literal shell arguments: $argv", ({ argv }) => {
   const args = parseArguments([...argv, "--sandbox", "/tmp/项目 O'Brien $(printf BAD); $HOME"]);
   if (args === "help") throw new Error("Unexpected help");

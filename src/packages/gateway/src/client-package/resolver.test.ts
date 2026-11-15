@@ -190,20 +190,27 @@ describe("resolveClient sources", () => {
     expect(resolved.cwd).toBe(root);
   });
 
-  test("preserves clientArgs and stdio", () => {
+  test("preserves clientArgs, applies optional defaults and validates enums", () => {
     const root = makeRoot("args");
-    const resolved = resolveClient(
-      makeClient({
-        id: "tg",
-        directory: root,
-        clientArgs: { mode: "webhook", "bot-token": "arg" },
-        stdio: "ignore",
-      }),
+    const explicit = resolveClient(
+      makeClient({ id: "tg", directory: root, clientArgs: { mode: "webhook" }, stdio: "ignore" }),
       makeOptions(),
     );
+    expect(explicit.clientArgs).toEqual({ mode: "webhook" });
+    expect(explicit.stdio).toBe("ignore");
 
-    expect(resolved.clientArgs).toEqual({ mode: "webhook", "bot-token": "arg" });
-    expect(resolved.stdio).toBe("ignore");
+    const defaults = resolveClient(makeClient({ id: "tg", directory: root }), makeOptions());
+    expect(defaults.clientArgs).toEqual({ mode: "longpoll" });
+
+    expect(() => resolveClient(
+      makeClient({ id: "tg", directory: root, clientArgs: { mode: "carrier-pigeon" } }),
+      makeOptions(),
+    )).toThrow("Client tg argument --mode must be one of: longpoll, webhook");
+
+    expect(() => resolveClient(
+      makeClient({ id: "tg", directory: root, clientArgs: { "bot-token": "secret" } }),
+      makeOptions(),
+    )).toThrow("Client tg secret field bot-token must use credentials, not clientArgs");
   });
 });
 
