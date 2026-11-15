@@ -300,6 +300,7 @@ sequenceDiagram
 
 - `ClientManager` 仍按启动时的 `ResolvedClientConfig[]` 构造 supervisor；动态登记/移除/重载（`#configs`、活动端口集合）属 G3，尚未实现。
 - `main.ts` 在启动 Gateway 前调用 resolver；Gateway 包自身不读取 sandbox 配置。
+- `main.ts` 向 resolver 传入 `baseDir: sandbox`；`directory` 的相对路径以 sandbox 根目录为基准，绝对路径原样使用。
 - 包安装目录由注入的 `packageRoot` 提供；G2 接入 `registry.ts` 后替换该回调。
 
 **不变量**

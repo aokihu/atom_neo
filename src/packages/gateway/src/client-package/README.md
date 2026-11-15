@@ -35,4 +35,10 @@ passed to `spawnProcess` without shell concatenation.
 - There is no fallback. A missing selected entry throws
   `manifest.entry.production is required` or `manifest.entry.development is required`.
 - The client root is the working directory; entries are non-empty string arrays and are passed
-  through unchanged.
+  through unchanged. Entries must not define Gateway-reserved flags (`--secret`, `--port`,
+  `--gateway-url`).
+- `directory` may be absolute. Relative paths resolve against `ResolveOptions.baseDir`; Gateway
+  bootstrap passes the sandbox root. The G2 CLI/wizard should persist absolute paths.
+- Before launch, resolver enforces `manifest.config.required`: secret fields need a `credentials`
+  reference, non-secret fields need the matching `clientArgs` key. `enum`/`default` are form/UI
+  concerns handled in G2, not auto-applied at launch.

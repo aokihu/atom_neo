@@ -90,6 +90,8 @@
 - Gateway 在入口后追加 `--secret`、`--port`、`--gateway-url` 与账号参数；入口不能覆盖内部保留参数。
 - 包格式为 tar.gz，归档根目录直接放 `manifest.json` 与 `bin/`。
 - 实例配置继续归属用户 `config.json`；凭据只存 `.env`，实例保存变量名引用。
+- `directory` 可为绝对路径；相对路径在 Gateway 启动时相对 sandbox 根目录解析（`resolveClients({ baseDir })`）。G2 的 CLI/向导应写入绝对路径。
+- 启动前校验 `manifest.config.required`：secret 字段必须有 `credentials` 引用，非 secret 字段必须有同名 `clientArgs` 参数；`enum`/`default` 由 G2 配置表单使用。
 - 复用 `ProcessSupervisor`、共享 `HttpServer`、`spawnProcess`、`createChildProcessEnv`、配置 schema 与启动菜单。
 
 ---
@@ -243,7 +245,7 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G1-1 | 已完成 | `shared/config/client.ts`；`config.test.ts` 通过 |
 | G1-2 | 已完成 | `shared/config/client-instance.ts`；18 个测试通过（含回滚与引用冲突）；lockfile + `configRevision` |
 | G1-3 | 已完成 | `gateway/client-package/manifest.ts` + README；17 个测试通过 |
-| G1-4 | 已完成 | `gateway/client-package/resolver.ts`；14 pass / 1 skip；package/directory/env 映射 |
+| G1-4 | 已完成 | `gateway/client-package/resolver.ts`；17 pass / 1 skip；package/directory、相对目录 baseDir、required 校验 |
 | G1-5 | 已完成 | `shared/utils/child-process-env.ts`；7 个测试通过；实例凭据隔离 |
 | G1-6 | 已完成 | `client-command` / `process-supervisor` / `client-manager` / `server` / `main` 接入 `ResolvedClientConfig`；57 个定向测试通过 |
 | G1-7 | 已完成 | fake runtime 集成测试覆盖 package、directory、旧 binary 拒绝、凭据隔离与保留参数；5 个测试通过 |
@@ -270,7 +272,7 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G2-4 | 包登记：读写、幂等、版本冲突、引用检查 | 中 | `registry.ts` + 测试 | 原子写；同内容幂等；同版本不同内容拒绝 |
 | G2-5 | install 流程：解包、校验、提交、回滚 | 中 | `archive.ts` install + 测试 | 失败不覆盖旧版本；成功登记版本目录 |
 | G2-6 | 离线实例配置（CLI） | 中 | `client-instance.ts` + 命令测试 | 保存成功显示“未启动”；取消不创建实例 |
-| G2-7 | 首次实例配置表单（config-tui） | 中 | `GatewayInstanceForm.tsx` + 测试 | manifest.config 驱动；secret 遮罩；enum/default 正确 |
+| G2-7 | 首次实例配置表单（config-tui） | 中 | `GatewayInstanceForm.tsx` + 测试 | manifest.config 驱动；secret 遮罩；enum 选择与 default 预填在表单应用；required 与 resolver 启动校验一致 |
 | G2-8 | 本地闭环端到端测试 | 中 | 临时 sandbox 测试 | 构建 → pack → install → 配置 → 启动 → fake 往返通过 |
 
 **G2 完成标准**：临时 sandbox 中完成上述闭环，不要求用户手写 binary 路径；失败路径无半成品。
@@ -398,7 +400,7 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 ```bash
 bun run docs:check
 git diff --check
-bun test src/packages/gateway
+bun test src/packages/gateway/src
 bun test src/packages/shared/src/config
 bun test src/bootstrap/cli.test.ts
 bun run typecheck
@@ -406,6 +408,8 @@ bun run typecheck:node
 bun run build:node
 ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts
 ```
+
+> Gateway 测试固定使用 `src/packages/gateway/src`：仓库可能残留被 `.gitignore` 忽略的 `src/packages/gateway/dist` 旧编译测试，`bun test src/packages/gateway` 会把它们一起执行并产生与当前源码无关的失败。dist 不作为验证来源。
 
 假平台通过只证明协议链路；Telegram 凭据检查与真实消息往返需使用明确指定的测试账号单独记录。
 

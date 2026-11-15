@@ -142,7 +142,7 @@ M1 实施记录：`ResolvedClientConfig` 已贯通 `client-command` / `ProcessSu
 ```bash
 bun run docs:check
 git diff --check
-bun test src/packages/gateway
+bun test src/packages/gateway/src
 bun test src/packages/shared/src/config
 bun test src/bootstrap/cli.test.ts
 bun run typecheck
@@ -150,6 +150,8 @@ bun run typecheck:node
 bun run build:node
 ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts
 ```
+
+> Gateway 测试固定使用 `src/packages/gateway/src`，避免执行被 `.gitignore` 忽略的 `src/packages/gateway/dist` 旧编译测试；dist 制品不作为验证来源。
 
 新命令、安装制品和 UI/菜单另增加对应定向验收；Node 制品调用已有 smoke 工具，不另造一套平台检查。假平台通过仅证明协议链路，Telegram 凭据检查与真实消息往返需使用明确指定的测试账号单独记录。
 

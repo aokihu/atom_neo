@@ -140,8 +140,10 @@ export function removeInstance(sandbox: string, id: string): void;
 - 使用现有 `writeFileAtomic` 与 `upsertEnv`，不新建写盘工具。
 - `config.json` 保留未知字段；只替换目标 `gateway.clients[]` 条目。
 - 凭据只写 `.env`，键名使用 `ATOM_CLIENT_<ID>_<FIELD>` 规范化形式。
-- 写入前获取 sandbox 级 lockfile；写入前后比对并递增 `.atom/gateway/state.json` 的 `configRevision`（G0 D4）。
-- 取消或失败时不留下半成品实例。
+- 写入前获取 sandbox 级 lockfile；写入前后比对并递增 `.atom/gateway/state.json` 的 `configRevision`（G0 D4）。锁为 fail-fast；崩溃遗留锁需人工清理。
+- 规范化后相同的凭据引用必须拒绝（例如实例 `a-b` 与 `a_b`），避免不同实例共享同一个 `.env` 变量。
+- 写入失败按 `.env` → `config.json` → `state.json` 顺序回滚；取消或失败不留下半成品实例。
+- G2 CLI/向导应把 `directory` 规范化为绝对路径再写入；resolver 仍支持相对路径，但以 sandbox 根目录为基准。
 - 返回 `saved/applied` 分离状态；Gateway 离线时 `applied=false`。
 
 ### 2.3 `src/packages/shared/src/config/index.ts`（修改）
@@ -279,11 +281,15 @@ export type ResolvedClientConfig = {
 
 export type ResolveOptions = {
   packageRoot: (id: string, version: string) => string;
-  readEnv: (key: string) => string | undefined;
+  baseDir?: string;
+  readEnv?: (key: string) => string | undefined;
+  baseEnv?: NodeJS.ProcessEnv;
 };
 
 export function resolveClient(config: ClientConfig, options: ResolveOptions): ResolvedClientConfig {
-  const root = config.directory ?? options.packageRoot(config.package!.id, config.package!.version);
+  const root = config.directory
+    ? resolve(options.baseDir ?? process.cwd(), config.directory)
+    : options.packageRoot(config.package!.id, config.package!.version);
   const manifest = parseManifest(readFileSync(join(root, "manifest.json"), "utf-8"));
   const entry = resolveEntry(manifest, config.directory ? "directory" : "package");
 
@@ -302,6 +308,10 @@ export function resolveClient(config: ClientConfig, options: ResolveOptions): Re
 }
 ```
 
+路径契约：`directory` 可为绝对路径；相对路径相对 `baseDir` 解析。`src/main.ts` 启动 Gateway 时传入 `baseDir: args.sandbox`，因此用户配置中的相对目录以 sandbox 根目录为基准。G2 的 CLI/向导应优先写入绝对路径。
+
+`manifest.config.required` 在启动前校验：secret 字段必须在 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。`default` 不会在启动时自动补参数，`enum`/`default` 由 G2 配置表单应用。
+
 凭据映射：
 
 ```ts
@@ -311,6 +321,15 @@ function buildClientEnv(
   readEnv: (key: string) => string | undefined,
 ): NodeJS.ProcessEnv {
   const injected: NodeJS.ProcessEnv = {};
+  for (const [field, declared] of Object.entries(manifest.config ?? {})) {
+    if (!declared.required) continue;
+    if (declared.secret && instance.credentials?.[field] === undefined) {
+      throw new Error(`Client ${instance.id} is missing required credential ${field}`);
+    }
+    if (!declared.secret && instance.clientArgs?.[field] === undefined) {
+      throw new Error(`Client ${instance.id} is missing required argument --${field}`);
+    }
+  }
   for (const [field, ref] of Object.entries(instance.credentials ?? {})) {
     if (!ref.startsWith("ATOM_CLIENT_")) {
       throw new Error(`Client ${instance.id} credential ${field} must use ATOM_CLIENT_ prefix`);
@@ -960,12 +979,12 @@ G0 契约确认
 | G1-1 | `shared/config/client.ts`：package/directory 二选一、credentials、旧 `binary`/`platform` 拒绝 | `bun test src/packages/shared/src/config/config.test.ts` → 21 pass |
 | G1-2 | `shared/config/client-instance.ts`：实例读写、凭据引用、lockfile、`configRevision`、写入回滚 | `bun test src/packages/shared/src/config/client-instance.test.ts` → 18 pass |
 | G1-3 | `gateway/client-package/manifest.ts`、`README.md`：manifest v1 严格校验与入口选择 | `bun test src/packages/gateway/src/client-package/manifest.test.ts` → 17 pass |
-| G1-4 | `gateway/client-package/resolver.ts`：package/directory → command/cwd/platform/env | `bun test src/packages/gateway/src/client-package/resolver.test.ts` → 14 pass / 1 skip |
+| G1-4 | `gateway/client-package/resolver.ts`：package/directory → command/cwd/platform/env；相对目录 baseDir；required 校验 | `bun test src/packages/gateway/src/client-package/resolver.test.ts` → 17 pass / 1 skip |
 | G1-5 | `shared/utils/child-process-env.ts`：实例凭据隔离与管理 Token 过滤 | `bun test src/packages/shared/src/utils/child-process-env.test.ts` → 7 pass |
 | G1-6 | `client-command.ts` / `process-supervisor.ts` / `client-manager/index.ts` / `server.ts` / `main.ts` 接入 `ResolvedClientConfig` | `bun test src/packages/gateway/src/client-manager src/packages/gateway/src/server.test.ts src/packages/gateway/src/config.test.ts` → 57 pass |
 | G1-7 | fake runtime 集成测试：package、directory、旧 binary 拒绝、凭据隔离、保留参数 | `bun test src/packages/gateway/src/client-package/integration.test.ts` → 5 pass |
 
-额外验证：`bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils/child-process-env.test.ts src/bootstrap/config.test.ts` → 156 pass / 1 skip；`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过。
+额外验证：`bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils/child-process-env.test.ts src/bootstrap/config.test.ts` → 159 pass / 1 skip；`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过。
 
 > 注意：仓库中可能存在被忽略的 `src/packages/gateway/dist` 旧编译测试；直接运行 `bun test src/packages/gateway` 会把它们一起执行并因旧 `binary` fixture 失败。M1 验证使用 `src/packages/gateway/src` 路径。
 
@@ -973,5 +992,7 @@ G0 契约确认
 
 - M1 的 `ClientManager` 仍按启动时数组构造 supervisor；动态登记/重载/活动端口集合归 G3（计划 §4.3 的 G1-6 只要求统一启动描述）。
 - `main.ts` 启动前解析实例；包安装目录通过 resolver 的 `packageRoot` 注入，`packages.json` 登记与安装归 G2。
+- `directory` 相对路径以 sandbox 根目录为基准（`main.ts` 传 `baseDir`）；G2 CLI/向导应写入绝对路径。
+- `manifest.config.required` 已在启动前校验（secret -> `credentials`，非 secret -> `clientArgs`）；`enum`/`default` 仅由 manifest 校验形状，实际选择/预填在 G2 表单完成。
 - `client-instance.removeInstance` 不删除 `.env` 中的凭据值，只移除实例配置；显式凭据删除归 G5 卸载流程。
 - 未实现新 CLI/TUI 入口、`registry.ts`、`archive.ts`、管理接口、drain、诊断协议与 Telegram 改动，均属于后续阶段。

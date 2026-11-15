@@ -214,6 +214,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
       const clientEnv = readSandboxEnv(args.sandbox);
       const resolvedClients = resolveClients(appConfig.gateway.clients, {
         packageRoot: sandboxPackageRoot(args.sandbox),
+        baseDir: args.sandbox,
         readEnv: (key) => clientEnv[key] ?? process.env[key],
       });
       const gatewayToken = crypto.randomUUID();

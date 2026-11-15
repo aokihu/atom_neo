@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   INSTANCE_CREDENTIAL_PREFIX,
   clientSource,
@@ -24,6 +24,8 @@ export type ResolvedClientConfig = {
 
 export type ResolveOptions = {
   packageRoot: (id: string, version: string) => string;
+  /** Base for relative `directory` sources; defaults to process.cwd(). */
+  baseDir?: string;
   readEnv?: (key: string) => string | undefined;
   baseEnv?: NodeJS.ProcessEnv;
 };
@@ -50,6 +52,17 @@ function readManifest(config: ClientConfig, source: ClientSource, root: string):
 function buildClientEnv(config: ClientConfig, manifest: Manifest, options: ResolveOptions): NodeJS.ProcessEnv {
   const readEnv = options.readEnv ?? ((key: string) => process.env[key]);
   const injected: NodeJS.ProcessEnv = {};
+
+  for (const [field, declared] of Object.entries(manifest.config ?? {})) {
+    if (!declared.required) continue;
+    if (declared.secret) {
+      if (config.credentials?.[field] === undefined) {
+        throw new Error(`Client ${config.id} is missing required credential ${field}`);
+      }
+    } else if (config.clientArgs?.[field] === undefined) {
+      throw new Error(`Client ${config.id} is missing required argument --${field}`);
+    }
+  }
 
   for (const [field, ref] of Object.entries(config.credentials ?? {})) {
     if (ref === "ATOM_ADMIN_TOKEN") {
@@ -93,7 +106,9 @@ export function resolveClient(config: ClientConfig, options: ResolveOptions): Re
   const source = clientSource(config);
   let root: string;
   try {
-    root = source.type === "package" ? options.packageRoot(source.id, source.version) : source.directory;
+    root = source.type === "package"
+      ? options.packageRoot(source.id, source.version)
+      : resolve(options.baseDir ?? process.cwd(), source.directory);
   } catch (error) {
     throw clientError(config, source, error instanceof Error ? error.message : String(error));
   }

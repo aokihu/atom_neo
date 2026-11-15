@@ -157,6 +157,8 @@ atom gateway check telegram-main --sandbox ./sandbox
 
 v1 优先覆盖现有字符串参数、required、enum、default、secret；普通字段键与 `clientArgs` 的 kebab-case 参数名对应。选择 webhook 后才展示相关高级字段；webhook 的条件必填最终仍由 Telegram Client 校验，不在 v1 引入通用表达式语言。
 
+启动前校验 `required`：secret 字段必须在实例 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。`default` 不会在启动时自动注入，`enum` 选择与 `default` 预填由 G2 配置表单负责。
+
 `env` 是为 secret 字段补充的建议映射：manifest 只声明子进程使用的变量名，实际值存于目标 sandbox 的 `.env`。实例只保存字段到持久化变量名的引用，例如 `bot-token → ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN`；启动时解析该引用，并向该实例子进程注入 `TELEGRAM_BOT_TOKEN`。同一包的不同实例可使用相同子进程变量名、不同持久化变量名。
 
 不能仅写 `.env` 后依赖父进程继承：现有 loader 只在 bootstrap 时加载。在线新增或重载必须重新读取目标凭据，清除其他实例的凭据，并继续通过 `createChildProcessEnv` 移除 `ATOM_ADMIN_TOKEN`。secret 字段不转换成普通 CLI 参数，不进入 manifest 默认值、日志、菜单历史或发行包。旧 clientArgs 中的凭据不自动迁移或删除。
@@ -192,6 +194,8 @@ M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-
 安装先校验 manifest、target、生产入口和解包路径边界，再从临时目录提交到版本目录；禁止路径越界与归档链接逃逸。失败不替换已有版本。已有同版本不同内容应拒绝静默覆盖。卸载包前检查实例引用，不删除开发源码、账号凭据或会话数据。
 
 实例配置继续归属用户配置。`gateway.clients` 只保留 `package` / `directory` 两种来源，二者互斥；`binary` 与实例级 `platform` 移除，platform、启动数组和 cwd 均由 manifest 解析。旧配置不自动迁移，升级后需重新登记。各实例显式固定安装版本。
+
+`directory` 可为绝对路径；相对路径在 Gateway 启动时相对 sandbox 根目录解析。G2 的 CLI/向导应写入绝对路径，避免依赖进程 cwd。
 
 在线配置变更需要配置修订校验与单一写入入口；CLI、配置向导和管理接口不得竞争覆盖 config.json/.env。具体提交/回滚顺序在开发阶段定义并验证。Gateway 端口变更仍需重启；现有 Core runtime overlay 继续拒绝 gateway 子树，不能通过放宽 overlay 实现 Client 重载。
 

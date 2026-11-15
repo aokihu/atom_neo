@@ -246,7 +246,10 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
       {
         "id": "telegram-dev",
         "directory": "./clients/telegram-bot",
-        "clientArgs": { "mode": "longpoll" }
+        "clientArgs": { "mode": "longpoll" },
+        "credentials": {
+          "bot-token": "ATOM_CLIENT_TELEGRAM_DEV_BOT_TOKEN"
+        }
       }
     ]
   }
@@ -254,7 +257,9 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
 ```
 
 - `package` 引用已安装包；`directory` 引用开发目录。二者必须恰好出现一个。
+- `directory` 可为绝对路径；相对路径在 Gateway 启动时相对 sandbox 根目录解析（`main.ts` 传入 `baseDir`）。G2 的 CLI/向导应优先写入绝对路径。
 - `credentials` 只保存字段到 `.env` 变量名的引用，例如 `bot-token -> ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN`；启动时由 resolver 注入 manifest 声明的子进程变量（如 `TELEGRAM_BOT_TOKEN`）。
+- 启动前校验 `manifest.config` 的 `required` 字段：secret 字段必须在 `credentials` 中有引用，非 secret 字段必须在 `clientArgs` 中有同名参数。`enum`/`default` 由 G2 配置表单使用，不在启动时自动填充。
 - 凭据只写 `.env`；实例写入入口为 shared `client-instance.ts`，使用 lockfile 与 `configRevision` 防止并发覆盖。Gateway 只读。
 
 **`clientArgs` 字段说明：**

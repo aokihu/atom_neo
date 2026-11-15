@@ -27,7 +27,7 @@ const BASE_MANIFEST = {
     "bot-token": {
       label: "Bot Token",
       type: "string",
-      required: true,
+      required: false,
       secret: true,
       env: "TELEGRAM_BOT_TOKEN",
     },
@@ -179,6 +179,16 @@ describe("resolveClient sources", () => {
     ).toThrow("manifest.entry.production is required");
   });
 
+  test("resolves a relative directory against baseDir", () => {
+    const root = makeRoot("relative-client");
+    const resolved = resolveClient(makeClient({ id: "tg", directory: "relative-client" }), {
+      ...makeOptions(),
+      baseDir: temp,
+    });
+
+    expect(resolved.cwd).toBe(root);
+  });
+
   test("preserves clientArgs and stdio", () => {
     const root = makeRoot("args");
     const resolved = resolveClient(
@@ -193,6 +203,54 @@ describe("resolveClient sources", () => {
 
     expect(resolved.clientArgs).toEqual({ mode: "webhook", "bot-token": "arg" });
     expect(resolved.stdio).toBe("ignore");
+  });
+});
+
+describe("resolveClient required config", () => {
+  test("requires a credential reference for a required secret field", () => {
+    const root = makeRoot("required-secret", {
+      config: {
+        "bot-token": {
+          label: "Bot Token",
+          type: "string",
+          required: true,
+          secret: true,
+          env: "TELEGRAM_BOT_TOKEN",
+        },
+      },
+    });
+
+    expect(() => resolveClient(makeClient({ id: "tg", directory: root }), makeOptions()))
+      .toThrow("Client tg is missing required credential bot-token");
+    expect(() => resolveClient(
+      makeClient({
+        id: "tg",
+        directory: root,
+        credentials: { "bot-token": "ATOM_CLIENT_TG_TOKEN" },
+      }),
+      makeOptions(undefined, { ATOM_CLIENT_TG_TOKEN: "secret" }),
+    )).not.toThrow();
+  });
+
+  test("requires clientArgs for a required non-secret field", () => {
+    const root = makeRoot("required-arg", {
+      config: {
+        mode: {
+          label: "Mode",
+          type: "string",
+          required: true,
+          enum: ["longpoll", "webhook"],
+          default: "longpoll",
+        },
+      },
+    });
+
+    expect(() => resolveClient(makeClient({ id: "tg", directory: root }), makeOptions()))
+      .toThrow("Client tg is missing required argument --mode");
+    expect(() => resolveClient(
+      makeClient({ id: "tg", directory: root, clientArgs: { mode: "longpoll" } }),
+      makeOptions(),
+    )).not.toThrow();
   });
 });
 
