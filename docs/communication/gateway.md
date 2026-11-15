@@ -2,7 +2,7 @@
 
 > **Purpose**: Gateway 是 Atom Neo 的平台 Client 中转层。通过管理平台 Client 子进程，将微信、Telegram 等外部平台的消息标准化后路由到 Core 引擎。
 
-## 接入改进（2026-11-14，M1 已实施）
+## 接入改进（M1–M3、M2.1、G5 代码/文档完成；G6 收口完成）
 
 新增 [接入与发行规划](./gateway-client-design.md) 与独立 [开发计划](./gateway-development-plan.md)：标准 Client 发行包安装、根目录 `manifest.json`、Chrome 式开发目录加载/手动重载、配置向导和实例状态诊断。
 
@@ -261,7 +261,7 @@ Gateway 关闭
 
 ## 7. 配置
 
-M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`binary` 与实例级 `platform` 已移除。旧 `binary` 配置在 schema 校验阶段被拒绝，错误信息提示改用 `package` 或 `directory`；不自动迁移。`platform`、启动命令与 cwd 均由 Client 根目录的 `manifest.json` 解析。
+当前实现：实例配置只接受 `package` / `directory` 二选一，`binary` 与实例级 `platform` 已移除。旧 `binary` 配置在 schema 校验阶段被拒绝，错误信息提示改用 `package` 或 `directory`；不自动迁移。`platform`、启动命令与 cwd 均由 Client 根目录的 `manifest.json` 解析。
 
 ```jsonc
 // config.json
@@ -397,8 +397,8 @@ clients/
 | [protocol.md](./protocol.md) | WebSocket 事件协议与 HTTP API |
 | [bootstrap.md](../overview/bootstrap.md) | Gateway 启动顺序 |
 | [configuration.md](../subsystems/configuration.md) | Gateway 配置项 (port, clients) |
-| [gateway-client-design.md](./gateway-client-design.md) | manifest、发行包与开发目录流程；G0 已确认，M1 已实施 |
-| [gateway-development-plan.md](./gateway-development-plan.md) | 阶段、影响面与验收；M1 已完成 |
-| [packaging plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md) | M1 执行计划、G0 决策与 G1 子任务状态 |
-| [packaging code_and_file](./atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md) | M1 文件清单、示例代码与实施记录 |
-| [packaging graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md) | 模块依赖、启动/安装/重载序列与不变量 |
+| [gateway-client-design.md](./gateway-client-design.md) | manifest、发行包与开发目录流程；M1–M3、M2.1、G5 代码/文档完成，G6 收口完成 |
+| [gateway-development-plan.md](./gateway-development-plan.md) | 阶段、影响面与验收；M1–M3、M2.1、G5 完成，G6 文档收口完成；真实平台/发布待执行 |
+| [packaging plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md) | 执行计划、G0 决策、G1–G6 实施状态与 G6 范围冻结 |
+| [packaging code_and_file](./atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md) | 文件清单、示例代码与 M1/M2/M3/G5/G6 实施记录 |
+| [packaging graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md) | 模块依赖、启动/安装/重载/升级/卸载序列与不变量 |

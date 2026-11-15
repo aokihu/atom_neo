@@ -1015,7 +1015,7 @@ G0 契约确认
 
 ## 13. M1 实施记录（2026-11-15）
 
-本轮只实施 G0 + G1，不含 G2–G6。
+M1 当时只实施 G0 + G1；G2–G6 已在后续阶段完成。
 
 | 子任务 | 实际产出 | 测试结果 |
 |---|---|---|
@@ -1033,12 +1033,12 @@ G0 契约确认
 
 实施偏差：
 
-- M1 的 `ClientManager` 仍按启动时数组构造 supervisor；动态登记/重载/活动端口集合归 G3（计划 §4.3 的 G1-6 只要求统一启动描述）。
-- `main.ts` 启动前解析实例；包安装目录通过 resolver 的 `packageRoot` 注入，`packages.json` 登记与安装归 G2。
-- `directory` 相对路径以 sandbox 根目录为基准（`main.ts` 传 `baseDir`）；G2 CLI/向导应写入绝对路径。
+- M1 的 `ClientManager` 当时按启动时数组构造 supervisor；动态登记/重载/活动端口集合已在 G3 实现。
+- `main.ts` 启动前解析实例；包安装目录通过 resolver 的 `packageRoot` 注入，`packages.json` 登记与安装在 G2 完成。
+- `directory` 相对路径以 sandbox 根目录为基准（`main.ts` 传 `baseDir`）；G2 CLI/向导写入绝对路径。
 - `manifest.config.required` 已在启动前校验（secret -> `credentials`，非 secret -> `clientArgs`）；可选非 secret 字段缺失时 resolver 应用 manifest `default`；`clientArgs` enum 在启动前校验，secret 字段不得进入 `clientArgs`。
-- `client-instance.removeInstance` 不删除 `.env` 中的凭据值，只移除实例配置；显式凭据删除归 G5 卸载流程。
-- 未实现新 CLI/TUI 入口、`registry.ts`、`archive.ts`、管理接口、drain、诊断协议与 Telegram 改动，均属于后续阶段。
+- `client-instance.removeInstance` 不删除 `.env` 中的凭据值，只移除实例配置；显式凭据删除不属于包卸载，需要独立操作。
+- M1 当时只覆盖统一启动描述；新 CLI/TUI 入口、`registry.ts`、`archive.ts`、管理接口、drain、诊断协议与 Telegram 改动由后续 G2–G5 完成。
 
 ## 14. M2 实施记录（2026-11-15）
 
@@ -1068,11 +1068,11 @@ G0 契约确认
 
 - registry `PackageRecord` 增加 `sha256` 内容标识，以满足同版本冲突判定；D3 嵌套结构不变。
 - pack 默认输出改为 Client 根目录下的 `dist/`，`out` 可覆盖；文档已同步。
-- `installClient` 只接受当前主机 target；跨 target 安装归 G5。
+- `installClient` 只接受当前主机 target；跨 target 安装仍未支持。
 - `sandboxPackageRoot` 只接受 registry 已登记包，不再回退到手工放置目录；命中记录时校验 target 与当前 host 一致。`configureInstance` 同样校验 registry target。
-- G2-6 提供库级 API 与表单，不实现 `atom gateway` CLI；CLI 接线归 G3。
-- `removePackage` 只删除 registry 记录并检查引用，不删除包目录；完整卸载归 G5。
-- 已知项：secret 编辑态遮罩归 G4，详见 plan §4.4；gateway 端口 0 与 registry 锁在 M2.1 修复。
+- G2-6 提供库级 API 与表单；`atom gateway` CLI 已在 G3 接线完成。
+- `removePackage` 默认只删除 registry 记录并检查引用；G5 已提供带包目录清理的完整卸载。
+- secret 编辑态遮罩已在 G4 实现，详见 plan §4.4；gateway 端口 0 与 registry 锁在 M2.1 修复。
 
 ## 15. M2.1 风险硬化（2026-11-15）
 
@@ -1112,7 +1112,7 @@ G0 契约确认
 - Client `/diagnostics` 二次限界：最多 20 checks、字段 200 字符（`at` 64）、总 JSON 8 KiB、仅保留 `name|ok|at|detail`，未知字段丢弃，常见 Token/Secret/UUID 形态脱敏。
 - 管理接口仍使用本机管理 Token；GET 状态不包含 secret。
 - `atom gateway load` 的相对路径按当前 cwd 解析（`GatewayCommandDeps.cwd` 可注入），写入绝对目录；`pack`/`install` 同样按 cwd 解析。
-- G4 的 GatewayModal、菜单、日志 UI 未实现；G5 卸载文件清理未实现。
+- M3a 当时未包含 G4 的 GatewayModal、菜单、日志 UI 与 G5 卸载文件清理；G4/G5 随后完成。
 
 额外验证：
 
@@ -1140,7 +1140,7 @@ G0 契约确认
 - `ClientStatus` 增加 `config` / `clientArgs` / `secretFields` / `stdio`；只含字段名与引用，不含 secret 值。
 - UI 的 start/stop/reload 走 admin API；install/load/pack 复用 CLI handler（`GatewayCommandDeps.cwd` 语义不变）。
 - 日志/诊断仍在 Gateway 侧有界脱敏（50 events / 5 summary / 20 checks / 8 KiB）；UI 只显示最近 12 条本地事件。
-- 已知边界：manifest 暂无字段条件显示契约，表单展示全部声明字段；条件字段留待 manifest 扩展。G5 的卸载文件清理未实现。
+- 已知边界：manifest 暂无字段条件显示契约，表单展示全部声明字段；条件字段留待 manifest 扩展。G5 已完成卸载文件清理。
 
 ### 17.1 M3b 初审修复（2026-11-15）
 

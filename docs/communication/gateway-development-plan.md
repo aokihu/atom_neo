@@ -39,7 +39,7 @@
 - [x] 核对 2026-11-14 代码，记录已存在的 supervisor、共享配置、Node/Bun 适配与菜单。
 - [x] 编写独立规划、开发计划，更新 Gateway 与相关文档入口。
 - [x] 收口 manifest 六字段、entry 选择、config/env 映射和 target 校验规则（D1；M1 实现）。
-- [x] 收口实例配置分支、包登记结构、在线/离线写入所有者、修订与失败回滚顺序（D2–D4；M1 实现实例读写，包登记归 G2）。
+- [x] 收口实例配置分支、包登记结构、在线/离线写入所有者、修订与失败回滚顺序（D2–D4；M1 实现实例读写，包登记由 G2 完成）。
 - [x] 收口命令参数、非交互配置方式、诊断返回与超时、pack 输出路径/target 参数（D5、D7–D9）。
 - [x] 决定同平台多账号的会话隔离方式：现有 `platform:user` 及冲突拒绝保持为兼容基线；任何新命名规则、旧会话恢复和迁移必须另列决策与测试（D6）。
 
@@ -53,11 +53,11 @@
 - [x] 实例配置改为包/目录二选一；`binary` 配置拒绝并提示重新登记，保留稳定实例 ID（M1）。
 - [x] 将所选入口解析为 command/cwd/platform；继续由现有命令构造函数追加保留参数（M1）。
 - [x] 实现实例凭据引用到子进程 env 的映射；每次启动读取当前值，过滤其他实例与管理凭据（M1）。
-- [x] 增加目标平台不匹配、开发运行时缺失、入口不存在与保留参数覆盖的明确错误（M1 先覆盖入口、凭据与保留参数；target 运行校验归 G2）。
+- [x] 增加目标平台不匹配、开发运行时缺失、入口不存在与保留参数覆盖的明确错误（M1 先覆盖入口、凭据与保留参数；target 运行校验由 G2 完成）。
 
 完成标准：安装包与目录开发命令都可通过 fake runtime 启动；开发目录无需先构建 production，发行包不能误走 development。未采用 shell 拼接或新增生命周期管理器。
 
-M1 实施记录：`ResolvedClientConfig` 已贯通 `client-command` / `ProcessSupervisor` / `ClientManager`；`main.ts` 启动前解析实例。包安装、`packages.json`、CLI/TUI 与动态重载仍归 G2–G4，不在 M1 范围内。包路径在 M1 通过 resolver 注入的 `packageRoot` 解析，G2 会由 `registry.ts` 接管。
+M1 实施记录：`ResolvedClientConfig` 已贯通 `client-command` / `ProcessSupervisor` / `ClientManager`；`main.ts` 启动前解析实例。包安装、`packages.json`、CLI/TUI 与动态重载由后续 G2–G4 完成；G2 已由 `registry.ts` 接管包路径。
 
 ### G2：本地安装、打包与离线配置闭环
 
@@ -72,7 +72,7 @@ M1 实施记录：`ResolvedClientConfig` 已贯通 `client-command` / `ProcessSu
 
 完成标准：临时 sandbox 中完成「构建 → pack → 本地 install → 配置 → Gateway 启动 → fake 平台消息往返」，不要求手写 binary 路径。
 
-M2 实施记录：`archive.ts` pack/install、`registry.ts`、`instance-config.ts`、`GatewayInstanceForm.tsx` 已完成；端到端测试 `src/bootstrap/gateway-package.e2e.test.ts` 使用临时 sandbox 与 fake Core/client 完成闭环。`atom gateway` CLI 接线仍归 G3。
+M2 实施记录：`archive.ts` pack/install、`registry.ts`、`instance-config.ts`、`GatewayInstanceForm.tsx` 已完成；端到端测试 `src/bootstrap/gateway-package.e2e.test.ts` 使用临时 sandbox 与 fake Core/client 完成闭环。`atom gateway` CLI 已在 G3 接线完成。
 
 M2.1 风险硬化：supervisor 在 spawn/restart 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock` 与 `.atom/gateway/packages.lock`（有界重试/超时）。两项均已完成并通过定向测试。
 

@@ -5,7 +5,7 @@
 > 开发目标：`gateway_client_packaging`
 > 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 代码与文档完成，真实平台/官方发布待执行**
 > 2026-11-15 修订：启动方式不再兼容旧 `binary`，启动路径只保留 `package` / `directory`。
-> M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单。动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
+> M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单；动态 ClientManager、管理接口与 CLI/TUI 已在 G3/G4 完成，G5 完成官方来源/升级/卸载，G6 完成文档收口。
 >
 > 本文用文件与代码片段说明改造关系。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，文件与示例代码见 [code_and_file](./atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md)。
@@ -303,7 +303,7 @@ sequenceDiagram
 
 **M1 边界**
 
-- `ClientManager` 仍按启动时的 `ResolvedClientConfig[]` 构造 supervisor；动态登记/移除/重载（`#configs`、活动端口集合）属 G3，尚未实现。
+- `ClientManager` 初始按启动时的 `ResolvedClientConfig[]` 构造 supervisor；动态登记/移除/重载（`#configs`、活动端口集合）已在 G3 实现。
 - `main.ts` 在启动 Gateway 前调用 resolver；Gateway 包自身不读取 sandbox 配置。
 - `main.ts` 向 resolver 传入 `baseDir: sandbox`；`directory` 的相对路径以 sandbox 根目录为基准，绝对路径原样使用。
 - 包安装目录由 registry 登记的记录提供；未登记包不再回退到手工目录。
@@ -685,7 +685,7 @@ graph LR
 
 ## 14. 架构不变量
 
-> 以下为完整目标不变量。M1 已满足 1、2（实例配置）、3、5、6、7、8、9、10；第 4 条活动端口集合仍待 G3（M1 继续按启动数组下标分配端口）。
+> 以下为完整目标不变量。M1 已满足 1、2（实例配置）、3、5、6、7、8、9、10；G3 已补齐第 4 条活动端口集合，当前实现覆盖全部不变量。
 
 1. **单一启动描述**：所有 Client 最终都变为 `ResolvedClientConfig`，supervisor 不再理解 manifest。
 2. **单一写盘入口**：Gateway 实例配置（`gateway.clients` / 实例凭据）只由本机 CLI/配置向导写入；Gateway 只读。

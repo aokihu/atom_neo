@@ -2,7 +2,7 @@
 
 > 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 代码与文档完成，真实 Telegram 平台/官方发布验收待执行**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。
-> 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准，M1 已完成 manifest、resolver、实例配置与统一启动描述。
+> 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准：M1–M3、M2.1、G5 代码/文档完成，G6 文档收口完成；真实 Telegram 平台验收、官方制品与生产索引发布待执行。
 
 ## 1. 目标与已确定方向
 
@@ -14,9 +14,9 @@
 - 开发模式借鉴 Chrome 扩展的目录加载、调试与重载流程。
 - 描述文件统一命名为 `manifest.json`，放在 Client 根目录，优先保留最基础字段。
 
-M1（G0+G1）已落地 §5 的 manifest v1、§6 的实例配置与凭据引用、以及统一启动描述；§7 的在线重载和 G2–G6 的命令/安装/诊断能力仍为**拟实施方案**，不能据此认为现有程序已经支持。确认结论与 M1 边界见 §9。
+M1（G0+G1）落地了 §5 的 manifest v1、§6 的实例配置与凭据引用、以及统一启动描述。G2–G6 的安装、重载、管理 UI、诊断、官方来源与升级/卸载已在后续阶段完成；真实 Telegram 平台验收、官方制品与生产索引发布仍待执行。确认结论与 M1 边界见 §9。
 
-## 2. 当前基线与复用边界（2026-11-14，M1 前）
+## 2. 历史基线与复用边界（2026-11-14，M1 前；后续阶段已完成）
 
 以 2026-11-14 工作区实现为基线：
 
@@ -93,7 +93,7 @@ atom gateway check telegram-main --sandbox ./sandbox
 
 安装和目录登记在 Gateway 离线时可完成，显示「已保存，未启动」；在线登记、启停与重载通过管理接口执行。控制命令不隐式启动 Core/Gateway，服务仍由 `--mode core-gateway` 或现有菜单 gateway/run 启动。首次交互配置取消时不创建半成品实例；非交互环境缺少必填配置时返回明确错误，不能挂起等待输入。
 
-## 5. manifest.json 最小契约（v1，M1 已实现）
+## 5. manifest.json 最小契约（v1，已实现）
 
 ### 5.1 六个基础必填字段
 
@@ -139,7 +139,7 @@ atom gateway check telegram-main --sandbox ./sandbox
 
 `target` 在源码加载时不限制开发主机；pack 按本次实际构建目标写入，不能将开发机架构当作交叉编译产物的架构。第一版原生包按目标分别发行。
 
-### 5.3 配置声明与凭据（M1 已实现）
+### 5.3 配置声明与凭据（已实现）
 
 ```json
 {
@@ -193,7 +193,7 @@ $SANDBOX/
     logs/<instance-id>/            有限大小的实例日志
 ```
 
-M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-instance.ts`：写入前获取 `.atom/gateway/config.lock`，成功后递增 `.atom/gateway/state.json` 的 `configRevision`；失败或取消时恢复原文件，不留下半成品实例。凭据只写 `.env`，实例保存 `field -> ATOM_CLIENT_<ID>_<FIELD>` 引用。
+当前实现使用 `config.json` / `.env` 的单一写入入口 `shared/config/client-instance.ts`：写入前获取 `.atom/gateway/config.lock`，成功后递增 `.atom/gateway/state.json` 的 `configRevision`；失败或取消时恢复原文件，不留下半成品实例。凭据只写 `.env`，实例保存 `field -> ATOM_CLIENT_<ID>_<FIELD>` 引用。
 
 第一版 pack 面向预构建的独立二进制，只收集 `manifest.json` 与 `bin/**`，排除源码依赖、`.env`、日志和运行数据；pack 按本次 target 写入归档 manifest，默认输出 Client 根目录下的 `dist/<id>-<version>-<target>.tar.gz`。pack 不安装依赖、不自动构建。development 入口可从打包后的 manifest 移除，生产加载不依赖源码或开发工具。
 
