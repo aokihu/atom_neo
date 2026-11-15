@@ -19,7 +19,12 @@ export {
   registryPath,
   removePackage,
 } from "./client-package/registry";
-export type { PackageRecord, PackageRegistration, PackageRegistry } from "./client-package/registry";
+export type {
+  PackageRecord,
+  PackageRegistration,
+  PackageRegistry,
+  RegistryLockOptions,
+} from "./client-package/registry";
 export { configureInstance } from "./client-package/instance-config";
 export type {
   ConfigureInstanceInput,

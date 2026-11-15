@@ -248,6 +248,7 @@ M2（G2）实际交付：
 - 安全 install：路径/链接/类型校验、临时目录、target/production 校验、失败回滚。
 - `packages.json` registry 与 `sha256` 幂等/冲突；resolver 只使用 registry 登记的包路径，并校验 target 与当前 host 一致。
 - 离线实例配置 API 与 config-tui 首次实例表单；临时 sandbox 端到端测试。
+- M2.1 硬化：supervisor 在 spawn 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock`（`.atom/gateway/packages.lock`，有界重试/超时）。
 - CLI/TUI 在线入口、动态重载与诊断仍属 G3–G4，尚未实现。
 
 ## 10. 依据与关联文档

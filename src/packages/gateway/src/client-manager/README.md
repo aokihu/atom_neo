@@ -15,6 +15,10 @@ Gateway 平台 Client 子进程管理。`ClientManager` 只做 facade，每个 C
 | `runtime.ts` | 生产默认 `spawnProcess` / `fetch` / `now` / timer / sleep |
 | `test-helpers.ts` | 测试用 fake runtime、fake process、fake clock；不启动真实子进程 |
 
+## Gateway 端口
+
+`ClientManager` 不缓存启动时的 gateway 端口，而是向 supervisor 传入实时 getter `() => config.port`。`ProcessSupervisor` 在每次 spawn（含重启）时解析该 getter，因此 `startGateway({ port: 0 })` 在 `httpServer.serve()` 回写实际端口后启动的 Client 会拿到正确地址，不会出现 `--gateway-url http://127.0.0.1:0`。`gatewayPort` 仍接受普通 `number`，供直接构造 supervisor 的测试使用。
+
 ## 生命周期
 
 ```text

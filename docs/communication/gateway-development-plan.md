@@ -74,12 +74,13 @@ M1 实施记录：`ResolvedClientConfig` 已贯通 `client-command` / `ProcessSu
 
 M2 实施记录：`archive.ts` pack/install、`registry.ts`、`instance-config.ts`、`GatewayInstanceForm.tsx` 已完成；端到端测试 `src/bootstrap/gateway-package.e2e.test.ts` 使用临时 sandbox 与 fake Core/client 完成闭环。`atom gateway` CLI 接线仍归 G3。
 
+M2.1 风险硬化：supervisor 在 spawn/restart 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock` 与 `.atom/gateway/packages.lock`（有界重试/超时）。两项均已完成并通过定向测试。
+
 ### G3：在线目录加载与手动重载
 
 依赖 G1、G2；先做手动重载。
 
 - [ ] 增加认证管理操作：配置快照校验、登记指定实例、重载指定实例；不放宽平台 Secret 权限。
-- [ ] 修正 `startGateway({ port: 0 })` 时 supervisor `--gateway-url` 使用初始 0 的问题，并处理 registry 并发写入锁。
 - [ ] ClientManager 动态创建/移除/替换 supervisor，分配不与活动实例冲突的稳定端口；stopAll 遍历实际受管实例。
 - [ ] 实现指定实例的在途请求/结果投递计数与暂停接入；重载等待完成，超时保留原进程并报告忙。
 - [ ] 修复 Telegram 对 Gateway 非 2xx 响应的处理；验证忙/拒收响应不会被当作消息成功消费。重试策略与现有限流一起验收，不承诺 exactly-once。

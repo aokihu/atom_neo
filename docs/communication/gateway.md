@@ -8,7 +8,7 @@
 
 M1（G0+G1）已落地：实例配置只接受 `package` / `directory` 二选一，`binary` / 实例级 `platform` 已移除并明确拒绝；manifest v1 解析、入口选择、`ResolvedClientConfig` 统一启动描述、凭据引用注入与实例凭据隔离已接入现有 `ClientManager` / `ProcessSupervisor`。
 
-M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest + `bin/**` 白名单、target 注入、敏感文件排除）、安全 `installClient`（路径/链接校验、临时目录、失败回滚）、`packages.json` registry（`sha256` 幂等/冲突）、离线实例配置 API 与 config-tui 首次实例表单。未实现 CLI 子命令、动态重载、诊断和日志；这些仍属 G3–G4。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
+M2（G2）已落地本地包闭环：Telegram manifest、`packClient`（manifest + `bin/**` 白名单、target 注入、敏感文件排除）、安全 `installClient`（路径/链接校验、临时目录、失败回滚）、`packages.json` registry（`sha256` 幂等/冲突）、离线实例配置 API 与 config-tui 首次实例表单。M2.1 硬化了 gateway 端口延迟绑定（`--gateway-url` 使用 serve 后真实端口）与 registry 跨进程锁（`.atom/gateway/packages.lock`，有界重试/超时）。未实现 CLI 子命令、动态重载、诊断和日志；这些仍属 G3–G4。`--mode` 控制入口继续保留。`/health` 只证明 Client 本机 HTTP 就绪，平台凭据检查与消息往返需要分别验证。
 
 ## Gateway Client 控制模式（已实现）
 

@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）已实施完成；G3–G6 待实施**。
+> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1 已实施完成；G3–G6 待实施**。
 > 本版已按复杂度规则将复杂阶段拆分为“中/轻”子任务；2026-11-15 修订：启动方式**不再兼容旧 `binary`**。决策与回写记录见 §4.2 与 §10。
 >
 > 关联文档：
@@ -305,11 +305,36 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 
 | 项 | 归属 | 说明 |
 |---|---|---|
-| `startGateway({ port: 0 })` 时 supervisor 的 `--gateway-url` 可能为 0 | G3 | 当前生产使用固定端口；G3 动态端口/重载时统一修正 supervisor 的 gateway 端口来源 |
 | secret 编辑态明文可见 | G4 | 当前列表行已遮罩，编辑时受 tui-kit FieldInput 限制；G4 实例表单实现真正的输入遮罩 |
-| registry 无跨进程锁 | G3 | 当前仅保证单次原子写；并发 register/remove 可能丢失更新，G3 与配置锁定一起处理 |
 
 **G2 完成标准**：临时 sandbox 中完成上述闭环，不要求用户手写 binary 路径；失败路径无半成品。
+
+### 4.4.1 M2.1：风险硬化
+
+**依赖**：M2。
+**目标**：修复端口 0 的启动描述错误；为 registry 的 read-modify-write 增加跨进程锁。不进入 G3/G4/G5。
+
+| ID | 事项 | 产出 | 完成条件 |
+|---|---|---|---|
+| M2.1-1 | gateway 端口延迟绑定 | supervisor 使用端口 getter；`startGateway` 在 `serve()` 后更新真实端口 | `startGateway({port:0})` + 已配置 Client 时，spawn 命令中的 `--gateway-url` 使用 serve 后的实际端口；不启动真实 Client |
+| M2.1-2 | registry 跨进程锁 | shared `utils/file-lock.ts`；client-instance 与 registry 共用 | 有界重试/超时、明确错误；并发 register/remove 不丢更新；锁冲突/超时不破坏 registry；同内容幂等保持 |
+
+**M2.1 决策**：
+
+- 不延迟创建 ClientManager（避免 serve 早期请求拿到未初始化 manager）；改为 ClientManager 向 supervisor 传 `() => config.port`，spawn 时读取当前端口。
+- `startGateway` 增加可注入 `clientRuntime`，用于端口 0 的 fake runtime 测试。
+- 锁文件：`.atom/gateway/config.lock`（实例配置）与 `.atom/gateway/packages.lock`（registry）；registry 默认有界等待 5s、25ms 重试，超时明确报错。
+- 不引入 stale-lock 自动回收；崩溃遗留锁需人工清理，沿用 M1 风险口径。
+- `startGateway({port:0})` 与 registry 锁从“已知风险”移出，作为 M2.1 已解决项。
+
+**M2.1 实施状态（2026-11-15）**
+
+| ID | 状态 | 实际产出 |
+|---|---|---|
+| M2.1-1 | 已完成 | supervisor 端口 getter；`startGateway({port:0})` fake runtime 测试；e2e 改用 port 0（52 个 client-manager/server 测试通过） |
+| M2.1-2 | 已完成 | shared `file-lock.ts`；registry `packages.lock` 有界重试/超时；file-lock 5 + client-instance 18 + registry 17 测试通过 |
+
+**M2.1 完成条件**：`startGateway({port:0})` 的 spawn 命令使用 serve 后的真实端口；registry 并发 register/remove 不丢更新；锁冲突/超时明确报错且不破坏 registry；client-instance 既有行为保持不变。以上均已通过定向测试。
 
 ---
 

@@ -1,6 +1,7 @@
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { upsertEnv } from "../utils/env-file";
+import { withFileLock } from "../utils/file-lock";
 import { writeFileAtomic } from "../utils/fs";
 import { ClientConfigSchema, type ClientConfig } from "./client";
 import { ConfigSchema } from "./schema";
@@ -98,33 +99,6 @@ function restore(path: string, file: FileSnapshot, writeFile: InstanceFileWriter
   else rmSync(path, { force: true });
 }
 
-function withLock<T>(sandbox: string, action: () => T): T {
-  const directory = gatewayDir(sandbox);
-  mkdirSync(directory, { recursive: true });
-  const lockPath = join(directory, "config.lock");
-
-  let descriptor: number;
-  try {
-    descriptor = openSync(lockPath, "wx", 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new Error(`Gateway config is locked: ${lockPath}`);
-    }
-    throw error;
-  }
-
-  try {
-    try {
-      writeFileSync(descriptor, `${process.pid}\n`, "utf8");
-    } finally {
-      closeSync(descriptor);
-    }
-    return action();
-  } finally {
-    rmSync(lockPath, { force: true });
-  }
-}
-
 function commit(
   sandbox: string,
   mutate: (config: JsonObject) => ConfigMutation,
@@ -134,8 +108,9 @@ function commit(
   const envPath = envFile(sandbox);
   const statePath = stateFile(sandbox);
   const writeFile = options.writeFile ?? writeFileAtomic;
+  const lockPath = join(gatewayDir(sandbox), "config.lock");
 
-  return withLock(sandbox, () => {
+  return withFileLock(lockPath, () => {
     const previousConfig = snapshot(configPath);
     const previousEnv = snapshot(envPath);
     const previousState = snapshot(statePath);
@@ -183,7 +158,7 @@ function commit(
       configPath,
       ...(envTouched ? { envPath } : {}),
     };
-  });
+  }, { lockedMessage: `Gateway config is locked: ${lockPath}` });
 }
 
 function normalizedPart(value: string, label: string): string {

@@ -13,11 +13,11 @@ passed to `spawnProcess` without shell concatenation.
 | `resolver.ts` | User client config → `ResolvedClientConfig` (command/cwd/platform/env) |
 | `resolver.test.ts` | Package/directory, credentials, error and package-root coverage |
 | `integration.test.ts` | Fake-runtime package/directory startup, credentials and reserved args |
-| `registry.ts` | `.atom/gateway/packages.json` read/write, `sha256` idempotency/conflicts, reference checks |
+| `registry.ts` | `.atom/gateway/packages.json` read/write under `packages.lock`, `sha256` idempotency/conflicts, reference checks |
 | `archive.ts` | tar.gz pack/install, target injection, path/link safety, commit/rollback |
 | `instance-config.ts` | Offline package/directory instance configuration via shared `client-instance` |
 
-`sandboxPackageRoot()` requires a registry record and rejects packages registered for another host target; there is no manual-directory fallback. `archive.test.ts` covers pack and install; the end-to-end round-trip lives in `src/bootstrap/gateway-package.e2e.test.ts`.
+`sandboxPackageRoot()` requires a registry record and rejects packages registered for another host target; there is no manual-directory fallback. `archive.test.ts` covers pack and install; the end-to-end round-trip lives in `src/bootstrap/gateway-package.e2e.test.ts`. Registry read-modify-write is serialized with `.atom/gateway/packages.lock` (bounded wait; stale locks are not auto-reclaimed).
 
 ## Manifest v1
 

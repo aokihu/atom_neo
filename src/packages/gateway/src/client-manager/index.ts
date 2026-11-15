@@ -46,7 +46,7 @@ export class ClientManager {
         id: client.id,
         config: client,
         port: this.#config.clientPortRangeStart + index,
-        gatewayPort: this.#config.port,
+        gatewayPort: () => this.#config.port,
         logger,
         runtime,
         probe,

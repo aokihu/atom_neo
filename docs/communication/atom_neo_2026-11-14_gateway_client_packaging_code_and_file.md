@@ -3,8 +3,8 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）已实施；G3–G6 待实施**
-> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14。
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1 已实施；G3–G6 待实施**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15。
 >
 > 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
@@ -1042,4 +1042,24 @@ G0 契约确认
 - `sandboxPackageRoot` 只接受 registry 已登记包，不再回退到手工放置目录；命中记录时校验 target 与当前 host 一致。`configureInstance` 同样校验 registry target。
 - G2-6 提供库级 API 与表单，不实现 `atom gateway` CLI；CLI 接线归 G3。
 - `removePackage` 只删除 registry 记录并检查引用，不删除包目录；完整卸载归 G5。
-- 已知项：`startGateway({port:0})` 的 supervisor gateway 端口、secret 编辑态遮罩、registry 跨进程锁分别归 G3/G4/G3，详见 plan §4.4。
+- 已知项：secret 编辑态遮罩归 G4，详见 plan §4.4；gateway 端口 0 与 registry 锁在 M2.1 修复。
+
+## 15. M2.1 风险硬化（2026-11-15）
+
+| 事项 | 产出 | 测试结果 |
+|---|---|---|
+| gateway 端口延迟绑定 | `ClientManager` 向 supervisor 传 `() => config.port`；spawn 时读取实际端口；`startGateway` 可注入 `clientRuntime` | `bun test src/packages/gateway/src/client-manager src/packages/gateway/src/server.test.ts` → 52 pass；`startGateway({port:0})` 断言 `--gateway-url http://127.0.0.1:4321` |
+| registry 跨进程锁 | shared `utils/file-lock.ts`；client-instance 与 registry 共用；registry `packages.lock` 有界重试/超时 | file-lock 5 pass、client-instance 18 pass、registry 17 pass；含跨进程并发注册/同版本冲突/锁超时 |
+
+额外验证：
+
+- `bun test src/packages/gateway/src src/packages/shared/src/config src/packages/shared/src/utils` → 260 pass / 1 skip
+- `bun test src/packages/config-tui/src src/bootstrap/gateway-package.e2e.test.ts src/bootstrap/config.test.ts` → 112 pass
+- `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` → 通过
+
+实现说明：
+
+- `withFileLock` 默认 fail-fast；registry 默认 5s 超时、25ms 重试，超时错误包含锁路径。
+- 不自动回收 stale lock；崩溃遗留锁需人工清理。
+- registry 写入仍使用 `writeFileAtomic`；锁只覆盖 read-modify-write。
+- M2.1 不进入 G3/G4/G5。

@@ -14,7 +14,7 @@ export type ProcessSupervisorDeps = {
   id: string;
   config: ResolvedClientConfig;
   port: number;
-  gatewayPort: number;
+  gatewayPort: number | (() => number);
   logger: Logger;
   runtime: ClientManagerRuntime;
   probe: HealthProbe;

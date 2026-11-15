@@ -21,7 +21,7 @@ export class ProcessSupervisor {
   #id: string;
   #config: ResolvedClientConfig;
   #port: number;
-  #gatewayPort: number;
+  #gatewayPort: number | (() => number);
   #logger: Logger;
   #runtime: ClientManagerRuntime;
   #probe: HealthProbe;
@@ -149,9 +149,11 @@ export class ProcessSupervisor {
       stdio,
     });
 
+    const gatewayPort = typeof this.#gatewayPort === "function" ? this.#gatewayPort() : this.#gatewayPort;
+
     let proc: ProcessHandle | undefined;
     try {
-      proc = this.#runtime.spawn(buildClientCommand(this.#config, client, this.#gatewayPort),
+      proc = this.#runtime.spawn(buildClientCommand(this.#config, client, gatewayPort),
         buildSpawnOptions(stdio, this.#config.env, this.#config.cwd, (exitCode, signalCode, error) => this.#handleExit(generation, exitCode, signalCode, error)));
       this.#proc = proc;
       this.#active = client;

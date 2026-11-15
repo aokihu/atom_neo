@@ -103,14 +103,10 @@ test("builds, packs, installs, configures and completes a fake platform round-tr
     },
   });
 
-  const portProbe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
-  const gatewayPort = portProbe.port;
-  portProbe.stop(true);
-
   let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
   try {
     gateway = await startGateway({
-      port: gatewayPort,
+      port: 0,
       clientPortRangeStart: 4_600,
       coreUrl: core.url.origin,
       clients: loaded.effective.gateway.clients,

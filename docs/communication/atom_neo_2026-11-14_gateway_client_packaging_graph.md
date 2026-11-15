@@ -306,7 +306,12 @@ sequenceDiagram
 - `ClientManager` 仍按启动时的 `ResolvedClientConfig[]` 构造 supervisor；动态登记/移除/重载（`#configs`、活动端口集合）属 G3，尚未实现。
 - `main.ts` 在启动 Gateway 前调用 resolver；Gateway 包自身不读取 sandbox 配置。
 - `main.ts` 向 resolver 传入 `baseDir: sandbox`；`directory` 的相对路径以 sandbox 根目录为基准，绝对路径原样使用。
-- 包安装目录由注入的 `packageRoot` 提供；G2 接入 `registry.ts` 后替换该回调。
+- 包安装目录由 registry 登记的记录提供；未登记包不再回退到手工目录。
+
+**M2.1 硬化**
+
+- `ClientManager` 向 supervisor 传 `gatewayPort: () => config.port`；`startGateway` 在 `serve()` 后更新 `config.port`，spawn/restart 时读取真实端口。
+- registry 的 `registerPackage` / `removePackage` 用 `.atom/gateway/packages.lock` 串行化 read-modify-write；锁有界重试/超时，registry 文件仍原子写。
 
 **不变量**
 
@@ -571,6 +576,8 @@ graph LR
 8. **启动来源唯一**：实例只接受 `package` / `directory`；`binary` 配置明确拒绝，不自动迁移。
 9. **无 shell 拼接**：入口数组、参数数组、cwd 直接传 `spawnProcess`。
 10. **凭据不落地到包/日志/历史**：只存 `.env` 引用，子进程只注入目标实例。
+11. **端口延迟绑定**：supervisor 在 spawn/restart 时读取当前 `config.port`，不使用创建时的临时 0。
+12. **registry 写串行化**：read-modify-write 持有 `packages.lock`；锁等待有界，超时明确报错。
 
 ---
 

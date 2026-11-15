@@ -6,6 +6,7 @@ import type { ResolvedClientConfig } from "./client-package/resolver";
 import { SECRET_HEADER } from "./auth/secret";
 import { ClientManager } from "./client-manager";
 import type { ActiveClient } from "./client-manager";
+import type { ClientManagerRuntime } from "./client-manager/runtime";
 
 type InboundMessage = {
   type: "message";
@@ -26,6 +27,7 @@ export type GatewayOverrides = Partial<GatewayConfig> & {
   logger?: Logger;
   httpServer?: HttpServer;
   resolvedClients?: readonly ResolvedClientConfig[];
+  clientRuntime?: ClientManagerRuntime;
 };
 
 export async function startGateway(configOverrides?: GatewayOverrides): Promise<{ port: number; stop: () => Promise<void> }> {
@@ -41,7 +43,7 @@ export async function startGateway(configOverrides?: GatewayOverrides): Promise<
   }
   const logger = configOverrides?.logger ?? new Logger("info", () => {});
   const httpServer = configOverrides?.httpServer ?? await createHttpServer();
-  const cm = new ClientManager(config, resolvedClients, logger);
+  const cm = new ClientManager(config, resolvedClients, logger, configOverrides?.clientRuntime);
   let stopping = false;
 
   // Per-client rate limiting: max 1 request per 200ms per client

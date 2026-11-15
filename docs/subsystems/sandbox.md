@@ -47,6 +47,7 @@ sandbox/                          # 工作目录（--sandbox 指定或默认 CWD
 │       ├── tmp/                 # pack/install 临时目录
 │       ├── state.json           # configRevision
 │       ├── config.lock          # 实例配置写入互斥锁
+│       ├── packages.lock        # registry read-modify-write 互斥锁
 │       └── logs/<instance-id>/
 └── ...                           # 用户项目文件
 ```
@@ -67,6 +68,7 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 | `.atom/gateway/tmp/` | pack/install 临时目录；成功或失败后清理 |
 | `.atom/gateway/state.json` | `configRevision` 等配置修订状态 |
 | `.atom/gateway/config.lock` | `config.json` / `.env` 写入互斥锁 |
+| `.atom/gateway/packages.lock` | `packages.json` read-modify-write 互斥锁（有界重试/超时） |
 | `.atom/gateway/logs/` | 实例级有界日志（G4） |
 
 **规则**：除 `AGENTS.md` 和 `.env` 外，所有 Agent 运行时数据文件必须存储在 `.atom/` 下。

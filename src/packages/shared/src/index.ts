@@ -1,6 +1,8 @@
 export { isAdminRequest } from "./utils/admin-auth";
 export type { AdminRequestContext } from "./utils/admin-auth";
 export { createChildProcessEnv, INSTANCE_CREDENTIAL_PREFIX } from "./utils/child-process-env";
+export { withFileLock } from "./utils/file-lock";
+export type { FileLockOptions } from "./utils/file-lock";
 export { spawnProcess } from "./utils/process";
 export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
 

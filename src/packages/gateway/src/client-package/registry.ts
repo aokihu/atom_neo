@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { listInstances, writeFileAtomic } from "@atom-neo/shared";
+import { listInstances, withFileLock, writeFileAtomic } from "@atom-neo/shared";
+import type { FileLockOptions } from "@atom-neo/shared";
 import { z } from "zod";
 
 /** One installed package version recorded in `.atom/gateway/packages.json`. */
@@ -29,6 +30,11 @@ export type PackageRegistration = {
   installedAt?: string;
 };
 
+export type RegistryLockOptions = { lock?: FileLockOptions };
+
+const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
+const DEFAULT_LOCK_RETRY_MS = 25;
+
 const PackageRecordSchema = z.strictObject({
   target: z.string().min(1),
   path: z.string().min(1),
@@ -44,6 +50,25 @@ const PackageRegistrySchema = z.strictObject({
 
 export function registryPath(sandbox: string): string {
   return join(sandbox, ".atom", "gateway", "packages.json");
+}
+
+function registryLockPath(sandbox: string): string {
+  return join(sandbox, ".atom", "gateway", "packages.lock");
+}
+
+/**
+ * Serialize a registry read-modify-write across processes. The lock is not reclaimed automatically:
+ * if a process crashes while holding it, remove `.atom/gateway/packages.lock` manually after
+ * confirming no process still owns it.
+ */
+function withRegistryLock<T>(sandbox: string, options: RegistryLockOptions, action: () => T): T {
+  const lockPath = registryLockPath(sandbox);
+  return withFileLock(lockPath, action, {
+    timeoutMs: DEFAULT_LOCK_TIMEOUT_MS,
+    retryMs: DEFAULT_LOCK_RETRY_MS,
+    lockedMessage: `Package registry is locked: ${lockPath}`,
+    ...options.lock,
+  });
 }
 
 function parseRegistry(path: string, text: string): PackageRegistry {
@@ -106,57 +131,70 @@ export function findPackage(sandbox: string, id: string, version: string): Packa
  * Register one installed package version. Identical content is idempotent and keeps the original
  * record; a different target/path/sha256 at the same version is rejected.
  */
-export function registerPackage(sandbox: string, registration: PackageRegistration): PackageRecord {
-  const registry = readRegistry(sandbox);
-  const existing = ownRecord(registry, registration.id, registration.version);
-  if (existing) {
-    if (
-      existing.target === registration.target
-      && existing.path === registration.path
-      && existing.sha256 === registration.sha256
-    ) {
-      return existing;
+export function registerPackage(
+  sandbox: string,
+  registration: PackageRegistration,
+  options: RegistryLockOptions = {},
+): PackageRecord {
+  return withRegistryLock(sandbox, options, () => {
+    const registry = readRegistry(sandbox);
+    const existing = ownRecord(registry, registration.id, registration.version);
+    if (existing) {
+      if (
+        existing.target === registration.target
+        && existing.path === registration.path
+        && existing.sha256 === registration.sha256
+      ) {
+        return existing;
+      }
+      throw new Error(`Package ${registration.id}@${registration.version} already installed with different content`);
     }
-    throw new Error(`Package ${registration.id}@${registration.version} already installed with different content`);
-  }
 
-  const record: PackageRecord = {
-    target: registration.target,
-    path: registration.path,
-    source: registration.source,
-    installedAt: registration.installedAt ?? new Date().toISOString(),
-    sha256: registration.sha256,
-  };
-  const versions = { ...(ownVersions(registry, registration.id) ?? {}), [registration.version]: record };
-  writeRegistry(sandbox, {
-    version: 1,
-    packages: { ...registry.packages, [registration.id]: versions },
+    const record: PackageRecord = {
+      target: registration.target,
+      path: registration.path,
+      source: registration.source,
+      installedAt: registration.installedAt ?? new Date().toISOString(),
+      sha256: registration.sha256,
+    };
+    const versions = { ...(ownVersions(registry, registration.id) ?? {}), [registration.version]: record };
+    writeRegistry(sandbox, {
+      version: 1,
+      packages: { ...registry.packages, [registration.id]: versions },
+    });
+    return record;
   });
-  return record;
 }
 
 /**
  * Remove one registry entry after checking package clients. Package files are left in place;
  * uninstall owns their cleanup.
  */
-export function removePackage(sandbox: string, id: string, version: string): void {
-  const registry = readRegistry(sandbox);
-  const versions = ownVersions(registry, id);
-  if (!versions || !Object.hasOwn(versions, version)) {
-    throw new Error(`Package ${id}@${version} is not installed`);
-  }
-
-  for (const client of listInstances(sandbox)) {
-    if (client.package?.id === id && client.package.version === version) {
-      throw new Error(`Package ${id}@${version} is referenced by client ${client.id}`);
+export function removePackage(
+  sandbox: string,
+  id: string,
+  version: string,
+  options: RegistryLockOptions = {},
+): void {
+  withRegistryLock(sandbox, options, () => {
+    const registry = readRegistry(sandbox);
+    const versions = ownVersions(registry, id);
+    if (!versions || !Object.hasOwn(versions, version)) {
+      throw new Error(`Package ${id}@${version} is not installed`);
     }
-  }
 
-  const remaining = Object.fromEntries(Object.entries(versions).filter(([current]) => current !== version));
-  const packages = Object.keys(remaining).length === 0
-    ? Object.fromEntries(Object.entries(registry.packages).filter(([current]) => current !== id))
-    : { ...registry.packages, [id]: remaining };
-  writeRegistry(sandbox, { version: 1, packages });
+    for (const client of listInstances(sandbox)) {
+      if (client.package?.id === id && client.package.version === version) {
+        throw new Error(`Package ${id}@${version} is referenced by client ${client.id}`);
+      }
+    }
+
+    const remaining = Object.fromEntries(Object.entries(versions).filter(([current]) => current !== version));
+    const packages = Object.keys(remaining).length === 0
+      ? Object.fromEntries(Object.entries(registry.packages).filter(([current]) => current !== id))
+      : { ...registry.packages, [id]: remaining };
+    writeRegistry(sandbox, { version: 1, packages });
+  });
 }
 
 /** All installed packages in deterministic id-then-version order. */

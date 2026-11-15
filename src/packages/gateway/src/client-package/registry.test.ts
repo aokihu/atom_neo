@@ -46,6 +46,65 @@ function writeConfig(dir: string, clients: unknown[]): void {
   writeFileSync(join(dir, "config.json"), `${JSON.stringify({ gateway: { clients } }, null, 2)}\n`);
 }
 
+const REGISTRY_MODULE_URL = new URL("./registry.ts", import.meta.url).href;
+const FILE_LOCK_MODULE_URL = new URL("../../../shared/src/utils/file-lock.ts", import.meta.url).href;
+
+type ChildResult = { code: number; stderr: string };
+
+function registryLockPath(dir: string): string {
+  return join(dir, ".atom", "gateway", "packages.lock");
+}
+
+function writeRegistryForTest(dir: string, text: string): void {
+  const path = registryPath(dir);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+}
+
+function holdRegistryLock(dir: string): string {
+  const path = registryLockPath(dir);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, "999\n");
+  return path;
+}
+
+function script(body: string): string {
+  return `(async () => {\n${body}\n})().catch((error) => {\n  console.error(error);\n  process.exit(1);\n});`;
+}
+
+function registrationScript(dir: string, registration: PackageRegistration): string {
+  return script(`
+  const { registerPackage } = await import(${JSON.stringify(REGISTRY_MODULE_URL)});
+  registerPackage(${JSON.stringify(dir)}, ${JSON.stringify(registration)}, {
+    lock: { timeoutMs: 10_000, retryMs: 10 },
+  });
+`);
+}
+
+async function collect(child: { exited: Promise<number>; stderr: ReadableStream }): Promise<ChildResult> {
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  return { code, stderr };
+}
+
+async function runRegistration(dir: string, registration: PackageRegistration): Promise<ChildResult> {
+  return collect(Bun.spawn([process.execPath, "-e", registrationScript(dir, registration)], {
+    stdout: "ignore",
+    stderr: "pipe",
+  }));
+}
+
+function expectChildSucceeded(result: ChildResult): void {
+  if (result.code !== 0) throw new Error(`Child process failed (${result.code}): ${result.stderr}`);
+}
+
+function waitForPath(path: string, timeoutMs: number): void {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(path)) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${path}`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+  }
+}
+
 describe("readRegistry", () => {
   test("returns an empty registry when packages.json is missing", () => {
     const dir = sandbox();
@@ -239,5 +298,130 @@ describe("removePackage", () => {
       expect(existsSync(join(dir, ".atom", "gateway", "packages", "demo", version, "darwin-arm64", "manifest.json")))
         .toBe(true);
     }
+  });
+});
+
+describe("registry locking", () => {
+  test("a held lock times out without changing the registry", () => {
+    const dir = sandbox();
+    registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    const raw = readRaw(dir);
+    const lockPath = holdRegistryLock(dir);
+    const started = Date.now();
+
+    expect(() => registerPackage(dir, makeRegistration({ id: "other", version: "1.0.0" }), {
+      lock: { timeoutMs: 50, retryMs: 10 },
+    })).toThrow(`Package registry is locked: ${lockPath}`);
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(30);
+    expect(readRaw(dir)).toBe(raw);
+    expect(existsSync(lockPath)).toBe(true);
+
+    rmSync(lockPath, { force: true });
+    registerPackage(dir, makeRegistration({ id: "other", version: "1.0.0" }));
+    expect(findPackage(dir, "other", "1.0.0")).toBeDefined();
+  });
+
+  test("waits for a held lock to be released, then registers", async () => {
+    const dir = sandbox();
+    const lockPath = registryLockPath(dir);
+    const holder = Bun.spawn([process.execPath, "-e", script(`
+  const { withFileLock } = await import(${JSON.stringify(FILE_LOCK_MODULE_URL)});
+  withFileLock(${JSON.stringify(lockPath)}, () => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+  });
+`)], { stdout: "ignore", stderr: "pipe" });
+
+    try {
+      waitForPath(lockPath, 2_000);
+      const started = Date.now();
+      const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }), {
+        lock: { timeoutMs: 2_000, retryMs: 10 },
+      });
+
+      expect(Date.now() - started).toBeGreaterThanOrEqual(100);
+      expect(findPackage(dir, "demo", "1.0.0")).toEqual(record);
+      expect(existsSync(lockPath)).toBe(false);
+    } finally {
+      expectChildSucceeded(await collect(holder));
+    }
+  });
+
+  test("a held lock blocks removal without changing the registry", () => {
+    const dir = sandbox();
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    const raw = readRaw(dir);
+    const lockPath = holdRegistryLock(dir);
+
+    expect(() => removePackage(dir, "demo", "1.0.0", { lock: { timeoutMs: 50, retryMs: 10 } }))
+      .toThrow(`Package registry is locked: ${lockPath}`);
+    expect(readRaw(dir)).toBe(raw);
+    expect(findPackage(dir, "demo", "1.0.0")).toEqual(record);
+    expect(existsSync(lockPath)).toBe(true);
+
+    rmSync(lockPath, { force: true });
+    removePackage(dir, "demo", "1.0.0");
+    expect(findPackage(dir, "demo", "1.0.0")).toBeUndefined();
+  });
+
+  test("releases the lock when register or remove fails", () => {
+    const dir = sandbox();
+    const path = registryPath(dir);
+    const lockPath = registryLockPath(dir);
+    writeRegistryForTest(dir, "{broken");
+
+    expect(() => registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" })))
+      .toThrow("Invalid packages.json");
+    expect(existsSync(lockPath)).toBe(false);
+
+    writeRegistryForTest(dir, `${JSON.stringify({ version: 1, packages: {} })}\n`);
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    expect(findPackage(dir, "demo", "1.0.0")).toEqual(record);
+
+    writeRegistryForTest(dir, "{broken");
+    expect(() => removePackage(dir, "demo", "1.0.0")).toThrow("Invalid packages.json");
+    expect(existsSync(lockPath)).toBe(false);
+
+    writeRegistryForTest(dir, `${JSON.stringify({ version: 1, packages: { demo: { "1.0.0": record } } }, null, 2)}\n`);
+    removePackage(dir, "demo", "1.0.0");
+    expect(findPackage(dir, "demo", "1.0.0")).toBeUndefined();
+    expect(existsSync(path)).toBe(true);
+  });
+
+  test("concurrent registrations from separate processes keep both records", async () => {
+    const dir = sandbox();
+    const [first, second] = await Promise.all([
+      runRegistration(dir, makeRegistration({ id: "alpha", version: "1.0.0" })),
+      runRegistration(dir, makeRegistration({ id: "beta", version: "1.0.0" })),
+    ]);
+
+    expectChildSucceeded(first);
+    expectChildSucceeded(second);
+    expect(readRegistry(dir).version).toBe(1);
+    expect(listPackages(dir).map(({ id, version }) => `${id}@${version}`)).toEqual([
+      "alpha@1.0.0",
+      "beta@1.0.0",
+    ]);
+    expect(readdirSync(dirname(registryPath(dir))).filter((name) => name.includes(".tmp-"))).toEqual([]);
+    expect(existsSync(registryLockPath(dir))).toBe(false);
+  });
+
+  test("concurrent same-version content conflicts leave one valid record", async () => {
+    const dir = sandbox();
+    const [first, second] = await Promise.all([
+      runRegistration(dir, makeRegistration({ id: "demo", version: "1.0.0", sha256: SHA_A })),
+      runRegistration(dir, makeRegistration({ id: "demo", version: "1.0.0", sha256: SHA_B })),
+    ]);
+
+    expect([first.code, second.code].filter((code) => code === 0)).toHaveLength(1);
+    expect([first.code, second.code].filter((code) => code !== 0)).toHaveLength(1);
+    const failed = first.code === 0 ? second : first;
+    expect(failed.stderr).toContain("already installed with different content");
+
+    expect(listPackages(dir)).toHaveLength(1);
+    const record = findPackage(dir, "demo", "1.0.0");
+    expect(record).toBeDefined();
+    expect([SHA_A, SHA_B]).toContain(record!.sha256);
+    expect(existsSync(registryLockPath(dir))).toBe(false);
   });
 });
