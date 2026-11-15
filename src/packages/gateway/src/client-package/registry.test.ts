@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   findPackage,
   listPackages,
@@ -10,7 +10,7 @@ import {
   registryPath,
   removePackage,
 } from "./registry";
-import type { PackageRegistration } from "./registry";
+import type { PackageRecord, PackageRegistration } from "./registry";
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
@@ -40,6 +40,13 @@ function makeRegistration(
 
 function readRaw(dir: string): string {
   return readFileSync(registryPath(dir), "utf8");
+}
+
+function makePackageDir(dir: string, record: PackageRecord): string {
+  const root = join(dir, record.path);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, "manifest.json"), "{}");
+  return root;
 }
 
 function writeConfig(dir: string, clients: unknown[]): void {
@@ -298,6 +305,97 @@ describe("removePackage", () => {
       expect(existsSync(join(dir, ".atom", "gateway", "packages", "demo", version, "darwin-arm64", "manifest.json")))
         .toBe(true);
     }
+  });
+
+  test("keeps package files by default and reports retained", () => {
+    const dir = sandbox();
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    const root = makePackageDir(dir, record);
+
+    expect(removePackage(dir, "demo", "1.0.0")).toEqual({ record, files: "retained" });
+    expect(findPackage(dir, "demo", "1.0.0")).toBeUndefined();
+    expect(existsSync(join(root, "manifest.json"))).toBe(true);
+  });
+
+  test("removes the registry entry and package directory with removeFiles", () => {
+    const dir = sandbox();
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    const sibling = registerPackage(dir, makeRegistration({ id: "demo", version: "2.0.0" }));
+    const root = makePackageDir(dir, record);
+    const siblingRoot = makePackageDir(dir, sibling);
+    writeFileSync(join(dir, ".env"), "SECRET=1\n");
+
+    expect(removePackage(dir, "demo", "1.0.0", { removeFiles: true })).toEqual({ record, files: "removed" });
+
+    expect(findPackage(dir, "demo", "1.0.0")).toBeUndefined();
+    expect(findPackage(dir, "demo", "2.0.0")).toBeDefined();
+    expect(existsSync(root)).toBe(false);
+    expect(existsSync(join(siblingRoot, "manifest.json"))).toBe(true);
+    expect(readFileSync(join(dir, ".env"), "utf8")).toBe("SECRET=1\n");
+    const tmpRoot = join(dir, ".atom", "gateway", "tmp");
+    expect(existsSync(tmpRoot) ? readdirSync(tmpRoot) : []).toEqual([]);
+  });
+
+  test("removeFiles leaves referenced packages and their files untouched", () => {
+    const dir = sandbox();
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    const root = makePackageDir(dir, record);
+    writeConfig(dir, [{ id: "tg", package: { id: "demo", version: "1.0.0" } }]);
+    const raw = readRaw(dir);
+
+    expect(() => removePackage(dir, "demo", "1.0.0", { removeFiles: true }))
+      .toThrow("Package demo@1.0.0 is referenced by client tg");
+    expect(readRaw(dir)).toBe(raw);
+    expect(existsSync(join(root, "manifest.json"))).toBe(true);
+  });
+
+  test("removeFiles removes the registry entry when the package directory is missing", () => {
+    const dir = sandbox();
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+
+    expect(removePackage(dir, "demo", "1.0.0", { removeFiles: true })).toEqual({ record, files: "missing" });
+    expect(findPackage(dir, "demo", "1.0.0")).toBeUndefined();
+    expect(readRegistry(dir).packages).toEqual({});
+  });
+
+  test("rejects absolute, outside, and sandbox-root package paths without touching files", () => {
+    const dir = sandbox();
+    const outside = mkdtempSync(join(tmpdir(), "atom-registry-outside-"));
+    tempDirs.push(outside);
+    writeFileSync(join(outside, "keep.txt"), "keep");
+
+    const cases = [
+      { id: "absolute", path: outside, message: "package path must be relative to the sandbox" },
+      { id: "escape", path: relative(dir, outside), message: "package path is outside the sandbox" },
+      { id: "root", path: ".", message: "package path must not be the sandbox root" },
+    ];
+
+    for (const { id, path, message } of cases) {
+      const record = registerPackage(dir, makeRegistration({ id, version: "1.0.0", path }));
+      const raw = readRaw(dir);
+
+      expect(() => removePackage(dir, id, "1.0.0", { removeFiles: true })).toThrow(message);
+      expect(readRaw(dir)).toBe(raw);
+      expect(findPackage(dir, id, "1.0.0")).toEqual(record);
+      expect(existsSync(dir)).toBe(true);
+    }
+
+    expect(readFileSync(join(outside, "keep.txt"), "utf8")).toBe("keep");
+  });
+
+  test("rejects a package path that is not a directory without changing registry or files", () => {
+    const dir = sandbox();
+    const record = registerPackage(dir, makeRegistration({ id: "demo", version: "1.0.0" }));
+    const path = join(dir, record.path);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "not a directory");
+    const raw = readRaw(dir);
+
+    expect(() => removePackage(dir, "demo", "1.0.0", { removeFiles: true }))
+      .toThrow("package path is not a directory");
+    expect(readRaw(dir)).toBe(raw);
+    expect(findPackage(dir, "demo", "1.0.0")).toEqual(record);
+    expect(readFileSync(path, "utf8")).toBe("not a directory");
   });
 });
 

@@ -1,5 +1,7 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import type { Stats } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { listInstances, withFileLock, writeFileAtomic } from "@atom-neo/shared";
 import type { FileLockOptions } from "@atom-neo/shared";
 import { z } from "zod";
@@ -31,6 +33,15 @@ export type PackageRegistration = {
 };
 
 export type RegistryLockOptions = { lock?: FileLockOptions };
+
+export type RemovePackageOptions = RegistryLockOptions & { removeFiles?: boolean };
+
+export type RemovePackageResult = {
+  record: PackageRecord;
+  /** `leftover` means the registry entry is gone but the renamed package directory remains. */
+  files: "retained" | "removed" | "missing" | "leftover";
+  leftoverPath?: string;
+};
 
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 const DEFAULT_LOCK_RETRY_MS = 25;
@@ -123,6 +134,33 @@ function ownRecord(registry: PackageRegistry, id: string, version: string): Pack
   return versions !== undefined && Object.hasOwn(versions, version) ? versions[version] : undefined;
 }
 
+function withoutPackage(registry: PackageRegistry, id: string, version: string): PackageRegistry {
+  const versions = ownVersions(registry, id)!;
+  const remaining = Object.fromEntries(Object.entries(versions).filter(([current]) => current !== version));
+  const packages = Object.keys(remaining).length === 0
+    ? Object.fromEntries(Object.entries(registry.packages).filter(([current]) => current !== id))
+    : { ...registry.packages, [id]: remaining };
+  return { version: 1, packages };
+}
+
+/** Resolve `record.path` and reject anything that is absolute or outside the sandbox. */
+function resolvePackageDir(sandbox: string, record: PackageRecord): string {
+  if (isAbsolute(record.path) || /^[A-Za-z]:/.test(record.path)) {
+    throw new Error(`Cannot remove package files: package path must be relative to the sandbox: ${record.path}`);
+  }
+
+  const root = resolve(sandbox);
+  const directory = resolve(root, record.path);
+  const path = relative(root, directory);
+  if (path === "") {
+    throw new Error(`Cannot remove package files: package path must not be the sandbox root: ${record.path}`);
+  }
+  if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
+    throw new Error(`Cannot remove package files: package path is outside the sandbox: ${record.path}`);
+  }
+  return directory;
+}
+
 export function findPackage(sandbox: string, id: string, version: string): PackageRecord | undefined {
   return ownRecord(readRegistry(sandbox), id, version);
 }
@@ -167,16 +205,17 @@ export function registerPackage(
 }
 
 /**
- * Remove one registry entry after checking package clients. Package files are left in place;
- * uninstall owns their cleanup.
+ * Remove one registry entry after checking package clients. Package files are kept unless
+ * `removeFiles` is true; deletion renames the directory aside first so a registry write failure
+ * can restore it.
  */
 export function removePackage(
   sandbox: string,
   id: string,
   version: string,
-  options: RegistryLockOptions = {},
-): void {
-  withRegistryLock(sandbox, options, () => {
+  options: RemovePackageOptions = {},
+): RemovePackageResult {
+  return withRegistryLock(sandbox, options, (): RemovePackageResult => {
     const registry = readRegistry(sandbox);
     const versions = ownVersions(registry, id);
     if (!versions || !Object.hasOwn(versions, version)) {
@@ -189,11 +228,50 @@ export function removePackage(
       }
     }
 
-    const remaining = Object.fromEntries(Object.entries(versions).filter(([current]) => current !== version));
-    const packages = Object.keys(remaining).length === 0
-      ? Object.fromEntries(Object.entries(registry.packages).filter(([current]) => current !== id))
-      : { ...registry.packages, [id]: remaining };
-    writeRegistry(sandbox, { version: 1, packages });
+    const record = versions[version]!;
+    const updated = withoutPackage(registry, id, version);
+
+    if (options.removeFiles !== true) {
+      writeRegistry(sandbox, updated);
+      return { record, files: "retained" };
+    }
+
+    const directory = resolvePackageDir(sandbox, record);
+    let stat: Stats | undefined;
+    try {
+      stat = lstatSync(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (stat === undefined) {
+      writeRegistry(sandbox, updated);
+      return { record, files: "missing" };
+    }
+    if (!stat.isDirectory()) {
+      throw new Error(`Cannot remove package files: package path is not a directory: ${record.path}`);
+    }
+
+    const trashRoot = join(resolve(sandbox), ".atom", "gateway", "tmp");
+    mkdirSync(trashRoot, { recursive: true });
+    const trash = join(trashRoot, `uninstall-${randomUUID()}`);
+    renameSync(directory, trash);
+    try {
+      writeRegistry(sandbox, updated);
+    } catch (error) {
+      try {
+        renameSync(trash, directory);
+      } catch {
+        // Best effort only: the registry write error is the actionable failure.
+      }
+      throw error;
+    }
+
+    try {
+      rmSync(trash, { recursive: true, force: false });
+      return { record, files: "removed" };
+    } catch {
+      return { record, files: "leftover", leftoverPath: trash };
+    }
   });
 }
 

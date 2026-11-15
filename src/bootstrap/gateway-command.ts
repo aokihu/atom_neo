@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   installClient,
+  installSourcePackage,
   listPackages,
   packClient,
   parseManifest,
@@ -11,6 +12,7 @@ import {
 import type { Manifest } from "@atom-neo/gateway";
 import { clientSource, listInstances, upsertInstance } from "@atom-neo/shared";
 import type { BootArguments, GatewayCommand } from "./cli";
+import { upgradeClientInstance } from "./gateway-upgrade";
 import { readRuntimeFile } from "./runtime-file";
 
 export type GatewayCommandDeps = {
@@ -55,6 +57,27 @@ function requiredSecretFields(manifest: Manifest): string[] {
   return Object.entries(manifest.config ?? {})
     .filter(([, field]) => field.required && field.secret)
     .map(([name]) => name);
+}
+
+function officialSource(command: GatewayCommand): string | undefined {
+  return command.source || process.env.ATOM_GATEWAY_SOURCE_INDEX || undefined;
+}
+
+function parseOfficialTarget(target: string): { id: string; version?: string } {
+  const at = target.lastIndexOf("@");
+  if (at === -1) return { id: target };
+  const id = target.slice(0, at);
+  const version = target.slice(at + 1);
+  if (!id || !version) throw new Error(`Invalid official client target "${target}"; expected <id>[@version]`);
+  return { id, version };
+}
+
+function isLocalArchive(target: string, cwd: string): boolean {
+  try {
+    return statSync(resolve(cwd, target)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 function resolveUninstallTarget(sandbox: string, target: string): { id: string; version: string } {
@@ -265,6 +288,36 @@ export async function runGatewayCommand(
 
   switch (command.action) {
     case "install": {
+      if (!isLocalArchive(command.target!, cwd)) {
+        const official = parseOfficialTarget(command.target!);
+        const source = officialSource(command);
+        const result = await installSourcePackage(args.sandbox, official.id, {
+          source,
+          version: official.version,
+          fetchImpl: deps.fetchImpl,
+        });
+        const manifest = readManifest(join(args.sandbox, result.record.path));
+        const installed = {
+          id: manifest.id,
+          version: manifest.version,
+          ...result.record,
+          ...(result.entry === undefined
+            ? {}
+            : { url: result.entry.url, archiveSha256: result.entry.sha256, size: result.entry.size }),
+          cached: result.cached,
+        };
+        if (command.json) {
+          printJson(installed);
+          return;
+        }
+        print(`Installed ${manifest.id}@${manifest.version} (${result.record.target})${result.cached ? " [already installed]" : ""}`);
+        print(`  path: ${result.record.path}`);
+        print(`  source: ${result.record.source}`);
+        print(`  sha256: ${result.record.sha256}`);
+        if (result.entry) print(`  archive: ${result.entry.url}`);
+        return;
+      }
+
       const record = await installClient(args.sandbox, resolve(cwd, command.target!));
       const manifest = readManifest(join(args.sandbox, record.path));
       const installed = { id: manifest.id, version: manifest.version, ...record };
@@ -276,6 +329,64 @@ export async function runGatewayCommand(
       print(`  path: ${record.path}`);
       print(`  source: ${record.source}`);
       print(`  sha256: ${record.sha256}`);
+      return;
+    }
+
+    case "upgrade": {
+      const instanceId = command.target!;
+      const current = listInstances(args.sandbox).find(instance => instance.id === instanceId);
+      if (!current) throw new Error(`Unknown client instance: ${instanceId}`);
+      if (!current.package) {
+        throw new Error(`Client instance ${instanceId} uses a directory source; upgrade packages explicitly or load a new directory`);
+      }
+
+      const install = await installSourcePackage(args.sandbox, current.package.id, {
+        source: officialSource(command),
+        version: command.version,
+        fetchImpl: deps.fetchImpl,
+      });
+      const newVersion = install.entry?.version ?? command.version;
+      if (!newVersion) throw new Error("Upgrade requires a target version from the source index or --version");
+      const online = readGatewayRuntime(args.sandbox) !== undefined;
+      const apply = online
+        ? async (): Promise<"reloaded" | "registered"> => {
+          const clients = clientsOf(parseAdminJson(await adminRequest(args, deps, "/admin/clients", { method: "GET" })));
+          const registered = clients.some(client => isRecord(client) && client.id === instanceId);
+          await adminRequest(args, deps, "/admin/clients", {
+            method: "POST",
+            body: JSON.stringify({ action: registered ? "reload" : "register", clientId: instanceId }),
+          });
+          return registered ? "reloaded" : "registered";
+        }
+        : undefined;
+      const upgraded = await upgradeClientInstance(args.sandbox, instanceId, newVersion, { apply });
+
+      if (command.json) {
+        printJson({
+          id: instanceId,
+          packageId: upgraded.packageId,
+          previousVersion: upgraded.oldVersion,
+          version: upgraded.newVersion,
+          changed: upgraded.changed,
+          cached: install.cached,
+          offline: !online,
+          applied: upgraded.applied,
+          rolledBack: upgraded.rolledBack,
+          ...(install.entry === undefined
+            ? {}
+            : { url: install.entry.url, archiveSha256: install.entry.sha256, size: install.entry.size }),
+        });
+        return;
+      }
+
+      const action = upgraded.changed
+        ? `Upgraded ${instanceId} ${upgraded.oldVersion} -> ${upgraded.newVersion}`
+        : `${instanceId} already at ${upgraded.newVersion}`;
+      const applied = upgraded.applied
+        ? `; ${upgraded.applied}`
+        : "; saved, not applied (Gateway offline)";
+      print(`${action}${applied}`);
+      if (install.entry) print(`  archive: ${install.entry.url}`);
       return;
     }
 
@@ -345,9 +456,20 @@ export async function runGatewayCommand(
 
     case "uninstall": {
       const { id, version } = resolveUninstallTarget(args.sandbox, command.target!);
-      removePackage(args.sandbox, id, version);
-      if (command.json) printJson({ id, version, removed: true });
-      else print(`Uninstalled ${id}@${version}`);
+      const result = removePackage(args.sandbox, id, version, { removeFiles: true });
+      if (command.json) {
+        printJson({
+          id,
+          version,
+          removed: true,
+          files: result.files,
+          ...(result.leftoverPath === undefined ? {} : { leftoverPath: result.leftoverPath }),
+        });
+      } else {
+        print(`Uninstalled ${id}@${version}`);
+        if (result.files === "missing") print("  package directory was already missing");
+        if (result.leftoverPath) print(`  warning: package files remain at ${result.leftoverPath}`);
+      }
       return;
     }
 

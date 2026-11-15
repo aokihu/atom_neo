@@ -129,7 +129,7 @@ describe("parseArguments session continuation", () => {
 
 describe("gateway command", () => {
   const actions = [
-    "install", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall",
+    "install", "upgrade", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall",
   ] as const;
   const targetActions = actions.filter(action => action !== "list");
 
@@ -180,6 +180,25 @@ describe("gateway command", () => {
     for (const action of actions.filter(action => action !== "load")) {
       const target = action === "list" ? [] : ["bot"];
       expect(() => parseArguments(["gateway", action, ...target, "--id", "x"])).toThrow("--id is only valid for gateway load");
+    }
+  });
+
+  test("install and upgrade accept --source; upgrade accepts --version", () => {
+    expect(bootArgs(["gateway", "install", "telegram-bot@0.1.0", "--source", "./index.json"]).gatewayCommand)
+      .toMatchObject({ action: "install", target: "telegram-bot@0.1.0", source: "./index.json" });
+    expect(bootArgs(["gateway", "upgrade", "telegram-main", "--version", "0.2.0", "--source", "https://example.invalid/index.json"]).gatewayCommand)
+      .toMatchObject({ action: "upgrade", target: "telegram-main", version: "0.2.0", source: "https://example.invalid/index.json" });
+    expect(() => parseArguments(["gateway", "install", "bot", "--source="])).toThrow("--source cannot be empty");
+    expect(() => parseArguments(["gateway", "upgrade", "bot", "--version="])).toThrow("--version cannot be empty");
+    for (const action of actions.filter(action => action !== "install" && action !== "upgrade")) {
+      const target = action === "list" ? [] : ["bot"];
+      expect(() => parseArguments(["gateway", action, ...target, "--source", "x"]))
+        .toThrow("--source is only valid for gateway install or upgrade");
+    }
+    for (const action of actions.filter(action => action !== "upgrade")) {
+      const target = action === "list" ? [] : ["bot"];
+      expect(() => parseArguments(["gateway", action, ...target, "--version", "1.0.0"]))
+        .toThrow("--version is only valid for gateway upgrade");
     }
   });
 

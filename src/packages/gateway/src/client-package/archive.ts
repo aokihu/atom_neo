@@ -36,6 +36,11 @@ export type PackOptions = {
 
 export type InstallResult = PackageRecord;
 
+export type InstallOptions = {
+  /** Traceable source label recorded in the registry (for downloads, the artifact URL). */
+  source?: string;
+};
+
 type ArchiveEntry = {
   path: string;
   type: string;
@@ -448,6 +453,7 @@ function commitPackage(
   manifest: Manifest,
   target: string,
   sha256: string,
+  sourceLabel: string,
 ): PackageRecord {
   const finalDir = join(sandbox, ".atom", "gateway", "packages", manifest.id, manifest.version, target);
   const existing = findPackage(sandbox, manifest.id, manifest.version);
@@ -484,7 +490,7 @@ function commitPackage(
       version: manifest.version,
       target,
       path: registryRelativePath(sandbox, finalDir),
-      source,
+      source: sourceLabel,
       sha256,
     });
   } catch (error) {
@@ -497,7 +503,11 @@ function commitPackage(
  * Validate and install one client archive into `<sandbox>/.atom/gateway/packages/<id>/<version>/<target>`.
  * No shell tar; extraction happens only after every archive entry passes the pack whitelist.
  */
-export async function installClient(sandbox: string, archive: string): Promise<InstallResult> {
+export async function installClient(
+  sandbox: string,
+  archive: string,
+  options: InstallOptions = {},
+): Promise<InstallResult> {
   const sandboxRoot = resolve(sandbox);
   const archivePath = resolve(archive);
   const allowed = await readArchiveEntries(archivePath, archive);
@@ -511,7 +521,7 @@ export async function installClient(sandbox: string, archive: string): Promise<I
     const manifest = readExtractedManifest(archive, tempRoot);
     assertInstallableManifest(archive, tempRoot, manifest);
     const sha256 = payloadSha256(tempRoot, files);
-    return commitPackage(sandboxRoot, archive, tempRoot, manifest, hostTarget(), sha256);
+    return commitPackage(sandboxRoot, archive, tempRoot, manifest, hostTarget(), sha256, options.source ?? archive);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

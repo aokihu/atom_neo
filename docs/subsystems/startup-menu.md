@@ -89,12 +89,13 @@ menu
 
 | 路径 | 步骤 | 执行 |
 |------|------|------|
-| `gateway / install` | sandbox → 归档文件 | `gateway install <archive> --sandbox ...` |
+| `gateway / install` | sandbox → 归档文件 | `gateway install <archive|id[@version]> --source ... --sandbox ...` |
 | `gateway / load directory` | sandbox → 客户端目录 → 实例 ID（可选） | `gateway load <directory> [--id] --sandbox ...` |
 | `gateway / manage instances` | sandbox | `gateway list --sandbox ...` |
 | `gateway / pack` | sandbox → 客户端目录 → 输出路径（可选） | `gateway pack <directory> [--out] --sandbox ...` |
 
 - 相对路径按打印命令的当前目录解析；菜单展示与执行使用同一参数。
+- `install` 的归档字段也可填写官方 `id[@version]`；官方安装/升级需要 `ATOM_GATEWAY_SOURCE_INDEX` 或显式 `--source`，来源索引地址与 checksum 由发布流程提供。菜单本轮不新增 upgrade 入口，使用 CLI 显式指定实例升级。
 - `load` 的实例 ID 可留空，留空时使用 manifest.id；填写时允许同一目录登记多个实例。
 - `load` 先写 config；Gateway 在线时再调用 admin `register`，新实例立即出现在管理列表但不会自动 start；Gateway 离线时保持 `saved, not started`。required secret/参数未配置时 register 失败，但 config-only 实例仍会显示为 `configured / unregistered`，可在配置 UI 补齐后 register/start。重复登记返回明确错误。
 - `manage instances` 执行 `gateway list`：离线时读取 config 并显示 configured/unregistered；在线时合并 supervisor 状态，JSON 区分 `configured`、`registered`、`running/state` 与 `offline`。

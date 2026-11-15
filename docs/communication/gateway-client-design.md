@@ -1,6 +1,6 @@
 # Gateway Client 接入与发行规划
 
-> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施；G5–G6 待实施**。
+> 日期：2026-11-14，2026-11-15 修订。状态：**G0 决策已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 待实施**。
 > 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。
 > 本文记录本轮讨论的目标、确认契约和范围；任务拆分见 [开发计划](./gateway-development-plan.md)。当前实现以 [Gateway](./gateway.md) 为准，M1 已完成 manifest、resolver、实例配置与统一启动描述。
 
@@ -65,11 +65,17 @@ flowchart TD
     K --> A
 ```
 
-本地 install/load/pack/reload/list/start/stop/check/logs 已实现；官方名称（如 `install telegram`）与 URL 获取仍属 G5。所有命令使用 `--sandbox` 选择目标，缺省规则复用现有 CLI。
+本地 install/load/pack/reload/list/start/stop/check/logs 已实现；G5 增加官方来源索引、下载校验、指定实例升级和带文件清理的卸载。所有命令使用 `--sandbox` 选择目标，缺省规则复用现有 CLI。
 
 ```bash
-# 本地包闭环已实现；官方名称与 URL 获取在 G5 接入
+# 本地归档安装
 atom gateway install ./telegram-bot-0.1.0-darwin-arm64.tar.gz --sandbox ./sandbox
+
+# 官方来源安装（无 --source 时读取 ATOM_GATEWAY_SOURCE_INDEX）
+atom gateway install telegram-bot@0.1.0 --source ./gateway-source-index.json --sandbox ./sandbox
+
+# 只升级指定实例；新版本未安装时先下载安装
+atom gateway upgrade telegram-main --version 0.2.0 --source ./gateway-source-index.json --sandbox ./sandbox
 
 # 开发目录原位加载；可用 --id 为同一目录登记不同实例
 atom gateway load ./clients/telegram-bot --sandbox ./sandbox
@@ -193,6 +199,26 @@ M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-
 
 安装先校验 manifest、target、生产入口和解包路径边界，再从临时目录提交到版本目录；禁止路径越界与归档链接逃逸。失败不替换已有版本。registry 使用 `sha256` 内容标识：同内容幂等，同版本不同内容拒绝覆盖；卸载包前检查实例引用，不删除开发源码、账号凭据或会话数据。
 
+**官方来源索引（G5）**：索引为：
+
+```json
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "telegram-bot",
+      "version": "0.1.0",
+      "target": "darwin-arm64",
+      "url": "https://example.invalid/telegram-bot-0.1.0-darwin-arm64.tar.gz",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "size": 123456
+    }
+  ]
+}
+```
+
+`sha256` 针对下载归档；`size` 可选。来源位置通过 `ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>` 提供，仓库不写死生产 URL/校验值。查找时 `id` 必填，`version` 省略取同 id+target 的最高语义版本；未知 id/version/target、缺失/非法 sha256、重复条目均拒绝。下载到临时文件，带超时/大小上限并流式计算 sha256；校验通过后才调用现有 `installClient`，失败不落盘、不注册。发布脚本只生成当前 host target；其他 target 必须在对应真实构建环境生成后合并索引。
+
 实例配置继续归属用户配置。`gateway.clients` 只保留 `package` / `directory` 两种来源，二者互斥；`binary` 与实例级 `platform` 移除，platform、启动数组和 cwd 均由 manifest 解析。旧配置不自动迁移，升级后需重新登记。各实例显式固定安装版本。
 
 `directory` 可为绝对路径；相对路径在 Gateway 启动时相对 sandbox 根目录解析。G2 的 CLI/向导应写入绝对路径，避免依赖进程 cwd。
@@ -251,6 +277,7 @@ M2（G2）实际交付：
 - M2.1 硬化：supervisor 在 spawn 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock`（`.atom/gateway/packages.lock`，有界重试/超时）。
 - M3a（G3）已落地动态 register/remove/reload、drain 503/409、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset 与 `atom gateway` CLI。
 - M3b（G4）已落地 GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、`load --id`、resolver enum/default 校验与 PTY 验收。初审修复增加 admin `register`：在线 load 通过 resolver 动态登记 idle 实例（不自动 start），重复登记 409；UI admin 请求统一 5s 超时，client key 使用前缀避免固定动作冲突。复审补齐 config-only 闭环：UI/CLI 合并 `listInstances` 与 supervisor 状态，未登记实例显示 configured/unregistered，可编辑配置后 register/start。
+- M4/G5 已落地官方来源索引、下载校验、当前 host 发布脚本、指定实例升级与带文件清理的卸载；测试使用本地 HTTP fixture，生产 URL/checksum 由部署与发布流程提供。
 
 ## 10. 依据与关联文档
 

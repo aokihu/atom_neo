@@ -306,6 +306,17 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
 
 环境变量：`GATEWAY_PORT`, `CORE_URL`；HTTP 传输选择使用 `ATOM_HTTP_RUNTIME`（`bun` / `node`）。
 
+### 7.1 官方来源索引、升级与卸载（G5）
+
+- 来源索引 v1：`{version:1, entries:[{id,version,target,url,sha256,size?}]}`；`sha256` 针对下载归档，`size` 可选。
+- 位置：`ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>`；仓库不提供默认生产 URL/checksum。
+- 查找：`id` 必填；`version` 省略取同 id+target 的最高 `x.y.z`；未知 id/version/target、缺失/非法 sha256、重复条目明确报错。
+- 下载：临时文件、超时、最大字节数、流式 sha256；失败不落盘、不注册。成功后复用 `installClient`，registry `source` 记录归档 URL。
+- `atom gateway install <id>[@version]` 使用官方来源；target 存在时仍是本地归档安装。
+- `atom gateway upgrade <instance> [--version <version>]` 只更新指定实例；新版本未安装时先下载安装；在线 reload/register 失败恢复旧实例配置，已安装新版本保留。
+- `atom gateway uninstall <id>[@version]` 在 registry 锁内检查实例引用；未被引用时删除 registry 和包目录。写入失败恢复目录，删除残留报告路径；`.env` 凭据、开发源码、会话不删除。
+- 发布：`bun run gateway:release -- --client clients/telegram-bot --base-url <url> [--no-build]` 只生成当前 host target；其他 target 必须在对应真实环境分别构建。
+
 ## 8. 文件
 
 ```
@@ -322,8 +333,11 @@ src/packages/gateway/
       README.md                     目录摘要与边界
       manifest.ts                   manifest v1 解析、严格校验、入口选择
       resolver.ts                   用户实例配置 → ResolvedClientConfig
-      registry.ts                   packages.json 登记、sha256 幂等/冲突
+      registry.ts                   packages.json 登记、sha256 幂等/冲突、卸载文件清理
       archive.ts                    tar.gz pack/install、目标与路径安全
+      source-index.ts               官方来源索引 schema/加载/选择/发布条目
+      download.ts                   临时下载、超时/大小上限、sha256 校验
+      source-install.ts             来源索引 + 下载 → installClient
       instance-config.ts            离线实例配置 API
     client-manager/
       README.md                     目录摘要与生命周期说明

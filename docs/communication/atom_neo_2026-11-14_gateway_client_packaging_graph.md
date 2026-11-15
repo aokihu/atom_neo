@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施；G5–G6 待实施**
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 待实施**
 > 2026-11-15 修订：启动方式不再兼容旧 `binary`，启动路径只保留 `package` / `directory`。
 > M1 落地 `manifest.ts`、`resolver.ts`、`config/client-instance.ts`、凭据过滤与 `ResolvedClientConfig` 启动链路；M2 落地 Telegram manifest、pack/install、`registry.ts`、离线实例配置与 config-tui 表单。动态 ClientManager、管理接口与 CLI/TUI 仍在后续阶段。
 >
@@ -624,6 +624,41 @@ graph LR
 | Telegram 入站 | [code_and_file §8.3](./atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md#83-clientstelegram-botsrcgateway-clientts新增) |
 
 > 锚点由 GitHub/Markdown 渲染器生成，若链接失效以章节标题为准。
+
+---
+
+## 13.1 G5 官方来源、升级与卸载流程
+
+```mermaid
+sequenceDiagram
+    participant CLI as atom gateway
+    participant SI as source-index
+    participant DL as download
+    participant AR as installClient / registry
+    participant CFG as client-instance
+    participant GW as Gateway admin
+
+    CLI->>SI: load --source/env
+    SI-->>CLI: entry(id/version/target/url/sha256/size)
+    CLI->>DL: downloadVerifiedArtifact(entry)
+    DL-->>CLI: temp archive + sha256
+    CLI->>AR: installClient(temp, source=url)
+    AR-->>CLI: registry record
+    CLI->>CFG: upsertInstance(package=new version)
+    alt Gateway online
+        CLI->>GW: reload (registered) / register (config-only)
+        GW-->>CLI: ok / error
+        alt apply failed
+            CLI->>CFG: restore old package ref
+        end
+    else offline
+        CLI-->>CLI: saved, not applied
+    end
+```
+
+**卸载**：`removePackage(...,{removeFiles:true})` 在 registry 锁内检查实例引用；包目录先改名为临时路径，registry 写入成功后再删除临时目录。registry 写入失败恢复目录；删除失败返回残留路径。凭据与开发源码不在删除范围。
+
+**发布**：`scripts/gateway-release.ts` 只接受当前 host target，调用 `packClient` 生成归档，计算归档 sha256/size，并要求 `--base-url` 生成索引条目；未构建 target 不写入索引。
 
 ---
 

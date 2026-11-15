@@ -11,19 +11,23 @@ export type Command = "export" | "import";
 export type BackupEnvMode = "merge" | "replace";
 export type GatewayCommandAction =
   | "install" | "load" | "reload" | "list" | "start" | "stop"
-  | "check" | "logs" | "pack" | "uninstall";
+  | "check" | "logs" | "pack" | "uninstall" | "upgrade";
 export type GatewayCommand = {
   action: GatewayCommandAction;
   target?: string;
   id?: string;
   out?: string;
   targetPlatform?: string;
+  /** Source index location for official install/upgrade (file or http(s) URL). */
+  source?: string;
+  /** Exact target version for upgrade. */
+  version?: string;
   force: boolean;
   json: boolean;
 };
 
 const GATEWAY_ACTIONS: readonly GatewayCommandAction[] = [
-  "install", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall",
+  "install", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall", "upgrade",
 ];
 
 export type BootArguments = {
@@ -170,9 +174,15 @@ function parseGatewayArguments(args: readonly string[]): BootArguments | "help" 
   if (action !== "pack" && values.out !== undefined) throw new Error("--out is only valid for gateway pack");
   if (action !== "pack" && values.target !== undefined) throw new Error("--target is only valid for gateway pack");
   if (action !== "load" && values.id !== undefined) throw new Error("--id is only valid for gateway load");
+  if (action !== "install" && action !== "upgrade" && values.source !== undefined) {
+    throw new Error("--source is only valid for gateway install or upgrade");
+  }
+  if (action !== "upgrade" && values.version !== undefined) throw new Error("--version is only valid for gateway upgrade");
   if (values.out === "") throw new Error("--out cannot be empty");
   if (values.target === "") throw new Error("--target cannot be empty");
   if (values.id === "") throw new Error("--id cannot be empty");
+  if (values.source === "") throw new Error("--source cannot be empty");
+  if (values.version === "") throw new Error("--version cannot be empty");
 
   const sandboxPath = values.sandbox;
   return {
@@ -199,6 +209,8 @@ function parseGatewayArguments(args: readonly string[]): BootArguments | "help" 
       id: values.id,
       out: values.out,
       targetPlatform: values.target,
+      source: values.source,
+      version: values.version,
       force: values.force,
       json: values.json,
     },
@@ -214,6 +226,8 @@ function parseGatewayArgs(args: readonly string[]) {
         id: { type: "string" },
         out: { type: "string" },
         target: { type: "string" },
+        source: { type: "string" },
+        version: { type: "string" },
         force: { type: "boolean", default: false },
         json: { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
@@ -247,13 +261,13 @@ USAGE
   ${binName} menu [--sandbox <path>]
   ${binName} export [--sandbox <path>] [-o|--output <file>] [--password] [--force]
   ${binName} import <archive> [--sandbox <path>] [--password] [--env merge|replace] [--dry-run] [--force]
-  ${binName} gateway <action> [target] [--sandbox <path>] [--id <instance>] [--out <file>] [--target <platform>] [--force] [--json]
+  ${binName} gateway <action> [target] [--sandbox <path>] [--id <instance>] [--source <file|url>] [--version <version>] [--out <file>] [--target <platform>] [--force] [--json]
 
 COMMANDS
   menu                   一次性启动向导（参数自动回填，完成后执行）
   export                 导出 config.json + .env 为 .atombak 归档
   import                 从 .atombak 归档导入配置
-  gateway <action>       Gateway 实例管理: install | load | reload | list | start | stop | check | logs | pack | uninstall
+  gateway <action>       Gateway 实例管理: install | upgrade | load | reload | list | start | stop | check | logs | pack | uninstall
 
 OPTIONS
   -m, --mode <mode>      运行模式: core | core-gateway | tui | gateway (默认: core + TUI)
@@ -274,6 +288,8 @@ OPTIONS
   --log-pipepath <path>   命名管道路径 (--log=pipe 时必需)
   -o, --output <file>     导出归档路径 (默认: atom-backup-<time>.atombak)
   --id <instance>         gateway load 实例 ID（默认 manifest.id）
+  --source <file|url>     官方来源索引（install/upgrade；也可用 ATOM_GATEWAY_SOURCE_INDEX）
+  --version <version>     gateway upgrade 目标版本
   --out <file>            gateway pack 输出路径
   --target <platform>     gateway pack 目标平台
   --json                  gateway 命令以 JSON 输出
@@ -293,6 +309,8 @@ EXAMPLES
   ${binName} export --sandbox ./sandbox --password -o ./backup.atombak
   ${binName} import ./backup.atombak --sandbox ./sandbox
   ${binName} gateway list --sandbox ./sandbox
+  ${binName} gateway install telegram-bot@0.1.0 --source ./gateway-source-index.json --sandbox ./sandbox
+  ${binName} gateway upgrade telegram-main --version 0.2.0 --source ./gateway-source-index.json --sandbox ./sandbox
 `);
 }
 

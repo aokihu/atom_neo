@@ -3,8 +3,8 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施；G5–G6 待实施**
-> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16，M3b 见 §17。
+> 状态：**G0 已确认；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施；G6 待实施**
+> 2026-11-15 修订：启动方式不再兼容旧 `binary`，实例只接受 `package` / `directory` 两种来源。M1 实际改动与偏差见 §13，M2 见 §14，M2.1 见 §15，M3a 见 §16，M3b 见 §17，G5 见 §18。
 >
 > 本文列出计划**修改**与**创建**的文件、职责、示例代码和测试。
 > 计划见 [plan](./atom_neo_2026-11-14_gateway_client_packaging_plan.md)，关系图见 [graph](./atom_neo_2026-11-14_gateway_client_packaging_graph.md)。
@@ -1156,6 +1156,52 @@ G0 契约确认
 - `bun test src/bootstrap/gateway-command.test.ts`：离线 load、在线 register、register 失败输出。
 - `bun test src/packages/config-tui/src/components/GatewayModal.test.tsx`：`refresh/back` 实例 ID、load 后刷新可见。
 - `bun test src/packages/config-tui/src/gateway-status.test.ts`：超时错误。
+
+---
+
+## 18. G5 官方获取、升级与卸载（计划）
+
+| 模块 | 文件 | 职责 |
+|---|---|---|
+| 来源索引 | `src/packages/gateway/src/client-package/source-index.ts` | v1 schema、file/http 加载、语义版本/target 选择、索引条目生成 |
+| 下载校验 | `src/packages/gateway/src/client-package/download.ts` | 临时文件、超时、大小上限、流式 sha256；失败清理 |
+| 来源安装 | `src/packages/gateway/src/client-package/source-install.ts` | 索引 + 下载 + 复用 `installClient`；已安装版本复用 |
+| 升级编排 | `src/bootstrap/gateway-upgrade.ts` | 指定实例 package ref 更新、在线 apply、失败恢复旧配置 |
+| 卸载清理 | `src/packages/gateway/src/client-package/registry.ts` | 引用检查 + registry 与包目录提交式删除 |
+| 发布脚本 | `scripts/gateway-release.ts` | 当前 host 构建/打包 + sha256/size + 索引条目；要求显式 base URL |
+| CLI | `src/bootstrap/cli.ts` / `gateway-command.ts` | `install <id>[@version]`、`upgrade`、`uninstall`、`--source`/`--version` |
+| 测试 | gateway package + bootstrap e2e | 本地 HTTP fixture、坏 checksum/404/超时/target、升级回滚、引用保护 |
+
+关键接口：
+
+```ts
+loadSourceIndex(location: string, options?): Promise<SourceIndex>;
+selectSourceEntry(index, { id, version?, target }): SourceIndexEntry;
+downloadVerifiedArtifact(entry, { fetchImpl?, timeoutMs?, maxBytes? }): Promise<{ path; sha256; size; cleanup }>;
+installSourcePackage(sandbox, id, options?): Promise<{ record; entry?; cached: boolean }>;
+upgradeClientInstance(sandbox, instanceId, version, { apply? }): Promise<UpgradeResult>;
+```
+
+`installClient` 增加可选 source label，使官方安装的 registry `source` 记录来源 URL，而不是临时下载路径。
+
+**实施结果（2026-11-15）**
+
+| 子任务 | 测试 |
+|---|---|
+| G5-1/G5-3 | `bun test src/packages/gateway/src/client-package/source-index.test.ts scripts/gateway-release.test.ts` → 11 pass |
+| G5-2 | `bun test src/packages/gateway/src/client-package/download.test.ts` → 6 pass |
+| G5-4 | `bun test src/packages/gateway/src/client-package/source-install.test.ts src/bootstrap/gateway-upgrade.test.ts` → 9 pass |
+| G5-5 | `bun test src/packages/gateway/src/client-package/registry.test.ts` → 23 pass |
+| G5-6 | `bun test src/bootstrap/gateway-official.e2e.test.ts` → 2 pass |
+| 定向回归 | `bun test src/bootstrap/cli.test.ts src/bootstrap/gateway-command.test.ts ...` → 118 pass |
+
+实现说明：
+
+- 下载归档的 `sha256` 与 registry 的 payload `sha256` 分属两层；官方安装输出同时保留 registry `sha256`、`url`、`archiveSha256`。
+- 升级失败只回滚实例 package ref；已安装的新版本保留，旧版本仍可用于回滚。
+- 卸载不删除 `.env`、credentials、开发源码或会话数据。
+- `gateway list` / config-only 行为保持 M3b 契约。
+- 发布脚本未提交任何生产 URL 或伪 checksum；当前 host 的 Telegram 制品需在部署时提供真实 `--base-url` 并上传归档。
 
 ### 17.2 M3b 复审修复：config-only 闭环（2026-11-15）
 

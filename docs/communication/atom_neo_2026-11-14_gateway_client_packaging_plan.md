@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-14
 > 开发目标：`gateway_client_packaging`
-> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）已实施完成；G5–G6 待实施**。
+> 状态：**G0 已确认（D1–D9 全部采用推荐方案）；M1（G1）、M2（G2）、M2.1、M3a（G3）、M3b（G4）、M4/G5 已实施完成；G6 待实施**。
 > 本版已按复杂度规则将复杂阶段拆分为“中/轻”子任务；2026-11-15 修订：启动方式**不再兼容旧 `binary`**。决策与回写记录见 §4.2 与 §10。
 >
 > 关联文档：
@@ -480,6 +480,52 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G5-6 | 官方分发端到端测试 | 中 | 测试记录 | 安装、版本选择、失败恢复、卸载保护通过 |
 
 **G5 完成标准**：官方名称安装、版本选择、失败恢复与引用保护端到端可验证。
+
+**G5 实施契约（2026-11-15）**
+
+来源索引（v1）：
+
+```json
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "telegram-bot",
+      "version": "0.1.0",
+      "target": "darwin-arm64",
+      "url": "https://example.invalid/telegram-bot-0.1.0-darwin-arm64.tar.gz",
+      "sha256": "64 lowercase or uppercase hex characters",
+      "size": 123456
+    }
+  ]
+}
+```
+
+- 索引位置由 `ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>` 提供；没有默认生产地址，不硬编码 URL/校验值。
+- `sha256` 是下载归档的校验值；`size` 可选，用于下载前/下载中限制。重复 `id/version/target`、缺失字段、非 http(s) URL、非 64 位 hex 均拒绝。
+- 查找规则：`id` 必须存在；`version` 省略时在同 `id+target` 中选择最高语义版本；版本/target 不存在必须明确报错。
+- 下载：临时目录、超时、最大字节数、边下边算 sha256；失败删除临时文件，不调用安装器。校验通过后只调用现有 `installClient`。
+- CLI：
+  - `atom gateway install <archive>`：本地归档（保持原行为）。
+  - `atom gateway install <id>[@version] --source <file|url>`：官方来源；无 `--source` 时读取 `ATOM_GATEWAY_SOURCE_INDEX`。
+  - `atom gateway upgrade <instance> [--version <version>] [--source <file|url>]`：只切换指定实例；新版本未安装时先下载安装。
+  - `atom gateway uninstall <id>[@version]`：引用检查通过后删除 registry 与包目录；凭据/开发源码不删除。
+- 升级：安装新版本 → 更新指定实例 package ref → Gateway 在线时 reload（已登记）或 register（config-only）；应用失败恢复旧版本配置并保留已安装新版本。离线时只更新 config，输出 `saved/not applied`。
+- 卸载清理：registry 与包目录通过临时改名 + registry 写入提交；写 registry 失败恢复目录；删除失败报告残留路径。被引用版本先拒绝。
+- 发布：`bun run gateway:release -- --client clients/telegram-bot --base-url <url> [--no-build]` 只生成当前 host target 的归档和索引条目；其他 target 必须在对应真实构建环境分别生成，未构建 target 不写入索引。
+
+**G5 实施状态（2026-11-15）**
+
+| ID | 状态 | 实际产出 |
+|---|---|---|
+| G5-1 | 已完成 | `source-index.ts`：严格 v1 schema、file/http 加载、semver/target 选择、重复/缺失 sha256/未知项错误 |
+| G5-2 | 已完成 | `download.ts`：临时文件、超时、大小上限、流式 sha256；失败清理；成功后复用 `installClient` |
+| G5-3 | 已完成 | `scripts/gateway-release.ts` + `gateway:release`：当前 host 构建/打包/算 hash/size/写索引；`--base-url` 必填，无生产默认值 |
+| G5-4 | 已完成 | `installSourcePackage` + `upgradeClientInstance`：版本并存、指定实例切换、在线 reload/register、失败恢复旧配置 |
+| G5-5 | 已完成 | `removePackage(...,{removeFiles:true})`：引用检查、目录改名提交、registry 写失败恢复、残留路径报告 |
+| G5-6 | 已完成 | 本地 HTTP fixture：官方安装 → 配置 → 升级/回滚 → 引用保护 → 文件清理 → 卸载；坏 checksum/404/unsupported target 不注册 |
+
+**G5 完成条件**：`bun test src/packages/gateway/src`、CLI/handler、下载/升级/卸载定向测试、本地 HTTP e2e、`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过；未进入 G6。真实 Telegram 平台消息往返仍留 G6。
 
 ---
 

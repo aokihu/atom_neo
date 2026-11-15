@@ -122,8 +122,7 @@ describe("offline gateway commands", () => {
 
     expect(removed.lines.join("\n")).toContain("Uninstalled echo-bot@1.0.0");
     expect(listPackages(sandbox)).toEqual([]);
-    // removePackage owns registry removal only; G5 owns package file cleanup.
-    expect(existsSync(packageRoot)).toBe(true);
+    expect(existsSync(packageRoot)).toBe(false);
   });
 
   test("loads a relative development directory from the current cwd, not the sandbox", async () => {

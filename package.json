@@ -49,6 +49,7 @@
     "smoke:node:platform": "bun run scripts/node-smoke/run-all.ts platform",
     "smoke:node:release": "bun run scripts/node-smoke/run-all.ts release",
     "smoke:node:package": "bun run scripts/node-smoke/package.ts",
+    "gateway:release": "bun run scripts/gateway-release.ts",
     "prepack": "bun run build:node",
     "prepare": "bash scripts/setup-git-hooks.sh"
   },
