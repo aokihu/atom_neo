@@ -79,6 +79,7 @@ M2 实施记录：`archive.ts` pack/install、`registry.ts`、`instance-config.t
 依赖 G1、G2；先做手动重载。
 
 - [ ] 增加认证管理操作：配置快照校验、登记指定实例、重载指定实例；不放宽平台 Secret 权限。
+- [ ] 修正 `startGateway({ port: 0 })` 时 supervisor `--gateway-url` 使用初始 0 的问题，并处理 registry 并发写入锁。
 - [ ] ClientManager 动态创建/移除/替换 supervisor，分配不与活动实例冲突的稳定端口；stopAll 遍历实际受管实例。
 - [ ] 实现指定实例的在途请求/结果投递计数与暂停接入；重载等待完成，超时保留原进程并报告忙。
 - [ ] 修复 Telegram 对 Gateway 非 2xx 响应的处理；验证忙/拒收响应不会被当作消息成功消费。重试策略与现有限流一起验收，不承诺 exactly-once。
@@ -94,7 +95,7 @@ M2 实施记录：`archive.ts` pack/install、`registry.ts`、`instance-config.t
 
 - [ ] GatewayModal 升级为实例列表，显示来源、版本/目录、进程状态、平台诊断、最近错误。
 - [ ] 增加安装、配置编辑、检查、启停入口；开发者模式展示加载目录、重载和打包。
-- [ ] 安装表单由 manifest.config 驱动；Token 遮罩、默认 longpoll，webhook 高级字段按选择展示。
+- [ ] 安装表单由 manifest.config 驱动；Token 遮罩、默认 longpoll，webhook 高级字段按选择展示；编辑态实现真正的 secret 输入遮罩（G2 仅列表行遮罩）。
 - [ ] 定义有界 Client 诊断能力；未实现诊断的 Client 显示未知/不支持，不能仅凭 health 判定凭据有效。
 - [ ] 汇总经过认证的连接事件并附时间；错误按安装、配置、进程、平台和投递阶段定位。
 - [ ] 实例日志接入现有日志能力；明确 inherit/ignore 与按需采集的兼容行为、输出脱敏和有界保留。

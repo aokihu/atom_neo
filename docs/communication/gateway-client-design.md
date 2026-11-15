@@ -246,7 +246,7 @@ M2（G2）实际交付：
 
 - Telegram manifest 与 `bin/telegram-bot` 构建；tar.gz pack 白名单、target 注入、敏感文件排除。
 - 安全 install：路径/链接/类型校验、临时目录、target/production 校验、失败回滚。
-- `packages.json` registry 与 `sha256` 幂等/冲突；resolver 优先使用 registry 路径。
+- `packages.json` registry 与 `sha256` 幂等/冲突；resolver 只使用 registry 登记的包路径，并校验 target 与当前 host 一致。
 - 离线实例配置 API 与 config-tui 首次实例表单；临时 sandbox 端到端测试。
 - CLI/TUI 在线入口、动态重载与诊断仍属 G3–G4，尚未实现。
 

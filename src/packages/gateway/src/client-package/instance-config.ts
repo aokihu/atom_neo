@@ -43,6 +43,12 @@ function packageSource(sandbox: string, source: PackageSource): { root: string; 
   if (record === undefined) {
     throw new Error(`Client package ${source.id}@${source.version} is not installed in ${sandbox}`);
   }
+  const host = `${process.platform}-${process.arch}`;
+  if (record.target !== host) {
+    throw new Error(
+      `Client package ${source.id}@${source.version} target "${record.target}" is not supported on ${host}`,
+    );
+  }
 
   const root = join(sandbox, record.path);
   const path = join(root, "manifest.json");

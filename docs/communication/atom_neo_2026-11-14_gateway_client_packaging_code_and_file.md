@@ -316,6 +316,8 @@ export function resolveClient(config: ClientConfig, options: ResolveOptions): Re
 
 路径契约：`directory` 可为绝对路径；相对路径相对 `baseDir` 解析。`src/main.ts` 启动 Gateway 时传入 `baseDir: args.sandbox`，因此用户配置中的相对目录以 sandbox 根目录为基准。G2 的 CLI/向导应优先写入绝对路径。
 
+包路径：`sandboxPackageRoot(sandbox)` 只读取 registry 登记记录，不提供手工目录 fallback；命中记录时要求 `record.target === ${process.platform}-${process.arch}`，否则明确报错。
+
 `manifest.config.required` 在启动前校验：secret 字段必须在 `credentials` 中有引用；非 secret 字段必须在 `clientArgs` 中有同名参数。`default` 不会在启动时自动补参数，`enum`/`default` 由 G2 配置表单应用。
 
 凭据映射：
@@ -1037,5 +1039,7 @@ G0 契约确认
 - registry `PackageRecord` 增加 `sha256` 内容标识，以满足同版本冲突判定；D3 嵌套结构不变。
 - pack 默认输出改为 Client 根目录下的 `dist/`，`out` 可覆盖；文档已同步。
 - `installClient` 只接受当前主机 target；跨 target 安装归 G5。
+- `sandboxPackageRoot` 只接受 registry 已登记包，不再回退到手工放置目录；命中记录时校验 target 与当前 host 一致。`configureInstance` 同样校验 registry target。
 - G2-6 提供库级 API 与表单，不实现 `atom gateway` CLI；CLI 接线归 G3。
 - `removePackage` 只删除 registry 记录并检查引用，不删除包目录；完整卸载归 G5。
+- 已知项：`startGateway({port:0})` 的 supervisor gateway 端口、secret 编辑态遮罩、registry 跨进程锁分别归 G3/G4/G3，详见 plan §4.4。

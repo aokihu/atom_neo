@@ -17,7 +17,7 @@ passed to `spawnProcess` without shell concatenation.
 | `archive.ts` | tar.gz pack/install, target injection, path/link safety, commit/rollback |
 | `instance-config.ts` | Offline package/directory instance configuration via shared `client-instance` |
 
-`sandboxPackageRoot()` prefers the registry record path and keeps a compatibility fallback for manually placed packages. `archive.test.ts` covers pack and install; the end-to-end round-trip lives in `src/bootstrap/gateway-package.e2e.test.ts`.
+`sandboxPackageRoot()` requires a registry record and rejects packages registered for another host target; there is no manual-directory fallback. `archive.test.ts` covers pack and install; the end-to-end round-trip lives in `src/bootstrap/gateway-package.e2e.test.ts`.
 
 ## Manifest v1
 

@@ -282,6 +282,7 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 - target：pack 使用显式 `target`、manifest.target 或当前 `${process.platform}-${process.arch}`；写入归档 manifest。install 校验归档 target 与当前主机一致，不支持时明确报错。
 - 默认 pack 输出：Client 根目录下 `dist/<id>-<version>-<target>.tar.gz`；`out` 可覆盖。
 - registry：沿用 D3 `{version:1, packages:{id:{version:PackageRecord}}}`；`PackageRecord` 增加 `sha256` 内容标识，以满足“同内容幂等、同版本不同内容拒绝”。删除前检查 `gateway.clients[].package` 引用。
+- 包查找由 registry 接管：`sandboxPackageRoot` 只接受已登记包，不再回退到手工放置目录；命中记录时校验 `record.target` 必须等于当前 host target。离线配置 API 同样校验 registry target。
 - install：解包到 `.atom/gateway/tmp`，校验路径/链接/manifest/target/production 入口后原子提交到 `packages/<id>/<version>/<target>`；已有版本拒绝覆盖；registry 写入失败时清理已提交目录。
 - 离线配置：`gateway/client-package/instance-config.ts` 复用 shared `client-instance` 写入，返回 `saved / applied=false`；不在 M2 实现 `atom gateway` CLI。
 - config-tui 表单只依赖 shared/tui-kit 类型，不导入 gateway；manifest.config 以结构化 prop 传入，enum/default 由表单应用。
@@ -299,6 +300,14 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G2-6 | 已完成 | `client-package/instance-config.ts`；10 个测试通过；`saved / applied=false` |
 | G2-7 | 已完成 | `GatewayInstanceForm.tsx` + 纯逻辑；15 个测试通过 |
 | G2-8 | 已完成 | 临时 sandbox build→pack→install→configure→start→fake roundtrip；1 个 e2e 测试通过 |
+
+**M2 已知项（后续阶段处理）**
+
+| 项 | 归属 | 说明 |
+|---|---|---|
+| `startGateway({ port: 0 })` 时 supervisor 的 `--gateway-url` 可能为 0 | G3 | 当前生产使用固定端口；G3 动态端口/重载时统一修正 supervisor 的 gateway 端口来源 |
+| secret 编辑态明文可见 | G4 | 当前列表行已遮罩，编辑时受 tui-kit FieldInput 限制；G4 实例表单实现真正的输入遮罩 |
+| registry 无跨进程锁 | G3 | 当前仅保证单次原子写；并发 register/remove 可能丢失更新，G3 与配置锁定一起处理 |
 
 **G2 完成标准**：临时 sandbox 中完成上述闭环，不要求用户手写 binary 路径；失败路径无半成品。
 

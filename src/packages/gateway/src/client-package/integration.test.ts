@@ -9,6 +9,7 @@ import { ClientManager } from "../client-manager";
 import { createFakeRuntime } from "../client-manager/test-helpers";
 import { loadGatewayConfig } from "../config";
 import { buildClientArgs } from "../client-manager/client-command";
+import { registerPackage } from "./registry";
 import { resolveClient, sandboxPackageRoot } from "./resolver";
 
 const tempDirs: string[] = [];
@@ -80,7 +81,9 @@ describe("M1 resolved client integration", () => {
 
   test("starts an installed package through the production entry", async () => {
     const sandboxPath = sandbox();
-    const root = join(sandboxPath, ".atom/gateway/packages/local-package/0.2.0", `${process.platform}-${process.arch}`);
+    const target = `${process.platform}-${process.arch}`;
+    const relativePath = join(".atom", "gateway", "packages", "local-package", "0.2.0", target);
+    const root = join(sandboxPath, relativePath);
     writeManifest(root, {
       manifest_version: 1,
       id: "local-package",
@@ -88,7 +91,15 @@ describe("M1 resolved client integration", () => {
       version: "0.2.0",
       platform: "local",
       entry: { production: ["./bin/local-package"] },
-      target: `${process.platform}-${process.arch}`,
+      target,
+    });
+    registerPackage(sandboxPath, {
+      id: "local-package",
+      version: "0.2.0",
+      target,
+      path: relativePath,
+      source: "test",
+      sha256: "a".repeat(64),
     });
 
     const client: ClientConfig = { id: "pkg", package: { id: "local-package", version: "0.2.0" }, stdio: "inherit" };

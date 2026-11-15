@@ -367,40 +367,44 @@ describe("resolveClients", () => {
 });
 
 describe("sandboxPackageRoot", () => {
-  test("finds the current target and rejects a missing target install", () => {
+  test("uses the registered package path and rejects unregistered packages", () => {
     const sandbox = join(temp, "sandbox");
     const target = `${process.platform}-${process.arch}`;
-    const root = join(
-      sandbox,
-      ".atom",
-      "gateway",
-      "packages",
-      "telegram-bot",
-      "0.1.0",
-      target,
-    );
+    const relativePath = join(".atom", "gateway", "packages", "telegram-bot", "0.1.0", target);
+    const root = join(sandbox, relativePath);
     writeManifest(root);
-
-    const packageRoot = sandboxPackageRoot(sandbox);
-
-    expect(packageRoot("telegram-bot", "0.1.0")).toBe(root);
-    expect(() => packageRoot("telegram-bot", "9.9.9")).toThrow(`not installed for ${target}`);
-  });
-
-  test("prefers the registry record path", () => {
-    const sandbox = join(temp, "registry-sandbox");
-    const installed = join(sandbox, ".atom", "gateway", "packages", "telegram-bot", "0.1.0", "custom-target");
-    writeManifest(installed);
     registerPackage(sandbox, {
       id: "telegram-bot",
       version: "0.1.0",
-      target: "custom-target",
-      path: ".atom/gateway/packages/telegram-bot/0.1.0/custom-target",
+      target,
+      path: relativePath,
       source: "local:test",
       sha256: "a".repeat(64),
       installedAt: "2026-01-01T00:00:00.000Z",
     });
 
-    expect(sandboxPackageRoot(sandbox)("telegram-bot", "0.1.0")).toBe(installed);
+    const packageRoot = sandboxPackageRoot(sandbox);
+
+    expect(packageRoot("telegram-bot", "0.1.0")).toBe(root);
+    expect(() => packageRoot("telegram-bot", "9.9.9")).toThrow(`is not installed in ${sandbox}`);
+  });
+
+  test("rejects a registered package for another host target", () => {
+    const sandbox = join(temp, "wrong-target-sandbox");
+    const relativePath = ".atom/gateway/packages/telegram-bot/0.1.0/linux-x64";
+    writeManifest(join(sandbox, relativePath));
+    registerPackage(sandbox, {
+      id: "telegram-bot",
+      version: "0.1.0",
+      target: "linux-x64",
+      path: relativePath,
+      source: "local:test",
+      sha256: "a".repeat(64),
+      installedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(() => sandboxPackageRoot(sandbox)("telegram-bot", "0.1.0")).toThrow(
+      `target "linux-x64" is not supported on ${process.platform}-${process.arch}`,
+    );
   });
 });

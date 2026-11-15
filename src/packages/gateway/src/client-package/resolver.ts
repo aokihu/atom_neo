@@ -173,24 +173,26 @@ export function resolveClients(
 }
 
 /**
- * Registry-backed package lookup with a compatibility fallback for manually placed packages:
- * `<sandbox>/.atom/gateway/packages/<id>/<version>/<platform>-<arch>`.
+ * Registry-backed package lookup. Packages must be registered; a package for another host
+ * target is rejected even if its directory happens to exist.
  */
 export function sandboxPackageRoot(sandbox: string): (id: string, version: string) => string {
   return (id, version) => {
     const installed = findPackage(sandbox, id, version);
-    if (installed) {
-      const root = join(sandbox, installed.path);
-      if (!existsSync(join(root, "manifest.json"))) {
-        throw new Error(`Client package ${id}@${version} is registered but missing at ${root}`);
-      }
-      return root;
+    if (!installed) {
+      throw new Error(`Client package ${id}@${version} is not installed in ${sandbox}`);
     }
 
     const target = `${process.platform}-${process.arch}`;
-    const root = join(sandbox, ".atom", "gateway", "packages", id, version, target);
+    if (installed.target !== target) {
+      throw new Error(
+        `Client package ${id}@${version} target "${installed.target}" is not supported on ${target}`,
+      );
+    }
+
+    const root = join(sandbox, installed.path);
     if (!existsSync(join(root, "manifest.json"))) {
-      throw new Error(`Client package ${id}@${version} is not installed for ${target}: ${root}`);
+      throw new Error(`Client package ${id}@${version} is registered but missing at ${root}`);
     }
     return root;
   };

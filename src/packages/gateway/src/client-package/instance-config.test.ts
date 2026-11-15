@@ -316,6 +316,15 @@ describe("configureInstance package validation", () => {
       source: { type: "package", id: "telegram-bot", version: "0.1.0" },
     })).toThrow("manifest target is missing; installed packages must be target-stamped");
     expectNoWrites(unstamped);
+
+    const hostMismatch = sandbox();
+    installPackage(hostMismatch, {}, { target: "custom-target" });
+    expect(() => configureInstance({
+      sandbox: hostMismatch,
+      id: "bot",
+      source: { type: "package", id: "telegram-bot", version: "0.1.0" },
+    })).toThrow(`target "custom-target" is not supported on ${TARGET}`);
+    expectNoWrites(hostMismatch);
   });
 });
 
