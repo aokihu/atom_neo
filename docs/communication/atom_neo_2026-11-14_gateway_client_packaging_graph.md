@@ -658,7 +658,11 @@ sequenceDiagram
 
 **卸载**：`removePackage(...,{removeFiles:true})` 在 registry 锁内检查实例引用；包目录先改名为临时路径，registry 写入成功后再删除临时目录。registry 写入失败恢复目录；删除失败返回残留路径。凭据与开发源码不在删除范围。
 
-**发布**：`scripts/gateway-release.ts` 只接受当前 host target，调用 `packClient` 生成归档，计算归档 sha256/size，并要求 `--base-url` 生成索引条目；未构建 target 不写入索引。
+**发布**：`scripts/gateway-release.ts` 只接受当前 host target，调用 `packClient` 生成归档，计算归档 sha256/size，并要求 `--base-url` 生成索引条目；未构建 target 不写入索引。索引默认与已有文件按 `id@version/target` 合并，相同 URL+sha256 幂等，冲突拒绝。
+
+**URL 边界**：远程索引/归档只允许 HTTPS；HTTP 仅 loopback。索引流式读取并执行 maxBytes。
+
+**Reload 恢复**：新 supervisor 启动失败时，ClientManager 恢复旧 config 与旧 supervisor 并重新 start；旧版本也失败时报告双失败。升级 apply 失败因此同时恢复 config 与运行中的旧进程。
 
 ---
 

@@ -17,7 +17,7 @@ export { parseManifest, resolveEntry } from "./client-package/manifest";
 export type { Manifest } from "./client-package/manifest";
 export { installClient, packClient } from "./client-package/archive";
 export type { InstallOptions, InstallResult, PackOptions } from "./client-package/archive";
-export { loadSourceIndex, selectSourceEntry, parseSourceIndex, createSourceIndexEntry, sourceIndexDocument, compareSourceVersions } from "./client-package/source-index";
+export { loadSourceIndex, selectSourceEntry, parseSourceIndex, createSourceIndexEntry, sourceIndexDocument, mergeSourceIndexEntries, compareSourceVersions } from "./client-package/source-index";
 export type { SourceIndex, SourceIndexEntry } from "./client-package/source-index";
 export { downloadVerifiedArtifact } from "./client-package/download";
 export type { DownloadArtifact, DownloadOptions, DownloadedArtifact } from "./client-package/download";

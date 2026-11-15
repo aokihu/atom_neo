@@ -527,6 +527,14 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 
 **G5 完成条件**：`bun test src/packages/gateway/src`、CLI/handler、下载/升级/卸载定向测试、本地 HTTP e2e、`bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过；未进入 G6。真实 Telegram 平台消息往返仍留 G6。
 
+**G5 初审修复（2026-11-15）**
+
+| 问题 | 修复 |
+|---|---|
+| 远程索引/归档允许公网 HTTP，索引先完整读入 | 统一 URL 策略：HTTPS 任意主机，HTTP 仅 loopback（localhost/127.0.0.1/::1）；索引流式读取并执行 maxBytes，不再先 `response.text()`。 |
+| 发布索引覆盖其他 target | 索引默认按 `id@version/target` 合并；相同 URL+sha256 幂等，同键不同内容明确报错；仍只生成当前 host 制品。 |
+| reload 新版本启动失败后旧进程不在 | `ClientManager.reload` 在新 supervisor 启动失败时恢复旧 config/supervisor 并重新启动；恢复失败报告 `restoring the previous version also failed`。升级 apply 失败现在同时恢复 config 和旧进程。 |
+
 ---
 
 ### 4.8 G6：集成收口与文档交付

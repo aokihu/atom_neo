@@ -123,7 +123,7 @@ M3b 实施记录：GatewayModal 实例列表/操作/诊断、GatewayInstanceForm
 
 完成标准：官方名称安装、版本选择、失败恢复与引用保护端到端可验证。文件监听、插件市场与通用 SDK 属后续按需工作，不作为本轮完成条件。
 
-M4/G5 实施记录：`source-index.ts`、`download.ts`、`source-install.ts`、`gateway-upgrade.ts`、registry 文件清理、CLI install/upgrade/uninstall 与 `gateway-release.ts` 已完成。测试使用本地 HTTP fixture，不访问外网；真实 Telegram 平台消息往返留 G6。
+M4/G5 实施记录：`source-index.ts`、`download.ts`、`source-install.ts`、`gateway-upgrade.ts`、registry 文件清理、CLI install/upgrade/uninstall 与 `gateway-release.ts` 已完成。测试使用 loopback HTTP fixture，不访问外网；远程索引/归档仅允许 HTTPS 或 loopback HTTP，发布索引默认安全合并；reload 新版本启动失败会恢复旧 supervisor。真实 Telegram 平台消息往返留 G6。
 
 ### G6：集成收口与文档交付
 

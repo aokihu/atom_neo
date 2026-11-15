@@ -143,6 +143,7 @@ Gateway 与 Core 共用 `@atom-neo/shared` 的 `HttpServer` 契约（`src/packag
 - drain 期间目标实例的 `/gateway/inbound` 返回 503 `{error:"Client busy"}`，其他实例不受影响。
 - 默认 30s 内等待在途请求结束；超时返回 409 并保留旧进程。
 - 成功后停止旧 supervisor（撤销 Secret/清 timer），用同一端口和 `desired` 状态创建新 supervisor；旧 exit 回调/restart timer 不影响新进程。
+- 新 supervisor 启动/就绪失败时，恢复旧配置与旧 supervisor 并重新启动旧版本；恢复成功错误信息明确写 `previous version restored and running`。恢复也失败时报告 `restoring the previous version also failed`，不伪装成功。
 - Telegram Client 对 503/429 退避重试，不推进 update offset。
 
 ### 诊断
@@ -309,13 +310,13 @@ M1 当前实现：实例配置只接受 `package` / `directory` 二选一，`bin
 ### 7.1 官方来源索引、升级与卸载（G5）
 
 - 来源索引 v1：`{version:1, entries:[{id,version,target,url,sha256,size?}]}`；`sha256` 针对下载归档，`size` 可选。
-- 位置：`ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>`；仓库不提供默认生产 URL/checksum。
+- 位置：`ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>`；仓库不提供默认生产 URL/checksum。远程索引/归档只允许 HTTPS；HTTP 仅 loopback（localhost/127.0.0.1/::1）用于本地测试。
 - 查找：`id` 必填；`version` 省略取同 id+target 的最高 `x.y.z`；未知 id/version/target、缺失/非法 sha256、重复条目明确报错。
-- 下载：临时文件、超时、最大字节数、流式 sha256；失败不落盘、不注册。成功后复用 `installClient`，registry `source` 记录归档 URL。
+- 索引读取流式执行 maxBytes，不会先完整读入。下载使用临时文件、超时、最大字节数和流式 sha256；失败不落盘、不注册。成功后复用 `installClient`，registry `source` 记录归档 URL。
 - `atom gateway install <id>[@version]` 使用官方来源；target 存在时仍是本地归档安装。
-- `atom gateway upgrade <instance> [--version <version>]` 只更新指定实例；新版本未安装时先下载安装；在线 reload/register 失败恢复旧实例配置，已安装新版本保留。
+- `atom gateway upgrade <instance> [--version <version>]` 只更新指定实例；新版本未安装时先下载安装；在线 reload/register 失败恢复旧实例配置，并自动恢复/启动旧 supervisor（恢复失败明确报告双失败），已安装新版本保留。
 - `atom gateway uninstall <id>[@version]` 在 registry 锁内检查实例引用；未被引用时删除 registry 和包目录。写入失败恢复目录，删除残留报告路径；`.env` 凭据、开发源码、会话不删除。
-- 发布：`bun run gateway:release -- --client clients/telegram-bot --base-url <url> [--no-build]` 只生成当前 host target；其他 target 必须在对应真实环境分别构建。
+- 发布：`bun run gateway:release -- --client clients/telegram-bot --base-url <url> [--no-build]` 只生成当前 host target；输出索引默认与已有文件按 `id@version/target` 合并，相同 URL+sha256 幂等，同键冲突拒绝。其他 target 必须在对应真实环境分别构建后合并。
 
 ## 8. 文件
 

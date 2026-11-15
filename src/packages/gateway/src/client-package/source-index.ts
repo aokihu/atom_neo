@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { z } from "zod";
+import { isAllowedSourceUrl, sourceUrlError } from "./source-url";
 
 /** One downloadable client archive in a Gateway source index. */
 export type SourceIndexEntry = {
@@ -29,7 +30,7 @@ const SourceIndexEntrySchema = z.strictObject({
   target: z.string().regex(TARGET_PATTERN, "source index target must use lowercase letters, digits, or hyphens"),
   url: z
     .url("source index url must be a valid URL")
-    .refine((url) => /^https?:\/\//i.test(url), "source index url must use http or https"),
+    .refine(isAllowedSourceUrl, "source index url must use https or loopback http"),
   sha256: z
     .string()
     .regex(SHA256_PATTERN, "source index sha256 must be 64 hexadecimal characters")
@@ -107,13 +108,16 @@ export async function loadSourceIndex(
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 
   if (HTTP_LOCATION_PATTERN.test(location)) {
+    if (!isAllowedSourceUrl(location)) {
+      throw new Error(`Cannot load source index at ${location}: ${sourceUrlError(location).message}`);
+    }
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const fetchImpl = options.fetchImpl ?? fetch;
     let response: Response;
     try {
       response = await fetchImpl(location, { signal: AbortSignal.timeout(timeoutMs) });
     } catch (error) {
-      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
       loadError(location, timedOut ? `request timed out after ${timeoutMs}ms` : errorMessage(error));
     }
 
@@ -131,12 +135,38 @@ export async function loadSourceIndex(
 
     let text: string;
     try {
-      text = await response.text();
+      const body = response.body;
+      if (body === null) loadError(location, "response has no body");
+      const reader = body.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > maxBytes) {
+            await reader.cancel();
+            loadError(location, `response exceeds ${maxBytes} bytes`);
+          }
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      text = new TextDecoder().decode(bytes);
     } catch (error) {
-      loadError(location, errorMessage(error));
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        loadError(location, `request timed out after ${timeoutMs}ms`);
+      }
+      throw error;
     }
-    const bytes = Buffer.byteLength(text, "utf8");
-    if (bytes > maxBytes) loadError(location, `response exceeds ${maxBytes} bytes (${bytes} bytes)`);
     return parseSourceIndex(text, location);
   }
 
@@ -222,4 +252,37 @@ export async function createSourceIndexEntry(options: {
 /** Build a validated source index document, rejecting duplicate id/version/target triples. */
 export function sourceIndexDocument(entries: readonly SourceIndexEntry[]): SourceIndex {
   return validateSourceIndex({ version: 1, entries: [...entries] }, "source index document");
+}
+
+function entryKey(entry: SourceIndexEntry): string {
+  return `${entry.id}\u0000${entry.version}\u0000${entry.target}`;
+}
+
+/**
+ * Merge archive entries into an existing index. Same triple with the same URL and sha256
+ * is idempotent; same triple with different content is rejected.
+ */
+export function mergeSourceIndexEntries(
+  existing: SourceIndex,
+  entries: readonly SourceIndexEntry[],
+): SourceIndex {
+  const current = sourceIndexDocument(existing.entries);
+  const incoming = sourceIndexDocument(entries);
+  const merged = new Map(current.entries.map((entry) => [entryKey(entry), entry]));
+
+  for (const entry of incoming.entries) {
+    const previous = merged.get(entryKey(entry));
+    if (previous === undefined) {
+      merged.set(entryKey(entry), entry);
+      continue;
+    }
+    if (previous.url !== entry.url || previous.sha256 !== entry.sha256) {
+      throw new Error(
+        `Conflicting source index entry for ${entry.id}@${entry.version} (${entry.target}): `
+        + `${previous.url} ${previous.sha256} vs ${entry.url} ${entry.sha256}`,
+      );
+    }
+  }
+
+  return sourceIndexDocument([...merged.values()]);
 }

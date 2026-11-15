@@ -8,6 +8,7 @@ import {
   compareSourceVersions,
   createSourceIndexEntry,
   loadSourceIndex,
+  mergeSourceIndexEntries,
   parseSourceIndex,
   selectSourceEntry,
   sourceIndexDocument,
@@ -78,14 +79,34 @@ describe("parseSourceIndex", () => {
     expect(() => sourceIndexDocument([entry(), entry()])).toThrow(/duplicate entry/);
   });
 
-  test("rejects non-http URLs, non-positive sizes, and unknown fields", () => {
+  test("rejects non-http URLs, public plain HTTP, non-positive sizes, and unknown fields", () => {
     for (const invalid of [
       rawEntry({ url: "ftp://example.invalid/demo-bot.tar.gz" }),
+      rawEntry({ url: "http://example.invalid/demo-bot.tar.gz" }),
       rawEntry({ size: 0 }),
       rawEntry({ checksum: SHA }),
     ]) {
       expect(() => parseSourceIndex(indexText([invalid]), "invalid.json")).toThrow(/invalid\.json/);
     }
+    expect(parseSourceIndex(indexText([rawEntry({ url: "https://example.invalid/demo-bot.tar.gz" })])))
+      .toBeDefined();
+    expect(parseSourceIndex(indexText([rawEntry({ url: "http://127.0.0.1/demo-bot.tar.gz" })])))
+      .toBeDefined();
+  });
+});
+
+describe("mergeSourceIndexEntries", () => {
+  test("accumulates targets, is idempotent, and rejects conflicting content", () => {
+    const host = entry();
+    const other = entry({ target: OTHER_TARGET, url: "https://example.invalid/other.tar.gz" });
+    const merged = mergeSourceIndexEntries(sourceIndexDocument([host]), [other]);
+    expect(merged.entries.map(item => item.target).sort()).toEqual([HOST, OTHER_TARGET].sort());
+
+    expect(mergeSourceIndexEntries(merged, [host]).entries).toHaveLength(2);
+    expect(() => mergeSourceIndexEntries(merged, [{
+      ...host,
+      sha256: "c".repeat(64),
+    }])).toThrow("Conflicting source index entry");
   });
 });
 
@@ -139,6 +160,14 @@ describe("loadSourceIndex", () => {
         const path = new URL(request.url).pathname;
         if (path === "/missing") return new Response("not found", { status: 404 });
         if (path === "/large") return new Response("x".repeat(64));
+        if (path === "/stream-large") {
+          return new Response(new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("x".repeat(32)));
+              controller.close();
+            },
+          }));
+        }
         return new Response(body, { headers: { "content-type": "application/json" } });
       },
     });
@@ -152,9 +181,32 @@ describe("loadSourceIndex", () => {
       await expect(loadSourceIndex(location("large"), { maxBytes: 16 })).rejects.toThrow(
         /exceeds 16 bytes/,
       );
+      await expect(loadSourceIndex(location("stream-large"), { maxBytes: 16 })).rejects.toThrow(
+        /exceeds 16 bytes/,
+      );
     } finally {
       server.stop(true);
     }
+  });
+
+  test("rejects public plain HTTP before fetching and allows loopback HTTP", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return Response.json({ version: 1, entries: [] });
+    }) as unknown as typeof fetch;
+
+    await expect(loadSourceIndex("http://example.invalid/index.json", { fetchImpl }))
+      .rejects.toThrow("Source URL must use HTTPS or loopback HTTP");
+    expect(calls).toBe(0);
+
+    await expect(loadSourceIndex("https://example.invalid/index.json", { fetchImpl }))
+      .resolves.toMatchObject({ version: 1 });
+    expect(calls).toBe(1);
+
+    await expect(loadSourceIndex("http://127.0.0.1/index.json", { fetchImpl }))
+      .resolves.toMatchObject({ version: 1 });
+    expect(calls).toBe(2);
   });
 });
 

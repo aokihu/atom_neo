@@ -217,7 +217,7 @@ M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-
 }
 ```
 
-`sha256` 针对下载归档；`size` 可选。来源位置通过 `ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>` 提供，仓库不写死生产 URL/校验值。查找时 `id` 必填，`version` 省略取同 id+target 的最高语义版本；未知 id/version/target、缺失/非法 sha256、重复条目均拒绝。下载到临时文件，带超时/大小上限并流式计算 sha256；校验通过后才调用现有 `installClient`，失败不落盘、不注册。发布脚本只生成当前 host target；其他 target 必须在对应真实构建环境生成后合并索引。
+`sha256` 针对下载归档；`size` 可选。来源位置通过 `ATOM_GATEWAY_SOURCE_INDEX` 或 `--source <file|http(s)-url>` 提供，仓库不写死生产 URL/校验值。远程 URL 仅允许 HTTPS；HTTP 只允许 loopback（localhost/127.0.0.1/::1）用于本地测试，索引条目和归档 URL 同样遵守。索引通过流式读取执行 maxBytes，不先完整缓冲。查找时 `id` 必填，`version` 省略取同 id+target 的最高语义版本；未知 id/version/target、缺失/非法 sha256、重复条目均拒绝。下载到临时文件，带超时/大小上限并流式计算 sha256；校验通过后才调用现有 `installClient`，失败不落盘、不注册。发布脚本只生成当前 host target；输出索引默认与已有索引按 `id@version/target` 合并，相同 URL+sha256 幂等，同键不同内容拒绝，其他 target 不会被覆盖。
 
 实例配置继续归属用户配置。`gateway.clients` 只保留 `package` / `directory` 两种来源，二者互斥；`binary` 与实例级 `platform` 移除，platform、启动数组和 cwd 均由 manifest 解析。旧配置不自动迁移，升级后需重新登记。各实例显式固定安装版本。
 
@@ -229,7 +229,7 @@ M1 已实现 `config.json` / `.env` 的单一写入入口 `shared/config/client-
 
 开发实例引用原始目录，不复制源码。首次加载登记目录和实例配置；重载重新读取 manifest、校验账号配置，并仅替换目标 Client，保留实例 ID、凭据引用与会话元数据。manifest.id/platform 改变按新包/新实例处理，不能覆盖旧身份。
 
-重载复用 supervisor 操作队列：先校验 → 阻止目标实例接收新工作 → 等待已接受消息的结果投递结束 → 停止旧进程并撤销 Secret → 启动新进程并探测就绪。等待超时时返回忙/超时并保留原进程，不能先强杀再宣称重载成功；启动新进程失败则明确报告目标实例失败，不影响其他实例与 Core。开发源码修改不具备代码级自动回滚保证。
+重载复用 supervisor 操作队列：先校验 → 阻止目标实例接收新工作 → 等待已接受消息的结果投递结束 → 停止旧进程并撤销 Secret → 启动新进程并探测就绪。等待超时时返回忙/超时并保留原进程，不能先强杀再宣称重载成功；启动新进程失败时恢复旧 config 与旧 supervisor 并重新启动旧版本，最终错误明确说明旧版本是否恢复；恢复也失败时报告双失败，不影响其他实例与 Core。开发源码修改不具备代码级自动回滚保证。
 
 现有入站请求等待 Core 任务结束后才响应，Telegram 当前也缺少对入站 HTTP 失败状态的检查。开发前必须明确暂停/重试与在途计数契约，修复 Client 对拒收/忙响应的处理，不能把普通 stop/start 当作已完成安全重载。首版不承诺持久投递或 exactly-once。
 
@@ -277,7 +277,7 @@ M2（G2）实际交付：
 - M2.1 硬化：supervisor 在 spawn 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock`（`.atom/gateway/packages.lock`，有界重试/超时）。
 - M3a（G3）已落地动态 register/remove/reload、drain 503/409、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset 与 `atom gateway` CLI。
 - M3b（G4）已落地 GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、`load --id`、resolver enum/default 校验与 PTY 验收。初审修复增加 admin `register`：在线 load 通过 resolver 动态登记 idle 实例（不自动 start），重复登记 409；UI admin 请求统一 5s 超时，client key 使用前缀避免固定动作冲突。复审补齐 config-only 闭环：UI/CLI 合并 `listInstances` 与 supervisor 状态，未登记实例显示 configured/unregistered，可编辑配置后 register/start。
-- M4/G5 已落地官方来源索引、下载校验、当前 host 发布脚本、指定实例升级与带文件清理的卸载；测试使用本地 HTTP fixture，生产 URL/checksum 由部署与发布流程提供。
+- M4/G5 已落地官方来源索引、下载校验、当前 host 发布脚本、指定实例升级与带文件清理的卸载；测试使用 loopback HTTP fixture，生产 URL/checksum 由部署与发布流程提供。远程 HTTP 被拒绝，发布索引默认安全合并。reload 新版本启动失败会恢复并重新启动旧 supervisor。
 
 ## 10. 依据与关联文档
 

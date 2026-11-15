@@ -1163,7 +1163,8 @@ G0 契约确认
 
 | 模块 | 文件 | 职责 |
 |---|---|---|
-| 来源索引 | `src/packages/gateway/src/client-package/source-index.ts` | v1 schema、file/http 加载、语义版本/target 选择、索引条目生成 |
+| 来源索引 | `src/packages/gateway/src/client-package/source-index.ts` | v1 schema、file/http 加载、语义版本/target 选择、索引条目生成与安全合并 |
+| 来源 URL 策略 | `src/packages/gateway/src/client-package/source-url.ts` | HTTPS 或 loopback HTTP 校验 |
 | 下载校验 | `src/packages/gateway/src/client-package/download.ts` | 临时文件、超时、大小上限、流式 sha256；失败清理 |
 | 来源安装 | `src/packages/gateway/src/client-package/source-install.ts` | 索引 + 下载 + 复用 `installClient`；已安装版本复用 |
 | 升级编排 | `src/bootstrap/gateway-upgrade.ts` | 指定实例 package ref 更新、在线 apply、失败恢复旧配置 |
@@ -1188,8 +1189,8 @@ upgradeClientInstance(sandbox, instanceId, version, { apply? }): Promise<Upgrade
 
 | 子任务 | 测试 |
 |---|---|
-| G5-1/G5-3 | `bun test src/packages/gateway/src/client-package/source-index.test.ts scripts/gateway-release.test.ts` → 11 pass |
-| G5-2 | `bun test src/packages/gateway/src/client-package/download.test.ts` → 6 pass |
+| G5-1/G5-3 | `bun test src/packages/gateway/src/client-package/source-index.test.ts scripts/gateway-release.test.ts` → 14 pass |
+| G5-2 | `bun test src/packages/gateway/src/client-package/download.test.ts` → 7 pass |
 | G5-4 | `bun test src/packages/gateway/src/client-package/source-install.test.ts src/bootstrap/gateway-upgrade.test.ts` → 9 pass |
 | G5-5 | `bun test src/packages/gateway/src/client-package/registry.test.ts` → 23 pass |
 | G5-6 | `bun test src/bootstrap/gateway-official.e2e.test.ts` → 2 pass |
@@ -1202,6 +1203,15 @@ upgradeClientInstance(sandbox, instanceId, version, { apply? }): Promise<Upgrade
 - 卸载不删除 `.env`、credentials、开发源码或会话数据。
 - `gateway list` / config-only 行为保持 M3b 契约。
 - 发布脚本未提交任何生产 URL 或伪 checksum；当前 host 的 Telegram 制品需在部署时提供真实 `--base-url` 并上传归档。
+
+**G5 初审修复（2026-11-15）**
+
+| 修复 | 文件 | 测试 |
+|---|---|---|
+| HTTPS/loopback URL 策略 + 流式索引限制 | `source-url.ts`、`source-index.ts`、`download.ts` | 公网 HTTP 拒绝、loopback 允许、content-length/无 length 超限拒绝 |
+| 发布索引按 `id@version/target` 合并 | `source-index.ts`、`scripts/gateway-release.ts` | 两 target 合并、重复幂等、同键冲突拒绝 |
+| reload 旧 supervisor 恢复 | `client-manager/index.ts` | 新版本 spawn 失败 → 旧版本重新 running；旧版本也失败 → 双失败报告 |
+| 升级 apply 失败 | `gateway-upgrade.ts` + reload | config 回滚 + 旧进程恢复；e2e 验证旧版本可用 |
 
 ### 17.2 M3b 复审修复：config-only 闭环（2026-11-15）
 

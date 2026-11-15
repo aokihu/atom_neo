@@ -90,7 +90,47 @@ describe("gateway-release", () => {
     expect(index).toEqual({ version: 1, entries: [expectedEntry] });
 
     const summary = JSON.parse(result.stdout);
-    expect(summary).toEqual({ archive, index: indexPath, entry: expectedEntry });
+    expect(summary).toEqual({ archive, index: indexPath, entry: expectedEntry, entries: 1 });
+  });
+
+  test("merges other target entries, stays idempotent, and rejects same-key conflicts", () => {
+    const client = createClient();
+    const out = join(tempDir(), "dist", "gateway");
+    const indexPath = join(out, "gateway-source-index.json");
+    const otherTarget = HOST === "linux-x64" ? "darwin-arm64" : "linux-x64";
+    const otherEntry = {
+      id: "echo-bot",
+      version: "1.0.0",
+      target: otherTarget,
+      url: `https://example.invalid/echo-bot-1.0.0-${otherTarget}.tar.gz`,
+      sha256: "b".repeat(64),
+    };
+    mkdirSync(out, { recursive: true });
+    writeFileSync(indexPath, JSON.stringify({ version: 1, entries: [otherEntry] }));
+
+    const args = [
+      "--no-build", "--client", client, "--base-url", "https://example.invalid", "--out", out,
+    ];
+    const first = runRelease(args);
+    if (first.status !== 0) throw new Error(first.stderr || first.stdout);
+    const merged = JSON.parse(readFileSync(indexPath, "utf8")) as { entries: Array<{ target: string }> };
+    expect(merged.entries.map(entry => entry.target).sort()).toEqual([HOST, otherTarget].sort());
+
+    const second = runRelease(args);
+    if (second.status !== 0) throw new Error(second.stderr || second.stdout);
+    expect(JSON.parse(readFileSync(indexPath, "utf8")).entries).toHaveLength(2);
+
+    const conflict = {
+      ...otherEntry,
+      target: HOST,
+      url: `https://example.invalid/conflict-${HOST}.tar.gz`,
+      sha256: "c".repeat(64),
+    };
+    writeFileSync(indexPath, JSON.stringify({ version: 1, entries: [otherEntry, conflict] }));
+    const rejected = runRelease(args);
+    expect(rejected.status).not.toBe(0);
+    expect(`${rejected.stderr}${rejected.stdout}`).toContain("Conflicting source index entry");
+    expect(JSON.parse(readFileSync(indexPath, "utf8")).entries).toHaveLength(2);
   });
 
   test("fails when no base URL is provided", () => {

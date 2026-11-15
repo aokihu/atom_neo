@@ -72,6 +72,22 @@ describe("downloadVerifiedArtifact", () => {
     expect(readdirSync(parent)).toEqual([]);
   });
 
+  test("rejects public plain HTTP before fetching or creating temp files", async () => {
+    let calls = 0;
+    const parent = tempParent();
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response(payload());
+    }) as unknown as typeof fetch;
+
+    await expect(downloadVerifiedArtifact(
+      { url: "http://example.invalid/artifact.tar.gz", sha256: sha256(payload()) },
+      { fetchImpl, tempDir: parent },
+    )).rejects.toThrow("Source URL must use HTTPS or loopback HTTP");
+    expect(calls).toBe(0);
+    expect(readdirSync(parent)).toEqual([]);
+  });
+
   test("rejects a checksum mismatch and removes the temp directory", async () => {
     const data = payload();
     const expected = "f".repeat(64);

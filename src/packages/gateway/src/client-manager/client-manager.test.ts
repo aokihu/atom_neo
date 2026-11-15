@@ -240,7 +240,7 @@ describe("ClientManager", () => {
     });
   });
 
-  test("keeps other instances running when a reloaded instance fails to start", async () => {
+  test("restores the previous version when a reloaded instance fails to start", async () => {
     const fake = createFakeRuntime();
     const manager = createManager(fake);
     await manager.startAll();
@@ -257,16 +257,40 @@ describe("ClientManager", () => {
     const error = await manager.reload("alpha", { ...RESOLVED_CLIENTS[0]!, command: ["/bin/alpha-v2"] })
       .then(() => null, (reason: Error) => reason);
 
-    expect(error?.message).toBe("spawn failed");
+    expect(error?.message).toContain("spawn failed");
+    expect(error?.message).toContain("previous version restored and running");
     expect(manager.status()[0]).toMatchObject({
-      id: "alpha", running: false, desired: false, state: "failed", port: 4_200,
+      id: "alpha", running: true, desired: true, state: "running", port: 4_200,
     });
+    expect(fake.spawnCalls.at(-1)?.command[0]).toBe("/bin/alpha");
     expect(manager.status()[1]).toMatchObject({ id: "beta", running: true, desired: true, state: "running" });
     expect(betaProcess.exitCode).toBeNull();
     expect(betaProcess.killSignals).toEqual([]);
 
     await manager.stopAll();
     expect(fake.clock.pendingTimers).toBe(0);
+  });
+
+  test("reports a double failure when the previous version cannot be restored", async () => {
+    const fake = createFakeRuntime();
+    const manager = createManager(fake, [RESOLVED_CLIENTS[0]!]);
+    await manager.start("alpha");
+    fake.setSpawn((command, options) => {
+      if (command[0] === "/bin/alpha-v2" || command[0] === "/bin/alpha") throw new Error("spawn failed");
+      const proc = new FakeProcess({ pid: 3_000 + fake.processes.length });
+      proc.onExit = options?.onExit;
+      fake.processes.push(proc);
+      fake.spawnCalls.push({ command, options });
+      return proc;
+    });
+
+    const error = await manager.reload("alpha", { ...RESOLVED_CLIENTS[0]!, command: ["/bin/alpha-v2"] })
+      .then(() => null, (reason: Error) => reason);
+
+    expect(error?.message).toContain("spawn failed");
+    expect(error?.message).toContain("restoring the previous version also failed");
+    expect(manager.status()[0]).toMatchObject({ id: "alpha", running: false, desired: false, state: "failed" });
+    await manager.stopAll();
   });
 
   test("ignores an old process exit after reload", async () => {

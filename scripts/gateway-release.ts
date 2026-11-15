@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { packClient } from "../src/packages/gateway/src/client-package/archive";
 import { parseManifest } from "../src/packages/gateway/src/client-package/manifest";
 import {
   createSourceIndexEntry,
+  mergeSourceIndexEntries,
+  parseSourceIndex,
   sourceIndexDocument,
 } from "../src/packages/gateway/src/client-package/source-index";
 
@@ -103,11 +105,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     version: manifest.version,
     target,
   });
-  const index = sourceIndexDocument([entry]);
   const indexPath = join(outDir, "gateway-source-index.json");
-  writeFileSync(indexPath, `${JSON.stringify(index, null, 2)}\n`);
+  const existing = existsSync(indexPath)
+    ? parseSourceIndex(readFileSync(indexPath, "utf8"), indexPath)
+    : sourceIndexDocument([]);
+  const merged = mergeSourceIndexEntries(existing, [entry]);
+  writeFileSync(indexPath, `${JSON.stringify(merged, null, 2)}\n`);
 
-  console.log(JSON.stringify({ archive, index: indexPath, entry }, null, 2));
+  console.log(JSON.stringify({ archive, index: indexPath, entry, entries: merged.entries.length }, null, 2));
 }
 
 if (import.meta.main) {

@@ -15,8 +15,9 @@ passed to `spawnProcess` without shell concatenation.
 | `integration.test.ts` | Fake-runtime package/directory startup, credentials and reserved args |
 | `registry.ts` | `.atom/gateway/packages.json` read/write under `packages.lock`, `sha256` idempotency/conflicts, reference checks, optional package-directory cleanup |
 | `archive.ts` | tar.gz pack/install, target injection, path/link safety, commit/rollback |
-| `source-index.ts` | Official source index v1 schema, file/http loading, version/target selection, archive hash/size entry generation |
-| `download.ts` | Bounded/streamed artifact download with sha256 verification and failure cleanup |
+| `source-index.ts` | Official source index v1 schema, file/http loading (HTTPS or loopback HTTP), version/target selection, safe merge, archive hash/size entry generation |
+| `source-url.ts` | Shared HTTPS/loopback URL policy for index and archive downloads |
+| `download.ts` | Bounded/streamed artifact download with sha256 verification, HTTPS/loopback policy, and failure cleanup |
 | `source-install.ts` | Source index + download → existing `installClient`; cached version reuse |
 | `instance-config.ts` | Offline package/directory instance configuration via shared `client-instance` |
 

@@ -33,7 +33,7 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。
 
 Gateway 为短时控制进程，不是 Gateway Server 启动模式。旧动作使用 `--action start|stop`；`atom gateway ...` 是增量 CLI，不初始化 Core/Provider/TUI。`install/load/pack/uninstall` 与 `list` 可离线执行；在线命令通过 `.atom/gateway/runtime.json` + 管理 Token 发现服务，Gateway 离线时明确报错，不自动启动。`list` 合并 config-only 条目与 supervisor 状态，JSON 用 `configured` / `registered` / `state` / `offline` 区分。`load` 的相对路径按当前 cwd 解析（与 pack/install 一致），以绝对目录写入；实例 ID 默认 manifest.id，可用 `--id <id>` 为同一目录登记不同实例，重复 ID 更新同名实例。Gateway 在线时 load 写 config 后调用 admin `register`（不自动 start）；离线时只保存，启动 Gateway 后再登记。`--id` 只对 load 有效。
 
-`install` 的 target 存在时按本地归档安装；否则按官方 `id[@version]` 从 `--source` 或 `ATOM_GATEWAY_SOURCE_INDEX` 读取索引，下载校验后复用本地安装器。`upgrade <instance>` 只更新指定实例，可带 `--version`；新版本未安装时先下载安装，在线 reload/register 失败恢复旧实例配置。`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
+`install` 的 target 存在时按本地归档安装；否则按官方 `id[@version]` 从 `--source` 或 `ATOM_GATEWAY_SOURCE_INDEX` 读取索引，下载校验后复用本地安装器。远程索引/归档只允许 HTTPS；HTTP 仅 loopback 用于本地测试。`upgrade <instance>` 只更新指定实例，可带 `--version`；新版本未安装时先下载安装，在线 reload/register 失败恢复旧实例配置。`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
 
 ## HTTP 运行时选择
 

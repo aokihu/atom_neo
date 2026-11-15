@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isAllowedSourceUrl, sourceUrlError } from "./source-url";
 
 export type DownloadArtifact = {
   url: string;
@@ -53,6 +54,7 @@ export async function downloadVerifiedArtifact(
   artifact: DownloadArtifact,
   options: DownloadOptions = {},
 ): Promise<DownloadedArtifact> {
+  if (!isAllowedSourceUrl(artifact.url)) throw sourceUrlError(artifact.url);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   const fetchImpl = options.fetchImpl ?? fetch;

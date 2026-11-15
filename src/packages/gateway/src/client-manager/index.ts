@@ -190,6 +190,8 @@ export class ClientManager {
       if (this.#stopping) throw new Error("Gateway is stopping");
       if (config.id !== id) throw new Error(`Reload config id "${config.id}" does not match "${id}"`);
 
+      const previousConfig = this.#configs.get(id);
+      if (!previousConfig) throw new Error(`Missing config for client: ${id}`);
       const port = previous.port;
       const wasDesired = previous.desired;
       await previous.stop();
@@ -197,7 +199,28 @@ export class ClientManager {
       const next = this.#createSupervisor(id, config, port);
       this.#configs.set(id, config);
       this.#supervisors.set(id, next);
-      if (wasDesired) await next.start();
+      if (!wasDesired) return;
+
+      try {
+        await next.start();
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error);
+        this.#configs.set(id, previousConfig);
+        this.#supervisors.set(id, previous);
+        try {
+          await previous.start();
+        } catch (restoreError) {
+          const restore = restoreError instanceof Error ? restoreError.message : String(restoreError);
+          throw new Error(
+            `Reload of client "${id}" failed: ${cause}; restoring the previous version also failed: ${restore}`,
+            { cause: error },
+          );
+        }
+        throw new Error(
+          `Reload of client "${id}" failed: ${cause}; previous version restored and running`,
+          { cause: error },
+        );
+      }
     });
   }
 
