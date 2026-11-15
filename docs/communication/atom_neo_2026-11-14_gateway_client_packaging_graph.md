@@ -533,10 +533,12 @@ sequenceDiagram
     participant A as gateway-actions / CLI
 
     U->>M: 打开 Gateway
-    M->>S: fetchGatewayStatus(sandbox)
+    M->>S: fetchGatewayInstances(sandbox, actions)
+    S->>S: listInstances(sandbox)（config-only）
     S->>G: GET /admin/clients (+ admin token)
     G-->>S: clients[]（source/state/port/platform/diagnostics，无 secret）
-    S-->>M: 列表或 null(OFFLINE)
+    S->>A: describe(config-only id) → manifest.config
+    S-->>M: 合并列表（registered 或 configured/unregistered）
     U->>M: Reload / Start / Stop
     M->>S: gatewayAction
     S->>G: POST /admin/clients
@@ -564,6 +566,8 @@ sequenceDiagram
 - `gateway-status` 的 admin 请求统一 `AbortSignal.timeout`（默认 5s）；超时显示明确错误，不无限等待。
 - `register` 只创建 idle supervisor，不自动 start；进程状态仍来自 supervisor。
 - client 列表 key 使用 `client:${id}`，固定动作 key（refresh/install/load/pack/port/back）与实例 ID 解耦。
+- config-only 条目的进程字段是显式占位（`registered:false`、`state:"unregistered"`、`running:false`），不代表进程状态；进程状态仍只看 supervisor。
+- `gateway list` 离线读 config；在线合并 admin 状态与 config-only，JSON 含 `configured`、`registered`、`offline`。
 
 ---
 

@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { act } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
+import { listInstances, upsertInstance } from "@atom-neo/shared";
 import { GatewayModal } from "./GatewayModal";
 import type { GatewayInstanceActions, GatewayInstanceStatus } from "../gateway-status";
+import type { GatewayInstanceFields } from "../gateway-instance-form";
 
 const cleanup: Array<() => void | Promise<void>> = [];
 
@@ -118,7 +120,7 @@ test("offline sandbox shows OFFLINE plus install/load/pack entry points", async 
 
   const frame = modal.frame();
   expect(frame).toContain("GATEWAY CLIENTS");
-  expect(frame).toContain("OFFLINE — Gateway is not running for this sandbox");
+  expect(frame).toContain("OFFLINE — config-only entries remain editable");
   expect(frame).toContain("Install client package");
   expect(frame).toContain("Load client directory");
   expect(frame).toContain("Pack client directory (developer)");
@@ -270,6 +272,109 @@ test("install, load with an optional id, and pack hand off to the CLI actions", 
   await modal.press("RETURN");
   await modal.settle();
   expect(packed).toEqual(["clients/bot"]);
+});
+
+test("offline load exposes a config-only instance for secret entry, register, and start", async () => {
+  const { dir } = makeSandbox();
+  const clientDir = join(dir, "client");
+  mkdirSync(clientDir, { recursive: true });
+  const fields: GatewayInstanceFields = {
+    mode: { label: "Mode", type: "string", enum: ["longpoll", "webhook"], default: "longpoll" },
+    "bot-token": { label: "Bot Token", type: "string", required: true, secret: true },
+  };
+  const registered = new Set<string>();
+  let running = false;
+  const actionsSeen: string[] = [];
+  const server = startServer(async (request) => {
+    if (request.method === "POST") {
+      const body = await request.json() as { action: string; clientId: string };
+      actionsSeen.push(body.action);
+      if (body.action === "register") registered.add(body.clientId);
+      if (body.action === "start") running = true;
+      return Response.json({ results: [{ id: body.clientId, ok: true }], clients: [] });
+    }
+    const instance = listInstances(dir).find(entry => entry.id === "echo-bot");
+    return Response.json({
+      clients: registered.has("echo-bot") ? [status({
+        id: "echo-bot",
+        platform: "test",
+        source: { type: "directory", directory: clientDir },
+        state: running ? "running" : "idle",
+        running,
+        desired: running,
+        config: fields,
+        clientArgs: { ...(instance?.clientArgs ?? {}) },
+        secretFields: Object.keys(instance?.credentials ?? {}),
+      })] : [],
+    });
+  });
+
+  const actions: GatewayInstanceActions = {
+    install: async () => "installed",
+    pack: async (directory) => `packed ${directory}`,
+    load: async (directory, id) => {
+      upsertInstance(dir, {
+        id: id ?? "echo-bot",
+        directory,
+        clientArgs: { mode: "longpoll" },
+        stdio: "inherit",
+      });
+      return "Loaded echo-bot; saved, not started (Gateway offline)";
+    },
+    describe: async (id) => {
+      const instance = listInstances(dir).find(entry => entry.id === id);
+      if (!instance) throw new Error("missing instance");
+      return {
+        config: fields,
+        clientArgs: { ...(instance.clientArgs ?? {}) },
+        secretFields: Object.keys(instance.credentials ?? {}),
+        stdio: instance.stdio,
+        platform: "test",
+      };
+    },
+  };
+
+  const modal = await mountModal(dir, actions);
+
+  await modal.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await modal.type(clientDir);
+  await modal.press("RETURN");
+  await modal.settle();
+  await modal.press("RETURN");
+  await modal.settle();
+
+  expect(modal.frame()).toContain("echo-bot");
+  expect(modal.frame()).toContain("configured · unregistered");
+
+  await modal.press("RETURN");
+  expect(modal.frame()).toContain("Register with Gateway");
+  expect(modal.frame()).not.toContain("Start");
+
+  await modal.press("ARROW_DOWN", "RETURN");
+  await modal.press("ARROW_DOWN", "RETURN");
+  await modal.type("123:telegram-secret");
+  expect(modal.frame()).toContain("••••••");
+  expect(modal.frame()).not.toContain("123:telegram-secret");
+  await modal.press("RETURN", "TAB", "RETURN");
+  await modal.settle();
+  expect(modal.frame()).toContain("Saved echo-bot; configured, not registered");
+
+  writeRuntime(dir, server.url.toString());
+  await modal.press("ARROW_DOWN", "RETURN");
+  await modal.settle();
+
+  await modal.press("ARROW_UP", "RETURN");
+  expect(modal.frame()).toContain("Register with Gateway");
+  await modal.press("RETURN");
+  await modal.settle();
+  expect(modal.frame()).toContain("register echo-bot: ok");
+
+  await modal.press("RETURN");
+  expect(modal.frame()).toContain("Start");
+  await modal.press("RETURN");
+  await modal.settle();
+  expect(modal.frame()).toContain("start echo-bot: ok");
+  expect(actionsSeen).toEqual(["register", "start"]);
 });
 
 test("instance ids that match fixed action keys still open the instance", async () => {

@@ -4,7 +4,7 @@ import { Modal } from "../modal";
 import { parsePort } from "../wizard-logic";
 import {
   fetchGatewayDiagnostics,
-  fetchGatewayStatus,
+  fetchGatewayInstances,
   gatewayAction,
   saveGatewayInstance,
 } from "../gateway-status";
@@ -32,11 +32,17 @@ function lastError(client: GatewayInstanceStatus): string | undefined {
 
 const CLIENT_KEY_PREFIX = "client:";
 
+function isRegistered(client: GatewayInstanceStatus): boolean {
+  return client.registered !== false;
+}
+
 function clientItems(clients: GatewayInstanceStatus[]): Item[] {
   return clients.map(client => ({
     key: `${CLIENT_KEY_PREFIX}${client.id}`,
     label: client.id,
-    detail: `${sourceLabel(client)} · ${client.state} · ${client.platform} · :${client.port}${lastError(client) ? ` · ${lastError(client)}` : ""}`,
+    detail: isRegistered(client)
+      ? `${sourceLabel(client)} · ${client.state} · ${client.platform} · :${client.port}${lastError(client) ? ` · ${lastError(client)}` : ""}`
+      : `${sourceLabel(client)} · configured · unregistered`,
   }));
 }
 
@@ -51,6 +57,20 @@ const ACTION_ITEMS: Item[] = [
   { key: "back", label: "‹ back" },
 ];
 
+const CONFIGURED_ACTION_ITEMS: Item[] = [
+  { key: "register", label: "Register with Gateway" },
+  { key: "edit", label: "Edit configuration" },
+  { key: "pack", label: "Pack directory (developer)" },
+  { key: "back", label: "‹ back" },
+];
+
+function actionItems(client: GatewayInstanceStatus): Item[] {
+  if (!isRegistered(client)) {
+    return CONFIGURED_ACTION_ITEMS.filter(item => item.key !== "pack" || client.source.type === "directory");
+  }
+  return ACTION_ITEMS.filter(item => item.key !== "pack" || client.source.type === "directory");
+}
+
 export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }: {
   sandbox: string;
   port: number;
@@ -60,6 +80,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
 }) {
   const { colors } = useTheme();
   const [clients, setClients] = useState<GatewayInstanceStatus[] | null | undefined>(undefined);
+  const [offline, setOffline] = useState(false);
   const [view, setView] = useState<View>("clients");
   const [selected, setSelected] = useState(0);
   const [error, setError] = useState("");
@@ -73,7 +94,9 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
   const refresh = async () => {
     setError("");
     try {
-      setClients(await fetchGatewayStatus(sandbox));
+      const result = await fetchGatewayInstances(sandbox, gatewayActions);
+      setClients(result.instances);
+      setOffline(result.offline);
     } catch (err) {
       setClients(null);
       setError(err instanceof Error ? err.message : String(err));
@@ -82,7 +105,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
 
   useEffect(() => {
     void refresh();
-  }, [sandbox]);
+  }, [sandbox, gatewayActions]);
 
   const open = (next: View) => {
     setError("");
@@ -91,7 +114,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
     setSelected(0);
   };
 
-  const runAction = async (action: "start" | "stop" | "reload") => {
+  const runAction = async (action: "start" | "stop" | "reload" | "register") => {
     if (!active) return;
     setError("");
     try {
@@ -106,6 +129,10 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
 
   const showDiagnostics = async (mode: "check" | "logs") => {
     if (!active) return;
+    if (!isRegistered(active)) {
+      setError("Register this instance before checking platform diagnostics");
+      return;
+    }
     setError("");
     try {
       setDiagnostics(await fetchGatewayDiagnostics(sandbox, active.id));
@@ -129,17 +156,19 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
       open("clients");
       setNotice(result.trim() || `${action}: ok`);
     } catch (err) {
+      await refresh();
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const saveEdit = (values: Record<string, string>) => {
+  const saveEdit = async (values: Record<string, string>) => {
     if (!active) return;
     const { secrets } = splitFieldValues(active.config, values);
     try {
       saveGatewayInstance(sandbox, active, values, secrets);
+      await refresh();
       open("clients");
-      setNotice(`Saved ${active.id}; restart/reload to apply`);
+      setNotice(`Saved ${active.id}; ${isRegistered(active) ? "restart/reload to apply" : "configured, not registered"}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -276,7 +305,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
   }
 
   if (view === "actions" && active) {
-    const items = ACTION_ITEMS.filter(item => item.key !== "pack" || active.source.type === "directory");
+    const items = actionItems(active);
     return (
       <Modal
         open
@@ -289,7 +318,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
         onListActivate={(index) => {
           const key = items[index]?.key;
           if (key === "back") open("clients");
-          else if (key === "start" || key === "stop" || key === "reload") void runAction(key);
+          else if (key === "start" || key === "stop" || key === "reload" || key === "register") void runAction(key);
           else if (key === "check" || key === "logs") void showDiagnostics(key);
           else if (key === "edit") open("edit");
           else if (key === "pack") {
@@ -301,7 +330,14 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
       >
         <box flexDirection="column">
           <text fg={colors.text.muted}>{sourceLabel(active)}</text>
-          <text fg={colors.text.muted}>state {active.state} · port {active.port} · {active.platform}</text>
+          {isRegistered(active) ? (
+            <text fg={colors.text.muted}>state {active.state} · port {active.port} · {active.platform}</text>
+          ) : (
+            <text fg={colors.status.warning ?? colors.text.muted}>configured · unregistered</text>
+          )}
+          {active.descriptionError ? (
+            <text fg={colors.status.error}>Manifest: {active.descriptionError}</text>
+          ) : null}
           {lastError(active) ? <text fg={colors.status.error}>{lastError(active)}</text> : null}
           <box marginTop={1} flexDirection="column">
             {items.map((item, index) => (
@@ -353,11 +389,9 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
     >
       <box flexDirection="column">
         {clients === undefined ? <text fg={colors.text.muted}>Loading…</text> : null}
-        {clients === null && !error
-          ? <text fg={colors.status.error}>OFFLINE — Gateway is not running for this sandbox</text>
-          : null}
         {clients === null && error ? <text fg={colors.status.error}>Unable to load Gateway status.</text> : null}
-        {clients !== null && clients !== undefined && clients.length === 0
+        {offline ? <text fg={colors.status.warning}>OFFLINE — config-only entries remain editable</text> : null}
+        {clients !== null && clients !== undefined && clients.length === 0 && !offline
           ? <text fg={colors.text.muted}>No configured clients.</text>
           : null}
         {items.map((item, index) => (

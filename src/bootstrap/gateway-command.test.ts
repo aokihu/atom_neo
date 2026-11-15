@@ -258,13 +258,33 @@ describe("offline gateway commands", () => {
     expect(JSON.parse(readFileSync(join(sandbox, "config.json"), "utf8")).gateway.clients).toHaveLength(1);
   });
 
-  test("offline actions need no runtime and online actions explain a missing one", async () => {
+  test("offline list shows configured instances and online actions explain a missing runtime", async () => {
     const sandbox = tempDir("atom-gateway-offline-");
     const clientRoot = join(sandbox, "client");
     writeClient(clientRoot);
 
     const load = gatewayArgs(sandbox, "load", clientRoot);
     await expect(runGatewayCommand(load.command, load.args, { stdout: () => {} })).resolves.toBeUndefined();
+
+    const list = capture();
+    const listArgs = gatewayArgs(sandbox, "list");
+    await runGatewayCommand(listArgs.command, listArgs.args, { stdout: list.stdout });
+    expect(list.lines.join("\n")).toContain("echo-bot");
+    expect(list.lines.join("\n")).toContain("configured");
+    expect(list.lines.join("\n")).toContain("unregistered");
+
+    const json = capture();
+    const jsonArgs = gatewayArgs(sandbox, "list", undefined, ["--json"]);
+    await runGatewayCommand(jsonArgs.command, jsonArgs.args, { stdout: json.stdout });
+    const body = JSON.parse(json.lines.join("\n")) as { clients: Array<Record<string, unknown>>; offline: boolean };
+    expect(body.offline).toBe(true);
+    expect(body.clients).toMatchObject([{
+      id: "echo-bot",
+      configured: true,
+      registered: false,
+      state: "unregistered",
+      source: { type: "directory", directory: clientRoot },
+    }]);
 
     let calls = 0;
     const deps = {
@@ -274,8 +294,8 @@ describe("offline gateway commands", () => {
         throw new Error("fetch must not run without a runtime file");
       }) as typeof fetch,
     };
-    const list = gatewayArgs(sandbox, "list");
-    await expect(runGatewayCommand(list.command, list.args, deps)).rejects.toThrow(
+    const start = gatewayArgs(sandbox, "start", "echo-bot");
+    await expect(runGatewayCommand(start.command, start.args, deps)).rejects.toThrow(
       `Gateway is not running for sandbox ${sandbox}; start it with --mode core-gateway`,
     );
     expect(calls).toBe(0);
@@ -285,7 +305,7 @@ describe("offline gateway commands", () => {
       token: "admin-token",
       instanceId: "gateway-test",
     });
-    await expect(runGatewayCommand(list.command, list.args, deps)).rejects.toThrow(
+    await expect(runGatewayCommand(start.command, start.args, deps)).rejects.toThrow(
       `Gateway is not running for sandbox ${sandbox}; start it with --mode core-gateway`,
     );
     expect(calls).toBe(1);
@@ -356,6 +376,29 @@ describe("online gateway commands", () => {
     })).rejects.toThrow("Gateway admin request failed (400): {\"results\":[{\"id\":\"echo-bot\",\"ok\":false,\"error\":\"Client echo-bot argument --mode must be one of: longpoll, webhook\"}]}");
   });
 
+  test("list keeps config-only entries distinct from registered instances", async () => {
+    const sandbox = tempDir("atom-gateway-list-configured-");
+    const clientRoot = join(sandbox, "client");
+    writeClient(clientRoot, { required: false });
+    const load = gatewayArgs(sandbox, "load", clientRoot);
+    await runGatewayCommand(load.command, load.args, { stdout: () => {} });
+
+    publishRuntimeFile(sandbox, "gateway", {
+      url: "http://127.0.0.1:4200",
+      token: "admin-token",
+      instanceId: "gateway-test",
+    });
+    const fetchImpl = (async () => Response.json({ clients: [] })) as unknown as typeof fetch;
+    const json = capture();
+    const list = gatewayArgs(sandbox, "list", undefined, ["--json"]);
+    await runGatewayCommand(list.command, list.args, { stdout: json.stdout, fetchImpl });
+
+    expect(JSON.parse(json.lines.join("\n"))).toMatchObject({
+      offline: false,
+      clients: [{ id: "echo-bot", configured: true, registered: false, state: "unregistered" }],
+    });
+  });
+
   test("list, lifecycle actions, check, and logs use the admin API", async () => {
     const sandbox = tempDir("atom-gateway-online-");
     publishRuntimeFile(sandbox, "gateway", {
@@ -410,7 +453,10 @@ describe("online gateway commands", () => {
     const listJson = capture();
     const listJsonArgs = gatewayArgs(sandbox, "list", undefined, ["--json"]);
     await runGatewayCommand(listJsonArgs.command, listJsonArgs.args, { ...deps, stdout: listJson.stdout });
-    expect(JSON.parse(listJson.lines.join("\n"))).toEqual({ clients });
+    expect(JSON.parse(listJson.lines.join("\n"))).toEqual({
+      clients: [{ ...clients[0], configured: false, registered: true }],
+      offline: false,
+    });
 
     for (const action of ["start", "stop", "reload"] as const) {
       calls.length = 0;

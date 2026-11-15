@@ -154,8 +154,8 @@ ProjectModal 在 config 模式跳过（不重写 AGENTS.md）。
 
 `GatewayModal` 在保留端口编辑的同时提供实例管理；Gateway 离线时显示 `OFFLINE`，仍可执行 install/load/pack。
 
-- 列表状态来自 Gateway `GET /admin/clients`：source（package 版本或 directory）、supervisor state、端口、平台、最近 warn/error。UI 不自行推断进程状态。
-- 操作：start/stop/reload、check（Client `/diagnostics`）、diagnostics/logs、编辑配置；reload 失败直接显示服务端 detail。
+- 列表状态来自 Gateway `GET /admin/clients` 与 sandbox `listInstances`：source（package 版本或 directory）、supervisor state、端口、平台、最近 warn/error；仅存在于 config 的实例显示 `configured / unregistered`。UI 不自行推断进程状态。
+- 操作：start/stop/reload/register、check（Client `/diagnostics`）、diagnostics/logs、编辑配置；reload/register 失败直接显示服务端 detail。config-only 实例可先编辑 secret，再 register/start。
 - 编辑表单由 `manifest.config` 驱动；secret 行始终显示固定 `••••••`，编辑 secret 使用 `SecretFieldInput`（原始输入不渲染），空白表示保持已配置值。
 - 安装/加载/打包复用 `atom gateway` CLI handler；`load` 可填写实例 ID，留空使用 manifest.id。
 - 保存实例复用 `upsertInstance`；成功后提示 restart/reload 生效，不伪造在线状态。

@@ -92,7 +92,7 @@ M2.1 风险硬化：supervisor 在 spawn/restart 时读取 serve 后的真实 ga
 
 M3a 实施记录：动态 ClientManager、drain/reload、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset、`atom gateway` CLI 与 gateway-command 已完成。`load` 相对路径按当前 cwd 解析；Client `/diagnostics` 在 Gateway 侧有界（20 checks / 200 字符 / 8 KiB）并脱敏。
 
-M3b 实施记录：GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、CLI `load --id`、resolver enum/default/clientArgs 校验、PTY 验收已完成。UI 进程状态来自 supervisor/admin API，平台检查来自 Client `/diagnostics`；诊断与日志继续有界脱敏。初审修复补充 admin `register`（在线 load 动态登记 idle 实例，不自动 start；重复 409）、UI admin 5s 超时和 client key 前缀。
+M3b 实施记录：GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、CLI `load --id`、resolver enum/default/clientArgs 校验、PTY 验收已完成。UI 进程状态来自 supervisor/admin API，平台检查来自 Client `/diagnostics`；诊断与日志继续有界脱敏。初审修复补充 admin `register`（在线 load 动态登记 idle 实例，不自动 start；重复 409）、UI admin 5s 超时和 client key 前缀。复审补齐 config-only 闭环：UI/CLI 合并 config 与 supervisor 状态，未登记实例显示 configured/unregistered，可编辑 secret 后 register/start。
 
 ### G4：平台接入管理、诊断与日志
 

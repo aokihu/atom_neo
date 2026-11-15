@@ -96,7 +96,8 @@ menu
 
 - 相对路径按打印命令的当前目录解析；菜单展示与执行使用同一参数。
 - `load` 的实例 ID 可留空，留空时使用 manifest.id；填写时允许同一目录登记多个实例。
-- `load` 先写 config；Gateway 在线时再调用 admin `register`，新实例立即出现在管理列表但不会自动 start；Gateway 离线时保持 `saved, not started`，下次启动 Gateway 后登记。重复登记返回明确错误。
+- `load` 先写 config；Gateway 在线时再调用 admin `register`，新实例立即出现在管理列表但不会自动 start；Gateway 离线时保持 `saved, not started`。required secret/参数未配置时 register 失败，但 config-only 实例仍会显示为 `configured / unregistered`，可在配置 UI 补齐后 register/start。重复登记返回明确错误。
+- `manage instances` 执行 `gateway list`：离线时读取 config 并显示 configured/unregistered；在线时合并 supervisor 状态，JSON 区分 `configured`、`registered`、`running/state` 与 `offline`。
 - 历史只保存非敏感字段；不记录 Token、Secret、`.env` 内容或管理凭据。
 - 取消、回退或执行失败不会写入历史；成功执行后结束菜单并退出。
 

@@ -9,7 +9,7 @@ import {
   resolveEntry,
 } from "@atom-neo/gateway";
 import type { Manifest } from "@atom-neo/gateway";
-import { upsertInstance } from "@atom-neo/shared";
+import { clientSource, listInstances, upsertInstance } from "@atom-neo/shared";
 import type { BootArguments, GatewayCommand } from "./cli";
 import { readRuntimeFile } from "./runtime-file";
 
@@ -149,9 +149,13 @@ function formatClient(client: unknown): string {
   if (!isRecord(client)) return String(client);
 
   const parts = [String(client.id ?? "unknown")];
-  const state = client.state
-    ?? (client.running === true ? "running" : client.running === false ? "idle" : undefined);
-  if (state !== undefined) parts.push(String(state));
+  if (client.registered === false) {
+    parts.push("configured", "unregistered");
+  } else {
+    const state = client.state
+      ?? (client.running === true ? "running" : client.running === false ? "idle" : undefined);
+    if (state !== undefined) parts.push(String(state));
+  }
 
   const source = client.source;
   if (isRecord(source)) {
@@ -348,12 +352,33 @@ export async function runGatewayCommand(
     }
 
     case "list": {
-      const text = await adminRequest(args, deps, "/admin/clients", { method: "GET" });
+      const configured = listInstances(args.sandbox);
+      const configuredById = new Map(configured.map(instance => [instance.id, instance]));
+      const offline = readGatewayRuntime(args.sandbox) === undefined;
+      const adminClients = offline
+        ? []
+        : clientsOf(parseAdminJson(await adminRequest(args, deps, "/admin/clients", { method: "GET" })));
+      const registeredIds = new Set(
+        adminClients.filter(isRecord).map(client => typeof client.id === "string" ? client.id : undefined),
+      );
+      const clients: unknown[] = adminClients.map(client => isRecord(client)
+        ? { ...client, configured: configuredById.has(String(client.id)), registered: true }
+        : client);
+      for (const instance of configured) {
+        if (registeredIds.has(instance.id)) continue;
+        clients.push({
+          id: instance.id,
+          source: clientSource(instance),
+          state: "unregistered",
+          configured: true,
+          registered: false,
+        });
+      }
+
       if (command.json) {
-        print(text);
+        printJson({ clients, offline });
         return;
       }
-      const clients = clientsOf(parseAdminJson(text));
       if (clients.length === 0) {
         print("No configured clients.");
         return;

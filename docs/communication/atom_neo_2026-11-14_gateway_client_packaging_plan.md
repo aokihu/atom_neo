@@ -419,7 +419,18 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 
 约束不变：CLI/UI 写 config，Gateway 只读并 register/reload；不自动 start；状态仍来自 supervisor；G5/G6 未进入。
 
-注意：`register` 复用现有 `resolveClient`，因此 required 字段或 required secret 未配置时返回 400；此时 config 已保存，但实例仍只存在于磁盘。补齐配置后需再次 load 或重启 Gateway 完成登记（本轮不新增“config-only 实例”列表状态源）。
+注意：`register` 复用现有 `resolveClient`，因此 required 字段或 required secret 未配置时返回 400。复审后已补齐 config-only 展示路径，见下节。
+
+**M3b 复审修复：config-only 首次接入闭环（2026-11-15）**
+
+- `GatewayModal` 同时读取 `listInstances(sandbox)` 与 Gateway supervisor 状态，按实例 ID 合并。
+- 仅存在于 config 的实例标记为 `configured / unregistered`；`registered=false`，不伪造 running/idle/port。
+- config-only 实例可编辑配置、保存、register、随后 start；离线时也可显示和编辑。
+- 实例表单的 manifest 元数据由注入的 `GatewayInstanceActions.describe(id)` 读取目录/registry manifest；config-tui 不直接依赖 gateway 包。
+- `atom gateway list` 离线时读取 config；在线时合并 admin 状态与 config-only 条目。文本与 JSON 用 `configured` / `registered` / `state` 区分。
+- 进程状态仍只来自 supervisor；`config` 只表示配置存在，不是进程状态。
+
+验收路径：离线 load required secret 未配置的目录 → UI/CLI 显示 configured → 在 UI 填写 secret 并保存 → register → start。
 
 **G3 完成标准**：
 

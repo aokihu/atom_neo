@@ -250,7 +250,7 @@ M2（G2）实际交付：
 - 离线实例配置 API 与 config-tui 首次实例表单；临时 sandbox 端到端测试。
 - M2.1 硬化：supervisor 在 spawn 时读取 serve 后的真实 gateway 端口；registry read-modify-write 使用 shared `file-lock`（`.atom/gateway/packages.lock`，有界重试/超时）。
 - M3a（G3）已落地动态 register/remove/reload、drain 503/409、GET 状态/诊断、DiagnosticsStore、Telegram 503/429 offset 与 `atom gateway` CLI。
-- M3b（G4）已落地 GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、`load --id`、resolver enum/default 校验与 PTY 验收。初审修复增加 admin `register`：在线 load 通过 resolver 动态登记 idle 实例（不自动 start），重复登记 409；UI admin 请求统一 5s 超时，client key 使用前缀避免固定动作冲突。
+- M3b（G4）已落地 GatewayModal 实例列表/操作/诊断、GatewayInstanceForm 编辑与 SecretFieldInput 真遮罩、shared runtime-file、菜单 install/load/manage/pack、`load --id`、resolver enum/default 校验与 PTY 验收。初审修复增加 admin `register`：在线 load 通过 resolver 动态登记 idle 实例（不自动 start），重复登记 409；UI admin 请求统一 5s 超时，client key 使用前缀避免固定动作冲突。复审补齐 config-only 闭环：UI/CLI 合并 `listInstances` 与 supervisor 状态，未登记实例显示 configured/unregistered，可编辑配置后 register/start。
 
 ## 10. 依据与关联文档
 

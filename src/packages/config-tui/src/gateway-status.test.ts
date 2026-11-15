@@ -2,13 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { upsertInstance } from "@atom-neo/shared";
 import {
   fetchGatewayDiagnostics,
+  fetchGatewayInstances,
   fetchGatewayStatus,
   gatewayAction,
   saveGatewayInstance,
 } from "./gateway-status";
-import type { GatewayDiagnostics, GatewayInstanceStatus } from "./gateway-status";
+import type { GatewayDiagnostics, GatewayInstanceActions, GatewayInstanceStatus } from "./gateway-status";
 
 const tempDirs: string[] = [];
 
@@ -148,6 +150,59 @@ describe("gateway status transport", () => {
     await expect(gatewayAction(dir, "reload", "alpha", fetchImpl)).rejects.toThrow(
       "Client alpha argument --mode must be one of: longpoll, webhook",
     );
+  });
+});
+
+describe("configured and supervisor merge", () => {
+  test("marks config-only entries as configured/unregistered and keeps supervisor status", async () => {
+    const dir = sandbox();
+    writeClientConfig(dir);
+    upsertInstance(dir, { id: "beta", directory: "/clients/beta", stdio: "ignore" }, { "bot-token": "beta-secret" });
+    publishRuntime(dir, "http://127.0.0.1:3100");
+    const { fetchImpl } = fakeFetch(() => Response.json({ clients: [STATUS] }));
+    const actions: GatewayInstanceActions = {
+      install: async () => "installed",
+      load: async () => "loaded",
+      pack: async () => "packed",
+      describe: async () => ({
+        config: { "bot-token": { label: "Bot Token", type: "string", required: true, secret: true } },
+        clientArgs: { mode: "longpoll" },
+        secretFields: ["bot-token"],
+        stdio: "inherit",
+        platform: "test",
+      }),
+    };
+
+    const merged = await fetchGatewayInstances(dir, actions, fetchImpl);
+
+    expect(merged.offline).toBe(false);
+    expect(merged.instances.find(client => client.id === "alpha")).toMatchObject({
+      state: "running",
+      registered: true,
+    });
+    expect(merged.instances.find(client => client.id === "beta")).toMatchObject({
+      state: "unregistered",
+      registered: false,
+      config: { "bot-token": { label: "Bot Token" } },
+      secretFields: ["bot-token"],
+    });
+  });
+
+  test("offline returns every configured instance without inventing process state", async () => {
+    const dir = sandbox();
+    writeClientConfig(dir);
+    const merged = await fetchGatewayInstances(dir, undefined);
+
+    expect(merged.offline).toBe(true);
+    expect(merged.instances).toMatchObject([{
+      id: "alpha",
+      state: "unregistered",
+      registered: false,
+      running: false,
+      desired: false,
+      port: 0,
+      descriptionError: "Manifest metadata unavailable",
+    }]);
   });
 });
 

@@ -1156,3 +1156,13 @@ G0 契约确认
 - `bun test src/bootstrap/gateway-command.test.ts`：离线 load、在线 register、register 失败输出。
 - `bun test src/packages/config-tui/src/components/GatewayModal.test.tsx`：`refresh/back` 实例 ID、load 后刷新可见。
 - `bun test src/packages/config-tui/src/gateway-status.test.ts`：超时错误。
+
+### 17.2 M3b 复审修复：config-only 闭环（2026-11-15）
+
+| 修复项 | 文件 | 行为 |
+|---|---|---|
+| config-only 合并 | `gateway-status.ts`、`GatewayModal.tsx` | `listInstances(sandbox)` 与 supervisor 状态按 id 合并；config-only 为 `registered:false`、`state:"unregistered"`、`running:false`，不伪造 port/platform。 |
+| manifest 元数据桥 | `gateway-actions.ts`、config-tui `index.ts` | `GatewayInstanceActions.describe(id)` 从目录或 registry manifest 读取 `config/clientArgs/secretFields/stdio/platform`；config-tui 不直接依赖 gateway。 |
+| config-only 操作 | `GatewayModal.tsx` | 提供 Edit / Register / Pack（目录） / Back；register 成功刷新后显示 Start/Stop/Reload/Check/Logs。 |
+| CLI list 合并 | `gateway-command.ts` | `gateway list` 离线读 config；在线合并 admin 状态。文本与 JSON 增加 `configured`、`registered`、`offline`。 |
+| 测试 | `GatewayModal.test.tsx`、`gateway-status.test.ts`、`gateway-actions.test.ts`、`gateway-command.test.ts` | 覆盖离线 load → configured → 填 secret → register → start、目录/package describe、离线/在线 list。 |

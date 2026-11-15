@@ -1,4 +1,5 @@
 import {
+  clientSource,
   listInstances,
   readRuntimeFile,
   upsertInstance,
@@ -36,6 +37,9 @@ export type GatewayInstanceStatus = {
   clientArgs: Record<string, string>;
   secretFields: string[];
   stdio: "inherit" | "ignore";
+  /** False for config-only entries; process fields are not invented for them. */
+  registered?: boolean;
+  descriptionError?: string;
 };
 
 export type GatewayDiagnostics = {
@@ -45,10 +49,24 @@ export type GatewayDiagnostics = {
   client: GatewayClientDiagnostics;
 };
 
+export type GatewayInstanceList = {
+  instances: GatewayInstanceStatus[];
+  offline: boolean;
+};
+
+export type GatewayConfiguredDescription = {
+  config: GatewayInstanceFields;
+  clientArgs: Record<string, string>;
+  secretFields: string[];
+  stdio: "inherit" | "ignore";
+  platform?: string;
+};
+
 export type GatewayInstanceActions = {
   install: (archive: string) => Promise<string>;
   load: (directory: string, id?: string) => Promise<string>;
   pack: (directory: string) => Promise<string>;
+  describe?: (id: string) => Promise<GatewayConfiguredDescription>;
 };
 
 export const GATEWAY_ADMIN_TIMEOUT_MS = 5_000;
@@ -99,6 +117,61 @@ export async function fetchGatewayStatus(
   return body.clients as GatewayInstanceStatus[];
 }
 
+/**
+ * Merge config-only instances with supervisor status by id.
+ * Process fields for config-only entries are explicit placeholders; `registered`
+ * and `state = "unregistered"` make it clear no process exists yet.
+ */
+export async function fetchGatewayInstances(
+  sandbox: string,
+  actions?: GatewayInstanceActions,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = GATEWAY_ADMIN_TIMEOUT_MS,
+): Promise<GatewayInstanceList> {
+  const configured = listInstances(sandbox);
+  const supervisor = await fetchGatewayStatus(sandbox, fetchImpl, timeoutMs);
+  const registered = new Map((supervisor ?? []).map(status => [status.id, { ...status, registered: true }]));
+  const instances: GatewayInstanceStatus[] = [];
+
+  for (const instance of configured) {
+    const live = registered.get(instance.id);
+    if (live) {
+      instances.push(live);
+      registered.delete(instance.id);
+      continue;
+    }
+
+    let description;
+    let descriptionError: string | undefined;
+    try {
+      description = actions?.describe ? await actions.describe(instance.id) : undefined;
+      if (!description) descriptionError = "Manifest metadata unavailable";
+    } catch (error) {
+      descriptionError = error instanceof Error ? error.message : String(error);
+    }
+
+    instances.push({
+      id: instance.id,
+      platform: description?.platform ?? "unknown",
+      source: clientSource(instance),
+      running: false,
+      desired: false,
+      state: "unregistered",
+      port: 0,
+      diagnostics: [],
+      config: description?.config ?? {},
+      clientArgs: description?.clientArgs ?? { ...(instance.clientArgs ?? {}) },
+      secretFields: description?.secretFields ?? Object.keys(instance.credentials ?? {}),
+      stdio: description?.stdio ?? instance.stdio,
+      registered: false,
+      ...(descriptionError === undefined ? {} : { descriptionError }),
+    });
+  }
+
+  instances.push(...registered.values());
+  return { instances, offline: supervisor === null };
+}
+
 export async function fetchGatewayDiagnostics(
   sandbox: string,
   id: string,
@@ -118,7 +191,7 @@ export async function fetchGatewayDiagnostics(
 
 export async function gatewayAction(
   sandbox: string,
-  action: "start" | "stop" | "reload",
+  action: "start" | "stop" | "reload" | "register",
   id?: string,
   fetchImpl: typeof fetch = fetch,
   timeoutMs: number = GATEWAY_ADMIN_TIMEOUT_MS,

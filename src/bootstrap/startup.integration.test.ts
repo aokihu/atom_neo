@@ -622,8 +622,13 @@ integration("gateway menu and admin commands fail cleanly without a terminal or 
   expect(menu.stderr).toContain("interactive terminal");
   expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
   const list = await run([binary, "gateway", "list", "--sandbox", path], temp);
-  expect(list.code).not.toBe(0);
-  expect(list.stderr).toContain("Gateway is not running");
+  expect(list.code).toBe(0);
+  expect(list.stdout).toContain("No configured clients.");
+  const json = await run([binary, "gateway", "list", "--json", "--sandbox", path], temp);
+  expect(JSON.parse(json.stdout)).toEqual({ clients: [], offline: true });
+  const start = await run([binary, "gateway", "start", "echo-bot", "--sandbox", path], temp);
+  expect(start.code).not.toBe(0);
+  expect(start.stderr).toContain("Gateway is not running");
   expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
 }, 15000);
 
