@@ -86,7 +86,7 @@ src/packages/config-tui/
         │ │ Model Profiles│ │   models: v4-pro,   │ │
         │ │ Decisions     │ │                     │ │
         │ │ Theme (edex)│ │           v4-flash    │ │
-        │ │ Gateway (port)│ │   thinking: enabled │ │
+        │ │ Gateway (clients·port)│ │ thinking: enabled │ │
         │ │               │ │   install/load/pack │ │
         │ │ Save & Exit│ │                        │ │
         │ └───────┘ └────────────────────────────┘ │
@@ -143,7 +143,7 @@ MenuModal
   ├─ Model Profiles    → ProfilesModal（只列出 LLM；预填）
   ├─ Decisions         → DecisionsModal（fast、Prediction、Post-Conversation、Continuation）
   ├─ Theme (edex)      → ThemeModal（预填）
-  ├─ Gateway (port)    → GatewayModal（实例列表/诊断/操作；端口仍在高级设置）
+  ├─ Gateway (clients · port) → GatewayModal（实例列表/安装/加载/编辑/register/start/诊断；端口仍在高级设置）
   └─ Save & Exit       → ConfirmModal → commit
 Esc（菜单层）→ 退出确认
 ```
@@ -151,6 +151,8 @@ Esc（菜单层）→ 退出确认
 ProjectModal 在 config 模式跳过（不重写 AGENTS.md）。
 
 ### Gateway 管理视图
+
+`atom --config --gateway [--sandbox <path>]` 可直接打开本视图，不先进入配置主菜单；`atom menu` 的 `gateway > configure clients` 复用同一入口。`atom --config` 不带 `--gateway` 时仍从配置主菜单开始。
 
 `GatewayModal` 在保留端口编辑的同时提供实例管理；Gateway 离线时显示 `OFFLINE`，仍可执行 install/load/pack。
 

@@ -13,7 +13,7 @@
 | [architecture.md](./overview/architecture.md) | 系统架构总览 | 开始前必读 |
 | [project-structure.md](./overview/project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
 | [bootstrap.md](./overview/bootstrap.md) | 启动序列、初始化顺序 | 理解启动流程 |
-| [startup-menu.md](./subsystems/startup-menu.md) | 一次性分层启动向导、参数记忆、执行交接及远程 attach | 修改 menu 子命令 |
+| [startup-menu.md](./subsystems/startup-menu.md) | 一次性分层启动向导、Gateway configure clients 直达、参数记忆、执行交接及远程 attach | 修改 menu 子命令 |
 | [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 
 ## 开发规范（编码时必查）
@@ -40,7 +40,7 @@
 | [jev-decisions.md](./subsystems/jev-decisions.md) | Jev 独立调用模块、配置、回退与验收 | 接入结构化决策模型 |
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
-| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `--config` 配置编辑器（OpenTUI 窗口化、按 provider 循环、原子回滚） | 实现首次启动流程/配置编辑 |
+| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `--config` 配置编辑器；`--config --gateway` 直达 GatewayModal（OpenTUI、原子回滚） | 实现首次启动流程/配置编辑 |
 | [tui-interface.md](./tui-interface.md) | eDEX 风格 OpenTUI 布局、工具调用背景提示与参数摘要、ROUNDS 预算、TODO 滚动跟随与响应式约束 | 修改 TUI 界面 |
 | [tui-modal.md](./tui-modal.md) | TUI 通用 Modal 组件 — 标题/内容/ActionBar + 键盘导航 + 定位 | 实现 TUI 浮层/确认框 |
 | [future-features.md](./future-features.md) | 已设计但未实现的功能清单 | 设计时查，避免遗忘 |

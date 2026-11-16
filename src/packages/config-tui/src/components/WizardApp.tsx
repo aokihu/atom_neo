@@ -5,17 +5,19 @@ import type { GatewayInstanceActions } from "../gateway-status";
 import { commit, finalizeEdit } from "../wizard-logic";
 import type { WizardMode } from "../wizard-logic";
 import { allowDecisionProviders, createWizardUiState, resolveView, wizardReducer } from "../wizard/wizard-reducer";
+import type { WizardInitialView } from "../wizard/wizard-reducer";
 import { WizardBackground, WizardQuitConfirm } from "../wizard/wizard-overlays";
 import { WizardProviderViews, WizardSettingsViews } from "../wizard/WizardViews";
 
-export function WizardApp({ sandboxPath, mode, gatewayActions, onComplete, onAbort }: {
+export function WizardApp({ sandboxPath, mode, initialView, gatewayActions, onComplete, onAbort }: {
   sandboxPath: string;
   mode: WizardMode;
+  initialView?: WizardInitialView;
   gatewayActions?: GatewayInstanceActions;
   onComplete: () => void;
   onAbort: () => void;
 }) {
-  const [ui, dispatch] = useReducer(wizardReducer, undefined, () => createWizardUiState(mode, sandboxPath));
+  const [ui, dispatch] = useReducer(wizardReducer, undefined, () => createWizardUiState(mode, sandboxPath, initialView));
   const { wizard, pending } = ui;
   const view = resolveView(ui);
   const allowJev = allowDecisionProviders(ui);

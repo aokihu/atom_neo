@@ -18,6 +18,7 @@ export type MenuView = {
 const STEPS: Record<MenuCommand, Field[]> = {
   chat: ["sandbox", "session"], core: ["sandbox", "host", "port"], config: ["sandbox"],
   "core-gateway": ["sandbox", "host", "port"],
+  "gateway-configure": ["sandbox"],
   "gateway-start": ["sandbox", "clients"], "gateway-stop": ["sandbox", "clients"],
   "gateway-install": ["sandbox", "target"], "gateway-load": ["sandbox", "target", "id"],
   "gateway-manage": ["sandbox"], "gateway-pack": ["sandbox", "target", "out"],
@@ -66,6 +67,7 @@ const MENUS: Record<MenuPage, MenuItem[]> = {
   ],
   gateway: [
     { label: "run >", target: "core-gateway", description: ["启动 Core 与 Gateway 服务。", "按配置接入平台 Client，在当前终端保持运行。"] },
+    { label: "configure clients >", target: "gateway-configure", description: ["管理平台 Client 与凭据。", "安装/加载包、编辑配置、检查、register/start/reload。"] },
     { label: "start clients >", target: "gateway-start", description: ["启动已配置的平台 Client。", "可操作指定 Client 或全部 Client。"] },
     { label: "stop clients >", target: "gateway-stop", description: ["停止已配置的平台 Client。", "Core 和 Gateway 服务保持运行。"] },
     { label: "install >", target: "gateway-install", description: ["安装本地客户端归档。", "归档内置 manifest，须与当前平台一致。"] },
@@ -94,8 +96,8 @@ const ITEM_VALUES: Partial<Record<Field, readonly string[]>> = { session: ["new"
 const ITEM_LABELS: Partial<Record<Field, readonly ChoiceItem[]>> = { session: SESSION_ITEMS, encrypt: ENCRYPT_ITEMS };
 const PATHS: Record<MenuCommand, string[]> = {
   chat: ["start", "chat"], core: ["start", "core"], config: ["config"],
-  "core-gateway": ["gateway", "run"], "gateway-start": ["gateway", "start clients"],
-  "gateway-stop": ["gateway", "stop clients"],
+  "core-gateway": ["gateway", "run"], "gateway-configure": ["gateway", "configure clients"],
+  "gateway-start": ["gateway", "start clients"], "gateway-stop": ["gateway", "stop clients"],
   "gateway-install": ["gateway", "install"], "gateway-load": ["gateway", "load directory"],
   "gateway-manage": ["gateway", "manage instances"], "gateway-pack": ["gateway", "pack"],
   attach: ["attach"],
@@ -134,6 +136,7 @@ export function formatMenuCommand(args: BootArguments, prefix = buildAppCommand(
   }
   if (args.config) flags.push("--config");
   else if (args.mode) flags.push("--mode", args.mode);
+  if (args.gatewayConfig) flags.push("--gateway");
   if (args.mode === "tui") flags.push("--core-server", args.coreServer!, "--core-port", String(args.corePort));
   else if (args.mode === "gateway") {
     flags.push("--action", args.action!);
@@ -250,7 +253,10 @@ export class MenuFlow {
     });
     const { archive, output, encrypt, target, id, out, ...launch } = parameters;
     const args: BootArguments = {
-      ...this.base, ...launch, menu: false, config: command === "config", mode: undefined,
+      ...this.base, ...launch, menu: false,
+      config: command === "config" || command === "gateway-configure",
+      gatewayConfig: command === "gateway-configure",
+      mode: undefined,
     };
     if (command === "core" || command === "core-gateway") args.mode = command;
     if (command === "attach") args.mode = "tui";

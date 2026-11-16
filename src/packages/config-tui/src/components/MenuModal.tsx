@@ -14,7 +14,7 @@ export function buildMenuItems(state: WizardState): { label: string; value: Menu
     { label: "Model Profiles", value: "profiles" },
     { label: "Decisions", value: "decisions" },
     { label: `Theme (${state.theme})`, value: "theme" },
-    { label: `Gateway (port ${state.gatewayPort})`, value: "gateway" },
+    { label: `Gateway (clients · port ${state.gatewayPort})`, value: "gateway" },
     { label: "Save & Exit", value: "save" },
   ];
 }
@@ -65,9 +65,9 @@ export function describeSelection(key: MenuKey, state: WizardState): string[] {
       return [
         `Port: ${state.gatewayPort}`,
         "",
-        "Takes effect on the next",
-        "start. Clients are configured",
-        "manually in config.json.",
+        "Manage clients, install/load",
+        "packages, edit credentials,",
+        "register/start, and diagnose.",
       ];
     case "save":
       return [

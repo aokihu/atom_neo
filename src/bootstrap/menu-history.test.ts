@@ -63,6 +63,12 @@ test("remembers gateway packaging parameters and never stores secret-like fields
   expect(text).not.toContain("hunter2");
 });
 
+test("remembers gateway configure sandbox without gateway parameters", () => {
+  const path = historyPath();
+  saveMenuHistory("gateway-configure", { sandbox: "/s", target: "/ignored", id: "ignored" }, path);
+  expect(readMenuHistory(path).commands).toEqual({ "gateway-configure": { sandbox: "/s" } });
+});
+
 test("reading gateway history drops secret-like fields", () => {
   const path = historyPath();
   mkdirSync(dirname(path), { recursive: true });

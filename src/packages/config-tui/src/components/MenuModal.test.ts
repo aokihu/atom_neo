@@ -19,7 +19,7 @@ describe("buildMenuItems", () => {
       "Model Profiles",
       "Decisions",
       "Theme (dracula)",
-      "Gateway (port 4123)",
+      "Gateway (clients · port 4123)",
       "Save & Exit",
     ]);
     expect(items.map(i => i.value)).toEqual([...MENU_KEYS]);
@@ -27,6 +27,13 @@ describe("buildMenuItems", () => {
 });
 
 describe("describeSelection", () => {
+  test("gateway points to client management instead of manual config edits", () => {
+    const lines = describeSelection("gateway", configState({ gatewayPort: 4123 }));
+    expect(lines.join(" ")).toContain("Port: 4123");
+    expect(lines.join(" ")).toContain("Manage clients");
+    expect(lines.join(" ")).not.toContain("manually");
+  });
+
   test("providers lists each provider with models and thinking", () => {
     const state = configState({
       editedProviders: {

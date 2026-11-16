@@ -6,12 +6,13 @@ import { ensureBunRuntimePluginSupport } from "@atom-neo/tui-kit";
 import { WizardApp } from "./components/WizardApp";
 import type { GatewayInstanceActions } from "./gateway-status";
 import type { WizardMode } from "./wizard-logic";
+import type { WizardInitialView } from "./wizard/wizard-reducer";
 
 /** Launch the standalone OpenTUI wizard (first-run setup or config editor). */
 export async function startWizard(
   sandboxPath: string,
   mode: WizardMode,
-  options: { gatewayActions?: GatewayInstanceActions } = {},
+  options: { gatewayActions?: GatewayInstanceActions; initialView?: WizardInitialView } = {},
 ): Promise<boolean> {
   await ensureBunRuntimePluginSupport();
   return new Promise<boolean>((resolve, reject) => {
@@ -51,6 +52,7 @@ export async function startWizard(
       createRoot(renderer).render(React.createElement(WizardApp, {
         sandboxPath,
         mode,
+        initialView: options.initialView,
         gatewayActions: options.gatewayActions,
         onComplete: () => { completed = true; createdRenderer.destroy(); },
         onAbort: abort,

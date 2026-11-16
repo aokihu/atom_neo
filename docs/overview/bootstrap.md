@@ -26,10 +26,11 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。
 |------|------|
 | 无 mode | Core + TUI |
 | --mode core | 仅 Core，Agent 与调度持续运行 |
+| --config --gateway | 直接打开 Gateway 配置界面（仅 config-tui） |
 | --mode core-gateway | Core + Gateway，无 TUI |
 | --mode tui --core-server <host> --core-port <port> | 仅 TUI，attach 已运行 Core |
 | --mode gateway --clients <name> | 控制指定 Client；省略 clients 则全部 |
-| gateway <action> [target] [--id] [--source] [--version] | 新 CLI：install/upgrade/load/reload/list/start/stop/check/logs/pack/uninstall；`load` 可用 `--id`，`install`/`upgrade` 可用 `--source`，`upgrade` 可用 `--version` |
+| gateway <action> [target] [--id] [--source] [--version] | 新 CLI：install/upgrade/load/reload/list/start/stop/check/logs/pack/uninstall；`load` 可用 `--id`，`install`/`upgrade` 可用 `--source`，`upgrade` 可用 `--version`。`--gateway` 仅与 `--config` 组合，直接打开 Gateway 管理界面 |
 
 Gateway 为短时控制进程，不是 Gateway Server 启动模式。旧动作使用 `--action start|stop`；`atom gateway ...` 是增量 CLI，不初始化 Core/Provider/TUI。`install/load/pack/uninstall` 与 `list` 可离线执行；在线命令通过 `.atom/gateway/runtime.json` + 管理 Token 发现服务，Gateway 离线时明确报错，不自动启动。`list` 合并 config-only 条目与 supervisor 状态，JSON 用 `configured` / `registered` / `state` / `offline` 区分。兼容说明：旧调用方若对 JSON 做完整对象比较，需要接受新增的顶层 `offline` 和每项 `configured/registered` 字段；原有 client 字段不变。`load` 的相对路径按当前 cwd 解析（与 pack/install 一致），以绝对目录写入；实例 ID 默认 manifest.id，可用 `--id <id>` 为同一目录登记不同实例，重复 ID 更新同名实例。Gateway 在线时 load 写 config 后调用 admin `register`（不自动 start）；离线时只保存，启动 Gateway 后再登记。`--id` 只对 load 有效。
 

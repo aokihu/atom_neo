@@ -19,3 +19,4 @@ export type {
 } from "./gateway-instance-form";
 export { GatewayInstanceForm } from "./components/GatewayInstanceForm";
 export type { GatewayConfiguredDescription, GatewayInstanceActions } from "./gateway-status";
+export type { WizardInitialView } from "./wizard/wizard-reducer";

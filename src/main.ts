@@ -118,7 +118,11 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   if (args.config) {
     const { startWizard } = await import("@atom-neo/config-tui");
     const { createGatewayActions } = await import("./bootstrap/gateway-actions");
-    if (await startWizard(args.sandbox, "config", { gatewayActions: createGatewayActions(args.sandbox) })) onReady();
+    const initialView = args.gatewayConfig ? "gateway" as const : undefined;
+    if (await startWizard(args.sandbox, "config", {
+      gatewayActions: createGatewayActions(args.sandbox),
+      initialView,
+    })) onReady();
     return;
   }
 

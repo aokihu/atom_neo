@@ -61,11 +61,20 @@ describe("parseArguments --config", () => {
   test("defaults to false", () => {
     const args = parseArguments(["--sandbox", "/tmp/sb"]) as any;
     expect(args.config).toBe(false);
+    expect(args.gatewayConfig).toBe(false);
   });
 
   test("detects the --config flag", () => {
     const args = parseArguments(["--config", "--sandbox", "/tmp/sb"]) as any;
     expect(args.config).toBe(true);
+    expect(args.gatewayConfig).toBe(false);
+  });
+
+  test("accepts --gateway only with --config", () => {
+    const args = parseArguments(["--config", "--gateway", "--sandbox", "/tmp/sb"]) as any;
+    expect(args).toMatchObject({ config: true, gatewayConfig: true, sandbox: "/tmp/sb" });
+    expect(() => parseArguments(["--gateway", "--sandbox", "/tmp/sb"])).toThrow("--gateway requires --config");
+    expect(() => parseArguments(["--gateway", "--mode", "core"])).toThrow("--gateway requires --config");
   });
 
   test("coexists with mode flags", () => {

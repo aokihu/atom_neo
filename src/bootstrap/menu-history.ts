@@ -6,7 +6,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "@atom-neo/shared";
 
 export const MENU_COMMANDS = [
-  "chat", "core", "config", "core-gateway", "gateway-start", "gateway-stop",
+  "chat", "core", "config", "core-gateway", "gateway-configure", "gateway-start", "gateway-stop",
   "gateway-install", "gateway-load", "gateway-manage", "gateway-pack", "attach", "export", "import",
 ] as const;
 export type MenuCommand = typeof MENU_COMMANDS[number];
@@ -32,6 +32,7 @@ export type MenuHistory = Partial<Record<MenuCommand, MenuParameters>>;
 const FIELDS: Record<MenuCommand, (keyof MenuParameters)[]> = {
   chat: ["sandbox", "continueSession"], core: ["sandbox", "host", "port"], config: ["sandbox"],
   "core-gateway": ["sandbox", "host", "port"],
+  "gateway-configure": ["sandbox"],
   "gateway-start": ["sandbox", "clients"], "gateway-stop": ["sandbox", "clients"],
   "gateway-install": ["sandbox", "target"], "gateway-load": ["sandbox", "target", "id"],
   "gateway-manage": ["sandbox"], "gateway-pack": ["sandbox", "target", "out"],

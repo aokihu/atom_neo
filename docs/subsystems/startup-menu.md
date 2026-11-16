@@ -10,6 +10,7 @@ menu
 │        └ core > sandbox > host > port > Core
 ├─ config > sandbox > 现有配置编辑器
 ├─ gateway > run > sandbox > host > port > Core + Gateway
+│          ├ configure clients > sandbox > 直接打开 Gateway 配置界面
 │          ├ start clients > sandbox > client ID / all > 启用
 │          ├ stop clients > sandbox > client ID / all > 停止
 │          ├ install > sandbox > 归档文件 > 安装本地客户端包
@@ -89,12 +90,14 @@ menu
 
 | 路径 | 步骤 | 执行 |
 |------|------|------|
+| `gateway / configure clients` | sandbox | `--config --gateway --sandbox ...`，直接打开现有 `GatewayModal` |
 | `gateway / install` | sandbox → 归档文件 | `gateway install <archive|id[@version]> --source ... --sandbox ...` |
 | `gateway / load directory` | sandbox → 客户端目录 → 实例 ID（可选） | `gateway load <directory> [--id] --sandbox ...` |
 | `gateway / manage instances` | sandbox | `gateway list --sandbox ...` |
 | `gateway / pack` | sandbox → 客户端目录 → 输出路径（可选） | `gateway pack <directory> [--out] --sandbox ...` |
 
 - 相对路径按打印命令的当前目录解析；菜单展示与执行使用同一参数。
+- `configure clients` 不重复实现表单：菜单选择 sandbox 后启动 `atom --config --gateway`，config-tui 直接显示现有 `GatewayModal`（实例列表、安装/加载包、编辑凭据、register/start/reload、检查与诊断）。返回/取消后行为沿用配置向导（GatewayModal 返回配置主菜单，配置向导退出确认后结束）。
 - `install` 的归档字段也可填写官方 `id[@version]`；官方安装/升级需要 `ATOM_GATEWAY_SOURCE_INDEX` 或显式 `--source`，来源索引地址与 checksum 由发布流程提供。菜单本轮不新增 upgrade 入口，使用 CLI 显式指定实例升级。
 - 菜单没有“开发者模式”权限开关、文件监听自动重载或后台自动更新；load/pack 仍以 developer 文案标注。真实 Telegram 平台验收和官方发布未包含在菜单验收内。
 - `load` 的实例 ID 可留空，留空时使用 manifest.id；填写时允许同一目录登记多个实例。

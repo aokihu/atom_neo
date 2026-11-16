@@ -117,4 +117,9 @@ describe("initial state", () => {
     expect(createWizardUiState("config", "/nonexistent-atom-wizard").view).toEqual({ kind: "menu" });
     expect(createWizardUiState("first-run", "/nonexistent-atom-wizard").view).toEqual({ kind: "providers" });
   });
+
+  test("gateway initial view only applies to config mode", () => {
+    expect(createWizardUiState("config", "/nonexistent-atom-wizard", "gateway").view).toEqual({ kind: "gateway" });
+    expect(createWizardUiState("first-run", "/nonexistent-atom-wizard", "gateway").view).toEqual({ kind: "providers" });
+  });
 });

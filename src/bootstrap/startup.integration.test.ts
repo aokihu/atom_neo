@@ -409,7 +409,7 @@ integration("menu arrow navigation and back restore the selected branch without 
     const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
     const result = await driveMenu([
       { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
-      { wait: "menu / gateway", send: "\x1b[B\x1b[B\x1b[C" },
+      { wait: "menu / gateway", send: "\x1b[B\x1b[B\x1b[B\x1b[C" },
       { wait: "[1/2] 工作目录", send: "\x1b" },
       { wait: "❯ stop clients >", send: "\x1b[D" },
       { wait: "❯ gateway >", send: "\x1b[B\x1b[C" },
@@ -513,7 +513,7 @@ integration("menu dispatches Gateway actions once and exits after success", asyn
   try {
     await driveMenu([
       { wait: "atom menu", send: "\x1b[B\x1b[B\r" },
-      { wait: "menu / gateway", send: "\x1b[B\x1b[B\r" },
+      { wait: "menu / gateway", send: "\x1b[B\x1b[B\x1b[B\r" },
       { wait: "工作目录", send: "\r" },
       { wait: "Client ID", send: "all\r" },
     ], [binary, "menu", "--sandbox", path], home);
@@ -528,7 +528,7 @@ integration("gateway menu exposes install/load/manage/pack and cancels without e
   const history = join(home, ".config/atom/menu_history.json");
   const result = await driveMenu([
     { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
-    { wait: "pack >", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[C" },
+    { wait: "pack >", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[C" },
     { wait: "[1/3] 工作目录", send: "\r" },
     { wait: "客户端目录", send: `\x15${clientRoot}\r` },
     { wait: "实例 ID", send: "\x1b" },
@@ -540,6 +540,21 @@ integration("gateway menu exposes install/load/manage/pack and cancels without e
   expect(result.commands).toEqual([]);
   expect(existsSync(history)).toBe(false);
   expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
+}, 30000);
+
+integration("menu configure clients opens GatewayModal directly", async () => {
+  const path = sandbox("menu-gateway-configure");
+  const home = join(temp, "menu-gateway-configure-home");
+  const result = await driveMenu([
+    { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
+    { wait: "configure clients >", send: "\x1b[B\x1b[C" },
+    { wait: "工作目录", send: "\r" },
+    { wait: "Install client package", send: "\x03" },
+  ], [binary, "menu", "--sandbox", path], home);
+  expect(result.commands).toHaveLength(1);
+  expect(result.commands[0]).toContain("--config --gateway");
+  expect(result.tail).toContain("Install client package");
+  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
 }, 30000);
 
 integration("gateway config UI navigates, cancels, and renders offline in a narrow PTY", async () => {

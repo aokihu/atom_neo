@@ -73,10 +73,10 @@ test.each(["core", "core-gateway"] as const)("launches %s only after all listeni
   expect(request.args).toMatchObject({ sandbox: "/a project", mode: command, host: "0.0.0.0", port: 0 });
 });
 
-test.each([1, 2])("gateway action %i preserves single-client and all semantics", index => {
+test.each([2, 3])("gateway action %i preserves single-client and all semantics", index => {
   const menu = flow();
   choose(menu, 2); choose(menu, index); menu.submit("/gateway");
-  expect(completed(menu.submit("telegram")).args).toMatchObject({ mode: "gateway", action: index === 1 ? "start" : "stop", clients: "telegram" });
+  expect(completed(menu.submit("telegram")).args).toMatchObject({ mode: "gateway", action: index === 2 ? "start" : "stop", clients: "telegram" });
   expect(completed(menu.submit("all")).args.clients).toBeUndefined();
   expect(completed(menu.submit("")).parameters.clients).toBeUndefined();
 });
@@ -86,13 +86,29 @@ test("gateway submenu lists service and packaging entries in order", () => {
   choose(menu, 2);
   expect(menu.view()).toMatchObject({
     title: "menu / gateway",
-    items: ["run >", "start clients >", "stop clients >", "install >", "load directory >", "manage instances >", "pack >", "‹ back"],
+    items: ["run >", "configure clients >", "start clients >", "stop clients >", "install >", "load directory >", "manage instances >", "pack >", "‹ back"],
   });
+});
+
+test("gateway configure clients directly opens config-tui on the gateway view", () => {
+  const menu = flow({ "gateway-configure": { sandbox: "/saved" } });
+  choose(menu, 2); choose(menu, 1);
+  expect(menu.view()).toMatchObject({ title: "menu / gateway / configure clients", field: "sandbox", value: "/saved", step: 1, total: 1 });
+  const request = completed(menu.submit("/project"));
+  expect(request.args).toMatchObject({
+    menu: false,
+    mode: undefined,
+    config: true,
+    gatewayConfig: true,
+    sandbox: resolve("/project"),
+  });
+  expect(request.parameters).toEqual({ sandbox: resolve("/project") });
+  expect(formatMenuCommand(request.args, ["atom"])).toBe("atom --config --gateway --sandbox /project");
 });
 
 test("gateway install requires an archive and launches without a mode", () => {
   const menu = flow({ "gateway-install": { sandbox: "/saved", target: "/tmp/old.tar.gz" } });
-  choose(menu, 2); choose(menu, 3);
+  choose(menu, 2); choose(menu, 4);
   expect(menu.view()).toMatchObject({ title: "menu / gateway / install", field: "sandbox", value: "/saved" });
   menu.submit("/project");
   expect(menu.view()).toMatchObject({ field: "target", label: "归档文件", value: "/tmp/old.tar.gz", step: 2, total: 2 });
@@ -105,7 +121,7 @@ test("gateway install requires an archive and launches without a mode", () => {
 
 test("gateway load collects a directory and treats the instance id as optional", () => {
   const menu = flow();
-  choose(menu, 2); choose(menu, 4);
+  choose(menu, 2); choose(menu, 5);
   expect(menu.view()).toMatchObject({ title: "menu / gateway / load directory", field: "sandbox", step: 1, total: 3 });
   menu.submit("/project");
   expect(menu.view()).toMatchObject({ field: "target", label: "客户端目录", step: 2, total: 3 });
@@ -120,7 +136,7 @@ test("gateway load collects a directory and treats the instance id as optional",
 
 test("gateway load forwards a remembered instance id", () => {
   const menu = flow({ "gateway-load": { sandbox: "/saved", target: "/clients/bot", id: "bot-dev" } });
-  choose(menu, 2); choose(menu, 4);
+  choose(menu, 2); choose(menu, 5);
   menu.submit(); menu.submit();
   expect(menu.view()).toMatchObject({ field: "id", value: "bot-dev" });
   const request = completed(menu.submit());
@@ -129,7 +145,7 @@ test("gateway load forwards a remembered instance id", () => {
 
 test("gateway manage lists instances after only the sandbox step", () => {
   const menu = flow();
-  choose(menu, 2); choose(menu, 5);
+  choose(menu, 2); choose(menu, 6);
   expect(menu.view()).toMatchObject({ title: "menu / gateway / manage instances", field: "sandbox", step: 1, total: 1 });
   const request = completed(menu.submit("/project"));
   expect(request.args).toMatchObject({ menu: false, mode: undefined, sandbox: resolve("/project") });
@@ -139,7 +155,7 @@ test("gateway manage lists instances after only the sandbox step", () => {
 
 test("gateway pack requires a directory and treats the output path as optional", () => {
   const menu = flow();
-  choose(menu, 2); choose(menu, 6);
+  choose(menu, 2); choose(menu, 7);
   expect(menu.view()).toMatchObject({ title: "menu / gateway / pack", field: "sandbox" });
   menu.submit("/project");
   expect(() => menu.submit("")).toThrow("请填写客户端目录");
@@ -154,7 +170,7 @@ test("gateway pack requires a directory and treats the output path as optional",
 
 test("printed gateway commands stay copyable and contain no credentials", () => {
   const menu = flow();
-  choose(menu, 2); choose(menu, 4);
+  choose(menu, 2); choose(menu, 5);
   menu.submit("/tmp/项目 O'Brien $(printf BAD)");
   menu.submit("clients/it's bot");
   menu.submit("bot-dev");
@@ -220,11 +236,11 @@ test("backup import requires a non-empty archive path", () => {
 
 test("returning to a parent restores the entry that opened the child", () => {
   const menu = flow();
-  choose(menu, 2); choose(menu, 2);
+  choose(menu, 2); choose(menu, 3);
   expect(menu.view()).toMatchObject({ title: "menu / gateway / stop clients", step: 1, total: 2 });
   menu.back();
   expect(menu.page).toBe("gateway");
-  expect(menu.selected).toBe(2);
+  expect(menu.selected).toBe(3);
   menu.back();
   expect(menu.page).toBe("menu");
   expect(menu.selected).toBe(2);
@@ -237,7 +253,7 @@ test("returning to a parent restores the entry that opened the child", () => {
 test("back entries navigate without executing, including the final session step", () => {
   const menu = flow({ chat: { continueSession: true } });
   choose(menu, 2);
-  expect(choose(menu, 7)).toBeUndefined();
+  expect(choose(menu, 8)).toBeUndefined();
   expect(menu.page).toBe("menu");
   choose(menu, 0); choose(menu, 0); menu.submit();
   expect(menu.view()).toMatchObject({ title: "menu / start / chat", items: ["new", "continue", "‹ back"], step: 2, total: 2 });
@@ -265,7 +281,7 @@ test.each(["127.0.0.1", "example.com", "::1", "[::1]"])("accepts address %s", va
 });
 
 test.each([
-  [], ["--continue"], ["--config"], ["--mode", "core", "--host", "0.0.0.0", "--port", "0"],
+  [], ["--continue"], ["--config"], ["--config", "--gateway"], ["--mode", "core", "--host", "0.0.0.0", "--port", "0"],
   ["--mode", "core-gateway", "--port", "4100"],
   ["--mode", "tui", "--core-server", "::1", "--core-port", "4200"],
   ["--mode", "gateway", "--action", "start"],
