@@ -17,8 +17,7 @@ import { AgentsCompilerService } from "./services/agents/agents-compiler";
 import { MemoryService } from "./services/memory/memory-service";
 import { SkillService } from "./services/skill/skill-service";
 import { NetworkService } from "./services/network/network-service";
-import { formatMenuCommand, MenuFlow } from "./bootstrap/menu-flow";
-import { readMenuHistory, saveMenuHistory } from "./bootstrap/menu-history";
+
 
 declare global {
   var AI_SDK_LOG_WARNINGS: LogWarningsFunction | false | undefined;
@@ -62,25 +61,32 @@ export async function main(): Promise<void> {
   }
   const args = parsed;
 
-  if (args.menu) {
-    const { startMenu } = await import("./bootstrap/menu");
-    const history = readMenuHistory();
-    const flow = new MenuFlow(args, history.commands);
-    flow.error = history.warning ?? "";
-    while (true) {
-      const request = await startMenu(flow);
-      if (!request) return;
-      try {
-        console.log(`执行命令: ${formatMenuCommand(request.args)}`);
-        await runApp(request.args, () => {
-          try { saveMenuHistory(request.command, request.parameters); }
-          catch (error) { console.error(`Cannot save menu history: ${error instanceof Error ? error.message : String(error)}`); }
-        });
-        return;
-      } catch (error) {
-        flow.error = error instanceof Error ? error.message : String(error);
-      }
+  if (args.menu || args.configRoute) {
+    const { startMenuApp } = await import("@atom-neo/config-tui");
+    const { createMenuActions } = await import("./bootstrap/menu-actions");
+    const launch = await startMenuApp(args.sandbox, {
+      actions: createMenuActions(args.sandbox),
+      initialRoute: args.configRoute ?? "home",
+      workspaceExplicit: args.sandboxExplicit,
+    });
+    if (!launch) return;
+    if (launch.kind === "chat") {
+      await runApp({
+        ...args, menu: false, configRoute: undefined, mode: undefined,
+        sandbox: launch.sandbox, continueSession: launch.continueSession,
+      });
+    } else if (launch.kind === "core") {
+      await runApp({
+        ...args, menu: false, configRoute: undefined, mode: "core",
+        sandbox: launch.sandbox, host: launch.host, port: launch.port,
+      });
+    } else {
+      await runApp({
+        ...args, menu: false, configRoute: undefined, mode: "tui",
+        sandbox: launch.sandbox, coreServer: launch.host, corePort: launch.port, continueSession: false,
+      });
     }
+    return;
   }
   await runApp(args);
 }
@@ -111,18 +117,6 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const { startWizard } = await import("@atom-neo/config-tui");
     const { createGatewayActions } = await import("./bootstrap/gateway-actions");
     await startWizard(args.sandbox, "first-run", { gatewayActions: createGatewayActions(args.sandbox) });
-    return;
-  }
-
-  // --config: standalone config wizard (edit config.json + .env) and exit
-  if (args.config) {
-    const { startWizard } = await import("@atom-neo/config-tui");
-    const { createGatewayActions } = await import("./bootstrap/gateway-actions");
-    const initialView = args.gatewayConfig ? "gateway" as const : undefined;
-    if (await startWizard(args.sandbox, "config", {
-      gatewayActions: createGatewayActions(args.sandbox),
-      initialView,
-    })) onReady();
     return;
   }
 
@@ -158,7 +152,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   logger.debug("log level active", { level: args.logLevel, ignore: args.logIgnore });
 
   // First-Run Detection
-  if (args.mode && Object.keys(appConfig.providers ?? {}).length === 0) throw new Error("Core requires provider configuration. Run --config with this sandbox first.");
+  if (args.mode && Object.keys(appConfig.providers ?? {}).length === 0) throw new Error("Core requires provider configuration. Run `atom config` with this sandbox first.");
   if (!args.mode && isFirstRun(args.sandbox)) {
     logger.info("first run detected, launching setup wizard");
     await runFirstRunWizard(args.sandbox);

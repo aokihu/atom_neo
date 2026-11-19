@@ -23,7 +23,7 @@ test("attach is address then port and automatically produces the TUI request", (
   menu.submit("core.example.com");
   expect(menu.view()).toMatchObject({ field: "corePort", value: "4200" });
   const request = completed(menu.submit());
-  expect(request.args).toMatchObject({ menu: false, mode: "tui", coreServer: "core.example.com", corePort: 4200, config: false, continueSession: false });
+  expect(request.args).toMatchObject({ menu: false, mode: "tui", coreServer: "core.example.com", corePort: 4200, configRoute: undefined, continueSession: false });
   expect(request.parameters).toEqual({ coreServer: "core.example.com", corePort: 4200 });
   expect(menu.view().field).toBe("corePort");
 });
@@ -52,7 +52,7 @@ test("config uses remembered sandbox unless the invocation explicitly overrides 
     const menu = flow({ config: { sandbox: "/remembered" } }, [...argv]);
     choose(menu, 1);
     expect(menu.view().value).toBe(expected);
-    expect(completed(menu.submit()).args).toMatchObject({ config: true, sandbox: expected, mode: undefined });
+    expect(completed(menu.submit()).args).toMatchObject({ configRoute: "configure", sandbox: expected, mode: undefined });
   }
 });
 
@@ -61,7 +61,7 @@ test("chat remembers session choice and immediately launches after selecting it"
   choose(menu, 0); choose(menu, 0); menu.submit();
   expect(menu.selected).toBe(1);
   const request = completed(menu.submit());
-  expect(request.args).toMatchObject({ sandbox: "/chat", mode: undefined, config: false, continueSession: true });
+  expect(request.args).toMatchObject({ sandbox: "/chat", mode: undefined, configRoute: undefined, continueSession: true });
 });
 
 test.each(["core", "core-gateway"] as const)("launches %s only after all listening parameters", command => {
@@ -98,12 +98,11 @@ test("gateway configure clients directly opens config-tui on the gateway view", 
   expect(request.args).toMatchObject({
     menu: false,
     mode: undefined,
-    config: true,
-    gatewayConfig: true,
+    configRoute: "gateway",
     sandbox: resolve("/project"),
   });
   expect(request.parameters).toEqual({ sandbox: resolve("/project") });
-  expect(formatMenuCommand(request.args, ["atom"])).toBe("atom --config --gateway --sandbox /project");
+  expect(formatMenuCommand(request.args, ["atom"])).toBe("atom config gateway --sandbox /project");
 });
 
 test("gateway install requires an archive and launches without a mode", () => {
@@ -281,7 +280,7 @@ test.each(["127.0.0.1", "example.com", "::1", "[::1]"])("accepts address %s", va
 });
 
 test.each([
-  [], ["--continue"], ["--config"], ["--config", "--gateway"], ["--mode", "core", "--host", "0.0.0.0", "--port", "0"],
+  [], ["--continue"], ["config"], ["config", "gateway"], ["--mode", "core", "--host", "0.0.0.0", "--port", "0"],
   ["--mode", "core-gateway", "--port", "4100"],
   ["--mode", "tui", "--core-server", "::1", "--core-port", "4200"],
   ["--mode", "gateway", "--action", "start"],

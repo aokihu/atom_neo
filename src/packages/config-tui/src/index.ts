@@ -1,5 +1,7 @@
-// @atom-neo/config-tui — standalone OpenTUI wizard (first-run setup + config editor)
+// @atom-neo/config-tui — standalone OpenTUI wizard/menu (first-run setup + config editor)
 export { startWizard } from "./app";
+export { startMenuApp } from "./menu/start-menu-app";
+export type { MenuActions, MenuInitialRoute, MenuLaunch, SessionSummary } from "./menu/menu-types";
 export type { WizardMode, WizardState, ProviderEdit, ThinkingMode } from "./wizard-logic";
 export {
   SECRET_MASK,

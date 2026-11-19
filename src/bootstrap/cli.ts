@@ -8,6 +8,7 @@ import type { LogLevel } from "@atom-neo/shared";
 export type Mode = "core" | "tui" | "core-gateway" | "gateway" | "full";
 export type LogMode = "console" | "pipe" | "file";
 export type Command = "export" | "import";
+export type ConfigRoute = "configure" | "gateway";
 export type BackupEnvMode = "merge" | "replace";
 export type GatewayCommandAction =
   | "install" | "load" | "reload" | "list" | "start" | "stop"
@@ -56,15 +57,14 @@ export type BootArguments = {
   corePort?: number;
   clients?: string;
   action?: "start" | "stop";
-  config: boolean;
-  /** Only valid with `--config`: open config-tui directly on GatewayModal. */
-  gatewayConfig: boolean;
+  configRoute?: ConfigRoute;
   continueSession: boolean;
   gatewayCommand?: GatewayCommand;
 };
 
 export function parseArguments(rawArgs: readonly string[]): BootArguments | "help" {
   if (rawArgs[0] === "gateway") return parseGatewayArguments(rawArgs.slice(1));
+  if (rawArgs[0] === "config") return parseConfigArguments(rawArgs.slice(1));
 
   const first = rawArgs[0];
   const menu = first === "menu";
@@ -83,8 +83,6 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
       "core-port": { type: "string" },
       clients: { type: "string" },
       action: { type: "string" },
-      config: { type: "boolean", default: false },
-      gateway: { type: "boolean", default: false },
       output: { type: "string", short: "o" },
       password: { type: "boolean", default: false },
       force: { type: "boolean", default: false },
@@ -111,7 +109,6 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
     throw new Error("--output/--password/--force/--dry-run/--env require export or import");
   }
   if (values.output === "") throw new Error("--output cannot be empty");
-  if (values.gateway && !values.config) throw new Error("--gateway requires --config");
 
   const sandboxPath = values.sandbox;
   if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
@@ -160,9 +157,50 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
     logModes: (values.log as string[]).map(validateLogMode),
     logFile: values["log-file"] as string | undefined,
     logPipePath: values["log-pipepath"] as string | undefined,
-    config: values.config as boolean,
-    gatewayConfig: values.config === true && values.gateway === true,
     continueSession: values.continue as boolean,
+  };
+}
+
+function parseConfigArguments(args: readonly string[]): BootArguments | "help" {
+  let parsed: ReturnType<typeof parseArgs>;
+  try {
+    parsed = parseArgs({
+      args: [...args],
+      options: {
+        sandbox: { type: "string" },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    throw new Error(`Invalid config command: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const { values, positionals } = parsed;
+  if (values.help) return "help";
+  if (positionals.length > 1) throw new Error("config accepts only an optional 'gateway' target");
+  const target = positionals[0];
+  if (target !== undefined && target !== "gateway") throw new Error(`Unknown config target: ${target}`);
+  const sandboxPath = values.sandbox;
+  if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
+  return {
+    menu: false,
+    wizard: false,
+    password: false,
+    force: false,
+    dryRun: false,
+    envMode: "merge",
+    sandboxExplicit: sandboxPath !== undefined,
+    port: 3100,
+    host: "127.0.0.1",
+    sandbox: parseSandboxPath(sandboxPath ?? process.cwd()),
+    logLevel: "debug",
+    logIgnore: [],
+    logLevelExplicit: false,
+    logIgnoreExplicit: false,
+    logModes: [],
+    configRoute: target === "gateway" ? "gateway" : "configure",
+    continueSession: false,
   };
 }
 
@@ -206,8 +244,6 @@ function parseGatewayArguments(args: readonly string[]): BootArguments | "help" 
     logLevelExplicit: false,
     logIgnoreExplicit: false,
     logModes: [],
-    config: false,
-    gatewayConfig: false,
     continueSession: false,
     gatewayCommand: {
       action,
@@ -265,12 +301,14 @@ atom-neo — AI Agent Development Platform
 USAGE
   ${binName} [OPTIONS]
   ${binName} menu [--sandbox <path>]
+  ${binName} config [gateway] [--sandbox <path>]
   ${binName} export [--sandbox <path>] [-o|--output <file>] [--password] [--force]
   ${binName} import <archive> [--sandbox <path>] [--password] [--env merge|replace] [--dry-run] [--force]
   ${binName} gateway <action> [target] [--sandbox <path>] [--id <instance>] [--source <file|url>] [--version <version>] [--out <file>] [--target <platform>] [--force] [--json]
 
 COMMANDS
-  menu                   一次性启动向导（参数自动回填，完成后执行）
+  menu                   打开 OpenTUI 菜单（Session / Gateway / Configure / Backup）
+  config                 配置工作区；config gateway 直接打开 Gateway 配置
   export                 导出 config.json + .env 为 .atombak 归档
   import                 从 .atombak 归档导入配置
   gateway <action>       Gateway 实例管理: install | upgrade | load | reload | list | start | stop | check | logs | pack | uninstall
@@ -286,8 +324,6 @@ OPTIONS
   --clients <id>         指定 Client；省略则操作全部
   --sandbox <path>        沙箱目录 (默认: 当前目录)
   -c, --continue         继续上次 TUI Session（默认新建；无历史时新建）
-  --config                启动配置向导 (API Key / 模型 / Provider / 主题)
-  --gateway               仅与 --config 使用：直接打开 Gateway Client 配置
   --log <mode>            日志输出模式: console | pipe | file (可叠加使用)
   --log-level <level>     日志级别: debug | info | warn | error (默认: debug)
   --log-ignore <level>    忽略的日志级别 (可多次使用)
@@ -312,8 +348,8 @@ EXAMPLES
   ${binName} --continue --sandbox ./sandbox
   ${binName} --mode core --port 3100 --log=console
   ${binName} --mode core-gateway --port 3100 --log=console
-  ${binName} --config --sandbox ./sandbox
-  ${binName} --config --gateway --sandbox ./sandbox
+  ${binName} config --sandbox ./sandbox
+  ${binName} config gateway --sandbox ./sandbox
   ${binName} export --sandbox ./sandbox --password -o ./backup.atombak
   ${binName} import ./backup.atombak --sandbox ./sandbox
   ${binName} gateway list --sandbox ./sandbox

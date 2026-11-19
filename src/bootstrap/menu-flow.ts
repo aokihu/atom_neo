@@ -134,14 +134,15 @@ export function formatMenuCommand(args: BootArguments, prefix = buildAppCommand(
     flags.push("--sandbox", args.sandbox);
     return joinCommand(prefix, flags);
   }
-  if (args.config) flags.push("--config");
-  else if (args.mode) flags.push("--mode", args.mode);
-  if (args.gatewayConfig) flags.push("--gateway");
+  if (args.configRoute) {
+    flags.push("config");
+    if (args.configRoute === "gateway") flags.push("gateway");
+  } else if (args.mode) flags.push("--mode", args.mode);
   if (args.mode === "tui") flags.push("--core-server", args.coreServer!, "--core-port", String(args.corePort));
   else if (args.mode === "gateway") {
     flags.push("--action", args.action!);
     if (args.clients) flags.push("--clients", args.clients);
-  } else if (!args.config) flags.push("--host", args.host, "--port", String(args.port));
+  } else if (!args.configRoute) flags.push("--host", args.host, "--port", String(args.port));
   flags.push("--sandbox", args.sandbox);
   if (args.continueSession) flags.push("--continue");
   return joinCommand(prefix, flags);
@@ -254,8 +255,7 @@ export class MenuFlow {
     const { archive, output, encrypt, target, id, out, ...launch } = parameters;
     const args: BootArguments = {
       ...this.base, ...launch, menu: false,
-      config: command === "config" || command === "gateway-configure",
-      gatewayConfig: command === "gateway-configure",
+      configRoute: command === "gateway-configure" ? "gateway" : command === "config" ? "configure" : undefined,
       mode: undefined,
     };
     if (command === "core" || command === "core-gateway") args.mode = command;

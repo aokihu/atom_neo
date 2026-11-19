@@ -57,30 +57,27 @@ describe("parseArguments --wizard", () => {
   });
 });
 
-describe("parseArguments --config", () => {
-  test("defaults to false", () => {
-    const args = parseArguments(["--sandbox", "/tmp/sb"]) as any;
-    expect(args.config).toBe(false);
-    expect(args.gatewayConfig).toBe(false);
+describe("config subcommand", () => {
+  test("routes atom config and atom config gateway", () => {
+    expect(parseArguments(["config", "--sandbox", "/tmp/sb"])).toMatchObject({
+      configRoute: "configure",
+      sandbox: "/tmp/sb",
+      sandboxExplicit: true,
+    });
+    expect(parseArguments(["config", "gateway", "--sandbox", "/tmp/sb"])).toMatchObject({
+      configRoute: "gateway",
+      sandbox: "/tmp/sb",
+    });
+    expect(parseArguments(["config"])).toMatchObject({ configRoute: "configure" });
   });
 
-  test("detects the --config flag", () => {
-    const args = parseArguments(["--config", "--sandbox", "/tmp/sb"]) as any;
-    expect(args.config).toBe(true);
-    expect(args.gatewayConfig).toBe(false);
-  });
-
-  test("accepts --gateway only with --config", () => {
-    const args = parseArguments(["--config", "--gateway", "--sandbox", "/tmp/sb"]) as any;
-    expect(args).toMatchObject({ config: true, gatewayConfig: true, sandbox: "/tmp/sb" });
-    expect(() => parseArguments(["--gateway", "--sandbox", "/tmp/sb"])).toThrow("--gateway requires --config");
-    expect(() => parseArguments(["--gateway", "--mode", "core"])).toThrow("--gateway requires --config");
-  });
-
-  test("coexists with mode flags", () => {
-    const args = parseArguments(["--mode", "core", "--config"]) as any;
-    expect(args.mode).toBe("core");
-    expect(args.config).toBe(true);
+  test("rejects old --config/--gateway flags and invalid config targets", () => {
+    expect(() => parseArguments(["--config"])).toThrow("Unknown option '--config'");
+    expect(() => parseArguments(["--config", "--gateway"])).toThrow("Unknown option '--config'");
+    expect(() => parseArguments(["--gateway"])).toThrow("Unknown option '--gateway'");
+    expect(() => parseArguments(["config", "providers"])).toThrow("Unknown config target: providers");
+    expect(() => parseArguments(["config", "gateway", "extra"])).toThrow("config accepts only an optional 'gateway' target");
+    expect(() => parseArguments(["config", "--mode", "core"])).toThrow("Invalid config command: Unknown option '--mode'");
   });
 });
 
@@ -157,7 +154,7 @@ describe("gateway command", () => {
         menu: false, wizard: false, password: false, dryRun: false, envMode: "merge",
         sandboxExplicit: false, port: 3100, host: "127.0.0.1", sandbox: process.cwd(),
         logLevel: "debug", logIgnore: [], logLevelExplicit: false, logIgnoreExplicit: false,
-        logModes: [], config: false, continueSession: false,
+        logModes: [], continueSession: false,
       });
       expect(args.mode).toBeUndefined();
       expect(args.action).toBeUndefined();
