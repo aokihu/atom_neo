@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { act, createRef, useState, type Ref } from "react";
+import { act, createRef, useState, type ReactNode, type Ref } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { RGBA } from "@opentui/core";
@@ -16,7 +16,7 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength, focusRef, actions = ACTIONS }: { listLength?: number; focusRef?: Ref<BoxRenderable>; actions?: ModalAction[] } = {}) {
+async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight }: { listLength?: number; focusRef?: Ref<BoxRenderable>; actions?: ModalAction[]; headerRight?: ReactNode } = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
   const triggered: string[] = [];
@@ -30,6 +30,7 @@ async function mountModal({ listLength, focusRef, actions = ACTIONS }: { listLen
       <Modal
         open={open}
         title="Test"
+        headerRight={headerRight}
         width={48}
         actions={actions}
         defaultActionKey="ok"
@@ -109,6 +110,18 @@ test("Tab focuses actions from list mode, then left/right cycle actions", async 
     expect(ctx.triggered).toEqual(["ok"]);
     await ctx.press("ARROW_LEFT", "RETURN");
     expect(ctx.triggered).toEqual(["ok", "cancel"]);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("renders headerRight on the title row", async () => {
+  const ctx = await mountModal({ headerRight: <text fg="#888888">v9.9.9</text> });
+  try {
+    await ctx.render(true);
+    const line = ctx.setup.captureCharFrame().split("\n").find(value => value.includes("Test"));
+    expect(line).toContain("Test");
+    expect(line).toContain("v9.9.9");
   } finally {
     await cleanup(ctx);
   }

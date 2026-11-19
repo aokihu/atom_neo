@@ -113,7 +113,7 @@ export function MenuApp({ sandbox, actions, initialRoute = "home", initialError,
 ```
 
 `routeFor("gateway", hasConfig)` 只在 `hasConfig` 为 true 时直达 Gateway；否则进入 `{ name: "workspace", after: "gateway-real" }`，避免 `loadConfig` 副作用伪造“已配置”。
-顶栏通过 `MenuChromeProvider` 注入 `breadcrumbFor(route)` 与 `startMenuApp` 参数传入的版本号，不复制版本常量。
+顶栏通过 `MenuChromeProvider` 注入 `breadcrumbFor(route)` 与 `startMenuApp` 参数传入的版本号，不复制版本常量；`@atom-neo/tui-kit` Modal 新增 `headerRight`，版本号与标题同一行右对齐，breadcrumb 在下一行。
 
 ### 2.3 WorkspaceGate
 

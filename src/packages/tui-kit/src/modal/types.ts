@@ -44,6 +44,8 @@ export interface ModalAction {
 export interface ModalProps {
   open: boolean;
   title?: string;
+  /** Optional content rendered at the right edge of the title row. */
+  headerRight?: React.ReactNode;
   width?: number;
   height?: number;
   placement?: ModalPlacement;

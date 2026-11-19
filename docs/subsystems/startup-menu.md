@@ -52,7 +52,7 @@ atom config gateway [--sandbox <path>]
 ## 全局 Workspace 与状态
 
 - MenuApp 维护单一 workspace；Session、History、Core Server、Gateway、Configure、Backup 全部使用它。
-- 顶部显示完整 breadcrumb、注入的版本号、workspace、Gateway 状态、Core 状态；窄窗口下 workspace 路径居中省略，避免溢出。
+- 顶栏第一行左侧 `ATOM NEO · <页面名>`、右侧 muted 版本号（`Modal.headerRight`，同一行右对齐）；第二行 breadcrumb；第三行 workspace；随后是 Gateway/Core 状态。窄窗口下 workspace 路径居中省略，避免溢出。
 - 启动失败重试时使用最后一次 launch 选择的 workspace 重新打开 MenuApp，不回退到原始 `args.sandbox`。
 - `createMenuActions` 严格只读配置：`config.json` 缺失时 theme=edex、Gateway port=3000，不创建目录或文件。
 - 修改 Workspace 会规范化绝对路径并更新后续页面使用的 sandbox；取消不写配置。

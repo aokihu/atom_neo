@@ -25,7 +25,7 @@ export function MenuStatus({ workspace, gateway, core }: {
 }) {
   const { colors } = useTheme();
   const { width } = useTerminalDimensions();
-  const { version, breadcrumb } = useContext(MenuChromeContext);
+  const { breadcrumb } = useContext(MenuChromeContext);
   const status = (value: string) => value === "online" ? colors.status.success : value === "offline" ? colors.status.warning : colors.text.muted;
   const limit = Math.max(16, Math.min(72, width - 18));
   const shown = workspace.length <= limit
@@ -33,10 +33,7 @@ export function MenuStatus({ workspace, gateway, core }: {
     : `${workspace.slice(0, Math.ceil((limit - 1) / 2))}…${workspace.slice(-Math.floor((limit - 1) / 2))}`;
   return (
     <box flexDirection="column" marginBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={colors.text.muted}>{breadcrumb ?? "Home"}</text>
-        {version ? <text fg={colors.text.muted}>{`v${version}`}</text> : null}
-      </box>
+      <text fg={colors.text.muted}>{breadcrumb ?? "Home"}</text>
       <text fg={colors.text.muted}>workspace: {shown}</text>
       <box flexDirection="row" gap={2}>
         <text fg={status(gateway)}>Gateway: {gateway}</text>
@@ -65,6 +62,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   children?: ReactNode;
 }) {
   const { colors } = useTheme();
+  const { version } = useContext(MenuChromeContext);
   const [selected, setSelected] = useState(0);
   const bounded = items.length === 0 ? 0 : Math.min(selected, items.length - 1);
   const maxVisible = 10;
@@ -87,8 +85,10 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
     <Modal
       open
       title={`ATOM NEO · ${title}`}
+      headerRight={version ? <text fg={colors.text.muted}>{`v${version}`}</text> : undefined}
       width={96}
       height={24}
+      titlePadding={0}
       interactive={!suspended}
       listLength={Math.max(1, items.length)}
       selectedListIndex={bounded}

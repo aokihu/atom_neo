@@ -153,10 +153,17 @@ test("advanced opens the existing wizard and the real Gateway entry", async () =
   expect(gateway.frame()).toContain("GATEWAY CLIENTS");
 });
 
-test("top bar shows the injected version and route breadcrumb", async () => {
-  const app = await mount({ initialRoute: "configure", version: "9.9.9" });
-  expect(app.frame()).toContain("Home / Configure");
-  expect(app.frame()).toContain("v9.9.9");
+test("top bar puts version on the title row and breadcrumb below it", async () => {
+  const app = await mount({ version: "9.9.9" });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  const lines = app.frame().split("\n")
+    .map(line => line.replace(/[│┌┐└┘─]/g, "").trim())
+    .filter(Boolean);
+  const title = lines.findIndex(line => line.includes("ATOM NEO · Backup"));
+  expect(title).toBeGreaterThanOrEqual(0);
+  expect(lines[title]).toContain("v9.9.9");
+  expect(lines[title + 1]).toContain("Home / Backup");
+  expect(lines[title + 2]).toContain("workspace:");
 });
 
 test("failed launch feedback is shown on the home screen", async () => {

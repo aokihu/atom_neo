@@ -54,6 +54,7 @@ const actionSignature = (actions: ModalAction[]) =>
 export function Modal({
   open,
   title,
+  headerRight,
   width = 60,
   height,
   placement = "center",
@@ -224,11 +225,17 @@ export function Modal({
         paddingX={1}
         backgroundColor={colors.bg.popup}
       >
-        {title && (
-          <box flexShrink={0} {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
-            <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>
-              {title}
-            </text>
+        {(title || headerRight) && (
+          <box
+            flexShrink={0}
+            flexDirection="row"
+            justifyContent="space-between"
+            {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}
+          >
+            {title
+              ? <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>{title}</text>
+              : <box />}
+            {headerRight ?? null}
           </box>
         )}
         <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>
