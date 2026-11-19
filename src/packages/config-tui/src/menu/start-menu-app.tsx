@@ -10,14 +10,16 @@ import type { MenuActions, MenuInitialRoute, MenuLaunch } from "./menu-types";
 export async function startMenuApp(
   sandbox: string,
   options: {
-    actions: MenuActions;
+    actions: MenuActions | (() => MenuActions);
     initialRoute?: MenuInitialRoute;
-    workspaceExplicit?: boolean;
+    /** Feedback from a previously failed launch. */
+    error?: string;
   },
 ): Promise<MenuLaunch | undefined> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error("menu requires an interactive terminal");
   }
+  const actions = typeof options.actions === "function" ? options.actions() : options.actions;
   await ensureBunRuntimePluginSupport();
 
   return new Promise<MenuLaunch | undefined>((resolve, reject) => {
@@ -30,18 +32,26 @@ export async function startMenuApp(
       process.stdin.off("end", abort);
       resolve(launch);
     };
-    const abort = () => {
-      if (settled) return;
-      if (renderer) renderer.destroy();
-      else finish();
+    // Release the terminal stream lease before another menu renderer can start.
+    const afterDestroy = () => {
+      const closed = (renderer as unknown as { nativeClosed?: Promise<void> } | undefined)?.nativeClosed;
+      void Promise.resolve(closed).then(finish, finish);
     };
+    const stop = (next?: MenuLaunch) => {
+      launch = next;
+      if (renderer) {
+        renderer.destroy();
+        afterDestroy();
+      } else finish();
+    };
+    const abort = () => stop();
 
     process.stdin.on("end", abort);
     createCliRenderer({
       exitOnCtrlC: false,
       screenMode: "alternate-screen",
       backgroundColor: "#05090c",
-      onDestroy: finish,
+      onDestroy: afterDestroy,
     }).then(createdRenderer => {
       renderer = createdRenderer;
       if (settled) { renderer.destroy(); return; }
@@ -50,13 +60,10 @@ export async function startMenuApp(
       });
       createRoot(renderer).render(React.createElement(MenuApp, {
         sandbox,
-        workspaceExplicit: options.workspaceExplicit,
         initialRoute: options.initialRoute,
-        actions: options.actions,
-        onExit: (next) => {
-          launch = next;
-          createdRenderer.destroy();
-        },
+        initialError: options.error,
+        actions,
+        onExit: (next) => stop(next),
       }));
     }).catch(error => {
       process.stdin.off("end", abort);

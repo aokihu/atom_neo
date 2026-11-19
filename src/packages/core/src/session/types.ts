@@ -27,7 +27,10 @@ export type SessionSummary = {
   lastTuiUsedAt: number;
   initiator: SessionInitiator;
   status: string;
+  /** Holds an active task lease. */
   active: boolean;
+  /** Attached to a TUI/consumer and protected from deletion until Core restarts. */
+  attached: boolean;
 };
 
 export type SessionCheckpointReason =

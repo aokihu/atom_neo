@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-19
 > 开发目标：`menu_config_integration`
-> 状态：**M1–M5 已实施并提交**。代码、测试、CLI、PTY 与文档已收口；三个里程碑 commit 见最终交付记录。
+> 状态：**M1–M5 与 code review 修复已实施并提交**。代码、测试、CLI、PTY 与文档已收口；commit 见最终交付记录。
 >
 > 关联文档：
 > - [启动菜单](startup-menu.md)
@@ -132,11 +132,10 @@ atom --config --gateway
 
 `atom config gateway`：
 
-1. 显式 `--sandbox <path>`：直接使用该 workspace。
-2. 未显式指定：
-   - 当前目录存在 `config.json`：使用当前目录。
-   - 当前目录没有配置：先打开 `Configure → Workspace path`。
-3. 页面顶部始终显示 workspace。
+1. 目标 sandbox（显式 `--sandbox` 或当前目录）存在 `config.json`：直接进入 Gateway。
+2. 目标 sandbox 没有配置：无论是否显式 `--sandbox`，先打开 `Configure → Workspace path`。
+3. 路由判定严格只读；`createMenuActions` 不得调用会写默认配置的 `loadConfig`。
+4. 页面顶部始终显示 workspace。
 
 ### 4.4 保留
 
@@ -278,13 +277,16 @@ GET /api/sessions
     "lastTuiUsedAt": 1760000000000,
     "initiator": { "type": "tui" },
     "status": "suspended",
-    "active": false
+    "active": false,
+    "attached": false
   }
 ]
 ```
 
 - 复用 `SessionPersistenceService` 的 checkpoint 目录扫描。
 - 只读，不创建 session。
+- `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 全部要求 admin token。
+- `active`（任务 lease）与 `attached`（TUI/消费者 attach）都禁止删除。
 - Core 离线时 MenuApp 显示不可用，不自行扫描 sandbox 伪造状态。
 
 ### 7.2 Core Stop
@@ -317,7 +319,7 @@ POST /api/admin/shutdown
 | Home | 方向键、Enter、Esc、Quit 确认 |
 | Workspace | 默认当前目录、显式 `--sandbox`、无配置、不可写 |
 | Session | New / Continue / Back；启动后 menu 退出 |
-| History | 空列表、Core 离线、打开、删除、active 409 |
+| History | 空列表、Core 离线、打开、删除确认、active/attached 409 |
 | Core Server | start / stop / attach、状态刷新、失败重试 |
 | Gateway 快捷入口 | workspace 确认、change workspace、取消 |
 | Gateway 真实入口 | Configure → Advanced → Gateway、保存/返回 |
@@ -366,15 +368,16 @@ POST /api/admin/shutdown
 
 ---
 
-## 11. 待确认
+## 11. 已确认并实施
 
-- [ ] 接受本计划与信息架构
-- [ ] 接受 `atom config` / `atom config gateway` 并移除 `--config`
-- [ ] 接受顶级 Gateway 强制 Workspace 确认页
-- [ ] 接受 `GET /api/sessions` 与受控 Core stop API
-- [ ] 接受第一版 History 使用 sessionId/摘要，不新增 title 迁移
+- [x] 接受本计划与信息架构
+- [x] 接受 `atom config` / `atom config gateway` 并移除 `--config`
+- [x] 接受顶级 Gateway 强制 Workspace 确认页
+- [x] 接受 `GET /api/sessions` 与受控 Core stop API
+- [x] 接受第一版 History 使用 sessionId/摘要，不新增 title 迁移
+- [x] 接受 code review 修复范围：只读 config、Backup 密码、attached 删除保护、Session API 鉴权、失败重试、长列表/长路径、PTY 覆盖
 
-确认后按 M1–M5 实施；三份文档见 code_and_file 与 graph。
+三份文档见 code_and_file 与 graph。
 
 ## 12. 实施记录（2026-11-19）
 
@@ -386,12 +389,25 @@ POST /api/admin/shutdown
 | M4 | Backup Export/Import 表单、merge/replace、覆盖确认；复用 bootstrap backup |
 | M5 | 移除旧 plain `MenuFlow`/`startMenu` 与 menu history；CLI help、docs、menu README、PTY 全量回归 |
 
+code review 修复（同范围）：
+
+| 项 | 修复 |
+|---|---|
+| B1 | `menu-actions` 严格只读 config；`createMenuActions` 延迟到 TTY 判定后；空目录/非 TTY/`atom config gateway` 不写盘；workspace 规范化 |
+| B2 | Export/Import 使用 secret 遮罩；非空密码 ≥8 位 + 二次确认；空密码明文警告；导入仅加密归档问密码；复用 `validateBackupPassword`/`inspectBackupArchive` |
+| B3 | History 删除确认；`SessionSummary.attached`；active/attached 删除保护；Session API admin 鉴权 |
+| M1 | theme/gatewayPort 提升为 MenuApp state，Wizard/端口/workspace 后 `refreshSettings()` |
+| M2 | `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 要求 admin |
+| M3 | `runMenuLoop` 失败重开菜单；`menu-launch.test.ts` 覆盖 chat/core/attach 映射与重试 |
+| M4 | 列表 10 项滚动窗口；长 workspace 路径省略 |
+| M5 | 恢复 PTY：config 取消/保存、Backup import、Gateway 窄窗口/取消、Core 失败重试、非 TTY/`--config` 拒绝；补 workspace gate/空目录/409/密码测试 |
+
 验证记录（2026-11-19）：
 
-- `bun test src/packages/config-tui/src` → 136 pass
-- `bun test src/packages/core/src/http-router.test.ts src/packages/core/src/session src/packages/core/src/server-continuation.test.ts` → 130 pass
-- `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/gateway-actions.test.ts src/bootstrap/gateway-command.test.ts` → 61 pass
-- `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 18 pass（含 MenuApp Home/WorkspaceGate/History/Core Stop/Configure/Gateway/Backup/窄窗口/非 TTY）
+- `bun test src/packages/config-tui/src` → 146 pass
+- `bun test src/packages/core/src/session src/packages/core/src/http-router.test.ts src/packages/core/src/server-continuation.test.ts src/packages/core/src/server-dual-instance.test.ts` → 134 pass
+- `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/menu-launch.test.ts src/bootstrap/backup.test.ts src/bootstrap/gateway-actions.test.ts src/bootstrap/gateway-command.test.ts` → 82 pass
+- `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 24 pass（含 Workspace/config 保存、Backup 导出/导入、History/Core stop、端口/provider/Attach 404 失败重试、窄窗口、非 TTY/`--config`）
 - `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过
 
 真实 Telegram 平台与官方发布仍按 G6 状态保持 PENDING。

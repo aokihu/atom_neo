@@ -156,6 +156,17 @@ describe("SessionStore", () => {
     expect(store.delete("active")).toBe(true);
   });
 
+  test("attached sessions survive idle sweep, eviction, and deletion", () => {
+    const store = new SessionStore(1, undefined, 100);
+    store.get("attached", { type: "tui" });
+    expect(store.attachSession("attached")?.sessionId).toBe("attached");
+    store.get("new");
+
+    expect(store.has("attached")).toBe(true);
+    expect(store.sweepIdle(Date.now() + 101)).not.toContain("attached");
+    expect(store.delete("attached")).toBe(false);
+  });
+
   test("evicts the next inactive session when the oldest is leased", () => {
     const store = new SessionStore(2);
     store.get("oldest");

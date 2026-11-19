@@ -1,3 +1,4 @@
+import { useKeyboard } from "@opentui/react";
 import { MenuScreen } from "./menu-frame";
 
 export function WorkspaceGate({ workspace, gateway, core, error, onContinue, onChange, onBack }: {
@@ -9,6 +10,10 @@ export function WorkspaceGate({ workspace, gateway, core, error, onContinue, onC
   onChange: () => void;
   onBack: () => void;
 }) {
+  useKeyboard((event) => {
+    if (event.name === "c" && !event.ctrl && !event.meta) onChange();
+  });
+
   return (
     <MenuScreen
       title="Gateway"

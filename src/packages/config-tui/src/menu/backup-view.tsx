@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
+import { MenuConfirm, MenuPrompt, MenuScreen, MenuSecretPrompt } from "./menu-frame";
 import type { MenuActions } from "./menu-types";
 
 export function BackupView({ workspace, gateway, core, notice, onExport, onImport, onBack }: {
@@ -30,15 +30,27 @@ export function BackupView({ workspace, gateway, core, notice, onExport, onImpor
   );
 }
 
+type ExportStep = "output" | "password" | "confirm-password" | "plaintext-confirm";
+
 export function BackupExportView({ actions, title, onDone, onBack }: {
   actions: MenuActions;
   title: string;
   onDone: (message: string) => void;
   onBack: () => void;
 }) {
-  const [step, setStep] = useState<"output" | "password">("output");
+  const [step, setStep] = useState<ExportStep>("output");
   const [output, setOutput] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  const runExport = (value?: string) => {
+    void actions.exportBackup({ output: output || undefined, password: value })
+      .then(message => onDone(message))
+      .catch(caught => {
+        setError(caught instanceof Error ? caught.message : String(caught));
+        setStep("password");
+      });
+  };
 
   if (step === "output") {
     return (
@@ -60,21 +72,64 @@ export function BackupExportView({ actions, title, onDone, onBack }: {
     );
   }
 
+  if (step === "password") {
+    return (
+      <MenuSecretPrompt
+        key="export-password"
+        title={`${title} / Password`}
+        label="Password (leave blank for plaintext)"
+        placeholder="Leave blank for unencrypted export"
+        error={error}
+        onSubmit={(value) => {
+          if (!value) {
+            setPassword("");
+            setError("");
+            setStep("plaintext-confirm");
+            return;
+          }
+          const problem = actions.validateBackupPassword(value);
+          if (problem) {
+            setError(problem);
+            return;
+          }
+          setPassword(value);
+          setError("");
+          setStep("confirm-password");
+        }}
+        onCancel={() => setStep("output")}
+        hint="Enter continue · Esc back"
+      />
+    );
+  }
+
+  if (step === "confirm-password") {
+    return (
+      <MenuSecretPrompt
+        key="export-confirm-password"
+        title={`${title} / Confirm password`}
+        label="Confirm password"
+        error={error}
+        onSubmit={(value) => {
+          if (value !== password) {
+            setError("Passwords do not match");
+            return;
+          }
+          setError("");
+          runExport(password);
+        }}
+        onCancel={() => setStep("password")}
+        hint="Enter export · Esc back"
+      />
+    );
+  }
+
   return (
-    <MenuPrompt
-      key="export-password"
-      title={`${title} / Password`}
-      label="Password (optional)"
-      value=""
-      placeholder="Enter to export unencrypted"
-      error={error}
-      onSubmit={(password) => {
-        void actions.exportBackup({ output: output || undefined, password: password || undefined })
-          .then(message => onDone(message))
-          .catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
-      }}
-      onCancel={() => setStep("output")}
-      hint="Enter export · Esc back"
+    <MenuConfirm
+      title={`${title} / Plaintext warning`}
+      message="Export without a password? The archive will contain plaintext API keys."
+      confirmLabel="Export plaintext"
+      onConfirm={() => runExport(undefined)}
+      onCancel={() => setStep("password")}
     />
   );
 }
@@ -93,6 +148,7 @@ export function BackupImportView({ actions, workspace, gateway, core, title, onD
   const [step, setStep] = useState<ImportStep>("archive");
   const [archive, setArchive] = useState("");
   const [password, setPassword] = useState("");
+  const [encrypted, setEncrypted] = useState(false);
   const [envMode, setEnvMode] = useState<"merge" | "replace">("merge");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -113,24 +169,32 @@ export function BackupImportView({ actions, workspace, gateway, core, title, onD
           }
           setArchive(value);
           setError("");
-          setStep("password");
+          setBusy(true);
+          void actions.inspectBackup(value).then(summary => {
+            setEncrypted(summary.encrypted);
+            setStep(summary.encrypted ? "password" : "env");
+          }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
+            .finally(() => setBusy(false));
         }}
         onCancel={onBack}
-        hint="Enter continue · Esc cancel"
+        hint={busy ? "Inspecting archive…" : "Enter continue · Esc cancel"}
       />
     );
   }
 
   if (step === "password") {
     return (
-      <MenuPrompt
+      <MenuSecretPrompt
         key="import-password"
         title={`${title} / Password`}
-        label="Password (only if encrypted)"
-        value={password}
-        placeholder="Leave blank for unencrypted archives"
+        label="Archive password"
+        placeholder="Encrypted archive"
         error={error}
         onSubmit={(value) => {
+          if (!value) {
+            setError("Password is required for an encrypted archive");
+            return;
+          }
           setPassword(value);
           setError("");
           setStep("env");
@@ -155,13 +219,13 @@ export function BackupImportView({ actions, workspace, gateway, core, title, onD
         ]}
         onSelect={(key) => {
           if (key === "back") {
-            setStep("password");
+            setStep(encrypted ? "password" : "archive");
             return;
           }
           setEnvMode(key === "replace" ? "replace" : "merge");
           setStep("confirm");
         }}
-        onBack={() => setStep("password")}
+        onBack={() => setStep(encrypted ? "password" : "archive")}
         hint="↑/↓ move · Enter continue · Esc back"
       />
     );
@@ -177,17 +241,16 @@ export function BackupImportView({ actions, workspace, gateway, core, title, onD
           if (busy) return;
           setBusy(true);
           setError("");
-          void actions.importBackup({ archive, envMode, password: password || undefined, force: true })
+          void actions.importBackup({ archive, envMode, password: password || undefined })
             .then(message => onDone(message))
             .catch(caught => {
               setError(caught instanceof Error ? caught.message : String(caught));
-              setStep("archive");
+              setStep(encrypted ? "password" : "archive");
             })
             .finally(() => setBusy(false));
         }}
         onCancel={() => setStep("env")}
       />
-      {error ? <MenuConfirm title={`${title} / Error`} message={error} confirmLabel="Back" onConfirm={() => setStep("archive")} onCancel={() => setStep("archive")} /> : null}
     </>
   );
 }

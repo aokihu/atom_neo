@@ -131,10 +131,8 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
         }
         let session: NonNullable<ReturnType<SessionStore["load"]>>;
         if ("sessionId" in options) {
-          const loaded = sessionStore.load(options.sessionId as string);
+          const loaded = sessionStore.attachSession(options.sessionId as string);
           if (!loaded) return Response.json({ error: "Session not found" }, { status: 404 });
-          loaded.lastTuiUsedAt = Date.now();
-          if (!sessionStore.save(loaded.sessionId, "restore")) return Response.json({ error: "Failed to persist TUI session" }, { status: 500 });
           session = loaded;
         } else {
           session = sessionStore.attachTui("continue" in options && options.continue === true);
@@ -151,6 +149,8 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
       if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
 
       if (url.pathname === `${API_PREFIX}sessions` && method === "GET") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
         return Response.json(sessionStore.listSessions());
       }
 
@@ -188,6 +188,8 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
       if (url.pathname === `${API_PREFIX}tasks` && method === "POST") return handleTaskSubmit(req);
 
       if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
         const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
         if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         const session = sessionStore.load(sid);
@@ -196,10 +198,12 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
           : Response.json({ error: "Session not found" }, { status: 404 });
       }
       if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
         const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
         if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         if (!sessionStore.delete(sid)) {
-          return Response.json({ error: "Session is active" }, { status: 409 });
+          return Response.json({ error: "Session is active or attached" }, { status: 409 });
         }
         return Response.json({ ok: true, sessionId: sid });
       }

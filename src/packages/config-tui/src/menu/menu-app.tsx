@@ -13,18 +13,20 @@ import { routeFor } from "./menu-routes";
 import type { MenuRoute } from "./menu-routes";
 import type { MenuActions, MenuInitialRoute, MenuLaunch } from "./menu-types";
 
-export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "home", actions, onExit }: {
+export function MenuApp({ sandbox, initialRoute = "home", initialError, actions, onExit }: {
   sandbox: string;
-  workspaceExplicit?: boolean;
   initialRoute?: MenuInitialRoute;
+  initialError?: string;
   actions: MenuActions;
   onExit: (launch?: MenuLaunch) => void;
 }) {
   const [workspace, setWorkspace] = useState(sandbox);
-  const [route, setRoute] = useState<MenuRoute>(() => routeFor(initialRoute, actions.hasConfig(sandbox), workspaceExplicit));
+  const [theme, setTheme] = useState(actions.theme);
+  const [gatewayPort, setGatewayPort] = useState(actions.gatewayPort);
+  const [route, setRoute] = useState<MenuRoute>(() => routeFor(initialRoute, actions.hasConfig(sandbox)));
   const [gateway, setGateway] = useState<"online" | "offline" | "unknown">("unknown");
   const [core, setCore] = useState<"online" | "offline" | "unknown">("unknown");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError ?? "");
   const [notice, setNotice] = useState("");
   const [quitConfirm, setQuitConfirm] = useState(false);
 
@@ -69,14 +71,14 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
     if (route.name === "history" || route.name === "core-server") return setRoute({ name: "session" });
     if (route.name === "backup") return setRoute({ name: "home" });
     if (route.name === "backup-export" || route.name === "backup-import") return setRoute({ name: "backup" });
-    if (route.name === "wizard") return setRoute({ name: "advanced" });
+    if (route.name === "wizard") return setRoute(route.back === "advanced" ? { name: "advanced" } : { name: "configure" });
     return setRoute({ name: "home" });
   };
 
   const statusProps = { workspace, gateway, core, error };
 
   return (
-    <ThemeProvider theme={actions.theme}>
+    <ThemeProvider theme={theme}>
       {quitConfirm ? (
         <MenuConfirm
           title="Quit"
@@ -149,9 +151,12 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
       ) : route.name === "gateway-real" ? (
         <GatewayModal
           sandbox={workspace}
-          port={actions.gatewayPort}
+          port={gatewayPort}
           gatewayActions={actions.gateway}
-          onSubmit={actions.setGatewayPort}
+          onSubmit={(port) => {
+            actions.setGatewayPort(port);
+            setGatewayPort(port);
+          }}
           onBack={back}
         />
       ) : route.name === "configure" ? (
@@ -160,7 +165,7 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           {...statusProps}
           items={[
             { key: "workspace", label: "Workspace path ›", detail: workspace },
-            { key: "advanced", label: "Advanced configuration ›" },
+            { key: "advanced", label: "Advanced configuration ›", detail: `Gateway port ${gatewayPort}` },
             { key: "back", label: "‹ Back" },
           ]}
           onSelect={(key) => key === "workspace" ? go({ name: "workspace", after: "configure" }) : key === "advanced" ? go({ name: "advanced" }) : back()}
@@ -173,13 +178,13 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           {...statusProps}
           items={[
             { key: "providers", label: "Providers & Models", detail: "Open provider/model editor" },
-            { key: "theme", label: "Theme", detail: "Choose UI theme" },
+            { key: "theme", label: "Theme", detail: `Current: ${theme}` },
             { key: "gateway", label: "Gateway ›", detail: "Instance and credential management" },
             { key: "back", label: "‹ Back" },
           ]}
           onSelect={(key) => {
-            if (key === "providers") go({ name: "wizard", view: "providers" });
-            else if (key === "theme") go({ name: "wizard", view: "theme" });
+            if (key === "providers") go({ name: "wizard", view: "providers", back: "advanced" });
+            else if (key === "theme") go({ name: "wizard", view: "theme", back: "advanced" });
             else if (key === "gateway") go({ name: "gateway-real", back: "advanced" });
             else back();
           }}
@@ -192,8 +197,18 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           mode="config"
           initialView={route.view}
           gatewayActions={actions.gateway}
-          onComplete={() => go({ name: "configure" })}
-          onAbort={() => go({ name: "configure" })}
+          onComplete={() => {
+            const settings = actions.refreshSettings();
+            setTheme(settings.theme);
+            setGatewayPort(settings.gatewayPort);
+            go(route.back === "advanced" ? { name: "advanced" } : { name: "configure" });
+          }}
+          onAbort={() => {
+            const settings = actions.refreshSettings();
+            setTheme(settings.theme);
+            setGatewayPort(settings.gatewayPort);
+            go(route.back === "advanced" ? { name: "advanced" } : { name: "configure" });
+          }}
         />
       ) : route.name === "workspace" ? (
         <MenuPrompt
@@ -208,8 +223,11 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
               setError(problem);
               return;
             }
-            setWorkspace(value);
-            actions.setWorkspace(value);
+            const normalized = actions.setWorkspace(value);
+            const settings = actions.refreshSettings();
+            setWorkspace(normalized);
+            setTheme(settings.theme);
+            setGatewayPort(settings.gatewayPort);
             if (route.after === "gateway-real") go({ name: "gateway-real", back: "configure" });
             else if (route.after === "gateway-shortcut") go({ name: "gateway-shortcut" });
             else go({ name: "configure" });

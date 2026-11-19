@@ -79,7 +79,7 @@ stateDiagram-v2
     advanced --> wizard: Providers & Models / Theme
     advanced --> gateway_real: Gateway
     advanced --> configure: Back
-    wizard --> configure: Save / Cancel
+    wizard --> advanced: Save / Cancel
 
     backup --> export: Export
     backup --> import: Import
@@ -100,14 +100,14 @@ graph TB
     subgraph ConfigTUI["@atom-neo/config-tui"]
         MenuApp["menu/menu-app.tsx"]
         MenuRoutes["menu/menu-routes.ts"]
+        MenuTypes["menu/menu-types.ts"]
+        MenuFrame["menu/menu-frame.tsx"]
+        StartMenu["menu/start-menu-app.tsx"]
         Home["menu/menu-home.tsx"]
         WorkspaceGate["menu/workspace-gate.tsx"]
         SessionView["menu/session-view.tsx"]
         HistoryView["menu/history-view.tsx"]
         CoreView["menu/core-server-view.tsx"]
-        ConfigureView["menu/configure-view.tsx"]
-        AdvancedView["menu/advanced-config-view.tsx"]
-        GatewayView["menu/gateway-view.tsx"]
         BackupView["menu/backup-view.tsx"]
         Wizard["components/WizardApp.tsx"]
         GatewayModal["components/GatewayModal.tsx"]
@@ -117,6 +117,8 @@ graph TB
     end
 
     subgraph Bootstrap["src/bootstrap"]
+        StartMain["main.ts"]
+        MenuLaunch["menu-launch.ts"]
         MenuActions["menu-actions.ts"]
         GatewayActions["gateway-actions.ts"]
         Backup["backup.ts"]
@@ -125,30 +127,35 @@ graph TB
 
     subgraph Core["@atom-neo/core"]
         Router["http-router.ts"]
+        Store["session/store.ts"]
         Sessions["session/persistence-service.ts"]
         Server["server.ts"]
     end
 
+    StartMain --> StartMenu
+    StartMain --> MenuLaunch
+    StartMenu --> MenuApp
     MenuApp --> MenuRoutes
+    MenuApp --> MenuTypes
+    MenuApp --> MenuFrame
     MenuApp --> Home
     MenuApp --> WorkspaceGate
     MenuApp --> SessionView
     MenuApp --> HistoryView
     MenuApp --> CoreView
-    MenuApp --> ConfigureView
-    MenuApp --> AdvancedView
-    MenuApp --> GatewayView
     MenuApp --> BackupView
+    MenuApp --> Wizard
+    MenuApp --> GatewayModal
     MenuApp --> TuiKit
-    AdvancedView --> Wizard
-    GatewayView --> GatewayModal
     GatewayModal --> InstanceForm
     GatewayModal --> Status
-    MenuApp --> MenuActions
+    MenuLaunch --> MenuTypes
+    MenuActions --> MenuTypes
     MenuActions --> GatewayActions
     MenuActions --> Backup
     MenuActions --> Runtime
     MenuActions --> Router
+    Router --> Store
     Router --> Sessions
     Server --> Router
 ```
@@ -175,15 +182,17 @@ sequenceDiagram
 
     Main->>CLI: parseArguments(["menu"])
     CLI-->>Main: menu=true, sandbox
-    Main->>Actions: createMenuActions(sandbox)
-    Main->>Menu: startMenuApp(sandbox, actions)
-    Menu->>Actions: load theme/workspace/Gateway port
+    Main->>Menu: startMenuApp(sandbox, actionsFactory)
+    Menu->>Menu: TTY check, then createMenuActions(sandbox, port)
+    Menu->>Actions: read-only theme/Gateway port
     Menu->>Gateway: optional status
     Menu->>Core: optional session/core status
-    Menu-->>Main: exit/quit 或 MenuRequest
+    Menu-->>Main: exit/quit 或 MenuLaunch
+    Main->>Main: runMenuLoop → menuLaunchArguments → runApp
+    Main-->>Menu: launch error → reopen with initialError
 ```
 
-`MenuRequest` 保留现有 `runApp` 执行路径：New Chat / Core Server / Attach 关闭 MenuApp 后由 `main.ts` 启动现有应用。
+`MenuLaunch` 保留现有 `runApp` 执行路径：New Chat / Core Server / Attach 关闭 MenuApp 后由 `main.ts` 启动现有应用。失败 launch 不退出进程，而是重新打开菜单并显示 `Launch failed: ...`。
 
 ---
 
@@ -246,7 +255,7 @@ sequenceDiagram
 
     User->>Menu: Session > New Chat
     Menu->>Actions: runChat(false)
-    Actions-->>Menu: MenuRequest
+    Actions-->>Menu: MenuLaunch
     Menu-->>User: exit
     Actions->>Chat: start default TUI
 
@@ -256,9 +265,11 @@ sequenceDiagram
     Core-->>Actions: summaries
     Actions-->>Menu: list
     User->>Menu: Delete
+    Menu->>Menu: MenuConfirm (cancel = no API call)
     Menu->>Actions: deleteSession(id)
-    Actions->>Core: DELETE /api/sessions/:id
-    Core-->>Actions: 200 / 409 active
+    Actions->>Core: DELETE /api/sessions/:id + admin token
+    Core->>Core: reject active || attached
+    Core-->>Actions: 200 / 409 Session is active or attached
 ```
 
 ---
@@ -303,14 +314,18 @@ sequenceDiagram
 
     User->>Menu: Backup > Export
     Menu->>View: Export form
-    User->>View: output/password
-    View->>Actions: exportBackup(options)
-    Actions->>Backup: plan/execute
+    User->>View: output → masked password → confirm
+    alt empty password
+        View-->>User: plaintext API-key warning
+        User->>View: confirm
+    end
+    View->>Actions: validateBackupPassword / exportBackup
+    Actions->>Backup: validate + plan/execute
     Backup-->>Actions: result
     Actions-->>View: success / error
 ```
 
-Import 需要覆盖确认；取消不写文件。
+Import 先 `inspectBackupArchive`，只有加密归档显示遮罩密码；`.env` merge/replace 与覆盖确认后才写盘；取消不写文件。
 
 ---
 
@@ -337,6 +352,7 @@ erDiagram
         string initiator
         string status
         boolean active
+        boolean attached
     }
     GATEWAY_INSTANCE ||--o{ SUPERVISOR : maps
     GATEWAY_INSTANCE {
@@ -371,9 +387,9 @@ graph TB
     end
 
     subgraph M3["M3 Configure/Gateway"]
-        F12["config-tui/src/menu/configure-view.tsx"]
-        F13["config-tui/src/menu/advanced-config-view.tsx"]
-        F14["config-tui/src/menu/gateway-view.tsx"]
+        F12["config-tui/src/menu/menu-app.tsx"]
+        F13["config-tui/src/menu/menu-routes.ts"]
+        F14["config-tui/src/menu/workspace-gate.tsx"]
         F15["config-tui/src/components/GatewayModal.tsx"]
         F16["config-tui/src/components/WizardApp.tsx"]
     end
@@ -381,6 +397,8 @@ graph TB
     subgraph M4["M4 Backup"]
         F17["config-tui/src/menu/backup-view.tsx"]
         F18["bootstrap/backup.ts"]
+        F19["config-tui/src/menu/menu-frame.tsx"]
+        F20["config-tui/src/menu/menu-types.ts"]
     end
 
     M1 --> M2 --> M3 --> M4
@@ -393,11 +411,11 @@ graph TB
 ```mermaid
 graph LR
     MenuTests["menu-app.test.tsx"] --> MenuApp
-    GateTests["workspace-gate.test.tsx"] --> WorkspaceGate
-    HistoryTests["history-view.test.tsx"] --> HistoryView
-    CoreTests["core-server-view.test.tsx"] --> CoreView
-    ConfigTests["configure-view.test.tsx"] --> ConfigureView
+    ViewTests["menu-views.test.tsx"] --> WorkspaceGate
+    ViewTests --> HistoryView
+    ViewTests --> CoreView
     BackupTests["backup-view.test.tsx"] --> BackupView
+    LaunchTests["menu-launch.test.ts"] --> MenuLaunch
     CliTests["cli.test.ts"] --> CLI
     ActionTests["menu-actions.test.ts"] --> MenuActions
     SessionTests["persistence-service.test.ts"] --> Sessions
@@ -424,10 +442,11 @@ graph LR
 
 ---
 
-## 15. 待确认
+## 15. 已确认并实施
 
-- [ ] MenuApp 放在 `@atom-neo/config-tui`
-- [ ] `atom config` / `atom config gateway` 为唯一配置入口
-- [ ] 顶级 Gateway 强制 WorkspaceGate
-- [ ] 新增 `GET /api/sessions` 与受控 shutdown
-- [ ] WizardApp 作为路由级子页面复用
+- [x] MenuApp 放在 `@atom-neo/config-tui`
+- [x] `atom config` / `atom config gateway` 为唯一配置入口
+- [x] 顶级 Gateway 强制 WorkspaceGate
+- [x] `GET /api/sessions` 与受控 shutdown
+- [x] WizardApp 作为路由级子页面复用
+- [x] 审查修复：只读 config、Backup 密码、attached 保护、Session API admin、失败重试、长列表/长路径、PTY 覆盖

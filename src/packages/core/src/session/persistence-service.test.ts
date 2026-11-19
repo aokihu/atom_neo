@@ -232,6 +232,7 @@ describe("SessionPersistenceService", () => {
         initiator: { type: "gateway", clientId: "bot", platform: "telegram" },
         status: "active",
         active: false,
+        attached: false,
       },
       {
         sessionId: "tui-session",
@@ -239,6 +240,7 @@ describe("SessionPersistenceService", () => {
         initiator: { type: "tui" },
         status: "suspended",
         active: false,
+        attached: false,
       },
     ]);
     expect(existsSync(missingDir)).toBe(false);
@@ -262,6 +264,7 @@ describe("SessionPersistenceService", () => {
       initiator: { type: "unknown" },
       status: "suspended",
       active: false,
+      attached: false,
     }]);
   });
 
@@ -284,6 +287,7 @@ describe("SessionPersistenceService", () => {
       initiator: { type: "tui" },
       status: "active",
       active: true,
+      attached: false,
     });
     expect(summaries[1]).toEqual({
       sessionId: "persisted",
@@ -291,6 +295,19 @@ describe("SessionPersistenceService", () => {
       initiator: { type: "gateway", clientId: "bot", platform: "telegram" },
       status: "suspended",
       active: false,
+      attached: false,
     });
+  });
+
+  test("attached sessions stay visible and protected from deletion", () => {
+    const { persistence } = createPersistence();
+    const store = new SessionStore(10, undefined, 0, persistence);
+    const session = store.attachSession("persisted");
+    expect(session).toBeNull();
+    store.get("attached", { type: "tui" });
+    expect(store.attachSession("attached")?.sessionId).toBe("attached");
+    expect(store.isAttached("attached")).toBe(true);
+    expect(store.listSessions()[0]?.attached).toBe(true);
+    expect(store.delete("attached")).toBe(false);
   });
 });

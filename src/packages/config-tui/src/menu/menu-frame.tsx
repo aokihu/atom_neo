@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { FieldInput, Modal, SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import type { ModalAction } from "@atom-neo/tui-kit";
+import { SecretFieldInput } from "../components/SecretFieldInput";
 
 export type MenuItem = {
   key: string;
@@ -16,10 +17,15 @@ export function MenuStatus({ workspace, gateway, core }: {
   core: "online" | "offline" | "unknown";
 }) {
   const { colors } = useTheme();
+  const { width } = useTerminalDimensions();
   const status = (value: string) => value === "online" ? colors.status.success : value === "offline" ? colors.status.warning : colors.text.muted;
+  const limit = Math.max(16, Math.min(72, width - 18));
+  const shown = workspace.length <= limit
+    ? workspace
+    : `${workspace.slice(0, Math.ceil((limit - 1) / 2))}…${workspace.slice(-Math.floor((limit - 1) / 2))}`;
   return (
     <box flexDirection="column" marginBottom={1}>
-      <text fg={colors.text.muted}>workspace: {workspace}</text>
+      <text fg={colors.text.muted}>workspace: {shown}</text>
       <box flexDirection="row" gap={2}>
         <text fg={status(gateway)}>Gateway: {gateway}</text>
         <text fg={status(core)}>Core: {core}</text>
@@ -47,6 +53,9 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const { colors } = useTheme();
   const [selected, setSelected] = useState(0);
   const bounded = items.length === 0 ? 0 : Math.min(selected, items.length - 1);
+  const maxVisible = 10;
+  const windowStart = Math.max(0, Math.min(bounded - maxVisible + 1, items.length - maxVisible));
+  const visibleItems = items.slice(windowStart, windowStart + maxVisible);
 
   useEffect(() => {
     setSelected(0);
@@ -81,15 +90,21 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
         {children}
         {items.length === 0
           ? <text fg={colors.text.muted}>No items.</text>
-          : items.map((item, index) => (
-            <SelectableRow
-              key={item.key}
-              selected={index === bounded}
-              label={item.label}
-              labelWidth={32}
-              detail={item.detail}
-            />
-          ))}
+          : visibleItems.map((item, offset) => {
+            const index = windowStart + offset;
+            return (
+              <SelectableRow
+                key={item.key}
+                selected={index === bounded}
+                label={item.label}
+                labelWidth={32}
+                detail={item.detail}
+              />
+            );
+          })}
+        {items.length > maxVisible
+          ? <text fg={colors.text.muted}>{`${windowStart + 1}-${windowStart + visibleItems.length} of ${items.length}`}</text>
+          : null}
         {error ? <box marginTop={1}><text fg={colors.status.error}>{error}</text></box> : null}
         {notice ? <box marginTop={1}><text fg={colors.status.success}>{notice}</text></box> : null}
       </box>
@@ -112,6 +127,28 @@ export function MenuPrompt({ title, label, value, placeholder, error, onSubmit, 
       <FieldInput
         label={label}
         value={value}
+        placeholder={placeholder}
+        error={error}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
+    </Modal>
+  );
+}
+
+export function MenuSecretPrompt({ title, label, placeholder, error, onSubmit, onCancel, hint }: {
+  title: string;
+  label: string;
+  placeholder?: string;
+  error?: string;
+  onSubmit: (value: string) => void;
+  onCancel: () => void;
+  hint: string;
+}) {
+  return (
+    <Modal open title={`ATOM NEO · ${title}`} width={72} interactive={false} onClose={onCancel} hint={hint}>
+      <SecretFieldInput
+        label={label}
         placeholder={placeholder}
         error={error}
         onSubmit={onSubmit}

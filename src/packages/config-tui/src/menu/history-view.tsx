@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MenuScreen } from "./menu-frame";
+import { MenuConfirm, MenuScreen } from "./menu-frame";
 import type { MenuActions, SessionSummary } from "./menu-types";
 
 function shortSession(sessionId: string): string {
@@ -8,7 +8,7 @@ function shortSession(sessionId: string): string {
 
 function detail(session: SessionSummary): string {
   const seen = session.lastTuiUsedAt > 0 ? new Date(session.lastTuiUsedAt).toLocaleString() : "no TUI access";
-  return `${session.status}${session.active ? " · active" : ""} · ${seen}`;
+  return `${session.status}${session.active ? " · active" : ""}${session.attached ? " · attached" : ""} · ${seen}`;
 }
 
 export function HistoryView({ workspace, gateway, core, actions, externalError, onBack, onOpen, onRefreshStatus }: {
@@ -26,6 +26,7 @@ export function HistoryView({ workspace, gateway, core, actions, externalError, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<SessionSummary>();
 
   const load = async () => {
     if (core !== "online") {
@@ -61,35 +62,55 @@ export function HistoryView({ workspace, gateway, core, actions, externalError, 
   ];
 
   return (
-    <MenuScreen
-      title="Session / History"
-      workspace={workspace}
-      gateway={gateway}
-      core={core}
-      items={items}
-      onSelect={(key) => {
-        if (key === "back") onBack();
-        else if (key === "refresh") {
-          onRefreshStatus();
-          void load();
-        } else onOpen(key);
-      }}
-      onBack={onBack}
-      onDelete={() => {
-        if (!session) return;
-        void actions.deleteSession(session.sessionId).then(() => {
-          setNotice(`Deleted ${session.sessionId}`);
+    <>
+      <MenuScreen
+        title="Session / History"
+        workspace={workspace}
+        gateway={gateway}
+        core={core}
+        items={items}
+        onSelect={(key) => {
+          if (key === "back") onBack();
+          else if (key === "refresh") {
+            onRefreshStatus();
+            void load();
+          } else onOpen(key);
+        }}
+        onBack={onBack}
+        onDelete={() => {
+          if (!session) return;
+          if (session.active || session.attached) {
+            setError(`Cannot delete ${session.active ? "active" : "attached"} session ${session.sessionId}`);
+            return;
+          }
           setError("");
-          void load();
-        }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
-      }}
-      onSelectionChange={setSelected}
-      hint="↑/↓ move · Enter open · Del delete · Esc back"
-      error={externalError || error}
-      notice={notice}
-    >
-      {loading ? <text>Loading sessions…</text> : null}
-      {!loading && sessions.length === 0 && !error ? <text>No sessions.</text> : null}
-    </MenuScreen>
+          setPendingDelete(session);
+        }}
+        onSelectionChange={setSelected}
+        hint="↑/↓ move · Enter open · Del delete · Esc back"
+        error={externalError || error}
+        notice={notice}
+      >
+        {loading ? <text>Loading sessions…</text> : null}
+        {!loading && sessions.length === 0 && !error ? <text>No sessions.</text> : null}
+      </MenuScreen>
+      {pendingDelete ? (
+        <MenuConfirm
+          title="Delete session"
+          message={`Delete ${pendingDelete.sessionId}? This removes its checkpoint data.`}
+          confirmLabel="Delete"
+          onConfirm={() => {
+            const target = pendingDelete;
+            setPendingDelete(undefined);
+            void actions.deleteSession(target.sessionId).then(() => {
+              setNotice(`Deleted ${target.sessionId}`);
+              setError("");
+              void load();
+            }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
+          }}
+          onCancel={() => setPendingDelete(undefined)}
+        />
+      ) : null}
+    </>
   );
 }

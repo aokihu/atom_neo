@@ -47,6 +47,11 @@ function sandbox(name: string, gatewayClients: unknown[] = []) {
   }));
   return path;
 }
+function emptySandbox(name: string) {
+  const path = join(temp, name);
+  mkdirSync(path, { recursive: true });
+  return path;
+}
 function clientDirectory(name: string, entry: string[], platform = "local") {
   const path = join(temp, name);
   mkdirSync(path, { recursive: true });
@@ -406,7 +411,7 @@ integration("MenuApp Configure/Advanced/Gateway direct entries and narrow layout
   const home = join(temp, "menuapp-configure-home");
   const configured = await driveMenu([
     { wait: "Workspace path", send: "\x1b[B\r", keyDelay: 0.08 },
-    { wait: "Choose UI theme", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Current: edex", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
     { wait: "Install client package", send: "\x03" },
   ], [binary, "config", "--sandbox", path], home);
   expect(configured.commands).toEqual([]);
@@ -417,12 +422,122 @@ integration("MenuApp Configure/Advanced/Gateway direct entries and narrow layout
   expect(direct.commands).toEqual([]);
 
   const narrow = await driveMenu([
-    { wait: "Install client package", send: "\x03" },
+    { wait: "Install client package", send: "\x1b" },
+    { wait: "ATOM NEO · Configure", send: "\x03" },
   ], [binary, "config", "gateway", "--sandbox", path], join(temp, "menuapp-configure-narrow-home"), {
     ATOM_PTY_COLS: "64", ATOM_PTY_ROWS: "26",
   });
-  expect(narrow.tail).toContain("Install client package");
+  expect(narrow.tail).toContain("ATOM NEO · Configure");
 }, 40000);
+
+integration("unconfigured atom config gateway starts at Workspace and never writes config", async () => {
+  const path = emptySandbox("empty-config-gateway");
+  const result = await driveMenu([
+    { wait: "Workspace path", send: "\x03" },
+  ], [binary, "config", "gateway", "--sandbox", path], join(temp, "empty-config-gateway-home"));
+  expect(result.commands).toEqual([]);
+  expect(existsSync(join(path, "config.json"))).toBe(false);
+}, 30000);
+
+integration("unconfigured config saves the workspace and Gateway port without writing before save", async () => {
+  const path = emptySandbox("empty-config-save");
+  const result = await driveMenu([
+    { wait: "ATOM NEO · Configure", send: "\r" },
+    { wait: "ATOM NEO · Workspace", send: "\r" },
+    { wait: "Advanced configuration", send: "\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Providers & Models", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Install client package", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "GATEWAY PORT", send: "\x1b[F\x7f\x7f\x7f\x7f4321\r" },
+    { wait: "GATEWAY CLIENTS", delay: 0.5, send: "\x03" },
+  ], [binary, "config", "--sandbox", path], join(temp, "empty-config-save-home"));
+  expect(result.commands).toEqual([]);
+  expect(JSON.parse(readFileSync(join(path, "config.json"), "utf8")).gateway.port).toBe(4321);
+}, 30000);
+
+integration("failed Core launch returns to the menu for a retry", async () => {
+  const path = sandbox("menuapp-retry-core");
+  const home = join(temp, "menuapp-retry-core-home");
+  const blocker = Bun.serve({ hostname: "127.0.0.1", port: 3100, fetch: () => new Response("occupied") });
+  try {
+    const result = await driveMenu([
+      { wait: "Session", send: "\r", keyDelay: 0.08 },
+      { wait: "Core Server", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+      { wait: "Start Server", send: "\r" },
+      { wait: "Launch failed", send: "\x03" },
+    ], [binary, "menu", "--sandbox", path], home);
+    expect(result.commands).toEqual([]);
+    expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
+  } finally {
+    blocker.stop(true);
+  }
+}, 30000);
+
+integration("missing provider returns to the menu instead of exiting", async () => {
+  const path = emptySandbox("menuapp-retry-provider");
+  const result = await driveMenu([
+    { wait: "Session", send: "\r", keyDelay: 0.08 },
+    { wait: "Core Server", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Start Server", send: "\r" },
+    { wait: "provider configuration", send: "\x03" },
+  ], [binary, "menu", "--sandbox", path], join(temp, "menuapp-retry-provider-home"));
+  expect(result.commands).toEqual([]);
+  expect(result.tail).toContain("Launch failed");
+}, 30000);
+
+integration("Attach 404 returns to the menu for a retry", async () => {
+  const path = sandbox("menuapp-retry-attach");
+  const fake = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(req) {
+      const { pathname } = new URL(req.url);
+      if (pathname === "/api/health") return Response.json({ ok: true });
+      if (pathname === "/api/sessions") {
+        return Response.json([{
+          sessionId: "tui-ghost-session", lastTuiUsedAt: Date.now(), initiator: { type: "tui" },
+          status: "suspended", active: false, attached: false,
+        }]);
+      }
+      if (pathname === "/api/tui/attach") return Response.json({ error: "Session not found" }, { status: 404 });
+      return new Response("not found", { status: 404 });
+    },
+  });
+  try {
+    writeFileSync(join(path, ".atom/core-runtime.json"), JSON.stringify({
+      url: `http://127.0.0.1:${fake.port}`, token: "fake-admin", instanceId: "fake-core",
+    }));
+    const result = await driveMenu([
+      { wait: "Session", send: "\r", keyDelay: 0.08 },
+      { wait: "History", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
+      { wait: "tui-ghost-se", delay: 0.3, send: "\r" },
+      { wait: "Cannot attach Core (404)", send: "\x03" },
+    ], [binary, "menu", "--sandbox", path], join(temp, "menuapp-retry-attach-home"));
+    expect(result.commands).toEqual([]);
+    expect(result.tail).toContain("Launch failed");
+  } finally {
+    fake.stop(true);
+  }
+}, 30000);
+
+integration("MenuApp Backup Import writes the archive into the workspace", async () => {
+  const source = sandbox("menuapp-import-source");
+  writeFileSync(join(source, ".env"), "IMPORTED_TOKEN=menu\n");
+  const archive = join(temp, "menuapp-import.atombak");
+  const exported = await run([binary, "export", "--sandbox", source, "--output", archive, "--force"]);
+  expect(exported.code, exported.stderr).toBe(0);
+  const target = emptySandbox("menuapp-import-target");
+  const result = await driveMenu([
+    { wait: "Session", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Export", send: "\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Archive path", send: `${archive}\r`, delay: 0.5 },
+    { wait: "Merge", send: "\r" },
+    { wait: "Overwrite", delay: 0.3, send: "\r" },
+    { wait: "Imported archive", send: "\x03" },
+  ], [binary, "menu", "--sandbox", target], join(temp, "menuapp-import-home"), { ATOM_PTY_COLS: "120" });
+  expect(result.commands).toEqual([]);
+  expect(existsSync(join(target, "config.json"))).toBe(true);
+  expect(readFileSync(join(target, ".env"), "utf8")).toContain("IMPORTED_TOKEN=menu");
+}, 30000);
 
 integration("MenuApp Backup export writes an archive", async () => {
   const path = sandbox("menuapp-backup");
@@ -433,6 +548,7 @@ integration("MenuApp Backup export writes an archive", async () => {
     { wait: "Export", send: "\r" },
     { wait: "Output path", send: `\x15${archive}\r` },
     { wait: "Password", send: "\r" },
+    { wait: "Export plaintext", send: "\r" },
     { wait: "Exported", send: "\x03" },
   ], [binary, "menu", "--sandbox", path], home);
   expect(result.commands).toEqual([]);
@@ -451,7 +567,7 @@ integration("MenuApp History lists sessions and Core Server stops through the co
       { wait: session.sessionId.slice(0, 12), send: "\x1b" },
       { wait: "Core Server", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
       { wait: "Start Server", send: "\x1b[B\r", keyDelay: 0.08 },
-      { wait: "Core shutdown requested", send: "\x03" },
+      { wait: "Core stopped", send: "\x03" },
     ], [binary, "menu", "--sandbox", path], home);
     await waitFor(() => core.proc.exitCode !== null, "Core shutdown from MenuApp");
     expect(result.commands).toEqual([]);
@@ -462,11 +578,20 @@ integration("MenuApp History lists sessions and Core Server stops through the co
 }, 30000);
 
 integration("MenuApp rejects non-interactive invocation and offline admin commands", async () => {
-  const path = sandbox("menuapp-noninteractive");
+  const path = emptySandbox("menuapp-noninteractive");
   const home = join(temp, "menuapp-noninteractive-home");
   const menu = await run([binary, "menu", "--sandbox", path], temp, { HOME: home });
   expect(menu.code).toBe(1);
   expect(menu.stderr).toContain("interactive terminal");
+  expect(existsSync(join(path, "config.json"))).toBe(false);
+  const config = await run([binary, "config", "gateway", "--sandbox", path], temp, { HOME: home });
+  expect(config.code).toBe(1);
+  expect(config.stderr).toContain("interactive terminal");
+  expect(existsSync(join(path, "config.json"))).toBe(false);
+  const legacy = await run([binary, "--config", "--sandbox", path], temp, { HOME: home });
+  expect(legacy.code).toBe(1);
+  expect(legacy.stderr).toContain("Unknown option '--config'");
+  expect(existsSync(join(path, "config.json"))).toBe(false);
   const list = await run([binary, "gateway", "list", "--json", "--sandbox", path], temp);
   expect(JSON.parse(list.stdout)).toEqual({ clients: [], offline: true });
   const startClient = await run([binary, "gateway", "start", "echo-bot", "--sandbox", path], temp);

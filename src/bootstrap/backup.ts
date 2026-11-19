@@ -103,6 +103,7 @@ function resolveOutput(output?: string): string {
 }
 
 export function exportBackup(request: ExportRequest): ExportResult {
+  if (request.password) validateBackupPassword(request.password, true);
   assertDirectory(request.sandbox);
   const configPath = join(request.sandbox, "config.json");
   const envPath = join(request.sandbox, ".env");
@@ -220,17 +221,27 @@ async function promptPassword(label: string): Promise<string> {
   }
 }
 
+/** Shared validation for CLI and MenuApp backup forms. */
+export function validateBackupPassword(password: string, requireStrong = true): void {
+  if (!password) throw new Error("Password cannot be empty");
+  if (requireStrong && password.length < 8) throw new Error("Password must be at least 8 characters");
+}
+
+/** Read only the backup envelope; used by the UI before deciding whether to ask for a password. */
+export function inspectBackupArchive(path: string): BackupSummary {
+  return inspectBackup(readArchive(path));
+}
+
 async function resolvePassword(confirm: boolean, requireStrong: boolean): Promise<string> {
   const fromEnv = process.env.ATOM_BACKUP_PASSWORD;
   if (fromEnv !== undefined) {
     if (!fromEnv) throw new Error("ATOM_BACKUP_PASSWORD is empty");
-    if (requireStrong && fromEnv.length < 8) throw new Error("Password must be at least 8 characters");
+    validateBackupPassword(fromEnv, requireStrong);
     return fromEnv;
   }
   if (!process.stdin.isTTY) throw new Error("Password required: set ATOM_BACKUP_PASSWORD or run in a TTY");
   const password = await promptPassword("Password: ");
-  if (!password) throw new Error("Password cannot be empty");
-  if (requireStrong && password.length < 8) throw new Error("Password must be at least 8 characters");
+  validateBackupPassword(password, requireStrong);
   if (confirm) {
     const repeated = await promptPassword("Confirm password: ");
     if (repeated !== password) throw new Error("Passwords do not match");

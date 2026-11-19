@@ -24,7 +24,12 @@ export function CoreServerView({ workspace, gateway, core, actions, onLaunch, on
     setError("");
     try {
       await actions.stopCore();
-      setNotice("Core shutdown requested; waiting for it to go offline.");
+      let offline = false;
+      for (let attempt = 0; attempt < 20 && !offline; attempt++) {
+        offline = await actions.coreStatus().then(state => state === "offline", () => true);
+        if (!offline) await new Promise((done) => setTimeout(done, 150));
+      }
+      setNotice(offline ? "Core stopped." : "Core shutdown requested; waiting for it to go offline.");
       onRefreshStatus();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -59,7 +64,7 @@ export function CoreServerView({ workspace, gateway, core, actions, onLaunch, on
         { key: "back", label: "‹ Back" },
       ]}
       onSelect={(key) => {
-        if (key === "start") onLaunch({ kind: "core", sandbox: workspace, host: "127.0.0.1", port: 3100 });
+        if (key === "start") onLaunch({ kind: "core", sandbox: workspace, ...actions.coreStartTarget() });
         else if (key === "stop") void stop();
         else if (key === "attach") void attach();
         else onBack();

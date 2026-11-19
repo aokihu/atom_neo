@@ -49,19 +49,15 @@ export class SessionPersistenceService {
         initiator: state.initiator ?? { type: "unknown" },
         status: state.status,
         active: false,
+        attached: false,
       }] : [];
     });
   }
 
   listTuiSessions(): { sessionId: string; lastTuiUsedAt: number }[] {
-    const result: { sessionId: string; lastTuiUsedAt: number }[] = [];
-    for (const sessionDir of this.#checkpoints.listSessionDirectories()) {
-      const state = this.#checkpoints.readSessionState(
-        this.#checkpoints.resolveCurrentGeneration(sessionDir) ?? sessionDir,
-      );
-      if (state?.initiator?.type === "tui") result.push({ sessionId: state.sessionId, lastTuiUsedAt: state.lastTuiUsedAt ?? 0 });
-    }
-    return result;
+    return this.listSessions()
+      .filter(session => session.initiator.type === "tui")
+      .map(({ sessionId, lastTuiUsedAt }) => ({ sessionId, lastTuiUsedAt }));
   }
 
   checkpoint(

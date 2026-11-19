@@ -11,6 +11,7 @@ export class SessionStore {
   #lastAccess = new Map<string, number>();
   #leases = new Map<string, number>();
   #taskLeases = new Map<string, string>();
+  #attached = new Set<string>();
   #idleTtlMs: number;
   #log: LogFn | null;
   #onCreated?: (sessionId: string) => void;
@@ -73,6 +74,7 @@ export class SessionStore {
         initiator: session.initiator,
         status: persisted?.status ?? "active",
         active: this.isActive(session.sessionId),
+        attached: this.isAttached(session.sessionId),
       });
     }
     return [...summaries.values()].sort(
@@ -87,9 +89,26 @@ export class SessionStore {
     }
     const latest = [...candidates.values()].sort((a, b) => b.lastTuiUsedAt - a.lastTuiUsedAt || a.sessionId.localeCompare(b.sessionId))[0];
     const session = latest ? this.get(latest.sessionId) : this.get(`tui-${crypto.randomUUID()}`, { type: "tui" });
+    this.attach(session);
+    return session;
+  }
+
+  /** Attach an existing session (History open); attached sessions are protected from deletion. */
+  attachSession(sessionId: string): SessionContext | null {
+    const session = this.load(sessionId);
+    if (!session) return null;
+    this.attach(session);
+    return session;
+  }
+
+  isAttached(sessionId: string): boolean {
+    return this.#attached.has(sessionId);
+  }
+
+  private attach(session: SessionContext): void {
     session.lastTuiUsedAt = Date.now();
     if (!this.save(session.sessionId, "restore")) throw new Error("Failed to persist TUI session");
-    return session;
+    this.#attached.add(session.sessionId);
   }
 
   has(sessionId: string): boolean {
@@ -97,10 +116,11 @@ export class SessionStore {
   }
 
   delete(sessionId: string): boolean {
-    if (this.isActive(sessionId)) return false;
+    if (this.isActive(sessionId) || this.isAttached(sessionId)) return false;
     const existed = this.#sessions.delete(sessionId);
     this.#lastAccess.delete(sessionId);
     this.#leases.delete(sessionId);
+    this.#attached.delete(sessionId);
     this.#persistence?.remove(sessionId);
     if (existed) this.#onClosed?.(sessionId);
     return true;
@@ -177,7 +197,7 @@ export class SessionStore {
     if (this.#idleTtlMs <= 0) return [];
     const closed: string[] = [];
     for (const [sessionId, lastAccess] of this.#lastAccess) {
-      if (this.isActive(sessionId)) continue;
+      if (this.isActive(sessionId) || this.isAttached(sessionId)) continue;
       if (now - lastAccess < this.#idleTtlMs) continue;
       if (this.#suspend(sessionId, "idle")) closed.push(sessionId);
     }
@@ -215,6 +235,7 @@ export class SessionStore {
     this.#sessions.delete(sessionId);
     this.#lastAccess.delete(sessionId);
     this.#leases.delete(sessionId);
+    this.#attached.delete(sessionId);
     for (const [taskId, leasedSessionId] of this.#taskLeases) {
       if (leasedSessionId === sessionId) this.#taskLeases.delete(taskId);
     }
@@ -229,7 +250,7 @@ export class SessionStore {
 
   #evictOverflow(currentSessionId: string): void {
     if (this.#sessions.size <= this.#maxSessions) return;
-    const oldest = [...this.#lastAccess.keys()].find(id => id !== currentSessionId && !this.isActive(id));
+    const oldest = [...this.#lastAccess.keys()].find(id => id !== currentSessionId && !this.isActive(id) && !this.isAttached(id));
     if (!oldest) return;
     this.#log?.("session-store evict", { sid: oldest, size: this.#sessions.size });
     this.#suspend(oldest, "capacity");

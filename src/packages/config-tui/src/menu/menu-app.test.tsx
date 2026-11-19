@@ -1,4 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { act } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -6,9 +9,11 @@ import { MenuApp } from "./menu-app";
 import type { MenuActions } from "./menu-types";
 
 const cleanup: Array<() => Promise<void>> = [];
+const tempDirs: string[] = [];
 
 afterEach(async () => {
   while (cleanup.length > 0) await cleanup.pop()!();
+  while (tempDirs.length > 0) rmSync(tempDirs.pop()!, { recursive: true, force: true });
 });
 
 function actions(overrides: Partial<MenuActions> = {}): MenuActions {
@@ -22,15 +27,19 @@ function actions(overrides: Partial<MenuActions> = {}): MenuActions {
     },
     hasConfig: () => true,
     validateWorkspace: () => undefined,
-    setWorkspace: () => {},
+    setWorkspace: (path) => path,
+    refreshSettings: () => ({ theme: "edex", gatewayPort: 3000 }),
     coreStatus: async () => "offline",
     coreTarget: async () => ({ host: "127.0.0.1", port: 3100 }),
+    coreStartTarget: () => ({ host: "127.0.0.1", port: 3100 }),
     gatewayStatus: async () => "offline",
     listSessions: async () => [],
     deleteSession: async () => {},
     stopCore: async () => {},
     exportBackup: async () => "exported",
     importBackup: async () => "imported",
+    validateBackupPassword: (password) => password.length < 8 ? "Password must be at least 8 characters" : undefined,
+    inspectBackup: async () => ({ encrypted: false }),
     setGatewayPort: () => {},
     ...overrides,
   };
@@ -38,9 +47,11 @@ function actions(overrides: Partial<MenuActions> = {}): MenuActions {
 
 async function mount(options: {
   initialRoute?: "home" | "configure" | "gateway";
-  workspaceExplicit?: boolean;
+  initialError?: string;
+  sandbox?: string;
   actions?: MenuActions;
 } = {}) {
+  const sandbox = options.sandbox ?? "/tmp/atom-menu";
   const reactEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
   const previous = reactEnvironment.IS_REACT_ACT_ENVIRONMENT;
   reactEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
@@ -49,9 +60,9 @@ async function mount(options: {
   const launches: Array<unknown> = [];
   await act(async () => root.render(
     <MenuApp
-      sandbox="/tmp/atom-menu"
-      workspaceExplicit={options.workspaceExplicit}
+      sandbox={sandbox}
       initialRoute={options.initialRoute}
+      initialError={options.initialError}
       actions={options.actions ?? actions()}
       onExit={(launch) => { launches.push(launch); }}
     />,
@@ -78,7 +89,12 @@ async function mount(options: {
     await settle();
   };
 
-  return { press, frame: setup.captureCharFrame, launches };
+  const type = async (value: string) => {
+    await act(async () => setup.mockInput.pasteBracketedText(value));
+    await settle();
+  };
+
+  return { press, type, frame: setup.captureCharFrame, launches };
 }
 
 test("home shows the integrated menu and workspace status", async () => {
@@ -133,6 +149,55 @@ test("advanced opens the existing wizard and the real Gateway entry", async () =
   await gateway.press("ARROW_DOWN", "RETURN");
   await gateway.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(gateway.frame()).toContain("GATEWAY CLIENTS");
+});
+
+test("failed launch feedback is shown on the home screen", async () => {
+  const app = await mount({ initialError: "Launch failed: EADDRINUSE" });
+  expect(app.frame()).toContain("Launch failed: EADDRINUSE");
+});
+
+test("gateway shortcut supports the C change-workspace hint", async () => {
+  const app = await mount();
+  await app.press("ARROW_DOWN", "RETURN");
+  await app.press("c");
+  expect(app.frame()).toContain("ATOM NEO · Workspace");
+});
+
+test("gateway port edit refreshes the Configure summary", async () => {
+  const ports: number[] = [];
+  const app = await mount({
+    initialRoute: "gateway",
+    actions: actions({
+      gatewayPort: 0,
+      setGatewayPort: (port) => { ports.push(port); },
+    }),
+  });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("END", "BACKSPACE", "BACKSPACE", "BACKSPACE", "BACKSPACE");
+  await app.type("4321");
+  await app.press("RETURN", "ESCAPE");
+  expect(ports).toEqual([4321]);
+  expect(app.frame()).toContain("Gateway port 4321");
+});
+
+test("saving the theme wizard refreshes Advanced and returns there", async () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "atom-menu-theme-"));
+  tempDirs.push(sandbox);
+  const app = await mount({
+    sandbox,
+    initialRoute: "configure",
+    actions: actions({ refreshSettings: () => ({ theme: "nord", gatewayPort: 3000 }) }),
+  });
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Current: edex");
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("THEME");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("SAVE & EXIT");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Advanced");
+  expect(app.frame()).toContain("Current: nord");
 });
 
 test("backup home exposes Export before Import", async () => {

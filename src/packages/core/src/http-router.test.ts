@@ -101,11 +101,13 @@ describe("http router", () => {
 
   test("attach accepts an explicit sessionId for History open", async () => {
     const restored = { sessionId: "session-history", lastTuiUsedAt: 0 };
-    const saved: string[] = [];
+    const attached: string[] = [];
     const route = createHttpRouter(routerDeps({
       sessionStore: {
-        load: (id: string) => id === "session-history" ? restored : null,
-        save: (id: string) => { saved.push(id); return true; },
+        attachSession: (id: string) => {
+          attached.push(id);
+          return id === "session-history" ? restored : null;
+        },
       } as unknown as SessionStore,
     }));
     const ok = await route.fetch(request("/api/tui/attach", {
@@ -115,7 +117,7 @@ describe("http router", () => {
     }), ctx);
     expect(ok.status).toBe(200);
     expect(await ok.json()).toMatchObject({ sessionId: "session-history" });
-    expect(saved).toEqual(["session-history"]);
+    expect(attached).toEqual(["session-history"]);
 
     const missing = await route.fetch(request("/api/tui/attach", {
       method: "POST",
@@ -159,20 +161,47 @@ describe("http router", () => {
     expect(await response.text()).toBe("Not Found");
   });
 
-  test("lists sessions without admin auth", async () => {
+  test("lists sessions only with admin auth", async () => {
     const summaries = [{
       sessionId: "tui-1",
       lastTuiUsedAt: 1760000000000,
       initiator: { type: "tui" as const },
       status: "suspended",
       active: false,
+      attached: false,
     }];
     const route = createHttpRouter(routerDeps({
       sessionStore: { listSessions: () => summaries } as unknown as SessionStore,
     }));
-    const response = await route.fetch(request("/api/sessions"), ctx);
+    expect((await route.fetch(request("/api/sessions"), ctx)).status).toBe(403);
+    const response = await route.fetch(request("/api/sessions", {
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(summaries);
+  });
+
+  test("session detail and delete require admin and protect attached sessions", async () => {
+    let deleted = 0;
+    const route = createHttpRouter(routerDeps({
+      sessionStore: {
+        load: () => ({ sessionId: "s1", messages: [] }),
+        delete: () => { deleted++; return false; },
+      } as unknown as SessionStore,
+    }));
+    expect((await route.fetch(request("/api/sessions/s1"), ctx)).status).toBe(403);
+    expect((await route.fetch(request("/api/sessions/s1", { method: "DELETE" }), ctx)).status).toBe(403);
+    const detail = await route.fetch(request("/api/sessions/s1", {
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(detail.status).toBe(200);
+    const removed = await route.fetch(request("/api/sessions/s1", {
+      method: "DELETE",
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(removed.status).toBe(409);
+    expect(await removed.json()).toEqual({ error: "Session is active or attached" });
+    expect(deleted).toBe(1);
   });
 });
 

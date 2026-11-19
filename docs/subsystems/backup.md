@@ -51,19 +51,18 @@ ATOM_BACKUP_PASSWORD='...' atom export --password --output backup.atombak
 
 ### 菜单向导
 
-`atom menu` 的一级菜单新增 `backup >`，内含两条路径：
+`atom menu` 的一级菜单 `backup >` 使用与 CLI 相同的密码校验和归档函数：
 
 ```text
-backup / export: sandbox → output → encrypt (yes / no)
-backup / import: archive → sandbox
+backup / export: output → password (masked) → confirm password → [plaintext warning] → archive
+backup / import: archive → inspect → password (encrypted only) → env merge/replace → overwrite confirm → write
 ```
 
-- 导出默认 `encrypt = yes`；`output` 留空使用默认文件名。
-- 导入先校验归档信封：`encryption` 存在才提示密码，未加密归档不出现密码步骤。
-- 菜单固定使用 `.env merge`，不提供 `--env` / `--dry-run` / `--force`；导入确认仍由 `runBackupCommand` 完成。
-- 历史仅记录归档路径、输出路径和加密选择，密码不进入 `menu_history.json`。
-
-密码输入发生在向导结束、命令执行阶段；密码提示取消或密码错误按菜单的失败重试规则回到当前路径最后一步。导入确认选择 `no` 时不写盘，直接结束菜单。
+- 导出：`output` 留空使用默认文件名；密码输入使用 secret 遮罩。非空密码至少 8 位并需二次确认；留空视为明文导出，必须再确认一次“归档包含明文 API Key”。
+- 导入：读取归档信封后才决定是否询问密码；未加密归档不出现密码步骤，加密归档必须输入密码。
+- 菜单提供 `.env merge` / `.env replace`；不提供 `--dry-run` / `--force`。覆盖 `config.json` / `.env` 前必须确认。
+- 密码不进入菜单历史、日志或可渲染文本（`frame` 只能看到遮罩）。
+- 取消密码、确认或返回均不写归档、`config.json`、`.env`。
 
 ---
 
@@ -112,12 +111,12 @@ backup / import: archive → sandbox
 | 加密 | AES-256-GCM，key 32 字节，IV 12 字节，tag 16 字节 |
 | 随机源 | `node:crypto` `randomBytes` |
 
-导出时密码少于 8 位直接拒绝。密码无法找回，丢失后归档不可恢复。
+导出时非空密码少于 8 位直接拒绝；校验同时用于 CLI、MenuApp 与 `exportBackup()` 调用方。密码无法找回，丢失后归档不可恢复。
 
 ## 5. 安全约束
 
 - 归档文件权限固定 `0600`；导入后的 `.env` 权限 `0600`。
-- 无密码导出会打印明文密钥警告。
+- 无密码导出会打印明文密钥警告；菜单在生成明文归档前要求二次确认。
 - 任何密码错误、认证失败、校验和不匹配、版本不支持，都在写盘前中止。
 - 导入先完成全部校验，再备份现有文件并原子写入（临时文件 + rename）。
 - 压缩后归档上限 10 MB，解压后上限 5 MB，防止异常膨胀。
@@ -202,7 +201,9 @@ backup / import: archive → sandbox
 - 非法 config 拒绝导入
 - 路径与键名解析
 - 命令层密码检测：未加密归档不提示密码，加密归档缺少密码时报错
-- PTY 验收：源码与编译二进制经菜单完成未加密导出/导入，且不出现密码提示
+- 菜单密码：`frame` 不包含明文、短密码拒绝、二次确认不匹配、空密码明文警告、取消不写归档
+- 菜单导入：未加密归档跳过密码、加密归档必须密码、取消覆盖确认不写盘
+- PTY 验收：源码与编译二进制经菜单完成明文导出警告、未加密导入、Workspace/config 保存与取消
 
 CLI 参数解析覆盖在 `src/bootstrap/cli.test.ts`；MenuApp Backup 覆盖在 `src/packages/config-tui/src/menu/backup-view.test.tsx` 与 `menu-app.test.tsx`，端到端菜单路径在 `src/bootstrap/startup.integration.test.ts`（需 `ATOM_RUN_STARTUP_VALIDATION=1`）。
 

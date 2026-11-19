@@ -42,49 +42,57 @@ atom config gateway [--sandbox <path>]
 - `atom menu`：从 Home 开始。
 - `atom config`：打开 Configure 页面。
 - `atom config gateway`：
-  - 显式 `--sandbox` 直接使用该 workspace；
-  - 未显式指定且当前目录存在 `config.json`：使用当前目录；
-  - 未显式指定且当前目录没有配置：先进入 Configure → Workspace path，保存后进入 Gateway 配置。
+  - 目标 sandbox 存在 `config.json`：直接进入 Gateway 配置；
+  - 目标 sandbox 没有配置：无论是否显式 `--sandbox`，先进入 Configure → Workspace path，保存后进入 Gateway；
+  - 路由判定只做只读检查，不会因为打开菜单而创建 `config.json`。
 - `atom --config`、`atom --config --gateway` 已移除，必须被 CLI 拒绝。
+- 非 TTY 的 `atom menu` / `atom config` / `atom config gateway` 明确报错，且不写 `config.json`。
 - `atom gateway ...` 子命令保持不变。
 
 ## 全局 Workspace 与状态
 
 - MenuApp 维护单一 workspace；Session、History、Core Server、Gateway、Configure、Backup 全部使用它。
-- 顶部显示 workspace、Gateway 状态、Core 状态。
-- 修改 Workspace 会更新后续页面使用的 sandbox；取消不写配置。
+- 顶部显示 workspace、Gateway 状态、Core 状态；窄窗口下 workspace 路径居中省略，避免溢出。
+- `createMenuActions` 严格只读配置：`config.json` 缺失时 theme=edex、Gateway port=3000，不创建目录或文件。
+- 修改 Workspace 会规范化绝对路径并更新后续页面使用的 sandbox；取消不写配置。
+- theme / Gateway port 是 MenuApp state；Wizard 保存/取消、端口编辑或 workspace 切换后通过 `refreshSettings()` 重新读取并渲染。
 - Gateway 进程状态来自 supervisor/admin API；平台检查来自 Client `/diagnostics`。
 - Core 离线时 History 显示不可用，提供 Start Server / Attach Server；不自行扫描 sandbox 伪造历史。
 
 ## 交互
 
 - `↑/↓` 移动，`Enter` 打开/执行，`Esc` 返回上一级；Home Esc 打开 Quit 确认。
-- `Del` 在 History 删除选中 session；active session 由 Core 返回 409。
+- `C` 在 Gateway WorkspaceGate 直接进入 Change workspace。
+- `Del` 在 History 删除选中 session：先弹 `MenuConfirm`，取消不得调用删除 API；active 或 attached session 在 UI 与 Core 双重拒绝。
 - `Ctrl+C`/`Ctrl+D` 退出；非 TTY 由 `startMenuApp` 明确报错，不静默降级。
 - 错误内联显示，不退出菜单；取消/返回不写 config、`.env` 或 history。
-- 当前项用 `▸` 标记；列表空状态明确显示，不留空白页。
+- 当前项用 `▸` 标记；列表超过 10 项时按选中项滚动窗口，选中项始终可见；列表空状态明确显示。
 
 ## Gateway 快捷入口与真实入口
 
-- **快捷入口**：Home → Gateway → WorkspaceGate。Continue 才进入 `GatewayModal`；Change workspace 进入 Workspace path，保存后返回确认页；Esc 返回 Home。
+- **快捷入口**：Home → Gateway → WorkspaceGate。Continue 才进入 `GatewayModal`；C 或 Change workspace 进入 Workspace path，保存后返回确认页；Esc 返回 Home。
 - **真实入口**：Configure → Advanced → Gateway，直接使用当前已确认 workspace，不再经过 WorkspaceGate。
+- Advanced 打开的 Wizard 保存/取消后返回 Advanced，不重置到 Configure。
 - `GatewayModal` / `GatewayInstanceForm` 与 `atom gateway` CLI actions 复用，不复制表单。
 - 安装/加载/保存不自动 start；Register/Start 需显式操作。
 
 ## Session / History / Core Server
 
 - New Chat / Continue Chat：关闭 MenuApp，复用现有 `runApp` TUI 启动路径。
-- History：`GET /api/sessions` 读取 sessionId、时间、状态、active；打开指定 session 复用 TUI attach；删除走 `DELETE /api/sessions/:id`，active 返回 409。
+- 启动失败（端口占用、缺 provider、Attach 404 等）打印错误并重新打开 MenuApp，可继续重试；不直接退出进程。
+- History：`GET /api/sessions` 读取 sessionId、时间、状态、`active`、`attached`；打开指定 session 复用 TUI attach；删除走 `DELETE /api/sessions/:id`。
+- `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 需要 admin token（菜单使用 Core runtime token）。
+- `active` 表示持有任务 lease；`attached` 表示已被 TUI/消费者 attach。两者都返回 409，避免跨菜单删除正在使用或可恢复的 session。
 - 第一版 History 使用 sessionId 短形式，不新增 title 数据库迁移。
 - Core Server：
-  - Start Server：显式启动现有 Core 前台入口；
-  - Stop Server：`POST /api/admin/shutdown`，本机 admin token，先响应再优雅关闭；
+  - Start Server：使用当前 boot 端口（默认 3100）显式启动 Core 前台入口；
+  - Stop Server：`POST /api/admin/shutdown`，本机 admin token，先响应再优雅关闭；菜单轮询 offline 状态后刷新；
   - Attach Server：使用 Core runtime 凭据进入 TUI。
 
 ## Backup
 
-- Export：输出路径可选，密码可选；复用 `bootstrap/backup.ts`。
-- Import：归档路径、`.env` merge/replace、覆盖确认；加密归档才需要密码。
+- Export：输出路径可选；非空密码使用遮罩、至少 8 位并二次确认；空密码必须确认“生成明文归档，包含 API Key”。
+- Import：归档路径、`.env` merge/replace、覆盖确认；先检查归档信封，只有加密归档才询问密码。
 - 取消不写归档/config/.env；导入仍由现有原子写入与备份文件机制保护。
 
 ## 旧入口说明

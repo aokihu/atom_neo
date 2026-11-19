@@ -108,7 +108,7 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 }
 ```
 
-**自动创建**: bootstrap 启动时若 `$SANDBOX/config.json` 不存在，自动写入上述最小可用配置。解析失败（格式错误）时只返回默认值，不覆盖文件。
+**自动创建**: bootstrap 启动需要完整配置的模式时，若 `$SANDBOX/config.json` 不存在，自动写入上述最小可用配置。解析失败（格式错误）时只返回默认值，不覆盖文件。例外：MenuApp 的 `createMenuActions` 与 `atom config gateway` 路由判定严格只读，不创建或规范化 `config.json`；只有用户显式保存 Workspace/Advanced/Gateway port 时才写盘。
 
 **无效 provider 恢复**: 若 config.json 中某个 `providers[x]` 条目校验失败（如缺 `apiKeyEnv` 或 `models` 为空），`loadConfig` 会丢弃该条目并保留其余配置，而不是整体回退默认值。这保证单个损坏条目不会让 gateway/mcpServers 等配置全部失效。
 

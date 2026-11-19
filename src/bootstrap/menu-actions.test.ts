@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMenuActions } from "./menu-actions";
@@ -33,15 +33,35 @@ describe("MenuActions adapter", () => {
       providers: {},
       gateway: { port: 4123 },
     });
+    expect(statSync(join(dir, "config.json")).mode & 0o777).toBe(0o600);
   });
 
-  test("switches workspace and updates gateway actions", () => {
+  test("switches workspace with a normalized path and refreshes settings", () => {
     const first = sandbox();
     const second = sandbox();
+    writeFileSync(join(second, "config.json"), JSON.stringify({
+      providers: {}, gateway: { port: 4555 }, tui: { theme: "nord" },
+    }));
     const actions = createMenuActions(first);
-    actions.setWorkspace(second);
+    expect(actions.setWorkspace(second)).toBe(second);
     expect(actions.hasConfig(second)).toBe(true);
     expect(actions.validateWorkspace(second)).toBeUndefined();
+    expect(actions.refreshSettings()).toEqual({ theme: "nord", gatewayPort: 4555 });
+    expect(() => actions.setWorkspace(join(second, "missing"))).toThrow("does not exist");
+    expect(() => actions.setWorkspace("  ")).toThrow("required");
+  });
+
+  test("empty directories are read-only and never create config.json", () => {
+    const dir = mkdtempSync(join(tmpdir(), "atom-menu-actions-empty-"));
+    tempDirs.push(dir);
+    const actions = createMenuActions(dir);
+    expect(actions.theme).toBe("edex");
+    expect(actions.gatewayPort).toBe(3000);
+    expect(actions.hasConfig(dir)).toBe(false);
+    expect(actions.coreStartTarget()).toEqual({ host: "127.0.0.1", port: 3100 });
+    expect(actions.validateWorkspace(dir)).toBeUndefined();
+    expect(actions.setWorkspace(dir)).toBe(dir);
+    expect(existsSync(join(dir, "config.json"))).toBe(false);
   });
 
   test("exports and imports backups through existing backup functions", async () => {
@@ -49,15 +69,18 @@ describe("MenuActions adapter", () => {
     writeFileSync(join(source, ".env"), "TOKEN=test\n");
     const archive = join(source, "backup.atombak");
     const actions = createMenuActions(source);
-    expect(await actions.exportBackup({ output: archive, password: "secret" })).toContain("Exported");
+    expect(await actions.exportBackup({ output: archive, password: "secret123" })).toContain("Exported");
     expect(existsSync(archive)).toBe(true);
 
     const target = sandbox();
     const targetActions = createMenuActions(target);
     expect(await targetActions.importBackup({
-      archive, envMode: "replace", password: "secret", force: true,
+      archive, envMode: "replace", password: "secret123",
     })).toContain("Imported");
     expect(readFileSync(join(target, ".env"), "utf8")).toContain("TOKEN=test");
+    expect(targetActions.validateBackupPassword("secret")).toBe("Password must be at least 8 characters");
+    expect(targetActions.validateBackupPassword("secret123")).toBeUndefined();
+    expect(await targetActions.inspectBackup(archive)).toEqual({ encrypted: true });
   });
 
   test("reads the core target from the runtime file", async () => {

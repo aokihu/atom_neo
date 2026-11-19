@@ -64,29 +64,16 @@ export async function main(): Promise<void> {
   if (args.menu || args.configRoute) {
     const { startMenuApp } = await import("@atom-neo/config-tui");
     const { createMenuActions } = await import("./bootstrap/menu-actions");
-    const launch = await startMenuApp(args.sandbox, {
-      actions: createMenuActions(args.sandbox),
-      initialRoute: args.configRoute ?? "home",
-      workspaceExplicit: args.sandboxExplicit,
-    });
-    if (!launch) return;
-    if (launch.kind === "chat") {
-      await runApp({
-        ...args, menu: false, configRoute: undefined, mode: undefined,
-        sandbox: launch.sandbox, continueSession: launch.continueSession,
-      });
-    } else if (launch.kind === "core") {
-      await runApp({
-        ...args, menu: false, configRoute: undefined, mode: "core",
-        sandbox: launch.sandbox, host: launch.host, port: launch.port,
-      });
-    } else {
-      await runApp({
-        ...args, menu: false, configRoute: undefined, mode: "tui",
-        sandbox: launch.sandbox, coreServer: launch.host, corePort: launch.port,
-        continueSession: false, sessionId: launch.sessionId,
-      });
-    }
+    const { runMenuLoop } = await import("./bootstrap/menu-launch");
+    await runMenuLoop(
+      args,
+      (error) => startMenuApp(args.sandbox, {
+        actions: () => createMenuActions(args.sandbox, args.port),
+        initialRoute: args.configRoute ?? "home",
+        error,
+      }),
+      runApp,
+    );
     return;
   }
   await runApp(args);

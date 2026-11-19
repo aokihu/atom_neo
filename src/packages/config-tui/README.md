@@ -7,12 +7,14 @@
 | 路径 | 职责 |
 |---|---|
 | `src/app.tsx` | 创建 Wizard renderer；注入 `GatewayInstanceActions`；首次运行取消与退出 |
-| `src/menu/menu-app.tsx` | 统一 OpenTUI MenuApp；Home/Session/Gateway/Configure/Backup 路由与 workspace |
-| `src/menu/menu-frame.tsx` | 列表/状态头/表单/确认通用 UI |
-| `src/menu/workspace-gate.tsx` | 顶级 Gateway 快捷入口的 workspace 确认 |
-| `src/menu/session-view.tsx` / `history-view.tsx` / `core-server-view.tsx` | Session、History、Core Server |
-| `src/menu/configure-view`（路由内） / `advanced` | Workspace、Advanced、Wizard/Gateway 真实入口 |
-| `src/menu/backup-view.tsx` | Export/Import 表单；复用 bootstrap backup actions |
+| `src/menu/menu-app.tsx` | 统一 OpenTUI MenuApp；Home/Session/Gateway/Configure/Backup 路由、workspace、theme 与 Gateway port state |
+| `src/menu/menu-routes.ts` | 路由类型与无配置时的 Workspace 重定向 |
+| `src/menu/menu-home.tsx` | Home 菜单 |
+| `src/menu/menu-frame.tsx` | 列表窗口滚动、状态头、路径省略、表单/secret/确认通用 UI |
+| `src/menu/menu-types.ts` | `MenuActions` / `SessionSummary` / `MenuLaunch` 注入契约 |
+| `src/menu/workspace-gate.tsx` | 顶级 Gateway 快捷入口的 workspace 确认（Enter / C / Esc） |
+| `src/menu/session-view.tsx` / `history-view.tsx` / `core-server-view.tsx` | Session、History（删除确认/attached 保护）、Core Server |
+| `src/menu/backup-view.tsx` | Export/Import 表单；遮罩密码、短密码拒绝、明文警告；复用 bootstrap backup actions |
 | `src/menu/start-menu-app.tsx` | MenuApp renderer 生命周期与非 TTY 错误 |
 | `src/wizard-logic.ts` | 配置文件读写、字段校验等纯逻辑入口 |
 | `src/components/WizardApp.tsx` | reducer 编排、视图组合、保存流程 |
@@ -50,4 +52,4 @@ bun test src/packages/config-tui/src
 bun run --cwd src/packages/config-tui typecheck
 ```
 
-重点：`menu/menu-app.test.tsx` / `menu-views.test.tsx` / `backup-view.test.tsx`（MenuApp 路由、History/Core、Backup）、`gateway-instance-form.test.ts`（secret 遮罩/编辑/提交）、`gateway-status.test.ts`（admin 请求/诊断/保存）、`components/GatewayModal.test.tsx`（离线/列表/操作/重载错误/编辑）。
+重点：`menu/menu-app.test.tsx`（路由、theme/port 刷新、失败反馈、WorkspaceGate C、Wizard 返回）、`menu/menu-views.test.tsx`（长列表滚动、路径省略、History 删除确认/attached 保护、Core 启停）、`menu/backup-view.test.tsx`（遮罩密码、短密码、明文警告、加密导入）、`gateway-instance-form.test.ts`（secret 遮罩/编辑/提交）、`gateway-status.test.ts`（admin 请求/诊断/保存）、`components/GatewayModal.test.tsx`（离线/列表/操作/重载错误/编辑）。
