@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -152,6 +152,35 @@ describe("loadConfig layering", () => {
     Bun.write(`${sandbox}/config.json`, JSON.stringify({ version: 3, providers: "nonsense" }));
     const { userConfig } = loadConfig(sandbox);
     expect(userConfig.providerProfiles.balanced).toBe("deepseek/deepseek-v4-flash");
+  });
+});
+
+describe("loadConfig strict", () => {
+  test("missing config.json throws without creating a file", () => {
+    const sandbox = makeSandbox();
+    expect(() => loadConfig(sandbox, { strict: true })).toThrow("config.json not found");
+    expect(existsSync(join(sandbox, "config.json"))).toBe(false);
+  });
+
+  test("invalid JSON throws and leaves the file untouched", async () => {
+    const sandbox = makeSandbox();
+    const path = join(sandbox, "config.json");
+    await Bun.write(path, "{not-json");
+    expect(() => loadConfig(sandbox, { strict: true })).toThrow("Failed to parse");
+    expect(readFileSync(path, "utf8")).toBe("{not-json");
+  });
+
+  test("schema-invalid config throws instead of sanitizing", async () => {
+    const sandbox = makeSandbox();
+    await Bun.write(join(sandbox, "config.json"), JSON.stringify({ version: 3, providers: "nonsense" }));
+    expect(() => loadConfig(sandbox, { strict: true })).toThrow("Invalid config");
+  });
+
+  test("invalid runtime overlay throws instead of falling back to empty", async () => {
+    const sandbox = makeSandbox();
+    await Bun.write(join(sandbox, "config.json"), JSON.stringify(ConfigSchema.parse({})));
+    await Bun.write(runtimeConfigPath(sandbox), "{bad-overlay");
+    expect(() => loadConfig(sandbox, { strict: true })).toThrow("Failed to load");
   });
 });
 

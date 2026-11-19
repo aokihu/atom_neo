@@ -67,9 +67,12 @@ function sanitizeConfig(raw: unknown): Record<string, unknown> {
   return config;
 }
 
-function loadUserConfig(sandboxPath: string): AppConfig {
+export type LoadConfigOptions = { strict?: boolean };
+
+function loadUserConfig(sandboxPath: string, strict = false): AppConfig {
   const configPath = `${sandboxPath}/config.json`;
   if (!existsSync(configPath)) {
+    if (strict) throw new Error(`config.json not found: ${configPath}`);
     const defaults = ConfigSchema.parse({});
     writeFileAtomic(configPath, JSON.stringify(defaults, null, 2));
     return defaults;
@@ -78,11 +81,17 @@ function loadUserConfig(sandboxPath: string): AppConfig {
   try {
     raw = JSON.parse(readFileSync(configPath, "utf-8"));
   } catch (err) {
-    console.error(`[config] Failed to parse ${configPath}: ${err instanceof Error ? err.message : String(err)}`);
+    const message = err instanceof Error ? err.message : String(err);
+    if (strict) throw new Error(`Failed to parse ${configPath}: ${message}`);
+    console.error(`[config] Failed to parse ${configPath}: ${message}`);
     return ConfigSchema.parse({});
   }
   const parsed = ConfigSchema.safeParse(raw);
   if (parsed.success) return parsed.data;
+  if (strict) {
+    const issues = parsed.error.issues.map(issue => `${issue.path.length ? issue.path.join(".") : "(root)"}: ${issue.message}`);
+    throw new Error(`Invalid config in ${configPath}: ${issues.join("; ")}`);
+  }
 
   console.error(`[config] Invalid config in ${configPath}:`);
   for (const issue of parsed.error.issues) {
@@ -98,19 +107,21 @@ function loadUserConfig(sandboxPath: string): AppConfig {
   return ConfigSchema.parse({});
 }
 
-export function loadRuntimeConfig(sandboxPath: string): RuntimeConfig {
+export function loadRuntimeConfig(sandboxPath: string, strict = false): RuntimeConfig {
   const path = runtimeConfigPath(sandboxPath);
   if (!existsSync(path)) return {};
   try {
     return RuntimeConfigSchema.parse(JSON.parse(readFileSync(path, "utf-8")));
   } catch (err) {
     if (err instanceof z.ZodError) {
+      if (strict) throw new Error(`Invalid runtime config in ${path}: ${err.message}`);
       console.error(`[config] Invalid runtime config in ${path}, ignoring overlay:`);
       for (const issue of err.issues) {
         const path = issue.path.length ? issue.path.join(".") : "(root)";
         console.error(`  ${path}: ${issue.message}`);
       }
     } else {
+      if (strict) throw new Error(`Failed to load ${path}: ${err instanceof Error ? err.message : String(err)}`);
       console.error(`[config] Failed to load ${path}: ${err instanceof Error ? err.message : String(err)}`);
     }
     return {};
@@ -126,9 +137,9 @@ export function deleteRuntimeConfig(sandboxPath: string): void {
   if (existsSync(path)) rmSync(path);
 }
 
-export function loadConfig(sandboxPath: string): LoadedConfig {
-  const userConfig = loadUserConfig(sandboxPath);
-  const runtimeConfig = loadRuntimeConfig(sandboxPath);
+export function loadConfig(sandboxPath: string, options: LoadConfigOptions = {}): LoadedConfig {
+  const userConfig = loadUserConfig(sandboxPath, options.strict);
+  const runtimeConfig = loadRuntimeConfig(sandboxPath, options.strict);
   const effective = ConfigSchema.parse(mergeConfig(userConfig, runtimeConfig));
   return { userConfig, runtimeConfig, effective };
 }

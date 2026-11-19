@@ -55,7 +55,7 @@ export class RuntimeService {
 
   /** Re-read config.json and the runtime overlay without clearing either source. */
   reloadConfig(): AppConfig {
-    const loaded = loadConfig(this.#sandbox);
+    const loaded = loadConfig(this.#sandbox, { strict: true });
     this.#userConfig = loaded.userConfig;
     this.#runtimeConfig = loaded.runtimeConfig;
     this.#effective = loaded.effective;

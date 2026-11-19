@@ -133,7 +133,9 @@ CLI args (--port, --host, --sandbox)  >  runtime-config.json  >  config.json  > 
 - `runtime-config.json` 覆盖 `config.json` 的同名字段（深合并，见 §1）
 - `.env` 用于存储 `DEEPSEEK_API_KEY` 等密钥，不参与 config 合并
 - `config.json` 不存在时，回退到默认值（deepseek/deepseek-v4-flash）
-- Core 启动时加载一次配置；每次 `POST /api/tui/attach` 前会重新读取 `config.json` 与 `runtime-config.json`，因此新进入的 TUI 能拿到最新 theme/provider/model。重新加载失败只记录 warn，继续使用旧配置，不阻断 attach。
+- Core 启动时按启动语义加载配置；每次 `POST /api/tui/attach` 前使用 strict 模式重新读取 `config.json` 与 `runtime-config.json`，因此新进入的 TUI 能拿到最新 theme/provider/model。
+- strict 模式不创建缺失的 `config.json`、不 sanitize/schema 回退、不忽略损坏的 overlay；缺失、JSON 损坏、`ConfigSchema`/runtime overlay 校验失败都会抛错。attach 捕获后只记录 warn，保留旧 effective 配置，不阻断 attach，也不会改写磁盘文件。
+- `.env` 凭据不随 attach reload；修改 API Key 仍需要重启 Core（或重新 start）。
 
 ---
 

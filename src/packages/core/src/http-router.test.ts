@@ -127,6 +127,22 @@ describe("http router", () => {
     expect(missing.status).toBe(404);
   });
 
+  test("attach without admin auth returns 403 without reloading config", async () => {
+    const reloadConfig = mock(() => ({}));
+    const route = createHttpRouter(routerDeps({
+      runtime: {
+        sandbox: "/tmp/atom",
+        appConfig: {},
+        maxTokens: 100,
+        getResolvedModel: () => ({ provider: "local", protocol: "deepseek", model: "local", apiKey: "test" }),
+        reloadConfig,
+      },
+    }));
+    const response = await route.fetch(request("/api/tui/attach", { method: "POST", body: "{}" }), ctx);
+    expect(response.status).toBe(403);
+    expect(reloadConfig).not.toHaveBeenCalled();
+  });
+
   test("attach reloads config from disk before building serverInfo", async () => {
     const runtime: any = {
       sandbox: "/tmp/atom",
