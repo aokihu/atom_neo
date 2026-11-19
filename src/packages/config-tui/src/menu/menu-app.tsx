@@ -7,6 +7,7 @@ import { MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
 import { SessionView } from "./session-view";
 import { HistoryView } from "./history-view";
 import { CoreServerView } from "./core-server-view";
+import { BackupExportView, BackupImportView, BackupView } from "./backup-view";
 import { WorkspaceGate } from "./workspace-gate";
 import { ROUTE_LABELS, routeFor } from "./menu-routes";
 import type { MenuRoute } from "./menu-routes";
@@ -217,17 +218,37 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           hint="Enter save · Esc back"
         />
       ) : route.name === "backup" ? (
-        <MenuScreen
-          title="Backup"
+        <BackupView
           {...statusProps}
-          items={[
-            { key: "export", label: "Export ›", detail: "Added in M4" },
-            { key: "import", label: "Import ›", detail: "Added in M4" },
-            { key: "back", label: "‹ Back" },
-          ]}
-          onSelect={back}
+          notice={notice}
+          onExport={() => go({ name: "backup-export" })}
+          onImport={() => go({ name: "backup-import" })}
           onBack={back}
-          hint="↑/↓ move · Enter open · Esc back"
+        />
+      ) : route.name === "backup-export" ? (
+        <BackupExportView
+          actions={actions}
+          title="Backup / Export"
+          onDone={(message) => {
+            setRoute({ name: "backup" });
+            setError("");
+            setNotice(message);
+          }}
+          onBack={back}
+        />
+      ) : route.name === "backup-import" ? (
+        <BackupImportView
+          actions={actions}
+          workspace={workspace}
+          gateway={gateway}
+          core={core}
+          title="Backup / Import"
+          onDone={(message) => {
+            setRoute({ name: "backup" });
+            setError("");
+            setNotice(message);
+          }}
+          onBack={back}
         />
       ) : (
         <MenuScreen

@@ -135,6 +135,13 @@ test("advanced opens the existing wizard and the real Gateway entry", async () =
   expect(gateway.frame()).toContain("GATEWAY CLIENTS");
 });
 
+test("backup home exposes Export before Import", async () => {
+  const app = await mount();
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Backup");
+  expect(app.frame().indexOf("Export")).toBeLessThan(app.frame().indexOf("Import"));
+});
+
 test("escape on home opens quit confirmation", async () => {
   const app = await mount();
   await app.press("ESCAPE");
