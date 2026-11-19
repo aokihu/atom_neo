@@ -118,8 +118,10 @@ describe("initial state", () => {
     expect(createWizardUiState("first-run", "/nonexistent-atom-wizard").view).toEqual({ kind: "providers" });
   });
 
-  test("gateway initial view only applies to config mode", () => {
+  test("gateway/providers/theme initial views only apply to config mode", () => {
     expect(createWizardUiState("config", "/nonexistent-atom-wizard", "gateway").view).toEqual({ kind: "gateway" });
+    expect(createWizardUiState("config", "/nonexistent-atom-wizard", "providers").view).toEqual({ kind: "providers" });
+    expect(createWizardUiState("config", "/nonexistent-atom-wizard", "theme").view).toEqual({ kind: "theme" });
     expect(createWizardUiState("first-run", "/nonexistent-atom-wizard", "gateway").view).toEqual({ kind: "providers" });
   });
 });

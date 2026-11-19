@@ -17,7 +17,7 @@ export type WizardViewKind =
   | "confirm";
 
 export type WizardView = { kind: WizardViewKind };
-export type WizardInitialView = "menu" | "gateway";
+export type WizardInitialView = "menu" | "gateway" | "providers" | "theme";
 
 export type WizardMenuKey = "providers" | "profiles" | "decisions" | "theme" | "gateway" | "save";
 
@@ -63,7 +63,7 @@ export function createWizardUiState(
 ): WizardUiState {
   const view: WizardView = mode !== "config"
     ? { kind: "providers" }
-    : { kind: initialView === "gateway" ? "gateway" : "menu" };
+    : { kind: initialView === "gateway" ? "gateway" : initialView === "providers" ? "providers" : initialView === "theme" ? "theme" : "menu" };
   return {
     wizard: buildInitialState(mode, sandboxPath),
     pending: null,

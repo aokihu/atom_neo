@@ -49,6 +49,10 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const bounded = items.length === 0 ? 0 : Math.min(selected, items.length - 1);
 
   useEffect(() => {
+    setSelected(0);
+  }, [title]);
+
+  useEffect(() => {
     onSelectionChange?.(bounded);
   }, [bounded, onSelectionChange]);
 

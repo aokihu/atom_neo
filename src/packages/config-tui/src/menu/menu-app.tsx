@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ThemeProvider } from "@atom-neo/tui-kit";
 import { GatewayModal } from "../components/GatewayModal";
+import { WizardApp } from "../components/WizardApp";
 import { MenuHome } from "./menu-home";
 import { MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
 import { SessionView } from "./session-view";
@@ -170,14 +171,28 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           title="Advanced"
           {...statusProps}
           items={[
-            { key: "providers", label: "Providers & Models", detail: "Added in M3" },
-            { key: "theme", label: "Theme", detail: "Added in M3" },
+            { key: "providers", label: "Providers & Models", detail: "Open provider/model editor" },
+            { key: "theme", label: "Theme", detail: "Choose UI theme" },
             { key: "gateway", label: "Gateway ›", detail: "Instance and credential management" },
             { key: "back", label: "‹ Back" },
           ]}
-          onSelect={(key) => key === "gateway" ? go({ name: "gateway-real", back: "advanced" }) : back()}
+          onSelect={(key) => {
+            if (key === "providers") go({ name: "wizard", view: "providers" });
+            else if (key === "theme") go({ name: "wizard", view: "theme" });
+            else if (key === "gateway") go({ name: "gateway-real", back: "advanced" });
+            else back();
+          }}
           onBack={back}
           hint="↑/↓ move · Enter open · Esc back"
+        />
+      ) : route.name === "wizard" ? (
+        <WizardApp
+          sandboxPath={workspace}
+          mode="config"
+          initialView={route.view}
+          gatewayActions={actions.gateway}
+          onComplete={() => go({ name: "configure" })}
+          onAbort={() => go({ name: "configure" })}
         />
       ) : route.name === "workspace" ? (
         <MenuPrompt

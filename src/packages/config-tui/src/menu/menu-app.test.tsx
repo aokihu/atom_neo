@@ -115,6 +115,26 @@ test("atom config opens Configure and atom config gateway requests workspace whe
   expect(unconfigured.frame()).toContain("Workspace path");
 });
 
+test("gateway shortcut Continue reaches the shared GatewayModal", async () => {
+  const app = await mount();
+  await app.press("ARROW_DOWN", "RETURN");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("GATEWAY CLIENTS");
+});
+
+test("advanced opens the existing wizard and the real Gateway entry", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Advanced");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("PROVIDERS");
+
+  const gateway = await mount({ initialRoute: "configure" });
+  await gateway.press("ARROW_DOWN", "RETURN");
+  await gateway.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(gateway.frame()).toContain("GATEWAY CLIENTS");
+});
+
 test("escape on home opens quit confirmation", async () => {
   const app = await mount();
   await app.press("ESCAPE");
