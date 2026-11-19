@@ -232,10 +232,12 @@ export function Modal({
             justifyContent="space-between"
             {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}
           >
-            {title
-              ? <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>{title}</text>
-              : <box />}
-            {headerRight ?? null}
+            <box flexShrink={1} minWidth={0}>
+              {title
+                ? <text fg={colors.text.bright} attributes={TextAttributes.BOLD} wrapMode="none" truncate>{title}</text>
+                : null}
+            </box>
+            {headerRight ? <box flexShrink={0}>{headerRight}</box> : null}
           </box>
         )}
         <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>

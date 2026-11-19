@@ -1,9 +1,59 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { stringWidth } from "@atom-neo/shared";
 import { FieldInput, Modal, SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import type { ModalAction } from "@atom-neo/tui-kit";
 import { SecretFieldInput } from "../components/SecretFieldInput";
+
+const MENU_WIDTH = 96;
+const ELLIPSIS = "…";
+
+/** Width inside Modal border + panel paddingX; shared by title, breadcrumb and workspace. */
+function menuContentWidth(screenWidth: number): number {
+  return Math.min(MENU_WIDTH, Math.max(20, screenWidth - 4)) - 4;
+}
+
+function truncateByWidth(text: string, maxWidth: number): string {
+  if (maxWidth <= 0) return "";
+  if (stringWidth(text) <= maxWidth) return text;
+  if (maxWidth <= 1) return ELLIPSIS;
+  let result = "";
+  let width = 0;
+  for (const char of text) {
+    const next = stringWidth(char);
+    if (width + next > maxWidth - 1) break;
+    result += char;
+    width += next;
+  }
+  return `${result}${ELLIPSIS}`;
+}
+
+function truncateMiddle(text: string, maxWidth: number): string {
+  if (maxWidth <= 0) return "";
+  if (stringWidth(text) <= maxWidth) return text;
+  if (maxWidth <= 1) return ELLIPSIS;
+  const chars = [...text];
+  const budget = maxWidth - 1;
+  const leftTarget = Math.ceil(budget / 2);
+  let left = "";
+  let leftWidth = 0;
+  for (const char of chars) {
+    const next = stringWidth(char);
+    if (leftWidth + next > leftTarget) break;
+    left += char;
+    leftWidth += next;
+  }
+  let right = "";
+  let rightWidth = 0;
+  for (let index = chars.length - 1; index >= 0; index--) {
+    const next = stringWidth(chars[index]!);
+    if (leftWidth + rightWidth + next > budget) break;
+    right = chars[index]! + right;
+    rightWidth += next;
+  }
+  return `${left}${ELLIPSIS}${right}`;
+}
 
 export type MenuItem = {
   key: string;
@@ -27,14 +77,15 @@ export function MenuStatus({ workspace, gateway, core }: {
   const { width } = useTerminalDimensions();
   const { breadcrumb } = useContext(MenuChromeContext);
   const status = (value: string) => value === "online" ? colors.status.success : value === "offline" ? colors.status.warning : colors.text.muted;
-  const limit = Math.max(16, Math.min(72, width - 18));
-  const shown = workspace.length <= limit
-    ? workspace
-    : `${workspace.slice(0, Math.ceil((limit - 1) / 2))}…${workspace.slice(-Math.floor((limit - 1) / 2))}`;
+  const contentWidth = menuContentWidth(width);
+  const prefix = "workspace: ";
+  const pathWidth = Math.max(1, contentWidth - stringWidth(prefix));
+  const shown = truncateMiddle(workspace, pathWidth);
+  const crumb = truncateByWidth(breadcrumb ?? "Home", contentWidth);
   return (
     <box flexDirection="column" marginBottom={1}>
-      <text fg={colors.text.muted}>{breadcrumb ?? "Home"}</text>
-      <text fg={colors.text.muted}>workspace: {shown}</text>
+      <text fg={colors.text.muted} wrapMode="none" truncate>{crumb}</text>
+      <text fg={colors.text.muted} wrapMode="none" truncate>{`${prefix}${shown}`}</text>
       <box flexDirection="row" gap={2}>
         <text fg={status(gateway)}>Gateway: {gateway}</text>
         <text fg={status(core)}>Core: {core}</text>
@@ -63,6 +114,11 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
 }) {
   const { colors } = useTheme();
   const { version } = useContext(MenuChromeContext);
+  const { width } = useTerminalDimensions();
+  const contentWidth = menuContentWidth(width);
+  const versionText = version ? `v${version}` : "";
+  const titleMax = Math.max(1, contentWidth - (versionText ? stringWidth(versionText) + 1 : 0));
+  const titleText = truncateByWidth(`ATOM NEO · ${title}`, titleMax);
   const [selected, setSelected] = useState(0);
   const bounded = items.length === 0 ? 0 : Math.min(selected, items.length - 1);
   const maxVisible = 10;
@@ -84,11 +140,12 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   return (
     <Modal
       open
-      title={`ATOM NEO · ${title}`}
-      headerRight={version ? <text fg={colors.text.muted}>{`v${version}`}</text> : undefined}
-      width={96}
+      title={titleText}
+      headerRight={version ? <text fg={colors.text.muted} wrapMode="none">{versionText}</text> : undefined}
+      width={MENU_WIDTH}
       height={24}
       titlePadding={0}
+      contentPaddingX={0}
       interactive={!suspended}
       listLength={Math.max(1, items.length)}
       selectedListIndex={bounded}

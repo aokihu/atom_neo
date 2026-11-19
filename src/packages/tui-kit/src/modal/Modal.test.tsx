@@ -119,9 +119,11 @@ test("renders headerRight on the title row", async () => {
   const ctx = await mountModal({ headerRight: <text fg="#888888">v9.9.9</text> });
   try {
     await ctx.render(true);
-    const line = ctx.setup.captureCharFrame().split("\n").find(value => value.includes("Test"));
-    expect(line).toContain("Test");
-    expect(line).toContain("v9.9.9");
+    const lines = ctx.setup.captureCharFrame().split("\n");
+    const line = lines.find(value => value.includes("Test") && value.includes("v9.9.9"));
+    expect(line).toBeDefined();
+    expect(line!.indexOf("v9.9.9")).toBeGreaterThan(line!.indexOf("Test"));
+    expect(lines.filter(value => value.includes("v9.9.9"))).toHaveLength(1);
   } finally {
     await cleanup(ctx);
   }

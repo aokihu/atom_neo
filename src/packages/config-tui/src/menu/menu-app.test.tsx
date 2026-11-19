@@ -50,13 +50,15 @@ async function mount(options: {
   initialError?: string;
   sandbox?: string;
   version?: string;
+  width?: number;
+  height?: number;
   actions?: MenuActions;
 } = {}) {
   const sandbox = options.sandbox ?? "/tmp/atom-menu";
   const reactEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
   const previous = reactEnvironment.IS_REACT_ACT_ENVIRONMENT;
   reactEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
-  const setup = await createTestRenderer({ width: 100, height: 32 });
+  const setup = await createTestRenderer({ width: options.width ?? 100, height: options.height ?? 32 });
   const root = createRoot(setup.renderer);
   const launches: Array<unknown> = [];
   await act(async () => root.render(
@@ -153,17 +155,37 @@ test("advanced opens the existing wizard and the real Gateway entry", async () =
   expect(gateway.frame()).toContain("GATEWAY CLIENTS");
 });
 
-test("top bar puts version on the title row and breadcrumb below it", async () => {
-  const app = await mount({ version: "9.9.9" });
-  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
-  const lines = app.frame().split("\n")
+function contentLines(frame: string): string[] {
+  return frame.split("\n")
     .map(line => line.replace(/[│┌┐└┘─]/g, "").trim())
     .filter(Boolean);
-  const title = lines.findIndex(line => line.includes("ATOM NEO · Backup"));
+}
+
+test.each([100, 64, 40])("top bar keeps title+version on one line at %i columns", async (width) => {
+  const app = await mount({ version: "9.9.9", width });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  const lines = contentLines(app.frame());
+  const title = lines.findIndex(line => line.includes("ATOM NEO"));
   expect(title).toBeGreaterThanOrEqual(0);
   expect(lines[title]).toContain("v9.9.9");
+  expect(lines[title]!.indexOf("v9.9.9")).toBeGreaterThan(lines[title]!.indexOf("ATOM NEO"));
+  expect(lines.filter(line => line.includes("v9.9.9"))).toHaveLength(1);
   expect(lines[title + 1]).toContain("Home / Backup");
-  expect(lines[title + 2]).toContain("workspace:");
+  expect(lines.filter(line => line.includes("Home / Backup"))).toHaveLength(1);
+  expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
+  expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
+});
+
+test("40-column header truncates a long title but keeps the version intact", async () => {
+  const app = await mount({ version: "9.9.9", width: 40 });
+  await app.press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  const lines = contentLines(app.frame());
+  const title = lines.findIndex(line => line.includes("ATOM NEO"));
+  expect(lines[title]).toContain("…");
+  expect(lines[title]).toContain("v9.9.9");
+  expect(lines[title]!.indexOf("v9.9.9")).toBeGreaterThan(lines[title]!.indexOf("ATOM NEO"));
+  expect(lines[title + 1]).toContain("Home / Session / History");
+  expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
 });
 
 test("failed launch feedback is shown on the home screen", async () => {
