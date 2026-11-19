@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
+import { connect } from "node:net";
 import { TuiClient } from "../packages/tui/src/client/ws-client";
 
 // Explicit opt-in: compiles binaries and starts isolated local processes.
@@ -23,6 +24,13 @@ async function waitFor(check: () => boolean | Promise<boolean>, label: string, t
   const until = Date.now() + timeout;
   while (Date.now() < until) { if (await check()) return; await Bun.sleep(30); }
   throw new Error(`Timed out: ${label}`);
+}
+async function portAccepts(port: number): Promise<boolean> {
+  return await new Promise(resolvePromise => {
+    const socket = connect({ host: "127.0.0.1", port });
+    socket.once("connect", () => { socket.destroy(); resolvePromise(true); });
+    socket.once("error", () => resolvePromise(false));
+  });
 }
 async function finish(proc: Bun.Subprocess, signal: "SIGTERM" | "SIGINT" = "SIGTERM") {
   if (proc.exitCode === null) proc.kill(signal);
@@ -362,6 +370,24 @@ integration("package build:bin generates valid version source", async () => {
   expect(executed.stdout.trim()).toBe(project.version);
 }, 15000);
 
+integration("Core reloads config.json before each TUI attach", async () => {
+  const path = sandbox("attach-config-reload");
+  const core = await start(path, "core");
+  try {
+    const first = await attach(core) as { serverInfo: { theme: string } };
+    expect(first.serverInfo.theme).toBe("edex");
+
+    const config = JSON.parse(readFileSync(join(path, "config.json"), "utf8"));
+    config.tui = { ...(config.tui ?? {}), theme: "tokyo-night" };
+    writeFileSync(join(path, "config.json"), JSON.stringify(config));
+
+    const second = await attach(core) as { serverInfo: { theme: string } };
+    expect(second.serverInfo.theme).toBe("tokyo-night");
+  } finally {
+    await finish(core.proc);
+  }
+}, 15000);
+
 integration("occupied port and failed Client startup leave no Core resources", async () => {
   const blocker = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("occupied") });
   const occupied = sandbox("occupied");
@@ -463,6 +489,7 @@ integration("failed Core launch returns to the menu for a retry", async () => {
   } catch {
     // The port may already be occupied by the user's running Core; that is
     // still the failure condition this test needs, so proceed without a blocker.
+    expect(await portAccepts(3100)).toBe(true);
   }
   try {
     const result = await driveMenu([
