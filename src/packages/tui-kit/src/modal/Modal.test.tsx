@@ -16,7 +16,15 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight }: { listLength?: number; focusRef?: Ref<BoxRenderable>; actions?: ModalAction[]; headerRight?: ReactNode } = {}) {
+async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight, title = "Test", titleTruncate, width = 48 }: {
+  listLength?: number;
+  focusRef?: Ref<BoxRenderable>;
+  actions?: ModalAction[];
+  headerRight?: ReactNode;
+  title?: string;
+  titleTruncate?: boolean;
+  width?: number;
+} = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
   const triggered: string[] = [];
@@ -29,9 +37,10 @@ async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight
     return (
       <Modal
         open={open}
-        title="Test"
+        title={title}
         headerRight={headerRight}
-        width={48}
+        titleTruncate={titleTruncate}
+        width={width}
         actions={actions}
         defaultActionKey="ok"
         onAction={key => triggered.push(key)}
@@ -123,7 +132,34 @@ test("renders headerRight on the title row", async () => {
     const line = lines.find(value => value.includes("Test") && value.includes("v9.9.9"));
     expect(line).toBeDefined();
     expect(line!.indexOf("v9.9.9")).toBeGreaterThan(line!.indexOf("Test"));
+    expect(line!.replace(/[│]/g, "").trimEnd().endsWith("v9.9.9")).toBe(true);
     expect(lines.filter(value => value.includes("v9.9.9"))).toHaveLength(1);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("keeps the original wrapping behavior when headerRight and titleTruncate are absent", async () => {
+  const title = "Header compatibility title that keeps the original wrapping behavior";
+  const ctx = await mountModal({ title, width: 24 });
+  try {
+    await ctx.render(true);
+    const frame = ctx.setup.captureCharFrame();
+    expect(frame).not.toContain("…");
+    const titleLines = frame.split("\n").filter(line => /Header|compatibility|wrapping|behavior/.test(line));
+    expect(titleLines.length).toBeGreaterThan(1);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("titleTruncate opts into single-line ellipsis without headerRight", async () => {
+  const ctx = await mountModal({ title: "A very long title that must be truncated", titleTruncate: true, width: 24 });
+  try {
+    await ctx.render(true);
+    const frame = ctx.setup.captureCharFrame();
+    expect(frame).toContain("...");
+    expect(frame).not.toContain("A very long title that must be truncated");
   } finally {
     await cleanup(ctx);
   }

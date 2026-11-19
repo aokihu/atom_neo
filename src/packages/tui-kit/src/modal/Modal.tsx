@@ -55,6 +55,7 @@ export function Modal({
   open,
   title,
   headerRight,
+  titleTruncate = false,
   width = 60,
   height,
   placement = "center",
@@ -225,7 +226,7 @@ export function Modal({
         paddingX={1}
         backgroundColor={colors.bg.popup}
       >
-        {(title || headerRight) && (
+        {(title || headerRight) && (headerRight || titleTruncate ? (
           <box
             flexShrink={0}
             flexDirection="row"
@@ -239,7 +240,11 @@ export function Modal({
             </box>
             {headerRight ? <box flexShrink={0}>{headerRight}</box> : null}
           </box>
-        )}
+        ) : (
+          <box flexShrink={0} {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
+            <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>{title}</text>
+          </box>
+        ))}
         <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>
           {children}
         </box>

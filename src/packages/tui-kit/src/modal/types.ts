@@ -46,6 +46,8 @@ export interface ModalProps {
   title?: string;
   /** Optional content rendered at the right edge of the title row. */
   headerRight?: React.ReactNode;
+  /** Opt in to single-line title truncation; default keeps the original wrapping behavior. */
+  titleTruncate?: boolean;
   width?: number;
   height?: number;
   placement?: ModalPlacement;

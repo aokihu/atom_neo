@@ -8,19 +8,24 @@ import { SecretFieldInput } from "../components/SecretFieldInput";
 
 const MENU_WIDTH = 96;
 const ELLIPSIS = "…";
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /** Width inside Modal border + panel paddingX; shared by title, breadcrumb and workspace. */
-function menuContentWidth(screenWidth: number): number {
+export function menuContentWidth(screenWidth: number): number {
   return Math.min(MENU_WIDTH, Math.max(20, screenWidth - 4)) - 4;
 }
 
-function truncateByWidth(text: string, maxWidth: number): string {
+function graphemes(text: string): string[] {
+  return [...segmenter.segment(text)].map(part => part.segment);
+}
+
+export function truncateByWidth(text: string, maxWidth: number): string {
   if (maxWidth <= 0) return "";
   if (stringWidth(text) <= maxWidth) return text;
   if (maxWidth <= 1) return ELLIPSIS;
   let result = "";
   let width = 0;
-  for (const char of text) {
+  for (const char of graphemes(text)) {
     const next = stringWidth(char);
     if (width + next > maxWidth - 1) break;
     result += char;
@@ -29,11 +34,11 @@ function truncateByWidth(text: string, maxWidth: number): string {
   return `${result}${ELLIPSIS}`;
 }
 
-function truncateMiddle(text: string, maxWidth: number): string {
+export function truncateMiddle(text: string, maxWidth: number): string {
   if (maxWidth <= 0) return "";
   if (stringWidth(text) <= maxWidth) return text;
   if (maxWidth <= 1) return ELLIPSIS;
-  const chars = [...text];
+  const chars = graphemes(text);
   const budget = maxWidth - 1;
   const leftTarget = Math.ceil(budget / 2);
   let left = "";
@@ -142,6 +147,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       open
       title={titleText}
       headerRight={version ? <text fg={colors.text.muted} wrapMode="none">{versionText}</text> : undefined}
+      titleTruncate
       width={MENU_WIDTH}
       height={24}
       titlePadding={0}

@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { act } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
+import { stringWidth } from "@atom-neo/shared";
 import { MenuApp } from "./menu-app";
+import { menuContentWidth } from "./menu-frame";
 import type { MenuActions } from "./menu-types";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -161,6 +163,8 @@ function contentLines(frame: string): string[] {
     .filter(Boolean);
 }
 
+// Layout contract: version is rendered muted by MenuScreen's headerRight;
+// frame capture verifies placement and single-line behavior.
 test.each([100, 64, 40])("top bar keeps title+version on one line at %i columns", async (width) => {
   const app = await mount({ version: "9.9.9", width });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
@@ -169,11 +173,45 @@ test.each([100, 64, 40])("top bar keeps title+version on one line at %i columns"
   expect(title).toBeGreaterThanOrEqual(0);
   expect(lines[title]).toContain("v9.9.9");
   expect(lines[title]!.indexOf("v9.9.9")).toBeGreaterThan(lines[title]!.indexOf("ATOM NEO"));
+  expect(lines[title]!.trimEnd().endsWith("v9.9.9")).toBe(true);
   expect(lines.filter(line => line.includes("v9.9.9"))).toHaveLength(1);
   expect(lines[title + 1]).toContain("Home / Backup");
   expect(lines.filter(line => line.includes("Home / Backup"))).toHaveLength(1);
   expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
   expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
+});
+
+test.each([64, 40])("narrow top bar keeps a long CJK workspace on one line at %i columns", async (width) => {
+  const workspace = "/Volumes/Projects/很长的项目目录/atom_neo/更深一层/文件";
+  const app = await mount({ version: "1.2.3", width, sandbox: workspace });
+  await app.press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  const lines = contentLines(app.frame());
+  const title = lines.findIndex(line => line.includes("ATOM NEO"));
+  expect(lines[title]!.trimEnd().endsWith("v1.2.3")).toBe(true);
+  expect(lines.filter(line => line.includes("v1.2.3"))).toHaveLength(1);
+  expect(lines[title + 1]).toBe("Home / Session / History");
+  expect(lines.filter(line => line === "Home / Session / History")).toHaveLength(1);
+  const workspaceLines = lines.filter(line => line.startsWith("workspace:"));
+  expect(workspaceLines).toHaveLength(1);
+  expect(stringWidth(workspaceLines[0]!)).toBeLessThanOrEqual(menuContentWidth(width));
+  expect(lines[title + 2]).toBe(workspaceLines[0]!);
+  const statusLines = lines.filter(line => line.startsWith("Gateway:"));
+  expect(statusLines).toHaveLength(1);
+  expect(lines[title + 3]).toBe(statusLines[0]!);
+  expect(stringWidth(statusLines[0]!)).toBeLessThanOrEqual(menuContentWidth(width));
+});
+
+test("40-column breadcrumb stays on one line before workspace and status", async () => {
+  const app = await mount({ version: "9.9.9", width: 40 });
+  await app.press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  const lines = contentLines(app.frame());
+  const title = lines.findIndex(line => line.includes("ATOM NEO"));
+  expect(lines[title + 1]).toBe("Home / Session / Core Server");
+  expect(lines.filter(line => line === "Home / Session / Core Server")).toHaveLength(1);
+  expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
+  expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
+  expect(lines[title + 3]?.startsWith("Gateway:")).toBe(true);
+  expect(lines.filter(line => line.startsWith("Gateway:"))).toHaveLength(1);
 });
 
 test("40-column header truncates a long title but keeps the version intact", async () => {
@@ -184,6 +222,7 @@ test("40-column header truncates a long title but keeps the version intact", asy
   expect(lines[title]).toContain("…");
   expect(lines[title]).toContain("v9.9.9");
   expect(lines[title]!.indexOf("v9.9.9")).toBeGreaterThan(lines[title]!.indexOf("ATOM NEO"));
+  expect(lines[title]!.trimEnd().endsWith("v9.9.9")).toBe(true);
   expect(lines[title + 1]).toContain("Home / Session / History");
   expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
 });
