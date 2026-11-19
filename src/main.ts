@@ -67,10 +67,11 @@ export async function main(): Promise<void> {
     const { runMenuLoop } = await import("./bootstrap/menu-launch");
     await runMenuLoop(
       args,
-      (error) => startMenuApp(args.sandbox, {
-        actions: () => createMenuActions(args.sandbox, args.port),
+      (sandbox, error) => startMenuApp(sandbox, {
+        actions: () => createMenuActions(sandbox, args.port),
         initialRoute: args.configRoute ?? "home",
         error,
+        version: VERSION,
       }),
       runApp,
     );

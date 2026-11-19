@@ -4,7 +4,7 @@
 > **Package**: `@atom-neo/config-tui` (`src/packages/config-tui/`)
 > **启动方式**: 子进程（`spawnProcess` / `node:child_process`）或独立进程入口，与主进程隔离
 
-`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。MenuApp Advanced 的保存/取消由路由回调返回 Configure，不复制 wizard 状态。
+`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。MenuApp Advanced 打开的 Wizard 保存/取消后返回 Advanced（`{ name: "wizard", back: "advanced" }`），不复制 wizard 状态，也不重置到 Configure。
 
 ---
 

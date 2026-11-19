@@ -71,6 +71,18 @@ describe("WebSocket session persistence", () => {
     expect(store.delete("ws-attached")).toBe(true);
   });
 
+  test("a failed SessionReady send does not retain the session", () => {
+    const store = new SessionStore(10, undefined, 100);
+    store.get("send-failed", { type: "tui" });
+    const handlers = createWsHandlers({ broadcaster: new Broadcaster(), taskQueue: new TaskQueue(), sessionStore: store });
+    const ws = { data: { sessionId: "send-failed" }, send: () => { throw new Error("closed"); } } as any;
+
+    handlers.open(ws);
+    expect(store.isAttached("send-failed")).toBe(false);
+    handlers.close(ws);
+    expect(store.isAttached("send-failed")).toBe(false);
+  });
+
   test("a failed attach does not retain the session", () => {
     const store = new SessionStore(10, undefined, 0, {
       restore: () => null,

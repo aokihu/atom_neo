@@ -49,6 +49,7 @@ async function mount(options: {
   initialRoute?: "home" | "configure" | "gateway";
   initialError?: string;
   sandbox?: string;
+  version?: string;
   actions?: MenuActions;
 } = {}) {
   const sandbox = options.sandbox ?? "/tmp/atom-menu";
@@ -63,6 +64,7 @@ async function mount(options: {
       sandbox={sandbox}
       initialRoute={options.initialRoute}
       initialError={options.initialError}
+      version={options.version}
       actions={options.actions ?? actions()}
       onExit={(launch) => { launches.push(launch); }}
     />,
@@ -151,6 +153,12 @@ test("advanced opens the existing wizard and the real Gateway entry", async () =
   expect(gateway.frame()).toContain("GATEWAY CLIENTS");
 });
 
+test("top bar shows the injected version and route breadcrumb", async () => {
+  const app = await mount({ initialRoute: "configure", version: "9.9.9" });
+  expect(app.frame()).toContain("Home / Configure");
+  expect(app.frame()).toContain("v9.9.9");
+});
+
 test("failed launch feedback is shown on the home screen", async () => {
   const app = await mount({ initialError: "Launch failed: EADDRINUSE" });
   expect(app.frame()).toContain("Launch failed: EADDRINUSE");
@@ -178,6 +186,22 @@ test("gateway port edit refreshes the Configure summary", async () => {
   await app.press("RETURN", "ESCAPE");
   expect(ports).toEqual([4321]);
   expect(app.frame()).toContain("Gateway port 4321");
+});
+
+test("gateway port save errors stay inline in the modal", async () => {
+  const app = await mount({
+    initialRoute: "gateway",
+    actions: actions({
+      gatewayPort: 0,
+      setGatewayPort: () => { throw new Error("Invalid config.json: Unexpected token"); },
+    }),
+  });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("END", "BACKSPACE", "BACKSPACE", "BACKSPACE", "BACKSPACE");
+  await app.type("4321");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Invalid config.json");
+  expect(app.frame()).toContain("GATEWAY PORT");
 });
 
 test("saving the theme wizard refreshes Advanced and returns there", async () => {

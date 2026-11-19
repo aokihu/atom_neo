@@ -203,7 +203,12 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
               setError("Port must be an integer between 1 and 65535");
               return;
             }
-            onSubmit(parsed);
+            try {
+              onSubmit(parsed);
+            } catch (caught) {
+              setError(caught instanceof Error ? caught.message : String(caught));
+              return;
+            }
             setNotice("Port saved; restart Gateway to apply");
             open("clients");
           }}

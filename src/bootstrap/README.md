@@ -1,6 +1,7 @@
 # Bootstrap
 
-- `cli.ts`：五模式参数、端口和模式适用性校验；`atom gateway <action>` 子命令解析。
+- 配置入口：`atom menu` 打开 Home；`atom config` 打开 Configure；`atom config gateway` 在已有配置时直接进入 Gateway，空 workspace 先走 Workspace path；旧 `--config` flag 被拒绝。
+- `cli.ts`：五模式参数、端口和模式适用性校验；`atom config` / `atom config gateway` 与 `atom gateway <action>` 子命令解析。
 - `gateway-command.ts`：`atom gateway` 离线 install/upgrade/load/pack/uninstall 与 list（读取 config）；在线 list/start/stop/reload/check/logs；`load --id` 可指定实例 ID；官方 install/upgrade 通过 `--source` 或 `ATOM_GATEWAY_SOURCE_INDEX`；不初始化 Core。`list` 合并 config-only 与 supervisor 状态。
 - `gateway-upgrade.ts`：指定实例 package ref 更新与在线 apply；apply 失败恢复旧配置。
 - `gateway-actions.ts`：`createGatewayActions` 把 config-tui 的 install/load/pack 请求转成 `GatewayCommand`，并通过 `describe(id)` 读取目录/registry manifest 供 config-only 编辑。

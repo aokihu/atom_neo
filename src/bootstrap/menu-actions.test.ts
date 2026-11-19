@@ -57,6 +57,14 @@ describe("MenuActions adapter", () => {
     expect(() => actions.setGatewayPort(0)).toThrow("1 and 65535");
   });
 
+  test("refuses to save a port when config.json is corrupt", () => {
+    const dir = sandbox();
+    writeFileSync(join(dir, "config.json"), "{not-json");
+    const actions = createMenuActions(dir);
+    expect(() => actions.setGatewayPort(4321)).toThrow("Invalid config.json");
+    expect(readFileSync(join(dir, "config.json"), "utf8")).toBe("{not-json");
+  });
+
   test("switches workspace with a normalized path and refreshes settings", () => {
     const first = sandbox();
     const second = sandbox();

@@ -3,20 +3,21 @@ import { ThemeProvider } from "@atom-neo/tui-kit";
 import { GatewayModal } from "../components/GatewayModal";
 import { WizardApp } from "../components/WizardApp";
 import { MenuHome } from "./menu-home";
-import { MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
+import { MenuChromeProvider, MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
 import { SessionView } from "./session-view";
 import { HistoryView } from "./history-view";
 import { CoreServerView } from "./core-server-view";
 import { BackupExportView, BackupImportView, BackupView } from "./backup-view";
 import { WorkspaceGate } from "./workspace-gate";
-import { routeFor } from "./menu-routes";
+import { breadcrumbFor, routeFor } from "./menu-routes";
 import type { MenuRoute } from "./menu-routes";
 import type { MenuActions, MenuInitialRoute, MenuLaunch } from "./menu-types";
 
-export function MenuApp({ sandbox, initialRoute = "home", initialError, actions, onExit }: {
+export function MenuApp({ sandbox, initialRoute = "home", initialError, version, actions, onExit }: {
   sandbox: string;
   initialRoute?: MenuInitialRoute;
   initialError?: string;
+  version?: string;
   actions: MenuActions;
   onExit: (launch?: MenuLaunch) => void;
 }) {
@@ -79,6 +80,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, actions,
 
   return (
     <ThemeProvider theme={theme}>
+      <MenuChromeProvider version={version} breadcrumb={breadcrumbFor(route)}>
       {quitConfirm ? (
         <MenuConfirm
           title="Quit"
@@ -269,6 +271,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, actions,
           onBack={back}
         />
       ) : null}
+      </MenuChromeProvider>
     </ThemeProvider>
   );
 }

@@ -407,14 +407,15 @@ code review 修复（同范围）：
 | 复审 m5 | `lastTuiUsedAt` 不再回退 `updatedAt`；`SessionSummary` 移至 shared 复用 |
 | 复审 m7 | Wizard 内 Gateway 第二入口明确允许，复用同一 `GatewayModal`，测试与文档写明 |
 | 复审 m8 | `app.tsx`、`bootstrap/README.md` 与新文件清单补齐，checkbox 与已实施状态一致 |
+| 终审 polish | first-run 返回 Advanced 文档；损坏 config 端口保存内联错误；Core 在线禁用 Start；失败重试保留 workspace；WS SessionReady 成功后才 retain；renderer 生命周期 helper；顶栏版本/breadcrumb；`checkCodeSize` 降至 280 行 |
 
 验证记录（2026-11-19）：
 
-- `bun test src/packages/config-tui/src` → 147 pass
-- `bun test src/packages/core/src/session src/packages/core/src/http-router.test.ts src/packages/core/src/ws tests/e2e/core.test.ts` → 162 pass
-- `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/menu-launch.test.ts src/bootstrap/backup.test.ts` → 69 pass
+- `bun test src/packages/config-tui/src` → 150 pass
+- `bun test src/packages/core/src/session src/packages/core/src/http-router.test.ts src/packages/core/src/ws tests/e2e/core.test.ts` → 163 pass
+- `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/menu-launch.test.ts src/bootstrap/backup.test.ts` → 70 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 24 pass（含 Workspace/config 保存、Backup 导出/导入、History/Core stop、端口/provider/Attach 404 失败重试、窄窗口、非 TTY/`--config`）
-- 全量 `bun test` → 2747 pass、25 skip、1 fail；唯一失败为既有 `checkCodeSize`：`src/packages/gateway/src/client-manager/process-supervisor.ts` 288 > 280，本轮未修改该文件。
+- 全量 `bun test` → 2753 pass、25 skip、0 fail
 - `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过
 
 真实 Telegram 平台与官方发布仍按 G6 状态保持 PENDING。

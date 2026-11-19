@@ -3,6 +3,8 @@ import type { KeyEvent } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import React from "react";
 import { ensureBunRuntimePluginSupport } from "@atom-neo/tui-kit";
+import { closeRenderer, waitForRendererClosed } from "../renderer-lifecycle";
+import type { ConfigRenderer } from "../renderer-lifecycle";
 import { MenuApp } from "./menu-app";
 import type { MenuActions, MenuInitialRoute, MenuLaunch } from "./menu-types";
 
@@ -14,6 +16,7 @@ export async function startMenuApp(
     initialRoute?: MenuInitialRoute;
     /** Feedback from a previously failed launch. */
     error?: string;
+    version?: string;
   },
 ): Promise<MenuLaunch | undefined> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -25,7 +28,7 @@ export async function startMenuApp(
   return new Promise<MenuLaunch | undefined>((resolve, reject) => {
     let settled = false;
     let launch: MenuLaunch | undefined;
-    let renderer: Awaited<ReturnType<typeof createCliRenderer>> | undefined;
+    let renderer: ConfigRenderer | undefined;
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -33,16 +36,10 @@ export async function startMenuApp(
       resolve(launch);
     };
     // Release the terminal stream lease before another menu renderer can start.
-    const afterDestroy = () => {
-      const closed = (renderer as unknown as { nativeClosed?: Promise<void> } | undefined)?.nativeClosed;
-      void Promise.resolve(closed).then(finish, finish);
-    };
+    const afterDestroy = () => waitForRendererClosed(renderer, finish);
     const stop = (next?: MenuLaunch) => {
       launch = next;
-      if (renderer) {
-        renderer.destroy();
-        afterDestroy();
-      } else finish();
+      closeRenderer(renderer, finish);
     };
     const abort = () => stop();
 
@@ -62,6 +59,7 @@ export async function startMenuApp(
         sandbox,
         initialRoute: options.initialRoute,
         initialError: options.error,
+        version: options.version,
         actions,
         onExit: (next) => stop(next),
       }));

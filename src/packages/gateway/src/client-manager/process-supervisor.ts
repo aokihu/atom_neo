@@ -38,24 +38,16 @@ export class ProcessSupervisor {
   #pendingStart: Promise<void> | null = null;
 
   constructor(deps: ProcessSupervisorDeps) {
-    this.#id = deps.id;
-    this.#config = deps.config;
-    this.#port = deps.port;
-    this.#gatewayPort = deps.gatewayPort;
-    this.#logger = deps.logger;
-    this.#runtime = deps.runtime;
-    this.#probe = deps.probe;
-    this.#policy = deps.policy;
+    this.#id = deps.id; this.#config = deps.config;
+    this.#port = deps.port; this.#gatewayPort = deps.gatewayPort;
+    this.#logger = deps.logger; this.#runtime = deps.runtime;
+    this.#probe = deps.probe; this.#policy = deps.policy;
   }
 
   get state(): ProcessState { return this.#state; }
-
   get port(): number { return this.#port; }
-
   get desired(): boolean { return this.#desired; }
-
   get active(): ActiveClient | undefined { return this.#active ?? undefined; }
-
   get isRunning(): boolean { return this.#proc !== null && this.#proc.exitCode === null; }
 
   start(): Promise<void> {

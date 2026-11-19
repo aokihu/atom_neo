@@ -52,7 +52,8 @@ atom config gateway [--sandbox <path>]
 ## 全局 Workspace 与状态
 
 - MenuApp 维护单一 workspace；Session、History、Core Server、Gateway、Configure、Backup 全部使用它。
-- 顶部显示 workspace、Gateway 状态、Core 状态；窄窗口下 workspace 路径居中省略，避免溢出。
+- 顶部显示完整 breadcrumb、注入的版本号、workspace、Gateway 状态、Core 状态；窄窗口下 workspace 路径居中省略，避免溢出。
+- 启动失败重试时使用最后一次 launch 选择的 workspace 重新打开 MenuApp，不回退到原始 `args.sandbox`。
 - `createMenuActions` 严格只读配置：`config.json` 缺失时 theme=edex、Gateway port=3000，不创建目录或文件。
 - 修改 Workspace 会规范化绝对路径并更新后续页面使用的 sandbox；取消不写配置。
 - theme / Gateway port 是 MenuApp state；Wizard 保存/取消、端口编辑或 workspace 切换后通过 `refreshSettings()` 重新读取并渲染。
@@ -75,6 +76,7 @@ atom config gateway [--sandbox <path>]
 - Advanced 打开的 Wizard 保存/取消后返回 Advanced，不重置到 Configure。
 - Wizard 内的 Gateway 项明确允许，复用同一个 `GatewayModal`，保存/返回后回到 Wizard 菜单；它不是绕过 WorkspaceGate 的顶级快捷入口，主真实入口仍是 Advanced → Gateway。
 - `GatewayModal` / `GatewayInstanceForm` 与 `atom gateway` CLI actions 复用，不复制表单。
+- Gateway 端口保存只校验 1–65535 并在原 config 上合并；损坏的 `config.json` 返回内联错误，不崩溃渲染器。
 - 安装/加载/保存不自动 start；Register/Start 需显式操作。
 
 ## Session / History / Core Server
@@ -87,7 +89,7 @@ atom config gateway [--sandbox <path>]
 - 只有 attached 引用计数归零后，sweep/evict/delete 才恢复；`active || attached` 都返回 409，避免跨菜单删除正在使用或可恢复的 session。
 - 第一版 History 使用 sessionId 短形式，不新增 title 数据库迁移。
 - Core Server：
-  - Start Server：使用当前 boot 端口（默认 3100）显式启动 Core 前台入口；
+  - Start Server：使用当前 boot 端口（默认 3100）显式启动 Core 前台入口；Core 已在线时拒绝并提示 “Core already running; use Attach Server.”，不会再次绑定端口；
   - Stop Server：`POST /api/admin/shutdown`，本机 admin token，先响应再优雅关闭；菜单轮询 offline 状态后刷新；
   - Attach Server：使用 Core runtime 凭据进入 TUI。
 

@@ -22,3 +22,28 @@ export function routeFor(initial: "home" | "configure" | "gateway", hasConfig: b
   }
   return { name: "home" };
 }
+
+/** Human-readable route path for the shared top bar. */
+export function breadcrumbFor(route: MenuRoute): string {
+  switch (route.name) {
+    case "home": return "Home";
+    case "session": return "Home / Session";
+    case "history": return "Home / Session / History";
+    case "core-server": return "Home / Session / Core Server";
+    case "gateway-shortcut": return "Home / Gateway";
+    case "gateway-real":
+      return route.back === "advanced" ? "Home / Configure / Advanced / Gateway"
+        : route.back === "gateway-shortcut" ? "Home / Gateway / Configuration"
+          : "Home / Configure / Gateway";
+    case "configure": return "Home / Configure";
+    case "workspace":
+      return route.after === "gateway-shortcut" ? "Home / Gateway / Workspace"
+        : route.after === "gateway-real" ? "Gateway / Workspace"
+          : "Home / Configure / Workspace";
+    case "advanced": return "Home / Configure / Advanced";
+    case "wizard": return `Home / Configure / Advanced / ${route.view === "providers" ? "Providers & Models" : "Theme"}`;
+    case "backup": return "Home / Backup";
+    case "backup-export": return "Home / Backup / Export";
+    case "backup-import": return "Home / Backup / Import";
+  }
+}

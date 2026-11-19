@@ -185,7 +185,7 @@ sequenceDiagram
 
     Main->>CLI: parseArguments(["menu"])
     CLI-->>Main: menu=true, sandbox
-    Main->>Menu: startMenuApp(sandbox, actionsFactory)
+    Main->>Menu: startMenuApp(lastSandbox, version, actionsFactory)
     Menu->>Menu: TTY check, then createMenuActions(sandbox, port)
     Menu->>Actions: read-only theme/Gateway port
     Menu->>Gateway: optional status
@@ -288,7 +288,8 @@ sequenceDiagram
     HTTP->>Store: attachSession/attachTui (persist, no retain)
     HTTP-->>TUI: sessionId
     TUI->>WS: open(sessionId)
-    WS->>Store: retain(sessionId)
+    WS->>TUI: send SessionReady
+    WS->>Store: retain(sessionId) after send succeeds
     Note over Store: attached count > 0
     TUI->>WS: close
     WS->>Store: detach(sessionId)

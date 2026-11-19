@@ -233,11 +233,29 @@ test("core server stop uses the controlled action and attach returns a launch", 
       onRefreshStatus={() => {}}
     />,
   );
+  await view.press("RETURN");
+  expect(view.frame()).toContain("Core already running; use Attach Server");
+  expect(launches).toEqual([]);
   await view.press("ARROW_DOWN", "RETURN");
   expect(stopped).toBe(1);
   expect(view.frame()).toContain("Core stopped");
-  await view.press("ARROW_UP", "RETURN");
+  await view.press("ARROW_DOWN", "RETURN");
+  expect(launches[0]).toEqual({ kind: "attach", sandbox: "/tmp/atom", host: "127.0.0.1", port: 3100 });
+});
+
+test("core server start launches only when offline", async () => {
+  const launches: MenuLaunch[] = [];
+  const view = await mount(
+    <CoreServerView
+      workspace="/tmp/atom"
+      gateway="offline"
+      core="offline"
+      actions={actions()}
+      onLaunch={(launch) => launches.push(launch)}
+      onBack={() => {}}
+      onRefreshStatus={() => {}}
+    />,
+  );
+  await view.press("RETURN");
   expect(launches).toEqual([{ kind: "core", sandbox: "/tmp/atom", host: "127.0.0.1", port: 3100 }]);
-  await view.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
-  expect(launches[1]).toEqual({ kind: "attach", sandbox: "/tmp/atom", host: "127.0.0.1", port: 3100 });
 });

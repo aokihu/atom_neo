@@ -44,6 +44,7 @@
 - install/load/pack 通过注入的 `GatewayInstanceActions` 复用 CLI handler，保持 cwd 与 file-lock 语义；`describe(id)` 读取目录/registry manifest 供 config-only 编辑，避免本包依赖 gateway。
 - 本包不依赖 `@atom-neo/gateway`；只使用 shared 与 tui-kit。MenuApp 的动作通过 `MenuActions` 注入，不导入 bootstrap。
 - MenuApp 与 WizardApp/GatewayModal 采用路由级复用；不复制 provider/model/theme/Gateway/backup 实现。
+- `src/renderer-lifecycle.ts` 统一 MenuApp 与独立 Wizard 的 renderer 关闭/stream lease 等待；OpenTUI 尚未公开 native close promise，因此私有字段桥接只保留在该文件。
 
 ## 测试
 

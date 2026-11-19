@@ -400,7 +400,7 @@ integration("MenuApp Home, Gateway shortcut, workspace gate, and quit confirmati
     { wait: "Workspace path", send: "\x1b" },
     { wait: "Continue to Gateway", send: "\x1b" },
     { wait: "Session", send: "\x1b" },
-    { wait: "Quit Atom Neo", send: "\r" },
+    { wait: "Cancel", send: "\r" },
   ], [binary, "menu", "--sandbox", path], home);
   expect(result.commands).toEqual([]);
   expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);

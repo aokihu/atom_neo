@@ -22,15 +22,17 @@ export function menuLaunchArguments(args: BootArguments, launch: MenuLaunch): Bo
   };
 }
 
-type StartMenu = (error?: string) => Promise<MenuLaunch | undefined>;
+type StartMenu = (sandbox: string, error?: string) => Promise<MenuLaunch | undefined>;
 type RunApp = (args: BootArguments) => Promise<void>;
 
-/** Reopen the menu after a failed launch so new/continue/core/attach can be retried. */
+/** Reopen the menu after a failed launch, preserving the workspace chosen for that launch. */
 export async function runMenuLoop(args: BootArguments, startMenu: StartMenu, runApp: RunApp): Promise<void> {
+  let sandbox = args.sandbox;
   let lastError: string | undefined;
   for (;;) {
-    const launch = await startMenu(lastError);
+    const launch = await startMenu(sandbox, lastError);
     if (!launch) return;
+    sandbox = launch.sandbox;
     try {
       await runApp(menuLaunchArguments(args, launch));
       return;

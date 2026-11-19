@@ -25,6 +25,7 @@
 | M2 | <code>src/packages/config-tui/src/menu/history-view.tsx</code> | Session 列表、打开、删除确认、attached 保护 |
 | M2 | <code>src/packages/config-tui/src/menu/core-server-view.tsx</code> | Start / Stop / Attach、Stop 后状态轮询 |
 | M4 | <code>src/packages/config-tui/src/menu/backup-view.tsx</code> | Export / Import 表单、遮罩密码、明文警告 |
+| M1 | <code>src/packages/config-tui/src/renderer-lifecycle.ts</code> | MenuApp/独立 Wizard 共用 renderer 关闭与 stream lease 等待 |
 | M1 | <code>src/packages/config-tui/src/menu/README.md</code> | 目录摘要与路由说明 |
 | M1 | <code>src/bootstrap/menu-actions.ts</code> | 只读配置适配器、Chat/Core/Backup/Gateway/Session 动作 |
 | M1 | <code>src/bootstrap/menu-launch.ts</code> | MenuLaunch → BootArguments 映射与失败重试循环 |
@@ -112,6 +113,7 @@ export function MenuApp({ sandbox, actions, initialRoute = "home", initialError,
 ```
 
 `routeFor("gateway", hasConfig)` 只在 `hasConfig` 为 true 时直达 Gateway；否则进入 `{ name: "workspace", after: "gateway-real" }`，避免 `loadConfig` 副作用伪造“已配置”。
+顶栏通过 `MenuChromeProvider` 注入 `breadcrumbFor(route)` 与 `startMenuApp` 参数传入的版本号，不复制版本常量。
 
 ### 2.3 WorkspaceGate
 
@@ -389,7 +391,9 @@ Gateway ›   ← 真实入口
 )}
 ```
 
-- 端口编辑只校验 1–65535，在原始 config 上合并 `gateway.port`，保留未知顶层/嵌套字段；写盘固定 0600。
+- 端口编辑只校验 1–65535，在原始 config 上合并 `gateway.port`，保留未知顶层/嵌套字段；写盘固定 0600。损坏的 `config.json` 返回 `Invalid config.json: ...`，由 `GatewayModal` 内联展示。
+- Core 已在线时 Start Server 拒绝并提示使用 Attach Server；失败 launch 重试使用最后一次 launch 的 workspace。
+- WS `open` 仅在 SessionReady 发送成功后 `retain`，`close` 调用 `detach`。
 - Export：输出路径 → 遮罩密码（非空至少 8 位 + 二次确认）→ 空密码明文警告 → 写归档。
 - Import：归档路径 → `inspectBackupArchive`（仅加密归档询问遮罩密码）→ merge/replace → 覆盖确认。
 - 复用 `src/bootstrap/backup.ts` 的 `validateBackupPassword` / `inspectBackupArchive` / plan/execute 逻辑，不复制规则。

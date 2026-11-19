@@ -47,13 +47,15 @@ describe("menu launch mapping", () => {
 });
 
 describe("menu launch retry", () => {
-  test("reopens the menu with the failure until a launch succeeds", async () => {
+  test("reopens the menu with the failure and the last chosen workspace", async () => {
     const errors: Array<string | undefined> = [];
+    const sandboxes: string[] = [];
     const attempts: BootArguments[] = [];
-    const queued = [launches[1]!, launches[2]!, launches[0]!];
+    const queued = [launches[1]!, { ...launches[2]!, sandbox: "/changed" }, launches[0]!];
     await runMenuLoop(
-      boot(),
-      async (error) => {
+      { ...boot(), sandbox: "/ws" },
+      async (sandbox, error) => {
+        sandboxes.push(sandbox);
         errors.push(error);
         return queued.shift();
       },
@@ -63,6 +65,7 @@ describe("menu launch retry", () => {
         if (args.mode === "tui") throw new Error("Cannot attach Core (404)");
       },
     );
+    expect(sandboxes).toEqual(["/ws", "/ws", "/changed"]);
     expect(errors).toEqual([undefined, "Launch failed: EADDRINUSE", "Launch failed: Cannot attach Core (404)"]);
     expect(attempts.map(args => args.mode)).toEqual(["core", "tui", undefined]);
   });

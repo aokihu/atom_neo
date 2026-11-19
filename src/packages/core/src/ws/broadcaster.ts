@@ -23,11 +23,12 @@ export class Broadcaster {
     this.#clients.delete(ws);
   }
 
-  send(ws: WsPeer, type: string, payload: unknown): void {
+  send(ws: WsPeer, type: string, payload: unknown): boolean {
     try {
-      this.#sendSerialized(ws, this.#serialize(type, payload));
+      return this.#sendSerialized(ws, this.#serialize(type, payload));
     } catch {
       // Ignore payload serialization failures.
+      return false;
     }
   }
 
@@ -74,11 +75,13 @@ export class Broadcaster {
     });
   }
 
-  #sendSerialized(ws: WsPeer, data: string): void {
+  #sendSerialized(ws: WsPeer, data: string): boolean {
     try {
       ws.send(data);
+      return true;
     } catch {
       this.remove(ws);
+      return false;
     }
   }
 }

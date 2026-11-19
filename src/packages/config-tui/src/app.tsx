@@ -4,6 +4,8 @@ import { createRoot } from "@opentui/react";
 import React from "react";
 import { ensureBunRuntimePluginSupport } from "@atom-neo/tui-kit";
 import { WizardApp } from "./components/WizardApp";
+import { closeRenderer, waitForRendererClosed } from "./renderer-lifecycle";
+import type { ConfigRenderer } from "./renderer-lifecycle";
 import type { GatewayInstanceActions } from "./gateway-status";
 import type { WizardMode } from "./wizard-logic";
 import type { WizardInitialView } from "./wizard/wizard-reducer";
@@ -18,7 +20,7 @@ export async function startWizard(
   return new Promise<boolean>((resolve, reject) => {
     let settled = false;
     let completed = false;
-    let renderer: Awaited<ReturnType<typeof createCliRenderer>> | undefined;
+    let renderer: ConfigRenderer | undefined;
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -28,8 +30,7 @@ export async function startWizard(
     };
     const abort = () => {
       if (settled) return;
-      if (renderer) renderer.destroy();
-      else finish();
+      closeRenderer(renderer, finish);
     };
 
     // EOF (redirected stdin) must not leave the wizard hanging forever
@@ -39,7 +40,7 @@ export async function startWizard(
       exitOnCtrlC: false,
       screenMode: "alternate-screen",
       backgroundColor: "#05090c",
-      onDestroy: () => finish(),
+      onDestroy: () => waitForRendererClosed(renderer, finish),
     }).then(createdRenderer => {
       renderer = createdRenderer;
       if (settled) { renderer.destroy(); return; }
@@ -54,7 +55,7 @@ export async function startWizard(
         mode,
         initialView: options.initialView,
         gatewayActions: options.gatewayActions,
-        onComplete: () => { completed = true; createdRenderer.destroy(); },
+        onComplete: () => { completed = true; closeRenderer(createdRenderer, finish); },
         onAbort: abort,
       }));
     }).catch(error => {

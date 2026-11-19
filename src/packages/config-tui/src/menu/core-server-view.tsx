@@ -64,8 +64,14 @@ export function CoreServerView({ workspace, gateway, core, actions, onLaunch, on
         { key: "back", label: "‹ Back" },
       ]}
       onSelect={(key) => {
-        if (key === "start") onLaunch({ kind: "core", sandbox: workspace, ...actions.coreStartTarget() });
-        else if (key === "stop") void stop();
+        if (key === "start") {
+          if (core === "online") {
+            setError("Core already running; use Attach Server.");
+            return;
+          }
+          setError("");
+          onLaunch({ kind: "core", sandbox: workspace, ...actions.coreStartTarget() });
+        } else if (key === "stop") void stop();
         else if (key === "attach") void attach();
         else onBack();
       }}

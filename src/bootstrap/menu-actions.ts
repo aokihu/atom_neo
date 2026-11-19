@@ -149,7 +149,14 @@ export function createMenuActions(sandbox: string, corePort = 3100): MenuActions
         throw new Error("Port must be an integer between 1 and 65535");
       }
       const path = join(workspace, "config.json");
-      const raw = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as unknown : {};
+      let raw: unknown = {};
+      if (existsSync(path)) {
+        try {
+          raw = JSON.parse(readFileSync(path, "utf8"));
+        } catch (error) {
+          throw new Error(`Invalid config.json: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       const config = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
       const gateway = config.gateway !== null && typeof config.gateway === "object" && !Array.isArray(config.gateway)
         ? config.gateway as Record<string, unknown>
