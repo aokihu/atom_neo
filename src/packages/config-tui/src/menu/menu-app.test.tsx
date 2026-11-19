@@ -123,7 +123,7 @@ async function mountNode(element: ReactNode) {
   return { frame: setup.captureCharFrame };
 }
 
-test("home shows the integrated menu and workspace status", async () => {
+test("home shows the integrated menu and workspace status without a breadcrumb", async () => {
   const app = await mount();
   const frame = app.frame();
   expect(frame).toContain("ATOM NEO · Home");
@@ -133,6 +133,24 @@ test("home shows the integrated menu and workspace status", async () => {
   expect(frame).toContain("Configure");
   expect(frame).toContain("Backup");
   expect(frame).toContain("Quit");
+  const lines = contentLines(frame);
+  const title = lines.findIndex(line => line.includes("ATOM NEO · Home"));
+  expect(lines[title + 1]?.startsWith("workspace:")).toBe(true);
+  expect(lines[title + 2]?.startsWith("Gateway:")).toBe(true);
+  expect(lines.filter(line => line === "Home")).toHaveLength(0);
+});
+
+test.each([64, 40])("home at %i columns has no breadcrumb and keeps workspace/status adjacent", async (width) => {
+  const app = await mount({ version: "1.2.3", width });
+  const lines = contentLines(app.frame());
+  const title = lines.findIndex(line => line.includes("ATOM NEO · Home"));
+  expect(lines[title]).toContain("v1.2.3");
+  expect(lines[title]!.trimEnd().endsWith("v1.2.3")).toBe(true);
+  expect(lines[title + 1]?.startsWith("workspace:")).toBe(true);
+  expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
+  expect(lines[title + 2]?.startsWith("Gateway:")).toBe(true);
+  expect(lines.filter(line => line.startsWith("Gateway:"))).toHaveLength(1);
+  expect(lines.filter(line => line === "Home")).toHaveLength(0);
 });
 
 test("gateway shortcut goes through workspace confirmation", async () => {

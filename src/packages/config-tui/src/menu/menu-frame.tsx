@@ -86,10 +86,10 @@ export function MenuStatus({ workspace, gateway, core }: {
   const prefix = "workspace: ";
   const pathWidth = Math.max(1, contentWidth - stringWidth(prefix));
   const shown = truncateMiddle(workspace, pathWidth);
-  const crumb = truncateByWidth(breadcrumb ?? "Home", contentWidth);
+  const crumb = breadcrumb?.includes(" / ") ? truncateByWidth(breadcrumb, contentWidth) : undefined;
   return (
     <box flexDirection="column" marginBottom={1}>
-      <text fg={colors.text.muted} wrapMode="none" truncate>{crumb}</text>
+      {crumb ? <text fg={colors.text.muted} wrapMode="none" truncate>{crumb}</text> : null}
       <text fg={colors.text.muted} wrapMode="none" truncate>{`${prefix}${shown}`}</text>
       <box flexDirection="row" gap={2}>
         <text fg={status(gateway)}>Gateway: {gateway}</text>
