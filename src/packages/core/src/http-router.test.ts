@@ -1,7 +1,7 @@
 /**
  * HTTP router contract tests: health, admin rejection, task submission delegation, upgrade, 404.
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { HttpRequestContext } from "@atom-neo/shared";
 import { Logger } from "@atom-neo/shared";
 import { createHttpRouter, requireAdmin } from "./http-router";
@@ -125,6 +125,55 @@ describe("http router", () => {
       body: JSON.stringify({ sessionId: "missing" }),
     }), ctx);
     expect(missing.status).toBe(404);
+  });
+
+  test("attach reloads config from disk before building serverInfo", async () => {
+    const runtime: any = {
+      sandbox: "/tmp/atom",
+      appConfig: { tui: { theme: "github-dark" } },
+      maxTokens: 100,
+      getResolvedModel: () => ({ provider: "local", protocol: "deepseek", model: "local", apiKey: "test" }),
+      reloadConfig: mock(() => {
+        runtime.appConfig = { tui: { theme: "tokyo-night" } };
+        return runtime.appConfig;
+      }),
+    };
+    const route = createHttpRouter(routerDeps({
+      runtime,
+      sessionStore: { attachTui: () => ({ sessionId: "session-reload" }) } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: "{}",
+    }), ctx);
+    expect(response.status).toBe(200);
+    expect(runtime.reloadConfig).toHaveBeenCalledTimes(1);
+    expect((await response.json() as any).serverInfo.theme).toBe("tokyo-night");
+  });
+
+  test("attach still succeeds with the old theme when config reload fails", async () => {
+    const warn = mock(() => {});
+    const runtime: any = {
+      sandbox: "/tmp/atom",
+      appConfig: { tui: { theme: "github-dark" } },
+      maxTokens: 100,
+      getResolvedModel: () => ({ provider: "local", protocol: "deepseek", model: "local", apiKey: "test" }),
+      reloadConfig: () => { throw new Error("bad config"); },
+    };
+    const route = createHttpRouter(routerDeps({
+      runtime,
+      logger: { warn } as any,
+      sessionStore: { attachTui: () => ({ sessionId: "session-reload-failed" }) } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: "{}",
+    }), ctx);
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).serverInfo.theme).toBe("github-dark");
+    expect(warn).toHaveBeenCalledWith("tui attach config reload failed", { error: "bad config" });
   });
 
   test("attach persistence failures return 500 and do not mark attached", async () => {

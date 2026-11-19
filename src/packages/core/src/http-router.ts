@@ -141,6 +141,13 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
         } catch {
           return Response.json({ error: "Failed to persist TUI session" }, { status: 500 });
         }
+        try {
+          deps.runtime.reloadConfig?.();
+        } catch (error) {
+          deps.logger.warn("tui attach config reload failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         const model = deps.runtime.getResolvedModel?.("balanced") ?? deps.fallbackModel;
         return Response.json({ sessionId: session.sessionId, serverInfo: {
           port: ctx.port, host: deps.host, sandbox: deps.sandbox, version: deps.version ?? "unknown", model: model.model,

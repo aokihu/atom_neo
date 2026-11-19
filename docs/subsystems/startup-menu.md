@@ -83,6 +83,7 @@ atom config gateway [--sandbox <path>]
 ## Session / History / Core Server
 
 - New Chat / Continue Chat：关闭 MenuApp，复用现有 `runApp` TUI 启动路径。
+- 新 TUI attach 前 Core 会重新读取 `config.json` 与 runtime overlay，因此 `atom config` 保存的 theme/provider/model 对新进入的 TUI 生效；已运行 TUI 不热更新，需重新进入或使用 `/settings`。
 - 启动失败（端口占用、缺 provider、Attach 404 等）打印错误并重新打开 MenuApp，可继续重试；不直接退出进程。
 - History：`GET /api/sessions` 读取 sessionId、时间、状态、`active`、`attached`；打开指定 session 复用 TUI attach；删除走 `DELETE /api/sessions/:id`。
 - `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 需要 admin token（菜单使用 Core runtime token）。

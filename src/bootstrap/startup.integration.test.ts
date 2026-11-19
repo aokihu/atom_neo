@@ -457,7 +457,13 @@ integration("unconfigured config saves the workspace and Gateway port without wr
 integration("failed Core launch returns to the menu for a retry", async () => {
   const path = sandbox("menuapp-retry-core");
   const home = join(temp, "menuapp-retry-core-home");
-  const blocker = Bun.serve({ hostname: "127.0.0.1", port: 3100, fetch: () => new Response("occupied") });
+  let blocker: ReturnType<typeof Bun.serve> | undefined;
+  try {
+    blocker = Bun.serve({ hostname: "127.0.0.1", port: 3100, fetch: () => new Response("occupied") });
+  } catch {
+    // The port may already be occupied by the user's running Core; that is
+    // still the failure condition this test needs, so proceed without a blocker.
+  }
   try {
     const result = await driveMenu([
       { wait: "Session", send: "\r", keyDelay: 0.08 },
@@ -468,7 +474,7 @@ integration("failed Core launch returns to the menu for a retry", async () => {
     expect(result.commands).toEqual([]);
     expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
   } finally {
-    blocker.stop(true);
+    blocker?.stop(true);
   }
 }, 30000);
 

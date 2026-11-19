@@ -133,6 +133,7 @@ CLI args (--port, --host, --sandbox)  >  runtime-config.json  >  config.json  > 
 - `runtime-config.json` 覆盖 `config.json` 的同名字段（深合并，见 §1）
 - `.env` 用于存储 `DEEPSEEK_API_KEY` 等密钥，不参与 config 合并
 - `config.json` 不存在时，回退到默认值（deepseek/deepseek-v4-flash）
+- Core 启动时加载一次配置；每次 `POST /api/tui/attach` 前会重新读取 `config.json` 与 `runtime-config.json`，因此新进入的 TUI 能拿到最新 theme/provider/model。重新加载失败只记录 warn，继续使用旧配置，不阻断 attach。
 
 ---
 
@@ -242,7 +243,7 @@ const providerOptions = providerOptionsFor(resolved);
 - `"adaptive"` — 兼容旧配置；当前 DeepSeek SDK 会将其映射为 `enabled`
 - `"enabled"` — 强制启用思考模式
 
-运行时覆盖写入后，下一次创建的对话、预测、摘要、对话后分析及 LLM 决策回退请求都从有效配置读取所用 provider 的 thinking 值，并发送 `thinking.type`。已在执行中的请求继续使用创建时的配置。手动编辑 `config.json` 仍需重启 Core 才会重新载入。
+运行时覆盖写入后，下一次创建的对话、预测、摘要、对话后分析及 LLM 决策回退请求都从有效配置读取所用 provider 的 thinking 值，并发送 `thinking.type`。已在执行中的请求继续使用创建时的配置。手动编辑 `config.json` 不会热更新正在运行的 TUI 或当前请求；新 TUI attach 前 Core 会重新加载配置，因此重新进入 TUI 即可生效。`/settings` 的 runtime overlay 仍只影响 overlay 自身并即时生效，行为不变。
 
 **TUI 展示**：`thinking` 状态会通过 `ServerInfo` 传递给 TUI，在 `StatusBar` 组件中于模型名称右侧显示 `[thinking]` 标签。颜色含义：
 - 高亮（`status.success`） — `enabled`，或兼容值 `adaptive`（实际映射为启用）

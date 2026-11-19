@@ -1,5 +1,5 @@
 import { describe, expect, test, afterAll, beforeAll, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeService } from "./runtime-service";
@@ -42,6 +42,29 @@ function makeRuntime(sandbox: string): RuntimeService {
 }
 
 describe("RuntimeService runtime config", () => {
+  test("reloadConfig reads config.json and keeps the runtime overlay precedence", () => {
+    const sandbox = makeSandbox();
+    const configPath = join(sandbox, "config.json");
+    const writeTheme = (theme: string) => writeFileSync(configPath, JSON.stringify(ConfigSchema.parse({
+      providers: {},
+      tui: { theme },
+    })));
+
+    writeTheme("github-dark");
+    const runtime = new RuntimeService({ mode: "core", port: 3100, host: "127.0.0.1", sandbox,
+      config: loadConfig(sandbox) });
+    expect(runtime.appConfig.tui.theme).toBe("github-dark");
+
+    writeTheme("tokyo-night");
+    expect(runtime.reloadConfig().tui.theme).toBe("tokyo-night");
+    expect(runtime.appConfig.tui.theme).toBe("tokyo-night");
+
+    runtime.updateRuntimeConfig({ tui: { theme: "dracula" } });
+    writeTheme("monokai");
+    expect(runtime.reloadConfig().tui.theme).toBe("dracula");
+    expect(existsSync(runtime.runtimeConfigPath)).toBe(true);
+  });
+
   test("thinking overlay takes effect immediately and survives reload", async () => {
     const sandbox = makeSandbox();
     const userConfig = ConfigSchema.parse({ providers: {
