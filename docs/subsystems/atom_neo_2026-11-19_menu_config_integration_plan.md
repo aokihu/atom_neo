@@ -412,11 +412,11 @@ code review 修复（同范围）：
 
 验证记录（2026-11-19）：
 
-- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 176 pass
+- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 177 pass
 - `bun test src/packages/core/src/session src/packages/core/src/http-router.test.ts src/packages/core/src/ws tests/e2e/core.test.ts` → 163 pass
 - `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/menu-launch.test.ts src/bootstrap/backup.test.ts` → 70 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 24 pass（含 Workspace/config 保存、Backup 导出/导入、History/Core stop、端口/provider/Attach 404 失败重试、窄窗口、非 TTY/`--config`）
-- 全量 `bun test` → 2767 pass、25 skip、0 fail
+- 全量 `bun test` → 2768 pass、25 skip、0 fail
 - `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过
 
 真实 Telegram 平台与官方发布仍按 G6 状态保持 PENDING。

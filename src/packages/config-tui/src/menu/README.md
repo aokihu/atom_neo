@@ -29,4 +29,5 @@ OpenTUI 的 menu/config 统一入口，由 `atom menu`、`atom config`、`atom c
 
 - `menu-app.test.tsx`：Home、workspace gate/C、Configure/Advanced/Gateway、theme/port 刷新、Wizard 返回、失败反馈、Quit。
 - `menu-views.test.tsx`：长列表滚动、长路径省略、History 删除确认键盘隔离/attached 保护、Core Server start/stop/attach。
+- `menu-frame.test.ts`：`menuContentWidth` / `truncateByWidth` / `truncateMiddle` 的显示宽度、CJK、emoji、组合字符与中部省略。
 - `backup-view.test.tsx`：遮罩密码、短密码拒绝、明文警告、加密导入与取消。

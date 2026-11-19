@@ -53,4 +53,4 @@ bun test src/packages/config-tui/src
 bun run --cwd src/packages/config-tui typecheck
 ```
 
-重点：`menu/menu-app.test.tsx`（路由、theme/port 刷新、失败反馈、WorkspaceGate C、Wizard 返回与内部 Gateway 入口）、`menu/menu-views.test.tsx`（长列表滚动、路径省略、History 删除确认键盘隔离/attached 保护、Core 启停）、`menu/backup-view.test.tsx`（遮罩密码、短密码、明文警告、加密导入）、`gateway-instance-form.test.ts`（secret 遮罩/编辑/提交）、`gateway-status.test.ts`（admin 请求/诊断/保存）、`components/GatewayModal.test.tsx`（离线/列表/操作/重载错误/编辑）。
+重点：`menu/menu-app.test.tsx`（路由、theme/port 刷新、失败反馈、WorkspaceGate C、Wizard 返回与内部 Gateway 入口、64/40 列顶栏与深路径 breadcrumb）、`menu/menu-views.test.tsx`（长列表滚动、路径省略、History 删除确认键盘隔离/attached 保护、Core 启停）、`menu/menu-frame.test.ts`（`menuContentWidth` / `truncateByWidth` / `truncateMiddle` 的显示宽度、CJK、emoji、组合字符）、`menu/backup-view.test.tsx`（遮罩密码、短密码、明文警告、加密导入）、`gateway-instance-form.test.ts`（secret 遮罩/编辑/提交）、`gateway-status.test.ts`（admin 请求/诊断/保存）、`components/GatewayModal.test.tsx`（离线/列表/操作/重载错误/编辑）。

@@ -404,8 +404,9 @@ Gateway ›   ← 真实入口
 
 | 测试 | 覆盖 |
 |---|---|
-| `config-tui/src/menu/menu-app.test.tsx` | Home、路由、WorkspaceGate C、theme/port 刷新、Wizard 返回、失败反馈、Quit |
+| `config-tui/src/menu/menu-app.test.tsx` | Home、路由、WorkspaceGate C、theme/port 刷新、Wizard 返回、失败反馈、Quit、64/40 列顶栏与深路径 breadcrumb |
 | `config-tui/src/menu/menu-views.test.tsx` | 长列表滚动、长路径省略、History 空/删除确认/attached 保护、Core start/stop/attach |
+| `config-tui/src/menu/menu-frame.test.ts` | `menuContentWidth` / `truncateByWidth` / `truncateMiddle` 的显示宽度、CJK、emoji、组合字符、空值与 maxWidth=1 |
 | `config-tui/src/menu/backup-view.test.tsx` | 遮罩密码、短密码拒绝、二次确认、明文警告、加密导入、取消 |
 | `bootstrap/cli.test.ts` | `atom config`、`atom config gateway`、`--config` 拒绝 |
 | `bootstrap/menu-actions.test.ts` | 只读空目录、workspace 规范化、settings、Session/Backup/Core 适配器 |
