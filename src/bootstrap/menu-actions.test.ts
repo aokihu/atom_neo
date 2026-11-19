@@ -36,6 +36,27 @@ describe("MenuActions adapter", () => {
     expect(statSync(join(dir, "config.json")).mode & 0o777).toBe(0o600);
   });
 
+  test("port edits preserve unknown top-level and nested config fields", () => {
+    const dir = sandbox();
+    writeFileSync(join(dir, "config.json"), JSON.stringify({
+      version: 2,
+      customSection: { feature: "keep-me" },
+      unknownTop: 7,
+      tui: { theme: "nord", customTui: true },
+      gateway: { port: 3000, clients: [], customGateway: { region: "local" } },
+    }));
+    const actions = createMenuActions(dir);
+    actions.setGatewayPort(4321);
+
+    const config = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+    expect(config.gateway).toEqual({ port: 4321, clients: [], customGateway: { region: "local" } });
+    expect(config.customSection).toEqual({ feature: "keep-me" });
+    expect(config.unknownTop).toBe(7);
+    expect(config.tui).toEqual({ theme: "nord", customTui: true });
+    expect(statSync(join(dir, "config.json")).mode & 0o777).toBe(0o600);
+    expect(() => actions.setGatewayPort(0)).toThrow("1 and 65535");
+  });
+
   test("switches workspace with a normalized path and refreshes settings", () => {
     const first = sandbox();
     const second = sandbox();

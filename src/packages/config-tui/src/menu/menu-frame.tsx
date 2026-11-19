@@ -35,7 +35,7 @@ export function MenuStatus({ workspace, gateway, core }: {
 }
 
 /** Shared OpenTUI menu surface: frame, status header, list and keyboard navigation. */
-export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, children }: {
+export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, children }: {
   title: string;
   workspace: string;
   gateway: "online" | "offline" | "unknown";
@@ -48,6 +48,8 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   hint: string;
   error?: string;
   notice?: string;
+  /** Keep the list visible but release all keyboard handling to an overlay. */
+  suspended?: boolean;
   children?: ReactNode;
 }) {
   const { colors } = useTheme();
@@ -66,7 +68,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   }, [bounded, onSelectionChange]);
 
   useKeyboard((event) => {
-    if (event.name === "delete" && onDelete) onDelete();
+    if (!suspended && event.name === "delete" && onDelete) onDelete();
   });
 
   return (
@@ -75,6 +77,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       title={`ATOM NEO · ${title}`}
       width={96}
       height={24}
+      interactive={!suspended}
       listLength={Math.max(1, items.length)}
       selectedListIndex={bounded}
       onListNavigate={(index) => setSelected(index)}

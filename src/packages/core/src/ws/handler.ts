@@ -35,6 +35,7 @@ type ServerContext = {
 type WsData = {
   sessionId?: string;
   chatId?: string;
+  retained?: boolean;
 };
 
 type WsPeer = WebSocketPeer<WsData>;
@@ -74,6 +75,10 @@ export function createWsHandlers(ctx: ServerContext) {
       if (sid) {
         ctx.broadcaster.add(ws, sid);
         const session = ctx.sessionStore?.load(sid);
+        if (session && ctx.sessionStore && !wsData(ws).retained) {
+          ctx.sessionStore.retain(sid);
+          wsData(ws).retained = true;
+        }
         send(ws, WsMessages.Server.SessionReady, { sessionId: sid, messages: session?.messages ?? [], contextTokens: session?.contextTokens ?? 0, activeTaskIds: ctx.taskQueue.getSessionTasks(sid),
           telemetry: session ? buildSessionTelemetry(session, ctx.getLocalRoundLimit?.() ?? 5) : { sessionId: sid, rounds: null, todos: [] } });
       }
@@ -157,6 +162,11 @@ export function createWsHandlers(ctx: ServerContext) {
     },
     close(ws: WsPeer) {
       ctx.broadcaster.remove(ws);
+      const data = wsData(ws);
+      if (data.retained && data.sessionId && ctx.sessionStore) {
+        ctx.sessionStore.detach(data.sessionId);
+        data.retained = false;
+      }
     },
   };
 }

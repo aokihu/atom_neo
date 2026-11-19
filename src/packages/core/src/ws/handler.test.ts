@@ -50,6 +50,39 @@ describe("WebSocket session persistence", () => {
     handlers.open(ws);
     expect(JSON.parse(ws.send.mock.calls[0][0]).payload.telemetry).toEqual(snapshot);
   });
+  test("holds an attach reference until the WebSocket closes", () => {
+    const store = new SessionStore(10, undefined, 100);
+    store.get("ws-attached", { type: "tui" });
+    const handlers = createWsHandlers({ broadcaster: new Broadcaster(), taskQueue: new TaskQueue(), sessionStore: store });
+    const first = createWebSocket("ws-attached");
+    const second = createWebSocket("ws-attached");
+
+    handlers.open(first);
+    handlers.open(second);
+    expect(store.isAttached("ws-attached")).toBe(true);
+
+    handlers.close(first);
+    expect(store.isAttached("ws-attached")).toBe(true);
+    handlers.close(second);
+    handlers.close(second);
+    expect(store.isAttached("ws-attached")).toBe(false);
+
+    expect(store.sweepIdle(Date.now() + 101)).toContain("ws-attached");
+    expect(store.delete("ws-attached")).toBe(true);
+  });
+
+  test("a failed attach does not retain the session", () => {
+    const store = new SessionStore(10, undefined, 0, {
+      restore: () => null,
+      checkpoint: () => { throw new Error("disk full"); },
+      remove: () => {},
+    } as any);
+    store.get("failed-attach", { type: "tui" });
+
+    expect(() => store.attachSession("failed-attach")).toThrow("Failed to persist TUI session");
+    expect(store.isAttached("failed-attach")).toBe(false);
+  });
+
   test("uses the broadcaster sequence for direct WebSocket responses", () => {
     const broadcaster = new Broadcaster();
     const handlers = createWsHandlers({

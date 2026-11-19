@@ -127,6 +127,21 @@ describe("http router", () => {
     expect(missing.status).toBe(404);
   });
 
+  test("attach persistence failures return 500 and do not mark attached", async () => {
+    const route = createHttpRouter(routerDeps({
+      sessionStore: {
+        attachSession: () => { throw new Error("Failed to persist TUI session"); },
+      } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "session-history" }),
+    }), ctx);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Failed to persist TUI session" });
+  });
+
   test("delegates POST /api/tasks to the shared submission service", async () => {
     const submitted: TaskSubmitInput[] = [];
     const route = createHttpRouter(routerDeps({

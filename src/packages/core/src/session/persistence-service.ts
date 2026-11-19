@@ -45,7 +45,7 @@ export class SessionPersistenceService {
       );
       return state ? [{
         sessionId: state.sessionId,
-        lastTuiUsedAt: state.lastTuiUsedAt ?? state.updatedAt ?? 0,
+        lastTuiUsedAt: state.lastTuiUsedAt ?? 0,
         initiator: state.initiator ?? { type: "unknown" },
         status: state.status,
         active: false,

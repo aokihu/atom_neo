@@ -1,6 +1,8 @@
 import type { SessionInitiator, ContinuationContext, InferenceFact, SessionMessage, TaskItem } from "@atom-neo/shared";
 import type { TodoItem } from "./context";
 
+export type { SessionSummary } from "@atom-neo/shared";
+
 export type ExecutionBudget = {
   goalId: string;
   goal: string;
@@ -21,17 +23,6 @@ export type ExecutionBudget = {
 };
 
 export type PersistedSessionStatus = "active" | "suspended" | "interrupted" | "completed" | "failed";
-
-export type SessionSummary = {
-  sessionId: string;
-  lastTuiUsedAt: number;
-  initiator: SessionInitiator;
-  status: string;
-  /** Holds an active task lease. */
-  active: boolean;
-  /** Attached to a TUI/consumer and protected from deletion until Core restarts. */
-  attached: boolean;
-};
 
 export type SessionCheckpointReason =
   | "message"

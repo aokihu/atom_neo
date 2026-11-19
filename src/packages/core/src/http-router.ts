@@ -130,12 +130,16 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
           return Response.json({ error: "continue must be a boolean and sessionId a non-empty string" }, { status: 400 });
         }
         let session: NonNullable<ReturnType<SessionStore["load"]>>;
-        if ("sessionId" in options) {
-          const loaded = sessionStore.attachSession(options.sessionId as string);
-          if (!loaded) return Response.json({ error: "Session not found" }, { status: 404 });
-          session = loaded;
-        } else {
-          session = sessionStore.attachTui("continue" in options && options.continue === true);
+        try {
+          if ("sessionId" in options) {
+            const loaded = sessionStore.attachSession(options.sessionId as string);
+            if (!loaded) return Response.json({ error: "Session not found" }, { status: 404 });
+            session = loaded;
+          } else {
+            session = sessionStore.attachTui("continue" in options && options.continue === true);
+          }
+        } catch {
+          return Response.json({ error: "Failed to persist TUI session" }, { status: 500 });
         }
         const model = deps.runtime.getResolvedModel?.("balanced") ?? deps.fallbackModel;
         return Response.json({ sessionId: session.sessionId, serverInfo: {

@@ -200,6 +200,17 @@ test("saving the theme wizard refreshes Advanced and returns there", async () =>
   expect(app.frame()).toContain("Current: nord");
 });
 
+test("wizard menu may open the shared GatewayModal and returns to the wizard", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  await app.press("ARROW_DOWN", "RETURN");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("PROVIDERS");
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("CONFIGURATION");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("GATEWAY CLIENTS");
+});
+
 test("backup home exposes Export before Import", async () => {
   const app = await mount();
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");

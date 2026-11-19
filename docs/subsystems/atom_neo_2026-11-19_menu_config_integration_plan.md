@@ -395,19 +395,26 @@ code review 修复（同范围）：
 |---|---|
 | B1 | `menu-actions` 严格只读 config；`createMenuActions` 延迟到 TTY 判定后；空目录/非 TTY/`atom config gateway` 不写盘；workspace 规范化 |
 | B2 | Export/Import 使用 secret 遮罩；非空密码 ≥8 位 + 二次确认；空密码明文警告；导入仅加密归档问密码；复用 `validateBackupPassword`/`inspectBackupArchive` |
-| B3 | History 删除确认；`SessionSummary.attached`；active/attached 删除保护；Session API admin 鉴权 |
+| B3 | History 删除确认；确认层打开时底层 MenuScreen 键盘完全挂起；`SessionSummary.attached`；active/attached 删除保护；Session API admin 鉴权 |
 | M1 | theme/gatewayPort 提升为 MenuApp state，Wizard/端口/workspace 后 `refreshSettings()` |
-| M2 | `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 要求 admin |
+| M2 | `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 要求 admin；E2E 请求带 admin token |
 | M3 | `runMenuLoop` 失败重开菜单；`menu-launch.test.ts` 覆盖 chat/core/attach 映射与重试 |
 | M4 | 列表 10 项滚动窗口；长 workspace 路径省略 |
-| M5 | 恢复 PTY：config 取消/保存、Backup import、Gateway 窄窗口/取消、Core 失败重试、非 TTY/`--config` 拒绝；补 workspace gate/空目录/409/密码测试 |
+| M5 | 恢复 PTY：config 取消/保存、Backup import、Gateway 窄窗口/取消、Core/Attach 404 失败重试、非 TTY/`--config` 拒绝；补 workspace gate/空目录/409/密码测试 |
+| 复审 B1 | History 确认层键盘隔离：DELETE→Enter 只删除、DELETE→Esc 只取消，不触发 onOpen/onBack |
+| 复审 M2 | attached 改为 WS open/close 引用计数；attach 失败不标记；面板文档、Core 与 shared DTO 同步 |
+| 复审 M3 | `setGatewayPort` 只校验端口并在原 config 合并，保留未知顶层/嵌套字段，写盘 0600 |
+| 复审 m5 | `lastTuiUsedAt` 不再回退 `updatedAt`；`SessionSummary` 移至 shared 复用 |
+| 复审 m7 | Wizard 内 Gateway 第二入口明确允许，复用同一 `GatewayModal`，测试与文档写明 |
+| 复审 m8 | `app.tsx`、`bootstrap/README.md` 与新文件清单补齐，checkbox 与已实施状态一致 |
 
 验证记录（2026-11-19）：
 
-- `bun test src/packages/config-tui/src` → 146 pass
-- `bun test src/packages/core/src/session src/packages/core/src/http-router.test.ts src/packages/core/src/server-continuation.test.ts src/packages/core/src/server-dual-instance.test.ts` → 134 pass
-- `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/menu-launch.test.ts src/bootstrap/backup.test.ts src/bootstrap/gateway-actions.test.ts src/bootstrap/gateway-command.test.ts` → 82 pass
+- `bun test src/packages/config-tui/src` → 147 pass
+- `bun test src/packages/core/src/session src/packages/core/src/http-router.test.ts src/packages/core/src/ws tests/e2e/core.test.ts` → 162 pass
+- `bun test src/bootstrap/cli.test.ts src/bootstrap/menu-actions.test.ts src/bootstrap/menu-launch.test.ts src/bootstrap/backup.test.ts` → 69 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 24 pass（含 Workspace/config 保存、Backup 导出/导入、History/Core stop、端口/provider/Attach 404 失败重试、窄窗口、非 TTY/`--config`）
+- 全量 `bun test` → 2747 pass、25 skip、1 fail；唯一失败为既有 `checkCodeSize`：`src/packages/gateway/src/client-manager/process-supervisor.ts` 288 > 280，本轮未修改该文件。
 - `bun run typecheck`、`bun run typecheck:node`、`bun run docs:check`、`git diff --check` 通过
 
 真实 Telegram 平台与官方发布仍按 G6 状态保持 PENDING。

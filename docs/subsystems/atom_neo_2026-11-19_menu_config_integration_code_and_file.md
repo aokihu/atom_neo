@@ -43,8 +43,8 @@
 | M2 | `src/packages/core/src/http-router.ts` | Session API admin 鉴权、attachSession、受控 shutdown |
 | M2 | `src/packages/core/src/server.ts` | 提供 shutdown 回调/管理入口 |
 | M3 | `src/packages/config-tui/src/components/GatewayModal.tsx` | 支持从菜单路由打开；保留现有操作 |
-| M3 | `src/packages/config-tui/src/components/WizardApp.tsx` | 作为 Advanced configuration 的子路由复用 |
-| M3 | `src/packages/config-tui/src/app.tsx` | 支持初始路由/回调 |
+| M3 | `src/packages/config-tui/src/components/WizardApp.tsx` | 作为 Advanced configuration 的子路由复用；Wizard 内 Gateway 明确复用同一 Modal |
+| M3 | `src/packages/config-tui/src/app.tsx` | 独立 first-run/config wizard renderer；非 MenuApp 的首次配置入口 |
 | M4 | `src/bootstrap/backup.ts` | 复用现有导出/导入函数，不改格式 |
 | M5 | docs | startup-menu、first-run-wizard、configuration、index、README |
 
@@ -282,7 +282,7 @@ listSessions(): SessionSummary[] {
 }
 ```
 
-`SessionStore.listSessions()` 合并持久化与内存 session，并标记 `active`（任务 lease）与 `attached`（TUI/消费者 attach）。`listTuiSessions()` 复用 `listSessions()` 过滤，不再重复扫描目录。
+`SessionStore.listSessions()` 合并持久化与内存 session，并标记 `active`（任务 lease）与 `attached`（WS open 引用计数）。`listTuiSessions()` 复用 `listSessions()` 过滤，不再重复扫描目录。`SessionSummary` 定义在 `@atom-neo/shared`，Core 与 MenuApp 共用同一 DTO；`lastTuiUsedAt` 缺失时使用 0，不回退 `updatedAt`。
 
 ### 4.2 `http-router.ts`
 
@@ -294,7 +294,7 @@ if (url.pathname === `${API_PREFIX}sessions` && method === "GET") {
 }
 ```
 
-`GET /api/sessions/:id` 与 `DELETE /api/sessions/:id` 同样要求 admin token。删除时 `active || attached` 返回 409 `Session is active or attached`；显式 History open 使用 `sessionStore.attachSession()`。
+`GET /api/sessions/:id` 与 `DELETE /api/sessions/:id` 同样要求 admin token。删除时 `active || attached` 返回 409 `Session is active or attached`；显式 History open 使用 `sessionStore.attachSession()` 准备 session，真正的 attached 引用由 WS handler 的 `open`/`close` 通过 `retain`/`detach` 成对管理。HTTP attach 持久化失败返回 500 且不标记 attached。
 
 ### 4.3 Core stop
 
@@ -340,6 +340,7 @@ Gateway ›   ← 真实入口
 
 - `Providers & Models` / `Theme` 路由到 `{ name: "wizard", view, back: "advanced" }`，保存/取消后返回 Advanced。
 - `Gateway` 路由直接渲染 `GatewayModal`，不再经过 WorkspaceGate。
+- Wizard 菜单内的 Gateway 项允许打开同一个 `GatewayModal`，返回 Wizard 菜单；测试 `menu-app.test.tsx` 覆盖，文档明确它不替代高级入口。
 - `GatewayModal` 使用 `workspace` 作为 sandbox，`gatewayActions` 由 bootstrap 注入；端口保存后 MenuApp 立即更新 `gatewayPort` state。
 
 ### 5.3 复用 WizardApp
@@ -388,6 +389,7 @@ Gateway ›   ← 真实入口
 )}
 ```
 
+- 端口编辑只校验 1–65535，在原始 config 上合并 `gateway.port`，保留未知顶层/嵌套字段；写盘固定 0600。
 - Export：输出路径 → 遮罩密码（非空至少 8 位 + 二次确认）→ 空密码明文警告 → 写归档。
 - Import：归档路径 → `inspectBackupArchive`（仅加密归档询问遮罩密码）→ merge/replace → 覆盖确认。
 - 复用 `src/bootstrap/backup.ts` 的 `validateBackupPassword` / `inspectBackupArchive` / plan/execute 逻辑，不复制规则。

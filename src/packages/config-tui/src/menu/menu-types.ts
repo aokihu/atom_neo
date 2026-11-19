@@ -1,15 +1,9 @@
+import type { SessionSummary } from "@atom-neo/shared";
 import type { GatewayInstanceActions } from "../gateway-status";
 
-export type MenuInitialRoute = "home" | "configure" | "gateway";
+export type { SessionSummary } from "@atom-neo/shared";
 
-export type SessionSummary = {
-  sessionId: string;
-  lastTuiUsedAt: number;
-  initiator: { type: string };
-  status: string;
-  active: boolean;
-  attached: boolean;
-};
+export type MenuInitialRoute = "home" | "configure" | "gateway";
 
 export type MenuLaunch =
   | { kind: "chat"; sandbox: string; continueSession: boolean }

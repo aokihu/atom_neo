@@ -22,6 +22,7 @@ export {
 } from "./types";
 export type {
   SessionInitiator,
+  SessionSummary,
   UUID,
   ISOTimeString,
   TaskItem,

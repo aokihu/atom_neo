@@ -5,7 +5,8 @@
 - `gateway-upgrade.ts`：指定实例 package ref 更新与在线 apply；apply 失败恢复旧配置。
 - `gateway-actions.ts`：`createGatewayActions` 把 config-tui 的 install/load/pack 请求转成 `GatewayCommand`，并通过 `describe(id)` 读取目录/registry manifest 供 config-only 编辑。
 - `buildAppCommand` 统一源码/编译入口的命令前缀，由首次配置子进程与菜单执行命令显示复用；Bun 源码使用 `bun run`，编译二进制与 Node 直接执行入口。
-- `menu-actions.ts`：OpenTUI MenuApp 的 bootstrap 适配器（workspace、Core/Gateway 状态、Session API、Backup、Gateway actions）。
+- `menu-actions.ts`：OpenTUI MenuApp 的 bootstrap 适配器（只读配置、workspace 规范化、Core/Gateway 状态、Session API、Backup、Gateway actions）。
+- `menu-launch.ts`：`MenuLaunch` → `runApp` 参数映射，以及失败 launch 重开 MenuApp 的重试循环。
 - `runtime-file.ts`：本机 Core/Gateway 实例发现文件、管理 token 和实例归属清理。
 - `config.ts` / `env.ts`：用户配置、运行时 overlay 与环境变量；`readSandboxEnv` 提供不修改 `process.env` 的 sandbox `.env` 读取。Gateway 旧 `binary` 客户端配置会在加载时明确拒绝并提示改用 `package` / `directory`。
 - `backup-format.ts` / `backup.ts`：`export` / `import` 子命令；`.atombak` 归档编解码、gzip、可选 scrypt + AES-256-GCM、`.env` merge 与原子写入。

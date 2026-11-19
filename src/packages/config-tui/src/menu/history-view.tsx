@@ -90,6 +90,7 @@ export function HistoryView({ workspace, gateway, core, actions, externalError, 
         hint="↑/↓ move · Enter open · Del delete · Esc back"
         error={externalError || error}
         notice={notice}
+        suspended={Boolean(pendingDelete)}
       >
         {loading ? <text>Loading sessions…</text> : null}
         {!loading && sessions.length === 0 && !error ? <text>No sessions.</text> : null}

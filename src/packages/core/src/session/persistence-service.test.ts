@@ -246,7 +246,7 @@ describe("SessionPersistenceService", () => {
     expect(existsSync(missingDir)).toBe(false);
   });
 
-  test("falls back to updatedAt and unknown initiator when persisted fields are absent", () => {
+  test("does not fall back to updatedAt for lastTuiUsedAt", () => {
     const { persistence } = createPersistence();
     const session = new SessionContext("legacy", 100, { type: "tui" });
     persistence.checkpoint(session, "shutdown");
@@ -260,7 +260,7 @@ describe("SessionPersistenceService", () => {
 
     expect(persistence.listSessions()).toEqual([{
       sessionId: "legacy",
-      lastTuiUsedAt: 777,
+      lastTuiUsedAt: 0,
       initiator: { type: "unknown" },
       status: "suspended",
       active: false,
@@ -299,15 +299,25 @@ describe("SessionPersistenceService", () => {
     });
   });
 
-  test("attached sessions stay visible and protected from deletion", () => {
+  test("attached sessions stay visible until the last reference is released", () => {
     const { persistence } = createPersistence();
     const store = new SessionStore(10, undefined, 0, persistence);
     const session = store.attachSession("persisted");
     expect(session).toBeNull();
     store.get("attached", { type: "tui" });
     expect(store.attachSession("attached")?.sessionId).toBe("attached");
+    expect(store.isAttached("attached")).toBe(false);
+
+    store.retain("attached");
+    store.retain("attached");
     expect(store.isAttached("attached")).toBe(true);
     expect(store.listSessions()[0]?.attached).toBe(true);
     expect(store.delete("attached")).toBe(false);
+
+    store.detach("attached");
+    expect(store.isAttached("attached")).toBe(true);
+    store.detach("attached");
+    expect(store.isAttached("attached")).toBe(false);
+    expect(store.delete("attached")).toBe(true);
   });
 });

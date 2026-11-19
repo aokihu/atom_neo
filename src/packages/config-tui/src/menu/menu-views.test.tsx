@@ -70,16 +70,18 @@ async function mount(element: ReactNode, options: { width?: number; height?: num
   return { press, frame: setup.captureCharFrame };
 }
 
-test("history lists sessions and deletes through MenuActions", async () => {
+test("history lists sessions and deletes through MenuActions without opening or going back", async () => {
   const deleted: string[] = [];
+  let opened = 0;
+  let backs = 0;
   const view = await mount(
     <HistoryView
       workspace="/tmp/atom"
       gateway="offline"
       core="online"
       actions={actions({ deleteSession: async (id) => { deleted.push(id); } })}
-      onBack={() => {}}
-      onOpen={() => {}}
+      onBack={() => { backs++; }}
+      onOpen={() => { opened++; }}
       onRefreshStatus={() => {}}
     />,
   );
@@ -89,24 +91,30 @@ test("history lists sessions and deletes through MenuActions", async () => {
   expect(view.frame()).toContain("Delete session");
   await view.press("RETURN");
   expect(deleted).toEqual([sessions[0]!.sessionId]);
+  expect(opened).toBe(0);
+  expect(backs).toBe(0);
 });
 
-test("history delete confirmation can be cancelled", async () => {
+test("history delete confirmation cancels without deleting or going back", async () => {
   const deleted: string[] = [];
+  let opened = 0;
+  let backs = 0;
   const view = await mount(
     <HistoryView
       workspace="/tmp/atom"
       gateway="offline"
       core="online"
       actions={actions({ deleteSession: async (id) => { deleted.push(id); } })}
-      onBack={() => {}}
-      onOpen={() => {}}
+      onBack={() => { backs++; }}
+      onOpen={() => { opened++; }}
       onRefreshStatus={() => {}}
     />,
   );
   await view.press("DELETE");
   await view.press("ESCAPE");
   expect(deleted).toEqual([]);
+  expect(opened).toBe(0);
+  expect(backs).toBe(0);
   expect(view.frame()).not.toContain("Delete session");
 });
 

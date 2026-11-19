@@ -110,6 +110,7 @@ graph TB
         CoreView["menu/core-server-view.tsx"]
         BackupView["menu/backup-view.tsx"]
         Wizard["components/WizardApp.tsx"]
+        StandaloneWizard["app.tsx"]
         GatewayModal["components/GatewayModal.tsx"]
         InstanceForm["components/GatewayInstanceForm.tsx"]
         Status["gateway-status.ts"]
@@ -145,10 +146,12 @@ graph TB
     MenuApp --> CoreView
     MenuApp --> BackupView
     MenuApp --> Wizard
+    StandaloneWizard --> Wizard
     MenuApp --> GatewayModal
     MenuApp --> TuiKit
     GatewayModal --> InstanceForm
     GatewayModal --> Status
+    Wizard --> GatewayModal: 明确允许的第二入口
     MenuLaunch --> MenuTypes
     MenuActions --> MenuTypes
     MenuActions --> GatewayActions
@@ -271,6 +274,28 @@ sequenceDiagram
     Core->>Core: reject active || attached
     Core-->>Actions: 200 / 409 Session is active or attached
 ```
+
+WS attach 生命周期：
+
+```mermaid
+sequenceDiagram
+    participant TUI
+    participant HTTP as Core HTTP
+    participant Store as SessionStore
+    participant WS as WS handler
+
+    TUI->>HTTP: POST /api/tui/attach
+    HTTP->>Store: attachSession/attachTui (persist, no retain)
+    HTTP-->>TUI: sessionId
+    TUI->>WS: open(sessionId)
+    WS->>Store: retain(sessionId)
+    Note over Store: attached count > 0
+    TUI->>WS: close
+    WS->>Store: detach(sessionId)
+    Note over Store: count == 0 → sweep/evict/delete allowed
+```
+
+HTTP attach 失败（404/持久化 500）不会打开 WS，因此不会留下 attached。多个 WS 连接使用引用计数，最后一个 close 才释放保护。
 
 ---
 

@@ -73,6 +73,7 @@ atom config gateway [--sandbox <path>]
 - **快捷入口**：Home → Gateway → WorkspaceGate。Continue 才进入 `GatewayModal`；C 或 Change workspace 进入 Workspace path，保存后返回确认页；Esc 返回 Home。
 - **真实入口**：Configure → Advanced → Gateway，直接使用当前已确认 workspace，不再经过 WorkspaceGate。
 - Advanced 打开的 Wizard 保存/取消后返回 Advanced，不重置到 Configure。
+- Wizard 内的 Gateway 项明确允许，复用同一个 `GatewayModal`，保存/返回后回到 Wizard 菜单；它不是绕过 WorkspaceGate 的顶级快捷入口，主真实入口仍是 Advanced → Gateway。
 - `GatewayModal` / `GatewayInstanceForm` 与 `atom gateway` CLI actions 复用，不复制表单。
 - 安装/加载/保存不自动 start；Register/Start 需显式操作。
 
@@ -82,7 +83,8 @@ atom config gateway [--sandbox <path>]
 - 启动失败（端口占用、缺 provider、Attach 404 等）打印错误并重新打开 MenuApp，可继续重试；不直接退出进程。
 - History：`GET /api/sessions` 读取 sessionId、时间、状态、`active`、`attached`；打开指定 session 复用 TUI attach；删除走 `DELETE /api/sessions/:id`。
 - `GET /api/sessions`、`GET/DELETE /api/sessions/:id` 需要 admin token（菜单使用 Core runtime token）。
-- `active` 表示持有任务 lease；`attached` 表示已被 TUI/消费者 attach。两者都返回 409，避免跨菜单删除正在使用或可恢复的 session。
+- `active` 表示持有任务 lease；`attached` 由 WS open/TUI 连接持有引用，WS close/TUI 退出释放。HTTP attach 只准备 session，不永久标记；attach 持久化失败不留下 attached。
+- 只有 attached 引用计数归零后，sweep/evict/delete 才恢复；`active || attached` 都返回 409，避免跨菜单删除正在使用或可恢复的 session。
 - 第一版 History 使用 sessionId 短形式，不新增 title 数据库迁移。
 - Core Server：
   - Start Server：使用当前 boot 端口（默认 3100）显式启动 Core 前台入口；

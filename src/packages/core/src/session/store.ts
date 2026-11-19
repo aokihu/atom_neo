@@ -11,7 +11,7 @@ export class SessionStore {
   #lastAccess = new Map<string, number>();
   #leases = new Map<string, number>();
   #taskLeases = new Map<string, string>();
-  #attached = new Set<string>();
+  #attached = new Map<string, number>();
   #idleTtlMs: number;
   #log: LogFn | null;
   #onCreated?: (sessionId: string) => void;
@@ -89,26 +89,36 @@ export class SessionStore {
     }
     const latest = [...candidates.values()].sort((a, b) => b.lastTuiUsedAt - a.lastTuiUsedAt || a.sessionId.localeCompare(b.sessionId))[0];
     const session = latest ? this.get(latest.sessionId) : this.get(`tui-${crypto.randomUUID()}`, { type: "tui" });
-    this.attach(session);
+    this.prepareTuiSession(session);
     return session;
   }
 
-  /** Attach an existing session (History open); attached sessions are protected from deletion. */
+  /** Load an existing session for History open; the WS open callback owns the attach reference. */
   attachSession(sessionId: string): SessionContext | null {
     const session = this.load(sessionId);
     if (!session) return null;
-    this.attach(session);
+    this.prepareTuiSession(session);
     return session;
   }
 
-  isAttached(sessionId: string): boolean {
-    return this.#attached.has(sessionId);
+  /** Reference-count attached consumers (WS peers); zero releases sweep/evict/delete protection. */
+  retain(sessionId: string): void {
+    this.#attached.set(sessionId, (this.#attached.get(sessionId) ?? 0) + 1);
   }
 
-  private attach(session: SessionContext): void {
+  detach(sessionId: string): void {
+    const count = (this.#attached.get(sessionId) ?? 0) - 1;
+    if (count > 0) this.#attached.set(sessionId, count);
+    else this.#attached.delete(sessionId);
+  }
+
+  isAttached(sessionId: string): boolean {
+    return (this.#attached.get(sessionId) ?? 0) > 0;
+  }
+
+  private prepareTuiSession(session: SessionContext): void {
     session.lastTuiUsedAt = Date.now();
     if (!this.save(session.sessionId, "restore")) throw new Error("Failed to persist TUI session");
-    this.#attached.add(session.sessionId);
   }
 
   has(sessionId: string): boolean {

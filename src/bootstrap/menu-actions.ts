@@ -1,7 +1,7 @@
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { MenuActions, SessionSummary } from "@atom-neo/config-tui";
-import { ConfigSchema, writeFileAtomic } from "@atom-neo/shared";
+import { writeFileAtomic } from "@atom-neo/shared";
 import { applyImport, exportBackup as runExport, inspectBackupArchive, planImport, validateBackupPassword } from "./backup";
 import { createGatewayActions } from "./gateway-actions";
 import { readRuntimeFile } from "./runtime-file";
@@ -145,12 +145,16 @@ export function createMenuActions(sandbox: string, corePort = 3100): MenuActions
     },
     inspectBackup: async (archive) => ({ encrypted: inspectBackupArchive(archive).encrypted }),
     setGatewayPort: (port) => {
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error("Port must be an integer between 1 and 65535");
+      }
       const path = join(workspace, "config.json");
-      const config = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown> : {};
-      const gateway = config.gateway && typeof config.gateway === "object" ? config.gateway as Record<string, unknown> : {};
-      config.gateway = { ...gateway, port };
-      const parsed = ConfigSchema.parse(config);
-      writeFileAtomic(path, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
+      const raw = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as unknown : {};
+      const config = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+      const gateway = config.gateway !== null && typeof config.gateway === "object" && !Array.isArray(config.gateway)
+        ? config.gateway as Record<string, unknown>
+        : {};
+      writeFileAtomic(path, `${JSON.stringify({ ...config, gateway: { ...gateway, port } }, null, 2)}\n`, { mode: 0o600 });
       actions.gatewayPort = port;
     },
   };
