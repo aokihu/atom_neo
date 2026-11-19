@@ -296,7 +296,7 @@ integration("cancelling config editor must not start Core", async () => {
   const path = sandbox("config-abort");
   const configPath = join(path, "config.json");
   const before = await Bun.file(configPath).text();
-  const result = await run(["python3", join(import.meta.dir, "fixtures/terminal-runner.py"), "abort", binary, "--config", "--sandbox", path]);
+  const result = await run(["python3", join(import.meta.dir, "fixtures/terminal-runner.py"), "abort", binary, "config", "--sandbox", path]);
   const terminal = JSON.parse(result.stdout);
   expect(terminal.timedOut, terminal.tail).toBe(false);
   expect(terminal.code).toBe(0);
@@ -384,309 +384,92 @@ async function driveMenu(steps: MenuStep[], command: string[], home: string, ext
   return terminal;
 }
 
-integration("menu cancellation and bracketed paste do not execute or write history", async () => {
-  for (const source of [true, false]) {
-    const home = join(temp, `menu-cancel-home-${source}`);
-    const history = join(home, ".config/atom/menu_history.json");
-    const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
-    const nonTerminal = await run([...command, "menu"], temp, { HOME: home });
-    expect(nonTerminal.code).toBe(1);
-    expect(nonTerminal.stderr).toContain("interactive terminal");
-    const cancelled = await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
-      { wait: "远程地址", send: "\x15\x1b[200~remote\raddress\x1b[201~" },
-      { wait: "> remote address", send: "\x03", absent: history },
-    ], [...command, "menu"], home);
-    expect(cancelled.commands).toEqual([]);
-    expect(existsSync(history)).toBe(false);
-    expect(existsSync(join(home, ".atom"))).toBe(false);
-  }
-}, 40000);
-
-integration("menu arrow navigation and back restore the selected branch without running it", async () => {
-  for (const source of [true, false]) {
-    const home = join(temp, `menu-navigation-home-${source}`);
-    const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
-    const result = await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
-      { wait: "menu / gateway", send: "\x1b[B\x1b[B\x1b[B\x1b[C" },
-      { wait: "[1/2] 工作目录", send: "\x1b" },
-      { wait: "❯ stop clients >", send: "\x1b[D" },
-      { wait: "❯ gateway >", send: "\x1b[B\x1b[C" },
-      { wait: "[1/2] 远程地址", send: "\x15example.com\r" },
-      { wait: "[2/2] 端口", send: "\x1b" },
-      { wait: "> example.com", send: "\x1b" },
-      { wait: "❯ attach >", send: "\x1b[F\r" },
-    ], [...command, "menu"], home);
-    expect(result.commands).toEqual([]);
-    expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
-  }
-}, 40000);
-
-integration("menu backup exports and imports unencrypted archives without password prompts", async () => {
-  for (const source of [true, false]) {
-    const path = sandbox(source ? "menu-backup-source" : "menu-backup-binary-source");
-    writeFileSync(join(path, ".env"), "ATOM_TEST_KEY=backup-test\nLOCAL_ONLY=keep\n");
-    const archive = join(temp, source ? "menu-backup-source.atombak" : "menu-backup-binary.atombak");
-    const target = join(temp, source ? "menu-backup-source-target" : "menu-backup-binary-target");
-    const home = join(temp, source ? "menu-backup-source-home" : "menu-backup-binary-home");
-    const command = source ? [process.execPath, "run", join(root, "src/main.ts")] : [binary];
-    const exported = await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r" },
-      { wait: "export >", send: "\r" },
-      { wait: "工作目录", send: "\r" },
-      { wait: "归档路径", send: `\x15${archive}\r` },
-      { wait: "加密归档", send: "\x1b[B\r" },
-    ], [...command, "menu", "--sandbox", path], home);
-    expect(exported.commands).toHaveLength(1);
-    expect(exported.commands[0]).toContain(`export --output ${archive}`);
-    expect(exported.tail).not.toContain("Password:");
-    const imported = await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r" },
-      { wait: "import >", send: "\x1b[B\r" },
-      { wait: "归档文件", send: `\x15${archive}\r` },
-      { wait: "工作目录", send: `\x15${target}\r` },
-      { wait: "Continue? [y/N]", send: "y\r" },
-    ], [...command, "menu", "--sandbox", path], home);
-    expect(imported.commands).toHaveLength(1);
-    expect(imported.commands[0]).toContain(`import ${archive}`);
-    expect(imported.tail).not.toContain("Password:");
-    expect(readFileSync(join(target, ".env"), "utf8")).toContain("LOCAL_ONLY=keep");
-    expect(JSON.parse(readFileSync(join(home, ".config/atom/menu_history.json"), "utf8")).commands).toEqual({
-      export: { sandbox: path, output: archive, encrypt: false },
-      import: { archive, sandbox: target },
-    });
-  }
-}, 40000);
-
-integration("menu attach supports back, failed connection retry, handoff, and remembered defaults", async () => {
-  const path = sandbox("menu-attach-core");
-  writeFileSync(join(path, ".env"), "ATOM_ADMIN_TOKEN=menu-local-test-token\n");
-  const core = await start(path, "core", false, "0", "0.0.0.0");
-  expect(core.token).toBe("menu-local-test-token");
-  const rejected = Bun.serve({ hostname: "0.0.0.0", port: 0, fetch: () => Response.json({ error: "Forbidden" }, { status: 403 }) });
-  const home = join(temp, "menu-attach-home");
-  const history = join(home, ".config/atom/menu_history.json");
-  const port = new URL(core.url).port;
-  try {
-    const first = await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
-      { wait: "远程地址", send: "\x15127.0.0.1\r" },
-      { wait: "[2/2] 端口", send: "\x1599999\r" },
-      { wait: "Invalid port: 99999", send: "\x1b" },
-      { wait: "远程地址", send: "\r" },
-      { wait: "> 99999", send: `\x15${rejected.port}\r` },
-      { wait: "Cannot attach Core (403)", send: `\x15${port}\r`, absent: history },
-      { wait: "Type a message...", send: "\x1b[200~LOCAL_HISTORY_CHECK\x1b[201~\r", delay: 0.15 },
-      { wait: "LOCAL_VERIFIED", send: "\x03" },
-      { wait: "again", send: "\x03" },
-    ], [process.execPath, "run", join(root, "src/main.ts"), "menu"], home, { ATOM_ADMIN_TOKEN: core.token });
-    expect(first.commands).toHaveLength(2);
-    expect(first.commands[0]).toContain(`run ${join(root, "src/main.ts")} --mode tui`);
-    expect(first.commands[0]).toContain(`--core-port ${rejected.port}`);
-    expect(first.commands[1]).toContain(`--core-port ${port}`);
-    expect(first.commands.join("\n")).not.toContain(core.token);
-    expect(JSON.parse(readFileSync(history, "utf8"))).toEqual({ version: 1, commands: { attach: { coreServer: "127.0.0.1", corePort: Number(port) } } });
-    expect(readFileSync(history, "utf8")).not.toContain(core.token);
-    expect(readFileSync(join(temp, ".atom/tui_history"), "utf8")).toContain("LOCAL_HISTORY_CHECK");
-    expect(existsSync(join(path, ".atom/tui_history"))).toBe(false);
-    expect(existsSync(join(temp, ".atom/core-runtime.json"))).toBe(false);
-
-    const replay = await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[B\r" },
-      { wait: "> 127.0.0.1", send: "\r" },
-      { wait: `> ${port}`, send: "\r" },
-      { wait: "CONVERSATION", send: "\x03" },
-      { wait: "again", send: "\x03" },
-    ], [binary, "menu"], home, { ATOM_ADMIN_TOKEN: core.token });
-    expect(replay.commands).toHaveLength(1);
-    expect([binary, realpathSync(binary)].some(entry => replay.commands[0].startsWith(`${entry} --mode tui `))).toBe(true);
-    expect(replay.commands[0]).toContain(`--core-server 127.0.0.1 --core-port ${port} --sandbox ${realpathSync(temp)}`);
-    expect((await fetch(`${core.url}/api/health`)).ok).toBe(true);
-  } finally { rejected.stop(true); await finish(core.proc); }
-}, 40000);
-
-integration("menu dispatches Gateway actions once and exits after success", async () => {
-  const path = sandbox("menu-gateway", [{ id: "local", directory: clientRoot }]);
-  const core = await start(path, "core-gateway");
-  const home = join(temp, "menu-gateway-home");
-  try {
-    await driveMenu([
-      { wait: "atom menu", send: "\x1b[B\x1b[B\r" },
-      { wait: "menu / gateway", send: "\x1b[B\x1b[B\x1b[B\r" },
-      { wait: "工作目录", send: "\r" },
-      { wait: "Client ID", send: "all\r" },
-    ], [binary, "menu", "--sandbox", path], home);
-    expect(JSON.parse(readFileSync(join(home, ".config/atom/menu_history.json"), "utf8")).commands).toEqual({ "gateway-stop": { sandbox: path } });
-    expect((await fetch(`${core.url}/api/health`)).ok).toBe(true);
-  } finally { await finish(core.proc); }
-}, 20000);
-
-integration("gateway menu exposes install/load/manage/pack and cancels without executing", async () => {
-  const path = sandbox("menu-gateway-entries");
-  const home = join(temp, "menu-gateway-entries-home");
-  const history = join(home, ".config/atom/menu_history.json");
+integration("MenuApp Home, Gateway shortcut, workspace gate, and quit confirmation", async () => {
+  const path = sandbox("menuapp-home");
+  const home = join(temp, "menuapp-home-home");
   const result = await driveMenu([
-    { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
-    { wait: "pack >", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[C" },
-    { wait: "[1/3] 工作目录", send: "\r" },
-    { wait: "客户端目录", send: `\x15${clientRoot}\r` },
-    { wait: "实例 ID", send: "\x1b" },
-    { wait: "客户端目录", send: "\x1b" },
-    { wait: "[1/3] 工作目录", send: "\x1b" },
-    { wait: "❯ load directory >", send: "\x1b" },
-    { wait: "❯ gateway >", send: "\x1b" },
+    { wait: "Session", send: "\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Continue to Gateway", send: "\r", keyDelay: 0.08 },
+    { wait: "Install client package", send: "\x1b" },
+    { wait: "Continue to Gateway", send: "\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Workspace path", send: "\x1b" },
+    { wait: "Continue to Gateway", send: "\x1b" },
+    { wait: "Session", send: "\x1b" },
+    { wait: "Quit Atom Neo", send: "\r" },
   ], [binary, "menu", "--sandbox", path], home);
   expect(result.commands).toEqual([]);
-  expect(existsSync(history)).toBe(false);
   expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
 }, 30000);
 
-integration("menu configure clients opens GatewayModal directly", async () => {
-  const path = sandbox("menu-gateway-configure");
-  const home = join(temp, "menu-gateway-configure-home");
-  const result = await driveMenu([
-    { wait: "atom menu", send: "\x1b[B\x1b[B\x1b[C" },
-    { wait: "configure clients >", send: "\x1b[B\x1b[C" },
-    { wait: "工作目录", send: "\r" },
+integration("MenuApp Configure/Advanced/Gateway direct entries and narrow layout", async () => {
+  const path = sandbox("menuapp-configure");
+  const home = join(temp, "menuapp-configure-home");
+  const configured = await driveMenu([
+    { wait: "Workspace path", send: "\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Choose UI theme", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
     { wait: "Install client package", send: "\x03" },
-  ], [binary, "menu", "--sandbox", path], home);
-  expect(result.commands).toHaveLength(1);
-  expect(result.commands[0]).toContain("--config --gateway");
-  expect(result.tail).toContain("Install client package");
-  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
-}, 30000);
+  ], [binary, "config", "--sandbox", path], home);
+  expect(configured.commands).toEqual([]);
 
-integration("gateway config UI navigates, cancels, and renders offline in a narrow PTY", async () => {
-  const path = sandbox("g4-narrow");
-  const home = join(temp, "g4-narrow-home");
+  const direct = await driveMenu([
+    { wait: "Install client package", send: "\x03" },
+  ], [binary, "config", "gateway", "--sandbox", path], home);
+  expect(direct.commands).toEqual([]);
+
+  const narrow = await driveMenu([
+    { wait: "Install client package", send: "\x03" },
+  ], [binary, "config", "gateway", "--sandbox", path], join(temp, "menuapp-configure-narrow-home"), {
+    ATOM_PTY_COLS: "64", ATOM_PTY_ROWS: "26",
+  });
+  expect(narrow.tail).toContain("Install client package");
+}, 40000);
+
+integration("MenuApp Backup export writes an archive", async () => {
+  const path = sandbox("menuapp-backup");
+  const home = join(temp, "menuapp-backup-home");
+  const archive = join(temp, "menuapp-backup.atombak");
   const result = await driveMenu([
-    { wait: "CONFIGURATION", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
-    { wait: "Install client package", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
-    { wait: "Enter save · Esc cancel", send: "\x1b" },
-    { wait: "Install client package", send: "\x1b" },
-    { wait: "Providers (1)", send: "\x1b" },
-    { wait: "Cancel", send: "\t\r", keyDelay: 0.1 },
-  ], [binary, "--config", "--sandbox", path], home, { ATOM_PTY_COLS: "64", ATOM_PTY_ROWS: "26" });
-  expect(result.tail).toContain("OFFLINE");
-  expect(result.tail).toContain("Install client package");
-  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
-  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
+    { wait: "Session", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "Export", send: "\r" },
+    { wait: "Output path", send: `\x15${archive}\r` },
+    { wait: "Password", send: "\r" },
+    { wait: "Exported", send: "\x03" },
+  ], [binary, "menu", "--sandbox", path], home);
+  expect(result.commands).toEqual([]);
+  expect(existsSync(archive)).toBe(true);
 }, 30000);
 
-integration("gateway reload failure is visible and can be retried from the config UI", async () => {
-  const path = sandbox("g4-reload-retry");
-  const home = join(temp, "g4-reload-retry-home");
-  let reloads = 0;
-  const admin = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(req) {
-    if (req.method === "POST") {
-      const body = await req.json() as { action?: string; clientId?: string };
-      reloads += 1;
-      if (body.action !== "reload" || body.clientId !== "alpha") {
-        return Response.json({ error: "unexpected action" }, { status: 400 });
-      }
-      if (reloads === 1) {
-        return Response.json({ results: [{ id: "alpha", ok: false, error: "reload failed: invalid clientArgs" }] }, { status: 400 });
-      }
-      return Response.json({ results: [{ id: "alpha", ok: true }] });
-    }
-    return Response.json({ clients: [{
-      id: "alpha",
-      platform: "local",
-      source: { type: "directory", directory: clientRoot },
-      running: true,
-      desired: true,
-      state: "running",
-      port: 7001,
-      diagnostics: [{ at: "2026-11-15T00:00:00.000Z", stage: "process", level: "error", message: "last error" }],
-      config: {
-        mode: { label: "Mode", type: "string", enum: ["longpoll", "webhook"], default: "longpoll" },
-        "bot-token": { label: "Bot Token", type: "string", required: true, secret: true },
-      },
-      clientArgs: { mode: "longpoll" },
-      secretFields: ["bot-token"],
-      stdio: "inherit",
-    }] });
-  } });
-  writeFileSync(join(path, ".atom/gateway-runtime.json"), JSON.stringify({
-    url: admin.url.toString().replace(/\/+$/, ""), token: "g4-admin-token", instanceId: "g4-gateway",
-  }));
+integration("MenuApp History lists sessions and Core Server stops through the controlled API", async () => {
+  const path = sandbox("menuapp-history");
+  const home = join(temp, "menuapp-history-home");
+  const core = await start(path, "core");
+  const session = await attach(core);
   try {
     const result = await driveMenu([
-      { wait: "CONFIGURATION", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
-      { wait: "Install client package", send: "\r" },
-      { wait: "Check platform credentials", send: "\x1b[B\x1b[B\r", keyDelay: 0.1 },
-      { wait: "reload failed: invalid clientArgs", send: "\r" },
-      { wait: "reload alpha: ok", send: "\x1b" },
-      { wait: "Providers (1)", send: "\x1b" },
-      { wait: "QUIT WITHOUT SAVING?", send: "\t\r", keyDelay: 0.1 },
-    ], [binary, "--config", "--sandbox", path], home);
-    expect(reloads).toBe(2);
-    expect(result.tail).not.toContain("g4-admin-token");
-    expect(result.tail).not.toContain("bot-token");
+      { wait: "Session", send: "\r" },
+      { wait: "History", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
+      { wait: session.sessionId.slice(0, 12), send: "\x1b" },
+      { wait: "Core Server", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+      { wait: "Start Server", send: "\x1b[B\r", keyDelay: 0.08 },
+      { wait: "Core shutdown requested", send: "\x03" },
+    ], [binary, "menu", "--sandbox", path], home);
+    await waitFor(() => core.proc.exitCode !== null, "Core shutdown from MenuApp");
+    expect(result.commands).toEqual([]);
+    expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
   } finally {
-    admin.stop(true);
+    if (core.proc.exitCode === null) await finish(core.proc);
   }
 }, 30000);
 
-integration("gateway menu and admin commands fail cleanly without a terminal or runtime", async () => {
-  const path = sandbox("g4-noninteractive");
-  const home = join(temp, "g4-noninteractive-home");
+integration("MenuApp rejects non-interactive invocation and offline admin commands", async () => {
+  const path = sandbox("menuapp-noninteractive");
+  const home = join(temp, "menuapp-noninteractive-home");
   const menu = await run([binary, "menu", "--sandbox", path], temp, { HOME: home });
   expect(menu.code).toBe(1);
   expect(menu.stderr).toContain("interactive terminal");
-  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
-  const list = await run([binary, "gateway", "list", "--sandbox", path], temp);
-  expect(list.code).toBe(0);
-  expect(list.stdout).toContain("No configured clients.");
-  const json = await run([binary, "gateway", "list", "--json", "--sandbox", path], temp);
-  expect(JSON.parse(json.stdout)).toEqual({ clients: [], offline: true });
-  const start = await run([binary, "gateway", "start", "echo-bot", "--sandbox", path], temp);
-  expect(start.code).not.toBe(0);
-  expect(start.stderr).toContain("Gateway is not running");
-  expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
+  const list = await run([binary, "gateway", "list", "--json", "--sandbox", path], temp);
+  expect(JSON.parse(list.stdout)).toEqual({ clients: [], offline: true });
+  const startClient = await run([binary, "gateway", "start", "echo-bot", "--sandbox", path], temp);
+  expect(startClient.code).not.toBe(0);
+  expect(startClient.stderr).toContain("Gateway is not running");
 }, 15000);
-
-integration("menu configuration cancellation does not remember unsaved parameters", async () => {
-  const path = sandbox("menu-config-cancel");
-  const home = join(temp, "menu-config-cancel-home");
-  await driveMenu([
-    { wait: "atom menu", send: "\x1b[B\r" },
-    { wait: "工作目录", send: "\r" },
-    { wait: "CONFIGURATION", send: "\x04" },
-  ], [binary, "menu", "--sandbox", path], home);
-  expect(existsSync(join(home, ".config/atom/menu_history.json"))).toBe(false);
-  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
-}, 20000);
-
-integration("menu saves service parameters when Core becomes ready before it exits", async () => {
-  const path = sandbox("menu-core-ready");
-  const home = join(temp, "menu-core-ready-home");
-  const history = join(home, ".config/atom/menu_history.json");
-  const ready = await driveMenu([
-    { wait: "atom menu", send: "\r" },
-    { wait: "menu / start", send: "\x1b[B\r" },
-    { wait: "工作目录", send: "\r" },
-    { wait: "监听地址", send: "\r" },
-    { wait: "监听端口", send: "\x150\r" },
-    { wait: "", waitFile: history, send: "", signal: "SIGTERM" },
-  ], [binary, "menu", "--sandbox", path], home);
-  expect(ready.commands).toHaveLength(1);
-  expect([binary, realpathSync(binary)].some(entry => ready.commands[0].startsWith(`${entry} --mode core `))).toBe(true);
-  expect(ready.commands[0]).toContain(`--host 127.0.0.1 --port 0 --sandbox ${path}`);
-  expect(JSON.parse(readFileSync(history, "utf8")).commands).toEqual({ core: { sandbox: path, host: "127.0.0.1", port: 0 } });
-  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
-}, 20000);
-
-integration("menu remembers configuration parameters only after saving the editor", async () => {
-  const path = sandbox("menu-config-save");
-  const home = join(temp, "menu-config-save-home");
-  await driveMenu([
-    { wait: "atom menu", send: "\x1b[B\r" },
-    { wait: "工作目录", send: "\r" },
-    { wait: "CONFIGURATION", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.06 },
-    { wait: "SAVE & EXIT", send: "\r" },
-  ], [binary, "menu", "--sandbox", path], home);
-  expect(JSON.parse(readFileSync(join(home, ".config/atom/menu_history.json"), "utf8")).commands).toEqual({ config: { sandbox: path } });
-  expect(existsSync(join(path, ".atom/core-runtime.json"))).toBe(false);
-}, 20000);

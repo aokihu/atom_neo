@@ -158,7 +158,7 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
         const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
         if (denied) return denied;
         if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
-        queueMicrotask(() => deps.requestShutdown());
+        setTimeout(() => deps.requestShutdown(), 0);
         return Response.json({ ok: true });
       }
 

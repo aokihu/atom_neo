@@ -453,7 +453,7 @@ D1–D9 全部采用上表“推荐方案”，无附加条件：
 | G4-3 | 实例编辑表单与条件字段（复用 G2 表单） | 中 | `GatewayInstanceForm.tsx` 扩展 + 测试 | 编辑模式；webhook 高级字段按选择展示；secret 不回显 |
 | G4-4 | 运行状态共享读取 | 轻 | shared `runtime-file.ts` + bootstrap 复用 | 路径/JSON 解析只有一份；离线显示 OFFLINE |
 | G4-5 | 诊断与日志展示 | 中 | 状态/日志 UI + 测试 | 进程就绪、平台检查、消息往返三结果可区分；日志有界脱敏 |
-| G4-6 | 菜单入口与参数记忆 | 轻 | `menu-flow.ts`/`menu-history.ts` | 不记录 Token/Secret；执行交接正确 |
+| G4-6 | 菜单入口与参数记忆（历史） | 轻 | 原 `menu-flow`/`menu-history`；2026-11-19 已由 MenuApp 取代 | 不记录 Token/Secret；执行交接正确 |
 | G4-7 | PTY 验收 | 中 | PTY 测试 | 键盘导航、取消、错误重试、窄窗口、非交互失败 |
 
 **G4 完成标准**：

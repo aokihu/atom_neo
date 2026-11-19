@@ -1,0 +1,433 @@
+# Atom Neo — Menu 与 Config 整合：关系图
+
+> 项目：`atom_neo`
+> 日期：2026-11-19
+> 开发目标：`menu_config_integration`
+> 状态：**M1–M5 已实施**
+>
+> 计划见 [plan](./atom_neo_2026-11-19_menu_config_integration_plan.md)，文件与示例代码见 [code_and_file](./atom_neo_2026-11-19_menu_config_integration_code_and_file.md)。
+
+---
+
+## 1. 系统上下文
+
+```mermaid
+graph TB
+    User["用户"]
+    CLI["atom menu / config / gateway"]
+    Menu["MenuApp (OpenTUI)"]
+    Wizard["WizardApp (config)"]
+    GatewayModal["GatewayModal"]
+    Actions["bootstrap/menu-actions"]
+    Core["Core HTTP API"]
+    Gateway["Gateway admin API"]
+    Backup["bootstrap/backup"]
+
+    User --> CLI
+    CLI --> Menu
+    Menu --> Wizard
+    Menu --> GatewayModal
+    Menu --> Actions
+    Actions --> Core
+    Actions --> Gateway
+    Actions --> Backup
+    Menu -->|Gateway actions| GatewayModal
+```
+
+---
+
+## 2. CLI 路由
+
+```mermaid
+graph LR
+    A["atom menu"] --> H["Home"]
+    B["atom config"] --> C["Configure"]
+    C["atom config gateway"] --> G["Advanced > Gateway"]
+    D["atom gateway ..."] --> CLI["现有 Gateway CLI"]
+    E["atom --config"] --> X["Rejected: unknown option"]
+```
+
+---
+
+## 3. MenuApp 路由状态
+
+```mermaid
+stateDiagram-v2
+    [*] --> home
+    home --> session: Session
+    home --> gateway_shortcut: Gateway
+    home --> configure: Configure
+    home --> backup: Backup
+    home --> quit_confirm: Quit / Esc
+
+    session --> history: History
+    session --> core_server: Core Server
+    session --> home: Back
+
+    history --> session: Back
+    core_server --> session: Back
+
+    gateway_shortcut --> workspace_gate: open
+    workspace_gate --> gateway_real: Continue
+    workspace_gate --> configure: Change workspace
+    workspace_gate --> home: Back
+    gateway_real --> advanced: Back
+
+    configure --> workspace: Workspace path
+    configure --> advanced: Advanced configuration
+    configure --> home: Back
+    advanced --> wizard: Providers & Models / Theme
+    advanced --> gateway_real: Gateway
+    advanced --> configure: Back
+    wizard --> configure: Save / Cancel
+
+    backup --> export: Export
+    backup --> import: Import
+    export --> backup: Back
+    import --> backup: Back
+    backup --> home: Back
+
+    quit_confirm --> [*]: Quit
+    quit_confirm --> home: Cancel
+```
+
+---
+
+## 4. 模块依赖
+
+```mermaid
+graph TB
+    subgraph ConfigTUI["@atom-neo/config-tui"]
+        MenuApp["menu/menu-app.tsx"]
+        MenuRoutes["menu/menu-routes.ts"]
+        Home["menu/menu-home.tsx"]
+        WorkspaceGate["menu/workspace-gate.tsx"]
+        SessionView["menu/session-view.tsx"]
+        HistoryView["menu/history-view.tsx"]
+        CoreView["menu/core-server-view.tsx"]
+        ConfigureView["menu/configure-view.tsx"]
+        AdvancedView["menu/advanced-config-view.tsx"]
+        GatewayView["menu/gateway-view.tsx"]
+        BackupView["menu/backup-view.tsx"]
+        Wizard["components/WizardApp.tsx"]
+        GatewayModal["components/GatewayModal.tsx"]
+        InstanceForm["components/GatewayInstanceForm.tsx"]
+        Status["gateway-status.ts"]
+        TuiKit["@atom-neo/tui-kit"]
+    end
+
+    subgraph Bootstrap["src/bootstrap"]
+        MenuActions["menu-actions.ts"]
+        GatewayActions["gateway-actions.ts"]
+        Backup["backup.ts"]
+        Runtime["runtime-file.ts"]
+    end
+
+    subgraph Core["@atom-neo/core"]
+        Router["http-router.ts"]
+        Sessions["session/persistence-service.ts"]
+        Server["server.ts"]
+    end
+
+    MenuApp --> MenuRoutes
+    MenuApp --> Home
+    MenuApp --> WorkspaceGate
+    MenuApp --> SessionView
+    MenuApp --> HistoryView
+    MenuApp --> CoreView
+    MenuApp --> ConfigureView
+    MenuApp --> AdvancedView
+    MenuApp --> GatewayView
+    MenuApp --> BackupView
+    MenuApp --> TuiKit
+    AdvancedView --> Wizard
+    GatewayView --> GatewayModal
+    GatewayModal --> InstanceForm
+    GatewayModal --> Status
+    MenuApp --> MenuActions
+    MenuActions --> GatewayActions
+    MenuActions --> Backup
+    MenuActions --> Runtime
+    MenuActions --> Router
+    Router --> Sessions
+    Server --> Router
+```
+
+**边界**
+
+- `config-tui` 不导入 `bootstrap`；动作通过 `MenuActions` 注入。
+- `bootstrap` 可以导入 `config-tui`、`core` 和 `gateway`。
+- `GatewayModal` 不直接读写 config；配置写入通过 shared `client-instance` / `gateway-actions`。
+- `WizardApp` 作为独立路由复用，不复制 provider/model 表单。
+
+---
+
+## 5. `atom menu` 启动序列
+
+```mermaid
+sequenceDiagram
+    participant Main as src/main.ts
+    participant CLI as bootstrap/cli.ts
+    participant Menu as config-tui MenuApp
+    participant Actions as bootstrap/menu-actions
+    participant Gateway as Gateway API
+    participant Core as Core API
+
+    Main->>CLI: parseArguments(["menu"])
+    CLI-->>Main: menu=true, sandbox
+    Main->>Actions: createMenuActions(sandbox)
+    Main->>Menu: startMenuApp(sandbox, actions)
+    Menu->>Actions: load theme/workspace/Gateway port
+    Menu->>Gateway: optional status
+    Menu->>Core: optional session/core status
+    Menu-->>Main: exit/quit 或 MenuRequest
+```
+
+`MenuRequest` 保留现有 `runApp` 执行路径：New Chat / Core Server / Attach 关闭 MenuApp 后由 `main.ts` 启动现有应用。
+
+---
+
+## 6. 顶级 Gateway 快捷入口
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Menu as MenuApp
+    participant Gate as WorkspaceGate
+    participant Modal as GatewayModal
+    participant Actions as menu-actions
+    participant GW as Gateway admin
+
+    User->>Menu: Gateway
+    Menu->>Gate: current workspace
+    Gate-->>User: Continue / Change workspace / Back
+    User->>Gate: Continue
+    Gate->>Modal: open(sandbox=workspace)
+    Modal->>Actions: fetchGatewayInstances
+    Actions->>GW: GET /admin/clients
+    GW-->>Actions: instances
+    Actions-->>Modal: merged status
+```
+
+`Change workspace` 进入 `Configure → Workspace path`，保存后回到 `WorkspaceGate`。
+
+---
+
+## 7. 真实 Gateway 入口
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Menu as MenuApp
+    participant Configure
+    participant Advanced
+    participant Modal as GatewayModal
+
+    User->>Menu: Configure
+    Menu->>Configure: open
+    User->>Configure: Advanced configuration
+    Configure->>Advanced: open
+    User->>Advanced: Gateway
+    Advanced->>Modal: open(sandbox=workspace)
+    Note over Modal: 不再经过 WorkspaceGate
+```
+
+---
+
+## 8. Session / History
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Menu as MenuApp
+    participant Actions as menu-actions
+    participant Core as Core API
+    participant Chat as Chat TUI
+
+    User->>Menu: Session > New Chat
+    Menu->>Actions: runChat(false)
+    Actions-->>Menu: MenuRequest
+    Menu-->>User: exit
+    Actions->>Chat: start default TUI
+
+    User->>Menu: Session > History
+    Menu->>Actions: listSessions()
+    Actions->>Core: GET /api/sessions
+    Core-->>Actions: summaries
+    Actions-->>Menu: list
+    User->>Menu: Delete
+    Menu->>Actions: deleteSession(id)
+    Actions->>Core: DELETE /api/sessions/:id
+    Core-->>Actions: 200 / 409 active
+```
+
+---
+
+## 9. Core Server Stop
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Menu as MenuApp
+    participant Actions as menu-actions
+    participant Core as Core HTTP
+    participant Shutdown as Core shutdown
+
+    User->>Menu: Core Server > Stop Server
+    Menu->>Actions: stopCore()
+    Actions->>Core: POST /api/admin/shutdown
+    Core->>Core: validate admin token
+    Core->>Shutdown: schedule graceful shutdown
+    Core-->>Actions: 200 {ok:true}
+    Actions-->>Menu: stopped
+    Shutdown->>Shutdown: stop schedules/tasks/sessions
+```
+
+要求：
+
+- 先返回响应，再关闭。
+- 不直接 `kill`。
+- 失败显示错误，不退出 menu。
+
+---
+
+## 10. Backup
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Menu as MenuApp
+    participant View as BackupView
+    participant Actions as menu-actions
+    participant Backup as bootstrap/backup
+
+    User->>Menu: Backup > Export
+    Menu->>View: Export form
+    User->>View: output/password
+    View->>Actions: exportBackup(options)
+    Actions->>Backup: plan/execute
+    Backup-->>Actions: result
+    Actions-->>View: success / error
+```
+
+Import 需要覆盖确认；取消不写文件。
+
+---
+
+## 11. 数据模型
+
+```mermaid
+erDiagram
+    MENU_STATE ||--o{ ROUTE : has
+    MENU_STATE {
+        string workspace
+        string theme
+        number gatewayPort
+        string gatewayStatus
+        string coreStatus
+    }
+    ROUTE {
+        string name
+        string breadcrumb
+    }
+    SESSION_SUMMARY ||--o{ SESSION : summarizes
+    SESSION_SUMMARY {
+        string sessionId
+        number lastTuiUsedAt
+        string initiator
+        string status
+        boolean active
+    }
+    GATEWAY_INSTANCE ||--o{ SUPERVISOR : maps
+    GATEWAY_INSTANCE {
+        string id
+        string source
+        string state
+        boolean registered
+    }
+```
+
+---
+
+## 12. 文件改动热区
+
+```mermaid
+graph TB
+    subgraph M1["M1 MenuApp"]
+        F1["config-tui/src/menu/menu-app.tsx"]
+        F2["config-tui/src/menu/menu-routes.ts"]
+        F3["config-tui/src/menu/menu-home.tsx"]
+        F4["config-tui/src/menu/workspace-gate.tsx"]
+        F5["bootstrap/menu-actions.ts"]
+        F6["main.ts / cli.ts"]
+    end
+
+    subgraph M2["M2 Session"]
+        F7["config-tui/src/menu/session-view.tsx"]
+        F8["config-tui/src/menu/history-view.tsx"]
+        F9["config-tui/src/menu/core-server-view.tsx"]
+        F10["core/session/persistence-service.ts"]
+        F11["core/http-router.ts"]
+    end
+
+    subgraph M3["M3 Configure/Gateway"]
+        F12["config-tui/src/menu/configure-view.tsx"]
+        F13["config-tui/src/menu/advanced-config-view.tsx"]
+        F14["config-tui/src/menu/gateway-view.tsx"]
+        F15["config-tui/src/components/GatewayModal.tsx"]
+        F16["config-tui/src/components/WizardApp.tsx"]
+    end
+
+    subgraph M4["M4 Backup"]
+        F17["config-tui/src/menu/backup-view.tsx"]
+        F18["bootstrap/backup.ts"]
+    end
+
+    M1 --> M2 --> M3 --> M4
+```
+
+---
+
+## 13. 测试关系
+
+```mermaid
+graph LR
+    MenuTests["menu-app.test.tsx"] --> MenuApp
+    GateTests["workspace-gate.test.tsx"] --> WorkspaceGate
+    HistoryTests["history-view.test.tsx"] --> HistoryView
+    CoreTests["core-server-view.test.tsx"] --> CoreView
+    ConfigTests["configure-view.test.tsx"] --> ConfigureView
+    BackupTests["backup-view.test.tsx"] --> BackupView
+    CliTests["cli.test.ts"] --> CLI
+    ActionTests["menu-actions.test.ts"] --> MenuActions
+    SessionTests["persistence-service.test.ts"] --> Sessions
+    HttpTests["http-router.test.ts"] --> Router
+    PtyTests["startup.integration.test.ts"] --> MenuApp
+```
+
+所有 UI 测试使用 fake `MenuActions`；不访问真实 Core/Gateway/Telegram。
+
+---
+
+## 14. 架构不变量
+
+1. **单一 MenuApp**：menu 与 config 不再维护两套入口。
+2. **单一 workspace**：Session、Gateway、Configure、Backup 使用同一个当前 workspace。
+3. **真实入口唯一**：`Configure → Advanced → Gateway` 是真实 Gateway 配置入口。
+4. **快捷入口有闸门**：顶级 Gateway 必须经过 WorkspaceGate。
+5. **复用表单**：GatewayModal / GatewayInstanceForm / config wizard 不复制。
+6. **无隐式启动**：安装/加载/保存不自动 start；启动需显式操作。
+7. **状态来源唯一**：Gateway 进程状态来自 supervisor；平台检查来自 Client diagnostics。
+8. **取消不写盘**：Back / Esc / Quit 取消不写 config、.env、history。
+9. **CLI 一致**：`atom config` / `atom config gateway` 与 MenuApp 路由一致。
+10. **非 TTY 安全失败**：无法启动 OpenTUI 时明确报错，不静默降级。
+
+---
+
+## 15. 待确认
+
+- [ ] MenuApp 放在 `@atom-neo/config-tui`
+- [ ] `atom config` / `atom config gateway` 为唯一配置入口
+- [ ] 顶级 Gateway 强制 WorkspaceGate
+- [ ] 新增 `GET /api/sessions` 与受控 shutdown
+- [ ] WizardApp 作为路由级子页面复用

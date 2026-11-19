@@ -31,7 +31,7 @@ export ATOM_GATEWAY_SOURCE_INDEX=/tmp/atom-gateway-source-index.json
 
 ## 3. 配置与启动
 
-- [ ] `atom --config --sandbox "$ATOM_SANDBOX"` 创建/编辑实例；secret 输入过程不显示原文。
+- [ ] `atom config --sandbox "$ATOM_SANDBOX"` 或 MenuApp Configure/Advanced 创建/编辑实例；secret 输入过程不显示原文。
 - [ ] 确认 `.env` 只保存 credential 值，`config.json` 只保存引用；日志/菜单历史不出现 Token。
 - [ ] `atom gateway list --sandbox "$ATOM_SANDBOX"` 区分 configured/registered/running。
 - [ ] 启动 Gateway：`atom --mode core-gateway --sandbox "$ATOM_SANDBOX"`。

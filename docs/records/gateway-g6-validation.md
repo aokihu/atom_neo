@@ -11,7 +11,7 @@
 | shared 配置/工具 | `bun test src/packages/shared/src/config src/packages/shared/src/utils` | 114 pass / 0 fail（15 files） |
 | Bootstrap 定向 | `bun test src/bootstrap/cli.test.ts src/bootstrap/gateway-command.test.ts src/bootstrap/gateway-actions.test.ts src/bootstrap/gateway-upgrade.test.ts src/bootstrap/gateway-official.e2e.test.ts` | 65 pass / 0 fail（5 files，351 assertions） |
 | Config TUI + Telegram + release | `bun test src/packages/config-tui/src clients/telegram-bot/src scripts/gateway-release.test.ts` | 137 pass / 0 fail（12 files，451 assertions） |
-| 菜单回归 | `bun test src/bootstrap/menu-flow.test.ts src/bootstrap/menu-history.test.ts` | 53 pass / 0 fail（2 files，143 assertions） |
+| 菜单回归 | `bun test src/packages/config-tui/src/menu` | 14 pass / 0 fail（3 files） |
 | PTY 全量 | `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` | 25 pass / 0 fail（308 assertions） |
 | 工作区类型 | `bun run typecheck` | 通过（6 workspaces） |
 | Node 类型 | `bun run typecheck:node` | 通过 |

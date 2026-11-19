@@ -204,7 +204,7 @@ backup / import: archive → sandbox
 - 命令层密码检测：未加密归档不提示密码，加密归档缺少密码时报错
 - PTY 验收：源码与编译二进制经菜单完成未加密导出/导入，且不出现密码提示
 
-CLI 参数解析覆盖在 `src/bootstrap/cli.test.ts`；菜单向导覆盖在 `src/bootstrap/menu-flow.test.ts` 与 `src/bootstrap/menu-history.test.ts`，端到端菜单路径在 `src/bootstrap/startup.integration.test.ts`（需 `ATOM_RUN_STARTUP_VALIDATION=1`）。
+CLI 参数解析覆盖在 `src/bootstrap/cli.test.ts`；MenuApp Backup 覆盖在 `src/packages/config-tui/src/menu/backup-view.test.tsx` 与 `menu-app.test.tsx`，端到端菜单路径在 `src/bootstrap/startup.integration.test.ts`（需 `ATOM_RUN_STARTUP_VALIDATION=1`）。
 
 ---
 

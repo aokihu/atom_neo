@@ -22,7 +22,7 @@ type CoreHandle = {
 };
 
 /** Start the core HTTP + WebSocket server with AI pipeline processing. */
-export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): Promise<CoreHandle> {
+export async function startCore(deps: CoreDeps & { httpServer?: HttpServer; requestShutdown?: () => void }): Promise<CoreHandle> {
   const { port, host, logger } = deps;
   const services = resolveCoreServices({ services: deps.services });
   const httpServer = deps.httpServer ?? await createHttpServer();
@@ -83,9 +83,9 @@ export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): P
     getMcpServerInfos: core.getMcpServerInfos,
     budgetLimits: core.budgetLimits,
     isStopping,
-    requestShutdown: () => {
+    requestShutdown: deps.requestShutdown ?? (() => {
       void stop().catch(error => logger.error("shutdown request failed", { error: String(error) }));
-    },
+    }),
   });
 
   try {

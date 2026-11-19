@@ -9,7 +9,7 @@ import { HistoryView } from "./history-view";
 import { CoreServerView } from "./core-server-view";
 import { BackupExportView, BackupImportView, BackupView } from "./backup-view";
 import { WorkspaceGate } from "./workspace-gate";
-import { ROUTE_LABELS, routeFor } from "./menu-routes";
+import { routeFor } from "./menu-routes";
 import type { MenuRoute } from "./menu-routes";
 import type { MenuActions, MenuInitialRoute, MenuLaunch } from "./menu-types";
 
@@ -250,17 +250,7 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           }}
           onBack={back}
         />
-      ) : (
-        <MenuScreen
-          title={ROUTE_LABELS[route.name]}
-          {...statusProps}
-          items={[{ key: "back", label: "‹ Back" }]}
-          onSelect={back}
-          onBack={back}
-          hint="Esc back"
-          notice={notice}
-        />
-      )}
+      ) : null}
     </ThemeProvider>
   );
 }

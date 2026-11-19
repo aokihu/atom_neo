@@ -11,25 +11,7 @@ export type MenuRoute =
   | { name: "wizard"; view: "providers" | "theme" }
   | { name: "backup" }
   | { name: "backup-export" }
-  | { name: "backup-import" }
-  | { name: "prompt-delete-session"; sessionId: string };
-
-export const ROUTE_LABELS: Record<MenuRoute["name"], string> = {
-  home: "Home",
-  session: "Session",
-  history: "Session / History",
-  "core-server": "Session / Core Server",
-  "gateway-shortcut": "Gateway",
-  "gateway-real": "Gateway / Configuration",
-  configure: "Configure",
-  workspace: "Configure / Workspace",
-  advanced: "Configure / Advanced",
-  wizard: "Configure / Advanced / Wizard",
-  backup: "Backup",
-  "backup-export": "Backup / Export",
-  "backup-import": "Backup / Import",
-  "prompt-delete-session": "Session / History / Delete",
-};
+  | { name: "backup-import" };
 
 export function routeFor(initial: "home" | "configure" | "gateway", hasConfig: boolean, explicit: boolean): MenuRoute {
   if (initial === "configure") return { name: "configure" };

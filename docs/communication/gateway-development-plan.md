@@ -26,7 +26,7 @@
 | `src/packages/shared/src/utils/process.ts` | 已有运行时中立的进程适配；优先直接复用 |
 | `src/packages/shared/src/utils/child-process-env.ts` | 保留管理凭据过滤并增加实例凭据隔离 |
 | `src/bootstrap/cli.ts` / `src/main.ts` | 新 gateway 子命令提前分流，复用 sandbox 与实例发现 |
-| `src/bootstrap/menu-flow.ts` / `src/bootstrap/menu.ts` | 增量菜单入口、执行交接与非敏感参数记忆 |
+| `src/bootstrap/menu-actions.ts` / `src/packages/config-tui/src/menu/` | OpenTUI MenuApp 入口、执行交接与状态适配；旧 plain menu 已移除 |
 | `src/packages/config-tui/src/components/GatewayModal.tsx` / `src/packages/config-tui/src/wizard-logic.ts` | 接入列表、manifest 配置表单、保存与取消 |
 | `clients/telegram-bot/src/main.ts` / `clients/telegram-bot/package.json` | 首个 manifest、打包产物、诊断与拒收重试行为 |
 

@@ -182,7 +182,7 @@ function parseConfigArguments(args: readonly string[]): BootArguments | "help" {
   if (positionals.length > 1) throw new Error("config accepts only an optional 'gateway' target");
   const target = positionals[0];
   if (target !== undefined && target !== "gateway") throw new Error(`Unknown config target: ${target}`);
-  const sandboxPath = values.sandbox;
+  const sandboxPath = values.sandbox as string | undefined;
   if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
   return {
     menu: false,

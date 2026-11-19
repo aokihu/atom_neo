@@ -69,6 +69,7 @@ describe("config subcommand", () => {
       sandbox: "/tmp/sb",
     });
     expect(parseArguments(["config"])).toMatchObject({ configRoute: "configure" });
+    expect(parseArguments(["config", "--help"])).toBe("help");
   });
 
   test("rejects old --config/--gateway flags and invalid config targets", () => {

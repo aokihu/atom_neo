@@ -198,7 +198,7 @@ describe("admin shutdown", () => {
     const response = await pending;
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
-    await Promise.resolve();
+    await Bun.sleep(5);
     expect(calls).toBe(1);
   });
 

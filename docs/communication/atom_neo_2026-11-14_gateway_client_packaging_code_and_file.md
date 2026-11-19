@@ -66,7 +66,7 @@
 | G4 | `src/packages/config-tui/src/components/GatewayInstanceForm.tsx` | 编辑模式、configured secret、外部持久化错误 |
 | G4 | `src/packages/config-tui/src/app.tsx` / `components/WizardApp.tsx` / `wizard/WizardViews.tsx` | 注入 `GatewayInstanceActions` 与 sandbox |
 | G4 | `src/bootstrap/runtime-file.ts` | 复用 shared 的运行描述读取，保留发布/清理 |
-| G4 | `src/bootstrap/menu-flow.ts` / `menu-history.ts` | 菜单入口与参数记忆 |
+| G4 | `src/bootstrap/menu-actions.ts` + `src/packages/config-tui/src/menu/` | 当前 MenuApp 入口、Gateway 快捷入口与状态适配；旧 plain menu 已移除 |
 | G4 | `src/bootstrap/cli.ts` / `gateway-command.ts` / `main.ts` | `load --id`、UI actions 注入、命令分流 |
 | G4 | `src/packages/gateway/src/client-package/resolver.ts` | enum 校验、可选 default、secret 禁止进入 clientArgs |
 | G4 | `src/packages/gateway/src/client-manager/index.ts` | 状态增加 config/clientArgs/secretFields/stdio（不含值） |
@@ -771,9 +771,11 @@ if (args.gatewayCommand) {
 }
 ```
 
-### 6.4 `menu-flow.ts` / `menu-history.ts`（修改）
+### 6.4 `menu-flow.ts` / `menu-history.ts`（历史设计，M5 已移除）
 
-在 `gateway` 菜单下增量增加：
+> 2026-11-19 MenuApp 整合后，plain `menu-flow`/`menu-history` 已删除；当前入口见 `src/packages/config-tui/src/menu/` 和 `src/bootstrap/menu-actions.ts`。
+
+原计划在 `gateway` 菜单下增量增加：
 
 ```text
 gateway >
@@ -1129,7 +1131,7 @@ M1 当时只实施 G0 + G1；G2–G6 已在后续阶段完成。
 | G4-1/G4-2/G4-5 | `GatewayModal` 列表/操作/check/logs；`gateway-status.ts` 管理请求与保存；reload 错误 detail | `bun test src/packages/config-tui/src/components/GatewayModal.test.tsx` → 5 pass；`gateway-status.test.ts` → 8 pass |
 | G4-3 | `GatewayInstanceForm` 编辑模式、configured secret、外部错误；`SecretFieldInput` 真遮罩 | `bun test src/packages/config-tui/src/gateway-instance-form.test.ts` → 22 pass |
 | G4-4 | shared `runtime-file.ts`；bootstrap 复用；离线 `OFFLINE` | `bun test src/packages/shared/src/runtime-file.test.ts` → 3 pass |
-| G4-6 | 菜单 install/load/manage/pack；history 新字段；命令预览安全引用 | `bun test src/bootstrap/menu-flow.test.ts src/bootstrap/menu-history.test.ts` → 53 pass |
+| G4-6 | 菜单 install/load/manage/pack；history 新字段；命令预览安全引用（历史） | 旧 plain menu 测试 53 pass；2026-11-19 已由 MenuApp 取代 |
 | G4-7 | PTY：gateway 菜单导航/取消、窄窗口、reload 失败重试、非交互失败 | `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts -t "gateway"` → 4 pass |
 | 硬性 CLI | `atom gateway load --id`；resolver enum/default；secret 拒绝进入 clientArgs | `bun test src/bootstrap/cli.test.ts src/bootstrap/gateway-command.test.ts` → 50 pass；resolver+integration → 23 pass / 1 skip |
 

@@ -1,10 +1,10 @@
 # First-Run Wizard & Config TUI
 
-> **Purpose**: 首次运行向导与 `--config` 配置编辑器的完整行为规格（OpenTUI 窗口化界面）。
+> **Purpose**: 首次运行向导、MenuApp Advanced 配置与 `atom config` 编辑器的行为规格（OpenTUI 窗口化界面）。
 > **Package**: `@atom-neo/config-tui` (`src/packages/config-tui/`)
 > **启动方式**: 子进程（`spawnProcess` / `node:child_process`）或独立进程入口，与主进程隔离
 
-`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。`menu` 仅在 true 时保存参数历史，避免把未完成的配置算作成功。
+`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。MenuApp Advanced 的保存/取消由路由回调返回 Configure，不复制 wizard 状态。
 
 ---
 
@@ -17,7 +17,7 @@ src/main.ts (主进程)
   │
   ├── 1.5 Early exits
   │     ├─ --wizard → startWizard(sandbox, "first-run") → return
-  │     └─ --config → startWizard(sandbox, "config") → return
+  │     └─ config → MenuApp Configure / Advanced → WizardApp → return
   │
   ├── 5. isFirstRun(args.sandbox)
   │     ├─ .atom/installed 不存在 → spawnWizard() → 自孵化子进程 (--wizard)
@@ -46,8 +46,9 @@ src/packages/config-tui/
 ├── package.json            # @atom-neo/config-tui
 ├── tsconfig.json
 └── src/
-    ├── index.ts            # export { startWizard }
+    ├── index.ts            # export { startWizard, startMenuApp }
     ├── app.tsx             # startWizard：渲染器生命周期 + Ctrl+C/D(EOF) 退出语义
+    ├── menu/               # OpenTUI MenuApp（Home/Session/Gateway/Configure/Backup）
     ├── wizard-logic.ts     # 单一文件：types + pending 状态机 + commit + load + 解析器
     ├── wizard-logic.test.ts
     ├── modal/index.tsx     # 薄包装：tui-kit Modal + chrome="bordered"
@@ -152,7 +153,7 @@ ProjectModal 在 config 模式跳过（不重写 AGENTS.md）。
 
 ### Gateway 管理视图
 
-`atom --config --gateway [--sandbox <path>]` 可直接打开本视图，不先进入配置主菜单；`atom menu` 的 `gateway > configure clients` 复用同一入口。`atom --config` 不带 `--gateway` 时仍从配置主菜单开始。
+`atom config gateway [--sandbox <path>]` 可直接打开本视图；未显式指定 sandbox 且当前目录没有配置时，先进入 Configure → Workspace path。`atom menu` 的 Gateway 快捷入口复用同一 GatewayModal，但必须先经过 WorkspaceGate；Configure → Advanced → Gateway 是真实入口。`atom config` 不带 `gateway` 时打开 Configure 页面。
 
 `GatewayModal` 在保留端口编辑的同时提供实例管理；Gateway 离线时显示 `OFFLINE`，仍可执行 install/load/pack。
 
@@ -279,6 +280,6 @@ addModel / removeModelAt / parseContextLimit / parsePort / collectModelIds
 
 | 文档 | 说明 |
 |------|------|
-| [bootstrap.md](../overview/bootstrap.md) | 启动序列中 first-run 检测与 `--config` 早退分支的位置 |
+| [bootstrap.md](../overview/bootstrap.md) | 启动序列中 first-run 检测与 `config` 早退分支的位置 |
 | [sandbox.md](./sandbox.md) | `.atom/installed` 标记文件和沙箱目录结构 |
 | [configuration.md](./configuration.md) | 向导输出的 config.json 结构与双层配置 |

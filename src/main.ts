@@ -215,7 +215,16 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const httpServer: HttpServer = await createHttpServer(runtimeKind);
     await sm.startAll();
     const { startCore } = await import("@atom-neo/core");
-    core = await startCore({ port: args.port, host: args.host, logger, services, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer });
+    core = await startCore({
+      port: args.port, host: args.host, logger, services, runtime,
+      adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer,
+      requestShutdown: () => {
+        void shutdown().then(() => process.exit(0), error => {
+          console.error(error);
+          process.exit(1);
+        });
+      },
+    });
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {

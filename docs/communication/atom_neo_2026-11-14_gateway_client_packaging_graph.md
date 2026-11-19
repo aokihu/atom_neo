@@ -125,7 +125,7 @@ graph TB
         Cli["cli.ts"]
         GatewayCommand["gateway-command.ts"]
         RuntimeFile["runtime-file.ts"]
-        Menu["menu-flow.ts / menu-history.ts"]
+        Menu["MenuApp / menu-actions.ts"]
     end
 
     subgraph ConfigTUI["@atom-neo/config-tui"]
@@ -505,7 +505,7 @@ graph TB
         F18["config-tui/GatewayInstanceForm.tsx"]
         F18b["config-tui/SecretFieldInput.tsx"]
         F19["config-tui/gateway-status.ts"]
-        F20["bootstrap/menu-flow.ts / menu-history.ts"]
+        F20["bootstrap/menu-actions.ts / config-tui menu"]
         F21["bootstrap/gateway-actions.ts"]
         F22["shared/runtime-file.ts"]
     end
@@ -592,7 +592,7 @@ graph LR
     SecretTest["form component test"] --> Secret["SecretFieldInput.tsx"]
     RuntimeTest["shared/runtime-file.test.ts"] --> Runtime["shared/runtime-file.ts"]
     PtyTest["startup.integration.test.ts (PTY)"] --> Modal
-    PtyTest --> Menu["menu-flow.ts"]
+    PtyTest --> Menu["MenuApp"]
 ```
 
 **测试替身**

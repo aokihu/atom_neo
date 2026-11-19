@@ -27,7 +27,7 @@ M1（G0+G1）落地了 §5 的 manifest v1、§6 的实例配置与凭据引用�
 | `src/packages/gateway/src/client-manager/process-supervisor.ts` | 单实例状态机、串行启停、健康检查、退避与 Secret 生命周期 | 所有重载继续走现有生命周期 |
 | `src/packages/gateway/src/client-manager/client-command.ts` | 参数映射、保留参数、spawn options、就绪探测 | 增加入口数组、cwd 与实例凭据注入 |
 | `src/packages/gateway/src/server.ts` | 本机管理启停、平台消息转发、平台事件日志 | 状态查询、诊断、登记、重载与在途消息协调 |
-| `src/bootstrap/cli.ts` / `src/bootstrap/menu-flow.ts` | CLI 分流；菜单已有 gateway/run、start clients、stop clients | 增量接入新命令与菜单 |
+| `src/bootstrap/cli.ts` / `menu-actions.ts` | CLI 分流与 OpenTUI MenuApp 动作适配 | 增量接入新命令与菜单 |
 | `src/packages/config-tui/src/components/GatewayModal.tsx` | 只编辑 Gateway 端口 | 升级为平台接入列表与配置向导 |
 | `clients/telegram-bot/package.json` | Bun 源码入口与编译二进制命令 | 首个标准包与开发目录样例 |
 
