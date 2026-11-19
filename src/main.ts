@@ -83,7 +83,8 @@ export async function main(): Promise<void> {
     } else {
       await runApp({
         ...args, menu: false, configRoute: undefined, mode: "tui",
-        sandbox: launch.sandbox, coreServer: launch.host, corePort: launch.port, continueSession: false,
+        sandbox: launch.sandbox, coreServer: launch.host, corePort: launch.port,
+        continueSession: false, sessionId: launch.sessionId,
       });
     }
     return;
@@ -124,7 +125,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const host = args.coreServer!;
     loadEnv(args.sandbox);
     const token = readAttachToken(args.sandbox, host, process.env.ATOM_ADMIN_TOKEN);
-    await attachTui(localUrl(host, args.corePort!), token, args.continueSession, args.sandbox, onReady);
+    await attachTui(localUrl(host, args.corePort!), token, args.continueSession, args.sandbox, onReady, args.sessionId);
     return;
   }
   if (args.mode === "gateway") {
@@ -254,10 +255,11 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   }
 }
 
-async function attachTui(url: string, adminToken: string, continueSession: boolean, historySandbox: string, onReady: () => void): Promise<void> {
+async function attachTui(url: string, adminToken: string, continueSession: boolean, historySandbox: string, onReady: () => void, sessionId?: string): Promise<void> {
   const response = await fetch(`${url}/api/tui/attach`, {
     method: "POST", headers: { "x-atom-admin-token": adminToken, "Content-Type": "application/json" },
-    body: JSON.stringify({ continue: continueSession }), signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify({ continue: continueSession, ...(sessionId === undefined ? {} : { sessionId }) }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Cannot attach Core (${response.status}); check sandbox and running instance`);
   const data = await response.json() as { sessionId: string; serverInfo: import("@atom-neo/tui").ServerInfo };

@@ -29,27 +29,6 @@ export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): P
   const stopping = { value: false };
   const isStopping = () => stopping.value;
   const core = createCoreBootstrap({ ...deps, services, isStopping });
-  const router = createHttpRouter({
-    logger,
-    adminToken: deps.adminToken,
-    allowRemoteAdmin: deps.allowRemoteAdmin,
-    version: deps.version,
-    host,
-    sandbox: deps.runtime.sandbox ?? "",
-    runtime: deps.runtime,
-    fallbackModel: core.fallbackModel,
-    sessionStore: core.sessionStore,
-    taskQueue: core.taskQueue,
-    taskEngine: core.taskEngine,
-    taskSubmission: core.taskSubmission,
-    orchestrator: core.orchestrator,
-    hookManager: core.hookManager,
-    allTools: core.allTools,
-    toolInfos: core.toolInfos,
-    getMcpServerInfos: core.getMcpServerInfos,
-    budgetLimits: core.budgetLimits,
-    isStopping,
-  });
 
   let handle: HttpServerHandle | undefined;
   let stopPromise: Promise<void> | null = null;
@@ -83,6 +62,31 @@ export async function startCore(deps: CoreDeps & { httpServer?: HttpServer }): P
     });
     return stopPromise;
   };
+
+  const router = createHttpRouter({
+    logger,
+    adminToken: deps.adminToken,
+    allowRemoteAdmin: deps.allowRemoteAdmin,
+    version: deps.version,
+    host,
+    sandbox: deps.runtime.sandbox ?? "",
+    runtime: deps.runtime,
+    fallbackModel: core.fallbackModel,
+    sessionStore: core.sessionStore,
+    taskQueue: core.taskQueue,
+    taskEngine: core.taskEngine,
+    taskSubmission: core.taskSubmission,
+    orchestrator: core.orchestrator,
+    hookManager: core.hookManager,
+    allTools: core.allTools,
+    toolInfos: core.toolInfos,
+    getMcpServerInfos: core.getMcpServerInfos,
+    budgetLimits: core.budgetLimits,
+    isStopping,
+    requestShutdown: () => {
+      void stop().catch(error => logger.error("shutdown request failed", { error: String(error) }));
+    },
+  });
 
   try {
     handle = await httpServer.serve({

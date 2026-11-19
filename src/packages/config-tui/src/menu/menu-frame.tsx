@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { useKeyboard } from "@opentui/react";
 import { FieldInput, Modal, SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import type { ModalAction } from "@atom-neo/tui-kit";
 
@@ -28,7 +29,7 @@ export function MenuStatus({ workspace, gateway, core }: {
 }
 
 /** Shared OpenTUI menu surface: frame, status header, list and keyboard navigation. */
-export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, hint, error, notice, children }: {
+export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, children }: {
   title: string;
   workspace: string;
   gateway: "online" | "offline" | "unknown";
@@ -36,6 +37,8 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   items: MenuItem[];
   onSelect: (key: string) => void;
   onBack: () => void;
+  onDelete?: () => void;
+  onSelectionChange?: (index: number) => void;
   hint: string;
   error?: string;
   notice?: string;
@@ -44,6 +47,14 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const { colors } = useTheme();
   const [selected, setSelected] = useState(0);
   const bounded = items.length === 0 ? 0 : Math.min(selected, items.length - 1);
+
+  useEffect(() => {
+    onSelectionChange?.(bounded);
+  }, [bounded, onSelectionChange]);
+
+  useKeyboard((event) => {
+    if (event.name === "delete" && onDelete) onDelete();
+  });
 
   return (
     <Modal

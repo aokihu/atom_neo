@@ -12,6 +12,7 @@ import type {
   HistoryMatch,
   PersistedSessionState,
   SessionCheckpointReason,
+  SessionSummary,
 } from "./types";
 import {
   createMessageManifest,
@@ -35,6 +36,21 @@ export class SessionPersistenceService {
   ) {
     this.#checkpoints = new CheckpointStore(sessionsDirectory(sandbox));
     this.#history = new HistoryStore(this.#checkpoints);
+  }
+
+  listSessions(): SessionSummary[] {
+    return this.#checkpoints.listSessionDirectories().flatMap((sessionDir) => {
+      const state = this.#checkpoints.readSessionState(
+        this.#checkpoints.resolveCurrentGeneration(sessionDir) ?? sessionDir,
+      );
+      return state ? [{
+        sessionId: state.sessionId,
+        lastTuiUsedAt: state.lastTuiUsedAt ?? state.updatedAt ?? 0,
+        initiator: state.initiator ?? { type: "unknown" },
+        status: state.status,
+        active: false,
+      }] : [];
+    });
   }
 
   listTuiSessions(): { sessionId: string; lastTuiUsedAt: number }[] {

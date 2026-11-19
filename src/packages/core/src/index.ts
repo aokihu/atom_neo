@@ -24,6 +24,7 @@ export type {
 
 export { SessionStore } from "./session/store";
 export { SessionPersistenceService } from "./session/persistence-service";
+export type { SessionSummary } from "./session/types";
 export type {
   ArchiveReceipt,
   HistoryMatch,

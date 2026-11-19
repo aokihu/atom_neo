@@ -47,6 +47,7 @@ function routerDeps(overrides: Partial<HttpRouterDeps> = {}): HttpRouterDeps {
     getMcpServerInfos: () => [],
     budgetLimits: () => ({ maxGlobalRounds: 10, maxLocalRounds: 5 }),
     isStopping: () => false,
+    requestShutdown: () => {},
     ...overrides,
   };
 }
@@ -98,6 +99,32 @@ describe("http router", () => {
     expect(data.serverInfo.port).toBe(3456);
   });
 
+  test("attach accepts an explicit sessionId for History open", async () => {
+    const restored = { sessionId: "session-history", lastTuiUsedAt: 0 };
+    const saved: string[] = [];
+    const route = createHttpRouter(routerDeps({
+      sessionStore: {
+        load: (id: string) => id === "session-history" ? restored : null,
+        save: (id: string) => { saved.push(id); return true; },
+      } as unknown as SessionStore,
+    }));
+    const ok = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "session-history" }),
+    }), ctx);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ sessionId: "session-history" });
+    expect(saved).toEqual(["session-history"]);
+
+    const missing = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "missing" }),
+    }), ctx);
+    expect(missing.status).toBe(404);
+  });
+
   test("delegates POST /api/tasks to the shared submission service", async () => {
     const submitted: TaskSubmitInput[] = [];
     const route = createHttpRouter(routerDeps({
@@ -130,6 +157,65 @@ describe("http router", () => {
     const response = await route.fetch(request("/api/unknown"), ctx);
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not Found");
+  });
+
+  test("lists sessions without admin auth", async () => {
+    const summaries = [{
+      sessionId: "tui-1",
+      lastTuiUsedAt: 1760000000000,
+      initiator: { type: "tui" as const },
+      status: "suspended",
+      active: false,
+    }];
+    const route = createHttpRouter(routerDeps({
+      sessionStore: { listSessions: () => summaries } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/sessions"), ctx);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(summaries);
+  });
+});
+
+describe("admin shutdown", () => {
+  test("rejects shutdown without the admin token", async () => {
+    let calls = 0;
+    const route = createHttpRouter(routerDeps({ requestShutdown: () => { calls++; } }));
+    const response = await route.fetch(request("/api/admin/shutdown", { method: "POST" }), ctx);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "Forbidden" });
+    await Promise.resolve();
+    expect(calls).toBe(0);
+  });
+
+  test("returns 200 and schedules shutdown after the response", async () => {
+    let calls = 0;
+    const route = createHttpRouter(routerDeps({ requestShutdown: () => { calls++; } }));
+    const pending = route.fetch(request("/api/admin/shutdown", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(calls).toBe(0);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+  });
+
+  test("returns 503 without scheduling shutdown while stopping", async () => {
+    let calls = 0;
+    const route = createHttpRouter(routerDeps({
+      isStopping: () => true,
+      requestShutdown: () => { calls++; },
+    }));
+    const response = await route.fetch(request("/api/admin/shutdown", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "Core is stopping" });
+    await Promise.resolve();
+    expect(calls).toBe(0);
   });
 });
 

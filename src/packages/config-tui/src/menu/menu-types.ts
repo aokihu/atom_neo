@@ -37,6 +37,7 @@ export type MenuActions = {
   validateWorkspace: (workspace: string) => string | undefined;
   setWorkspace: (workspace: string) => void;
   coreStatus: () => Promise<"online" | "offline">;
+  coreTarget: () => Promise<{ host: string; port: number }>;
   gatewayStatus: () => Promise<"online" | "offline">;
   listSessions: () => Promise<SessionSummary[]>;
   deleteSession: (sessionId: string) => Promise<void>;

@@ -22,6 +22,14 @@ export type ExecutionBudget = {
 
 export type PersistedSessionStatus = "active" | "suspended" | "interrupted" | "completed" | "failed";
 
+export type SessionSummary = {
+  sessionId: string;
+  lastTuiUsedAt: number;
+  initiator: SessionInitiator;
+  status: string;
+  active: boolean;
+};
+
 export type SessionCheckpointReason =
   | "message"
   | "task_completed"

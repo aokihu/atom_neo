@@ -24,6 +24,7 @@ function actions(overrides: Partial<MenuActions> = {}): MenuActions {
     validateWorkspace: () => undefined,
     setWorkspace: () => {},
     coreStatus: async () => "offline",
+    coreTarget: async () => ({ host: "127.0.0.1", port: 3100 }),
     gatewayStatus: async () => "offline",
     listSessions: async () => [],
     deleteSession: async () => {},

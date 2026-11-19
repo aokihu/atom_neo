@@ -3,6 +3,9 @@ import { ThemeProvider } from "@atom-neo/tui-kit";
 import { GatewayModal } from "../components/GatewayModal";
 import { MenuHome } from "./menu-home";
 import { MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
+import { SessionView } from "./session-view";
+import { HistoryView } from "./history-view";
+import { CoreServerView } from "./core-server-view";
 import { WorkspaceGate } from "./workspace-gate";
 import { ROUTE_LABELS, routeFor } from "./menu-routes";
 import type { MenuRoute } from "./menu-routes";
@@ -93,23 +96,39 @@ export function MenuApp({ sandbox, workspaceExplicit = false, initialRoute = "ho
           onBack={() => setQuitConfirm(true)}
         />
       ) : route.name === "session" ? (
-        <MenuScreen
-          title="Session"
-          {...statusProps}
-          items={[
-            { key: "new", label: "New Chat" },
-            { key: "continue", label: "Continue Chat" },
-            { key: "history", label: "History", detail: "Session features are added in M2" },
-            { key: "core", label: "Core Server", detail: "Session features are added in M2" },
-            { key: "back", label: "‹ Back" },
-          ]}
-          onSelect={(key) => {
-            if (key === "new") onExit({ kind: "chat", sandbox: workspace, continueSession: false });
-            else if (key === "continue") onExit({ kind: "chat", sandbox: workspace, continueSession: true });
-            else if (key === "back") back();
-          }}
+        <SessionView
+          workspace={workspace}
+          gateway={gateway}
+          core={core}
+          onChat={(continueSession) => onExit({ kind: "chat", sandbox: workspace, continueSession })}
+          onHistory={() => go({ name: "history" })}
+          onCoreServer={() => go({ name: "core-server" })}
           onBack={back}
-          hint="↑/↓ move · Enter open · Esc back"
+        />
+      ) : route.name === "history" ? (
+        <HistoryView
+          workspace={workspace}
+          gateway={gateway}
+          core={core}
+          actions={actions}
+          externalError={error}
+          onBack={back}
+          onRefreshStatus={() => { void refreshStatuses(); }}
+          onOpen={(sessionId) => {
+            void actions.coreTarget().then(target => {
+              onExit({ kind: "attach", sandbox: workspace, sessionId, ...target });
+            }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
+          }}
+        />
+      ) : route.name === "core-server" ? (
+        <CoreServerView
+          workspace={workspace}
+          gateway={gateway}
+          core={core}
+          actions={actions}
+          onLaunch={onExit}
+          onBack={back}
+          onRefreshStatus={() => { void refreshStatuses(); }}
         />
       ) : route.name === "gateway-shortcut" ? (
         <WorkspaceGate

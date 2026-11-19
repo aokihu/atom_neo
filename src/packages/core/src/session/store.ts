@@ -1,7 +1,7 @@
 import type { SessionInitiator } from "@atom-neo/shared";
 import { SessionContext } from "./context";
 import type { SessionPersistenceService } from "./persistence-service";
-import type { SessionCheckpointReason } from "./types";
+import type { SessionCheckpointReason, SessionSummary } from "./types";
 
 type LogFn = (msg: string, ctx?: Record<string, unknown>) => void;
 
@@ -59,6 +59,25 @@ export class SessionStore {
     this.#log?.("session-store get", { sid: sessionId, op: "RESTORE", size: this.#sessions.size });
     this.#evictOverflow(sessionId);
     return restoredSession;
+  }
+
+  listSessions(): SessionSummary[] {
+    const summaries = new Map<string, SessionSummary>(
+      (this.#persistence?.listSessions() ?? []).map(summary => [summary.sessionId, summary]),
+    );
+    for (const session of this.#sessions.values()) {
+      const persisted = summaries.get(session.sessionId);
+      summaries.set(session.sessionId, {
+        sessionId: session.sessionId,
+        lastTuiUsedAt: session.lastTuiUsedAt || persisted?.lastTuiUsedAt || 0,
+        initiator: session.initiator,
+        status: persisted?.status ?? "active",
+        active: this.isActive(session.sessionId),
+      });
+    }
+    return [...summaries.values()].sort(
+      (a, b) => b.lastTuiUsedAt - a.lastTuiUsedAt || a.sessionId.localeCompare(b.sessionId),
+    );
   }
 
   attachTui(continueSession = false): SessionContext {

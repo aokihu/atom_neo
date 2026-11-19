@@ -2,6 +2,7 @@ import { contextRows } from "../context/test-helpers";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   cpSync,
+  existsSync,
   lstatSync,
   mkdtempSync,
   readFileSync,
@@ -18,6 +19,7 @@ import type { FullEventMap } from "@atom-neo/shared";
 import { ContextService } from "../context/context-service";
 import { SessionContext } from "./context";
 import { SessionPersistenceService } from "./persistence-service";
+import { SessionStore } from "./store";
 
 const roots: string[] = [];
 
@@ -210,5 +212,85 @@ describe("SessionPersistenceService", () => {
     }
     const dir = persistence.getSessionDirectory(session.sessionId, false);
     expect(readdirSync(resolve(dir, ".checkpoints")).filter(name => name.startsWith("g-"))).toHaveLength(2);
+  });
+
+  test("lists persisted sessions without creating missing sessions", () => {
+    const { persistence } = createPersistence();
+    const tui = new SessionContext("tui-session", 100, { type: "tui" });
+    tui.lastTuiUsedAt = 42;
+    persistence.checkpoint(tui, "shutdown");
+    const gateway = new SessionContext("gateway-session", 100, { type: "gateway", clientId: "bot", platform: "telegram" });
+    gateway.addMessage({ role: "user", content: "hello", timestamp: 1 });
+    persistence.checkpoint(gateway, "message");
+
+    const missingDir = persistence.getSessionDirectory("missing", false);
+    expect(existsSync(missingDir)).toBe(false);
+    expect(persistence.listSessions().toSorted((a, b) => a.sessionId.localeCompare(b.sessionId))).toEqual([
+      {
+        sessionId: "gateway-session",
+        lastTuiUsedAt: 0,
+        initiator: { type: "gateway", clientId: "bot", platform: "telegram" },
+        status: "active",
+        active: false,
+      },
+      {
+        sessionId: "tui-session",
+        lastTuiUsedAt: 42,
+        initiator: { type: "tui" },
+        status: "suspended",
+        active: false,
+      },
+    ]);
+    expect(existsSync(missingDir)).toBe(false);
+  });
+
+  test("falls back to updatedAt and unknown initiator when persisted fields are absent", () => {
+    const { persistence } = createPersistence();
+    const session = new SessionContext("legacy", 100, { type: "tui" });
+    persistence.checkpoint(session, "shutdown");
+
+    const statePath = resolve(persistence.getSessionDirectory(session.sessionId, false), "session.json");
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    delete state.lastTuiUsedAt;
+    delete state.initiator;
+    state.updatedAt = 777;
+    writeFileSync(statePath, JSON.stringify(state));
+
+    expect(persistence.listSessions()).toEqual([{
+      sessionId: "legacy",
+      lastTuiUsedAt: 777,
+      initiator: { type: "unknown" },
+      status: "suspended",
+      active: false,
+    }]);
+  });
+
+  test("merges persisted summaries with loaded sessions and lease state", () => {
+    const { persistence } = createPersistence();
+    const persisted = new SessionContext("persisted", 100, { type: "gateway", clientId: "bot", platform: "telegram" });
+    persistence.checkpoint(persisted, "shutdown");
+
+    const store = new SessionStore(10, undefined, 0, persistence);
+    const loaded = store.get("loaded", { type: "tui" });
+    loaded.lastTuiUsedAt = 500;
+    store.acquire("loaded");
+    store.load(persisted.sessionId);
+
+    const summaries = store.listSessions();
+    expect(summaries.map(summary => summary.sessionId)).toEqual(["loaded", "persisted"]);
+    expect(summaries[0]).toEqual({
+      sessionId: "loaded",
+      lastTuiUsedAt: 500,
+      initiator: { type: "tui" },
+      status: "active",
+      active: true,
+    });
+    expect(summaries[1]).toEqual({
+      sessionId: "persisted",
+      lastTuiUsedAt: 0,
+      initiator: { type: "gateway", clientId: "bot", platform: "telegram" },
+      status: "suspended",
+      active: false,
+    });
   });
 });

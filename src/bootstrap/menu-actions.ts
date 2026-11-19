@@ -72,6 +72,11 @@ export function createMenuActions(sandbox: string): MenuActions {
       actions.gateway = createGatewayActions(workspace);
     },
     coreStatus: async () => await runtimeOnline(workspace, "core") ? "online" : "offline",
+    coreTarget: async () => {
+      const runtime = readRuntimeFile(workspace, "core");
+      const url = new URL(runtime.url);
+      return { host: url.hostname.replace(/^\[|\]$/g, ""), port: Number(url.port) };
+    },
     gatewayStatus: async () => await runtimeOnline(workspace, "gateway") ? "online" : "offline",
     listSessions: async () => {
       const response = await coreRequest(workspace, "/api/sessions");

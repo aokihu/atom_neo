@@ -59,6 +59,7 @@ export type BootArguments = {
   action?: "start" | "stop";
   configRoute?: ConfigRoute;
   continueSession: boolean;
+  sessionId?: string;
   gatewayCommand?: GatewayCommand;
 };
 

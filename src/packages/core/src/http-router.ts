@@ -43,6 +43,7 @@ export type HttpRouterDeps = {
   getMcpServerInfos: () => McpServerInfo[];
   budgetLimits: () => BudgetLimits;
   isStopping: () => boolean;
+  requestShutdown: () => void;
 };
 
 /** Single admin gate shared by every protected route. */
@@ -124,10 +125,20 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
           return Response.json({ error: "Invalid attach JSON" }, { status: 400 });
         }
         if (!options || typeof options !== "object" || Array.isArray(options)
-          || ("continue" in options && typeof options.continue !== "boolean")) {
-          return Response.json({ error: "continue must be a boolean" }, { status: 400 });
+          || ("continue" in options && typeof options.continue !== "boolean")
+          || ("sessionId" in options && (typeof options.sessionId !== "string" || !options.sessionId.trim()))) {
+          return Response.json({ error: "continue must be a boolean and sessionId a non-empty string" }, { status: 400 });
         }
-        const session = sessionStore.attachTui("continue" in options && options.continue === true);
+        let session: NonNullable<ReturnType<SessionStore["load"]>>;
+        if ("sessionId" in options) {
+          const loaded = sessionStore.load(options.sessionId as string);
+          if (!loaded) return Response.json({ error: "Session not found" }, { status: 404 });
+          loaded.lastTuiUsedAt = Date.now();
+          if (!sessionStore.save(loaded.sessionId, "restore")) return Response.json({ error: "Failed to persist TUI session" }, { status: 500 });
+          session = loaded;
+        } else {
+          session = sessionStore.attachTui("continue" in options && options.continue === true);
+        }
         const model = deps.runtime.getResolvedModel?.("balanced") ?? deps.fallbackModel;
         return Response.json({ sessionId: session.sessionId, serverInfo: {
           port: ctx.port, host: deps.host, sandbox: deps.sandbox, version: deps.version ?? "unknown", model: model.model,
@@ -138,6 +149,18 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
       }
       if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
       if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
+
+      if (url.pathname === `${API_PREFIX}sessions` && method === "GET") {
+        return Response.json(sessionStore.listSessions());
+      }
+
+      if (url.pathname === `${API_PREFIX}admin/shutdown` && method === "POST") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
+        queueMicrotask(() => deps.requestShutdown());
+        return Response.json({ ok: true });
+      }
 
       if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
         const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
