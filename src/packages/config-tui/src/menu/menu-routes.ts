@@ -23,10 +23,10 @@ export function routeFor(initial: "home" | "configure" | "gateway", hasConfig: b
   return { name: "home" };
 }
 
-/** Human-readable route path for the shared top bar. */
-export function breadcrumbFor(route: MenuRoute): string {
+/** Human-readable route path for the shared top bar; undefined means no parent path. */
+export function breadcrumbFor(route: MenuRoute): string | undefined {
   switch (route.name) {
-    case "home": return "Home";
+    case "home": return undefined;
     case "session": return "Home / Session";
     case "history": return "Home / Session / History";
     case "core-server": return "Home / Session / Core Server";

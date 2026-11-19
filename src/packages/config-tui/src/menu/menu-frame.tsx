@@ -86,7 +86,7 @@ export function MenuStatus({ workspace, gateway, core }: {
   const prefix = "workspace: ";
   const pathWidth = Math.max(1, contentWidth - stringWidth(prefix));
   const shown = truncateMiddle(workspace, pathWidth);
-  const crumb = breadcrumb?.includes(" / ") ? truncateByWidth(breadcrumb, contentWidth) : undefined;
+  const crumb = breadcrumb ? truncateByWidth(breadcrumb, contentWidth) : undefined;
   return (
     <box flexDirection="column" marginBottom={1}>
       {crumb ? <text fg={colors.text.muted} wrapMode="none" truncate>{crumb}</text> : null}

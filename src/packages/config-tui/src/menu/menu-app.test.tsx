@@ -9,6 +9,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { stringWidth } from "@atom-neo/shared";
 import { MenuApp } from "./menu-app";
 import { MenuChromeProvider, MenuScreen, menuContentWidth } from "./menu-frame";
+import { breadcrumbFor } from "./menu-routes";
 import type { MenuActions } from "./menu-types";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -133,24 +134,33 @@ test("home shows the integrated menu and workspace status without a breadcrumb",
   expect(frame).toContain("Configure");
   expect(frame).toContain("Backup");
   expect(frame).toContain("Quit");
-  const lines = contentLines(frame);
+  const lines = frame.split("\n");
   const title = lines.findIndex(line => line.includes("ATOM NEO · Home"));
-  expect(lines[title + 1]?.startsWith("workspace:")).toBe(true);
-  expect(lines[title + 2]?.startsWith("Gateway:")).toBe(true);
-  expect(lines.filter(line => line === "Home")).toHaveLength(0);
+  expect(lines[title + 1]).toContain("workspace: /tmp/atom-menu");
+  expect(lines[title + 1]!.trim()).not.toBe("");
+  expect(lines[title + 2]).toContain("Gateway:");
+  expect(lines.filter(line => line.replace(/[│]/g, "").trim() === "Home")).toHaveLength(0);
 });
 
-test.each([64, 40])("home at %i columns has no breadcrumb and keeps workspace/status adjacent", async (width) => {
+test("breadcrumbFor uses undefined for Home and strings for parent paths", () => {
+  expect(breadcrumbFor({ name: "home" })).toBeUndefined();
+  expect(breadcrumbFor({ name: "backup" })).toBe("Home / Backup");
+  expect(breadcrumbFor({ name: "session" })).toBe("Home / Session");
+  expect(breadcrumbFor({ name: "workspace", after: "gateway-shortcut" })).toBe("Home / Gateway / Workspace");
+});
+
+test.each([100, 64, 40])("home at %i columns has no breadcrumb and keeps workspace/status adjacent", async (width) => {
   const app = await mount({ version: "1.2.3", width });
-  const lines = contentLines(app.frame());
+  const lines = app.frame().split("\n");
   const title = lines.findIndex(line => line.includes("ATOM NEO · Home"));
   expect(lines[title]).toContain("v1.2.3");
-  expect(lines[title]!.trimEnd().endsWith("v1.2.3")).toBe(true);
-  expect(lines[title + 1]?.startsWith("workspace:")).toBe(true);
-  expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
-  expect(lines[title + 2]?.startsWith("Gateway:")).toBe(true);
-  expect(lines.filter(line => line.startsWith("Gateway:"))).toHaveLength(1);
-  expect(lines.filter(line => line === "Home")).toHaveLength(0);
+  expect(lines[title]!.replace(/[│]/g, "").trimEnd().endsWith("v1.2.3")).toBe(true);
+  expect(lines[title + 1]).toContain("workspace:");
+  expect(lines[title + 1]!.trim()).not.toBe("");
+  expect(lines.filter(line => line.includes("workspace:"))).toHaveLength(1);
+  expect(lines[title + 2]).toContain("Gateway:");
+  expect(lines.filter(line => line.includes("Gateway:"))).toHaveLength(1);
+  expect(lines.filter(line => line.replace(/[│]/g, "").trim() === "Home")).toHaveLength(0);
 });
 
 test("gateway shortcut goes through workspace confirmation", async () => {
@@ -158,8 +168,53 @@ test("gateway shortcut goes through workspace confirmation", async () => {
   await app.press("ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("Gateway configuration uses this workspace.");
   expect(app.frame()).toContain("Continue to Gateway");
+  const lines = contentLines(app.frame());
+  expect(lines.filter(line => line === "Home / Gateway")).toHaveLength(1);
+  const title = lines.findIndex(line => line.includes("ATOM NEO · Gateway"));
+  expect(lines[title + 1]).toBe("Home / Gateway");
+  expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
   await app.press("ESCAPE");
   expect(app.frame()).toContain("ATOM NEO · Home");
+});
+
+test("Workspace route breadcrumb renders through the shared chrome", async () => {
+  const view = await mountNode(
+    <MenuChromeProvider version="1.2.3" breadcrumb={breadcrumbFor({ name: "workspace", after: "gateway-shortcut" })}>
+      <MenuScreen
+        title="Workspace"
+        workspace="/tmp/atom"
+        gateway="offline"
+        core="online"
+        items={[{ key: "back", label: "‹ Back" }]}
+        onSelect={() => {}}
+        onBack={() => {}}
+        hint="Esc back"
+      />
+    </MenuChromeProvider>,
+  );
+  const lines = contentLines(view.frame());
+  expect(lines.filter(line => line === "Home / Gateway / Workspace")).toHaveLength(1);
+});
+
+test("empty breadcrumb renders workspace directly below the title", async () => {
+  const view = await mountNode(
+    <MenuChromeProvider version="1.2.3">
+      <MenuScreen
+        title="Home"
+        workspace="/tmp/atom"
+        gateway="offline"
+        core="online"
+        items={[{ key: "back", label: "‹ Back" }]}
+        onSelect={() => {}}
+        onBack={() => {}}
+        hint="Esc back"
+      />
+    </MenuChromeProvider>,
+  );
+  const lines = contentLines(view.frame());
+  const title = lines.findIndex(line => line.includes("ATOM NEO · Home"));
+  expect(lines[title + 1]?.startsWith("workspace:")).toBe(true);
+  expect(lines.filter(line => line === "Home")).toHaveLength(0);
 });
 
 test("atom config opens Configure and atom config gateway requests workspace when unconfigured", async () => {
