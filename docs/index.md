@@ -17,6 +17,9 @@
 | [atom_neo_2026-11-19_menu_config_integration_plan.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_plan.md) | Menu 与 Config 整合计划（已实施 M1–M5）：OpenTUI MenuApp、Session/History/Core Server、Configure/Advanced/Gateway、Backup | 追踪整合范围与验收 |
 | [atom_neo_2026-11-19_menu_config_integration_code_and_file.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_code_and_file.md) | Menu 与 Config 整合文件与代码（已实施）：路由、MenuApp、CLI、Core API、测试 | 审阅实现与文件影响面 |
 | [atom_neo_2026-11-19_menu_config_integration_graph.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_graph.md) | Menu 与 Config 整合关系图（已实施）：路由状态、模块依赖、启动/History/Gateway 序列 | 理解实现关系与风险 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_plan.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_plan.md) | Menu 与 Config 视觉统一计划（设计已确认，待实施）：统一 Shell、扁平化 Configure、Providers/Theme 分栏、`atom config` 落点 | 追踪视觉统一范围与验收 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md) | Menu 与 Config 视觉统一文件与代码（待实施）：路由、MenuScreen 分栏、ConfigureView、WizardApp embedded、测试清单 | 编码前审阅文件影响面 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_graph.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_graph.md) | Menu 与 Config 视觉统一关系图（待实施）：模块依赖、路由状态、启动/保存/Theme 序列、响应式与风险 | 理解改动关系与风险 |
 | [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 
 ## 开发规范（编码时必查）
