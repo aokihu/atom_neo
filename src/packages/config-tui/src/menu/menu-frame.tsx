@@ -140,7 +140,7 @@ export function MenuStatus({ workspace, gateway, core, breadcrumb }: {
 }
 
 /** Shared OpenTUI menu surface: frame, status header, list and keyboard navigation. */
-export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, preview, breadcrumb, children }: {
+export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, preview, breadcrumb, initialSelection = 0, children }: {
   title: string;
   workspace: string;
   gateway: "online" | "offline" | "unknown";
@@ -157,6 +157,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   suspended?: boolean;
   preview?: (item: MenuItem) => MenuPreview;
   breadcrumb?: string;
+  initialSelection?: number;
   children?: ReactNode;
 }) {
   const { colors } = useTheme();
@@ -166,7 +167,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const versionText = version ? `v${version}` : "";
   const titleMax = Math.max(1, contentWidth - (versionText ? stringWidth(versionText) + 1 : 0));
   const titleText = truncateByWidth(`ATOM NEO · ${title}`, titleMax);
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState(initialSelection);
   const bounded = items.length === 0 ? 0 : Math.min(selected, items.length - 1);
   const maxVisible = 10;
   const windowStart = Math.max(0, Math.min(bounded - maxVisible + 1, items.length - maxVisible));
@@ -178,31 +179,36 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const selectedPreview = selectedItem
     ? preview?.(selectedItem) ?? defaultPreview(selectedItem, hint)
     : undefined;
-  const renderRows = (detail: boolean) => (
-    <>
-      {items.length === 0
-        ? <text fg={colors.text.muted}>No items.</text>
-        : visibleItems.map((item, offset) => {
-          const index = windowStart + offset;
-          return (
-            <SelectableRow
-              key={item.key}
-              selected={index === bounded}
-              label={item.label}
-              labelWidth={detail ? 24 : Math.min(30, Math.max(12, contentWidth - 5))}
-              detail={detail ? item.detail : undefined}
-            />
-          );
-        })}
-      {items.length > maxVisible
-        ? <text fg={colors.text.muted}>{`${windowStart + 1}-${windowStart + visibleItems.length} of ${items.length}`}</text>
-        : null}
-    </>
-  );
+  const renderRows = (detail: boolean) => {
+    const labelMax = split ? NAV_WIDTH - 4 : detail ? 24 : Math.max(4, contentWidth - 4);
+    const detailMax = detail ? Math.max(1, contentWidth - labelMax - 3) : 0;
+    return (
+      <>
+        {items.length === 0
+          ? <text fg={colors.text.muted}>No items.</text>
+          : visibleItems.map((item, offset) => {
+            const index = windowStart + offset;
+            return (
+              <SelectableRow
+                key={item.key}
+                selected={index === bounded}
+                label={truncateByWidth(item.label, labelMax)}
+                labelWidth={labelMax}
+                detail={detail ? truncateByWidth(item.detail ?? "", detailMax) : undefined}
+                truncate
+              />
+            );
+          })}
+        {items.length > maxVisible
+          ? <text fg={colors.text.muted} wrapMode="none" truncate>{`${windowStart + 1}-${windowStart + visibleItems.length} of ${items.length}`}</text>
+          : null}
+      </>
+    );
+  };
 
   useEffect(() => {
-    setSelected(0);
-  }, [title]);
+    setSelected(initialSelection);
+  }, [title, initialSelection]);
 
   useEffect(() => {
     onSelectionChange?.(bounded);
@@ -231,7 +237,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
         if (item) onSelect(item.key);
       }}
       onClose={onBack}
-      hint={hint}
+      hint={truncateByWidth(hint, contentWidth)}
     >
       <box flexDirection="column">
         <MenuStatus workspace={workspace} gateway={gateway} core={core} breadcrumb={breadcrumb} />

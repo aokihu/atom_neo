@@ -1,4 +1,4 @@
-import { useReducer } from "react";
+import { useEffect, useReducer } from "react";
 import { ThemeProvider } from "@atom-neo/tui-kit";
 import type { ModelEdit } from "./ModelsModal";
 import type { GatewayInstanceActions } from "../gateway-status";
@@ -16,6 +16,7 @@ export type WizardChrome = {
   core: "online" | "offline" | "unknown";
   suspended?: boolean;
   onWorkspace: () => void;
+  onThemeChange?: (theme: string) => void;
   notice?: string;
   error?: string;
 };
@@ -49,8 +50,12 @@ export function WizardApp({ sandboxPath, mode, initialView, gatewayActions, onCo
   const embedded = mode === "config" && chrome !== undefined;
   const views = { view, wizard, pending, allowJev, dispatch, chrome };
 
-  return (
-    <ThemeProvider theme={wizard.theme}>
+  useEffect(() => {
+    if (embedded) chrome?.onThemeChange?.(wizard.theme);
+  }, [embedded, chrome, wizard.theme]);
+
+  const content = (
+    <>
       {!embedded ? <WizardBackground /> : null}
       {embedded && view?.kind === "menu" && chrome ? (
         <ConfigureView
@@ -72,6 +77,8 @@ export function WizardApp({ sandboxPath, mode, initialView, gatewayActions, onCo
         onQuit={onAbort}
         onCancel={() => dispatch({ type: "quit-cancel" })}
       />
-    </ThemeProvider>
+    </>
   );
+
+  return embedded ? content : <ThemeProvider theme={wizard.theme}>{content}</ThemeProvider>;
 }

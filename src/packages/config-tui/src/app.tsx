@@ -7,15 +7,17 @@ import { WizardApp } from "./components/WizardApp";
 import { closeRenderer, waitForRendererClosed } from "./renderer-lifecycle";
 import type { ConfigRenderer } from "./renderer-lifecycle";
 import type { GatewayInstanceActions } from "./gateway-status";
-import type { WizardMode } from "./wizard-logic";
 import type { WizardInitialView } from "./wizard/wizard-reducer";
 
-/** Launch the standalone OpenTUI wizard (first-run setup or config editor). */
+/** Launch the standalone first-run wizard; config editing is MenuApp Configure only. */
 export async function startWizard(
   sandboxPath: string,
-  mode: WizardMode,
+  mode: "first-run",
   options: { gatewayActions?: GatewayInstanceActions; initialView?: WizardInitialView } = {},
 ): Promise<boolean> {
+  if ((mode as string) !== "first-run") {
+    throw new Error("startWizard only supports first-run; config editing uses atom config / MenuApp Configure");
+  }
   await ensureBunRuntimePluginSupport();
   return new Promise<boolean>((resolve, reject) => {
     let settled = false;

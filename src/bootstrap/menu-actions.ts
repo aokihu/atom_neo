@@ -80,6 +80,7 @@ export function createMenuActions(sandbox: string, corePort = 3100): MenuActions
     gateway: createGatewayActions(workspace),
     hasConfig: (path) => existsSync(join(path, "config.json")),
     validateWorkspace: (path) => resolveWorkspace(path).problem,
+    normalizeWorkspace: (path) => resolveWorkspace(path).target,
     setWorkspace: (path) => {
       const { target, problem } = resolveWorkspace(path);
       if (problem) throw new Error(problem);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 import { FieldInput, SelectableRow, useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 import {
   SECRET_MASK,
   beginDraft,
@@ -47,6 +48,9 @@ export function GatewayInstanceForm({
   onCancel: () => void;
 }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
+  const versionRight = version ? <text fg={colors.text.muted}>v{version}</text> : undefined;
+  const displayTitle = title.startsWith("ATOM NEO") ? title : `ATOM NEO · ${title}`;
   const [draft, setDraft] = useState(() => beginDraft(fields, initialValues));
   const [selected, setSelected] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -95,7 +99,9 @@ export function GatewayInstanceForm({
       return (
         <Modal
           open
-          title={title}
+          title={displayTitle}
+          headerRight={versionRight}
+          titleTruncate
           width={64}
           interactive={false}
           onClose={() => setEditing(null)}
@@ -125,7 +131,9 @@ export function GatewayInstanceForm({
       return (
         <Modal
           open
-          title={field.label}
+          title={`ATOM NEO · ${field.label}`}
+          headerRight={versionRight}
+          titleTruncate
           width={56}
           onClose={() => setEditing(null)}
           listLength={options.length}
@@ -156,7 +164,9 @@ export function GatewayInstanceForm({
       return (
         <Modal
           open
-          title={title}
+          title={displayTitle}
+          headerRight={versionRight}
+          titleTruncate
           width={64}
           interactive={false}
           onClose={() => setEditing(null)}
@@ -183,7 +193,9 @@ export function GatewayInstanceForm({
   return (
     <Modal
       open
-      title={title}
+      title={displayTitle}
+      headerRight={versionRight}
+      titleTruncate
       width={64}
       actions={ACTIONS}
       defaultActionKey="save"

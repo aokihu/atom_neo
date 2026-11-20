@@ -29,6 +29,8 @@ export type MenuActions = {
   gateway: GatewayInstanceActions;
   hasConfig: (workspace: string) => boolean;
   validateWorkspace: (workspace: string) => string | undefined;
+  /** Returns the normalized absolute workspace path without activating it. */
+  normalizeWorkspace: (workspace: string) => string;
   /** Returns the normalized absolute workspace path. */
   setWorkspace: (workspace: string) => string;
   refreshSettings: () => { theme: string; gatewayPort: number };

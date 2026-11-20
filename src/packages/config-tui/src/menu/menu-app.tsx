@@ -31,6 +31,8 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
   const [notice, setNotice] = useState("");
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [workspaceEditing, setWorkspaceEditing] = useState(false);
+  const [pendingWorkspace, setPendingWorkspace] = useState<string>();
+  const [wizardEpoch, setWizardEpoch] = useState(0);
 
   const refreshStatuses = async () => {
     const [gatewayState, coreState] = await Promise.all([
@@ -49,6 +51,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
     setError("");
     setNotice("");
     setWorkspaceEditing(false);
+    setPendingWorkspace(undefined);
     setRoute(next);
   };
 
@@ -164,6 +167,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
       ) : route.name === "configure" ? (
         <>
           <WizardApp
+            key={`${workspace}:${wizardEpoch}`}
             sandboxPath={workspace}
             mode="config"
             initialView="menu"
@@ -175,13 +179,19 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
               setError("");
               setNotice("Saved");
             }}
-            onAbort={() => go({ name: "home" })}
+            onAbort={() => {
+              const settings = actions.refreshSettings();
+              setTheme(settings.theme);
+              setGatewayPort(settings.gatewayPort);
+              go({ name: "home" });
+            }}
             chrome={{
               workspace,
               gateway,
               core,
-              suspended: workspaceEditing,
+              suspended: workspaceEditing || Boolean(pendingWorkspace),
               onWorkspace: () => setWorkspaceEditing(true),
+              onThemeChange: setTheme,
               notice,
               error,
             }}
@@ -199,20 +209,36 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
                   setError(problem);
                   return;
                 }
-                const normalized = actions.setWorkspace(value);
-                const settings = actions.refreshSettings();
-                setWorkspace(normalized);
-                setTheme(settings.theme);
-                setGatewayPort(settings.gatewayPort);
+                const target = actions.normalizeWorkspace(value);
                 setError("");
-                setNotice("");
                 setWorkspaceEditing(false);
+                if (target === workspace) return;
+                setPendingWorkspace(target);
               }}
               onCancel={() => {
                 setError("");
                 setWorkspaceEditing(false);
               }}
-              hint="Enter save · Esc cancel"
+              hint="Enter continue · Esc cancel"
+            />
+          ) : null}
+          {pendingWorkspace ? (
+            <MenuConfirm
+              title="Switch workspace"
+              message="Switch workspace? Unsaved Configure changes will be discarded."
+              confirmLabel="Switch"
+              onConfirm={() => {
+                actions.setWorkspace(pendingWorkspace);
+                const settings = actions.refreshSettings();
+                setWorkspace(pendingWorkspace);
+                setTheme(settings.theme);
+                setGatewayPort(settings.gatewayPort);
+                setPendingWorkspace(undefined);
+                setError("");
+                setNotice("");
+                setWizardEpoch(epoch => epoch + 1);
+              }}
+              onCancel={() => setPendingWorkspace(undefined)}
             />
           ) : null}
         </>

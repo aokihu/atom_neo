@@ -1,6 +1,7 @@
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 import { useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 import type { WizardState } from "../wizard-logic";
 import { describeDecisions } from "./DecisionsModal";
 
@@ -21,12 +22,15 @@ export function ConfirmModal({ state, onSave, onBack }: {
   onBack: () => void;
 }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
   const entries = Object.entries(state.editedProviders);
 
   return (
     <Modal
       open
-      title="SAVE & EXIT"
+      title="ATOM NEO · SAVE & EXIT"
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
       width={64}
       actions={ACTIONS}
       defaultActionKey="save"

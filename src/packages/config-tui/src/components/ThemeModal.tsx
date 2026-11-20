@@ -47,6 +47,7 @@ export function ThemeModal({ theme, chrome, onSubmit, onBack }: {
         workspace={chrome.workspace}
         gateway={chrome.gateway}
         core={chrome.core}
+        initialSelection={Math.max(0, THEME_NAMES.indexOf(theme as (typeof THEME_NAMES)[number]))}
         items={THEME_NAMES.map(name => ({ key: name, label: name, detail: name === theme ? "current" : undefined }))}
         preview={item => themePreview(item.key)}
         onSelect={key => {
