@@ -242,17 +242,27 @@ test("gateway shortcut Continue reaches the shared GatewayModal", async () => {
   expect(app.frame()).toContain("GATEWAY CLIENTS");
 });
 
-test("advanced opens the existing wizard and the real Gateway entry", async () => {
+test("atom config opens the flat Configure menu without Advanced", async () => {
   const app = await mount({ initialRoute: "configure" });
-  await app.press("ARROW_DOWN", "RETURN");
-  expect(app.frame()).toContain("ATOM NEO · Advanced");
-  await app.press("RETURN");
+  const frame = app.frame();
+  expect(frame).toContain("ATOM NEO · Configure");
+  expect(frame).toContain("Workspace path");
+  expect(frame).toContain("Providers (0)");
+  expect(frame).toContain("Model Profiles");
+  expect(frame).toContain("Decisions");
+  expect(frame).toContain("Theme (edex)");
+  expect(frame).toContain("Gateway (clients · port 3000)");
+  expect(frame).toContain("Save & Exit");
+  expect(frame).not.toContain("Advanced configuration");
+  await app.press("ARROW_DOWN");
   expect(app.frame()).toContain("PROVIDERS");
+  expect(app.frame()).toContain("No providers configured yet.");
+});
 
-  const gateway = await mount({ initialRoute: "configure" });
-  await gateway.press("ARROW_DOWN", "RETURN");
-  await gateway.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
-  expect(gateway.frame()).toContain("GATEWAY CLIENTS");
+test("configure Gateway opens the shared GatewayModal", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("GATEWAY CLIENTS");
 });
 
 function contentLines(frame: string): string[] {
@@ -399,7 +409,7 @@ test("gateway port save errors stay inline in the modal", async () => {
   expect(app.frame()).toContain("GATEWAY PORT");
 });
 
-test("saving the theme wizard refreshes Advanced and returns there", async () => {
+test("Save & Exit stays on Configure and shows Saved", async () => {
   const sandbox = mkdtempSync(join(tmpdir(), "atom-menu-theme-"));
   tempDirs.push(sandbox);
   const app = await mount({
@@ -407,29 +417,41 @@ test("saving the theme wizard refreshes Advanced and returns there", async () =>
     initialRoute: "configure",
     actions: actions({ refreshSettings: () => ({ theme: "nord", gatewayPort: 3000 }) }),
   });
-  await app.press("ARROW_DOWN", "RETURN");
-  await app.press("ARROW_DOWN");
-  expect(app.frame()).toContain("Current: edex");
-  await app.press("RETURN");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("THEME");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
-  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
+  expect(app.frame()).toContain("Theme (nord)");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("SAVE & EXIT");
   await app.press("RETURN");
-  expect(app.frame()).toContain("ATOM NEO · Advanced");
-  await app.press("ARROW_DOWN");
-  expect(app.frame()).toContain("Current: nord");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
+  expect(app.frame()).toContain("Saved");
 });
 
-test("wizard menu may open the shared GatewayModal and returns to the wizard", async () => {
-  const app = await mount({ initialRoute: "configure" });
-  await app.press("ARROW_DOWN", "RETURN");
-  await app.press("RETURN");
-  expect(app.frame()).toContain("PROVIDERS");
-  await app.press("ESCAPE");
-  expect(app.frame()).toContain("CONFIGURATION");
+test("Configure workspace editing preserves unsaved wizard state", async () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "atom-menu-workspace-"));
+  tempDirs.push(sandbox);
+  const app = await mount({ sandbox, initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
-  expect(app.frame()).toContain("GATEWAY CLIENTS");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Theme (nord)");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Configure / Workspace");
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
+  expect(app.frame()).toContain("Theme (nord)");
+});
+
+test("Configure Escape asks for quit confirmation", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("QUIT WITHOUT SAVING?");
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
+  await app.press("ESCAPE");
+  await app.press("ARROW_RIGHT", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Home");
 });
 
 test("backup home exposes Export before Import", async () => {

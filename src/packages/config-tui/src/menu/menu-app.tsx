@@ -3,7 +3,7 @@ import { ThemeProvider } from "@atom-neo/tui-kit";
 import { GatewayModal } from "../components/GatewayModal";
 import { WizardApp } from "../components/WizardApp";
 import { MenuHome } from "./menu-home";
-import { MenuChromeProvider, MenuConfirm, MenuPrompt, MenuScreen } from "./menu-frame";
+import { MenuChromeProvider, MenuConfirm, MenuPrompt } from "./menu-frame";
 import { SessionView } from "./session-view";
 import { HistoryView } from "./history-view";
 import { CoreServerView } from "./core-server-view";
@@ -30,6 +30,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
   const [error, setError] = useState(initialError ?? "");
   const [notice, setNotice] = useState("");
   const [quitConfirm, setQuitConfirm] = useState(false);
+  const [workspaceEditing, setWorkspaceEditing] = useState(false);
 
   const refreshStatuses = async () => {
     const [gatewayState, coreState] = await Promise.all([
@@ -47,6 +48,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
   const go = (next: MenuRoute) => {
     setError("");
     setNotice("");
+    setWorkspaceEditing(false);
     setRoute(next);
   };
 
@@ -58,12 +60,11 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
     setError("");
     setNotice("");
     if (route.name === "gateway-real") {
-      setRoute(route.back === "advanced" ? { name: "advanced" } : route.back === "gateway-shortcut" ? { name: "gateway-shortcut" } : { name: "configure" });
+      setRoute(route.back === "gateway-shortcut" ? { name: "gateway-shortcut" } : { name: "configure" });
       return;
     }
     if (route.name === "gateway-shortcut") return setRoute({ name: "home" });
     if (route.name === "configure") return setRoute({ name: "home" });
-    if (route.name === "advanced") return setRoute({ name: "configure" });
     if (route.name === "workspace") {
       if (route.after === "gateway-real") return setRoute({ name: "configure" });
       return setRoute(route.after === "gateway-shortcut" ? { name: "gateway-shortcut" } : { name: "configure" });
@@ -72,7 +73,6 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
     if (route.name === "history" || route.name === "core-server") return setRoute({ name: "session" });
     if (route.name === "backup") return setRoute({ name: "home" });
     if (route.name === "backup-export" || route.name === "backup-import") return setRoute({ name: "backup" });
-    if (route.name === "wizard") return setRoute(route.back === "advanced" ? { name: "advanced" } : { name: "configure" });
     return setRoute({ name: "home" });
   };
 
@@ -162,56 +162,60 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
           onBack={back}
         />
       ) : route.name === "configure" ? (
-        <MenuScreen
-          title="Configure"
-          {...statusProps}
-          items={[
-            { key: "workspace", label: "Workspace path ›", detail: workspace },
-            { key: "advanced", label: "Advanced configuration ›", detail: `Gateway port ${gatewayPort}` },
-            { key: "back", label: "‹ Back" },
-          ]}
-          onSelect={(key) => key === "workspace" ? go({ name: "workspace", after: "configure" }) : key === "advanced" ? go({ name: "advanced" }) : back()}
-          onBack={back}
-          hint="↑/↓ move · Enter open · Esc back"
-        />
-      ) : route.name === "advanced" ? (
-        <MenuScreen
-          title="Advanced"
-          {...statusProps}
-          items={[
-            { key: "providers", label: "Providers & Models", detail: "Open provider/model editor" },
-            { key: "theme", label: "Theme", detail: `Current: ${theme}` },
-            { key: "gateway", label: "Gateway ›", detail: "Instance and credential management" },
-            { key: "back", label: "‹ Back" },
-          ]}
-          onSelect={(key) => {
-            if (key === "providers") go({ name: "wizard", view: "providers", back: "advanced" });
-            else if (key === "theme") go({ name: "wizard", view: "theme", back: "advanced" });
-            else if (key === "gateway") go({ name: "gateway-real", back: "advanced" });
-            else back();
-          }}
-          onBack={back}
-          hint="↑/↓ move · Enter open · Esc back"
-        />
-      ) : route.name === "wizard" ? (
-        <WizardApp
-          sandboxPath={workspace}
-          mode="config"
-          initialView={route.view}
-          gatewayActions={actions.gateway}
-          onComplete={() => {
-            const settings = actions.refreshSettings();
-            setTheme(settings.theme);
-            setGatewayPort(settings.gatewayPort);
-            go(route.back === "advanced" ? { name: "advanced" } : { name: "configure" });
-          }}
-          onAbort={() => {
-            const settings = actions.refreshSettings();
-            setTheme(settings.theme);
-            setGatewayPort(settings.gatewayPort);
-            go(route.back === "advanced" ? { name: "advanced" } : { name: "configure" });
-          }}
-        />
+        <>
+          <WizardApp
+            sandboxPath={workspace}
+            mode="config"
+            initialView="menu"
+            gatewayActions={actions.gateway}
+            onComplete={() => {
+              const settings = actions.refreshSettings();
+              setTheme(settings.theme);
+              setGatewayPort(settings.gatewayPort);
+              setError("");
+              setNotice("Saved");
+            }}
+            onAbort={() => go({ name: "home" })}
+            chrome={{
+              workspace,
+              gateway,
+              core,
+              suspended: workspaceEditing,
+              onWorkspace: () => setWorkspaceEditing(true),
+              notice,
+              error,
+            }}
+          />
+          {workspaceEditing ? (
+            <MenuPrompt
+              title="Configure / Workspace"
+              label="Workspace path"
+              value={workspace}
+              placeholder={workspace}
+              error={error}
+              onSubmit={(value) => {
+                const problem = actions.validateWorkspace(value);
+                if (problem) {
+                  setError(problem);
+                  return;
+                }
+                const normalized = actions.setWorkspace(value);
+                const settings = actions.refreshSettings();
+                setWorkspace(normalized);
+                setTheme(settings.theme);
+                setGatewayPort(settings.gatewayPort);
+                setError("");
+                setNotice("");
+                setWorkspaceEditing(false);
+              }}
+              onCancel={() => {
+                setError("");
+                setWorkspaceEditing(false);
+              }}
+              hint="Enter save · Esc cancel"
+            />
+          ) : null}
+        </>
       ) : route.name === "workspace" ? (
         <MenuPrompt
           title="Workspace"

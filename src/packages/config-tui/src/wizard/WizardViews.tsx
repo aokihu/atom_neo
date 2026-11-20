@@ -1,6 +1,4 @@
 import type { Dispatch } from "react";
-import { MenuModal } from "../components/MenuModal";
-import type { MenuKey } from "../components/MenuModal";
 import { ProvidersModal } from "../components/ProvidersModal";
 import { ApiKeyModal } from "../components/ApiKeyModal";
 import { ModelsModal } from "../components/ModelsModal";
@@ -12,6 +10,7 @@ import { GatewayModal } from "../components/GatewayModal";
 import type { GatewayInstanceActions } from "../gateway-status";
 import { ProjectModal } from "../components/ProjectModal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import type { WizardChrome } from "../components/WizardApp";
 import { collectModelIds } from "../wizard-logic";
 import type { WizardAction, WizardView } from "./wizard-reducer";
 import type { PendingEdit } from "./wizard-edit";
@@ -23,6 +22,7 @@ type CommonProps = {
   pending: PendingEdit | null;
   allowJev: boolean;
   dispatch: Dispatch<WizardAction>;
+  chrome?: WizardChrome;
 };
 
 export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch, onModelsSubmit }: CommonProps & {
@@ -32,14 +32,6 @@ export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch,
 
   return (
     <>
-      {view?.kind === "menu" && (
-        <MenuModal
-          state={wizard}
-          onSelect={(key: MenuKey) => dispatch({ type: "menu-select", key })}
-          onClose={() => dispatch({ type: "quit-request" })}
-        />
-      )}
-
       {view?.kind === "providers" && (
         <ProvidersModal
           providers={Object.keys(wizard.editedProviders)}
@@ -89,7 +81,7 @@ export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch,
   );
 }
 
-export function WizardSettingsViews({ view, wizard, dispatch, sandboxPath, gatewayActions, onSave }: CommonProps & {
+export function WizardSettingsViews({ view, wizard, dispatch, sandboxPath, gatewayActions, chrome, onSave }: CommonProps & {
   onSave: () => void;
   sandboxPath: string;
   gatewayActions?: GatewayInstanceActions;

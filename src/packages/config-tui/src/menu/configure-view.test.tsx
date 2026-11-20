@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildMenuItems, describeSelection, MENU_KEYS } from "./MenuModal";
+import { buildMenuItems, describeSelection, MENU_KEYS } from "./configure-view";
 import { initialState } from "../wizard-logic";
 
 function configState(overrides: Record<string, any> = {}): any {
@@ -40,8 +40,7 @@ describe("describeSelection", () => {
         deepseek: { apiKeyEnv: "DEEPSEEK_API_KEY", apiKey: "", models: ["a", "b"], thinking: "enabled", contextLimit: 131072 },
       },
     });
-    const lines = describeSelection("providers", state);
-    expect(lines).toEqual([
+    expect(describeSelection("providers", state)).toEqual([
       "deepseek",
       "  models: a, b",
       "  thinking: enabled · ctx 131072",
@@ -70,10 +69,6 @@ describe("describeSelection", () => {
 
   test("theme shows the current theme", () => {
     expect(describeSelection("theme", configState({ theme: "nord" }))[0]).toBe("Current: nord");
-  });
-
-  test("gateway shows the current port", () => {
-    expect(describeSelection("gateway", configState({ gatewayPort: 8080 }))[0]).toBe("Port: 8080");
   });
 
   test("save describes the write targets", () => {

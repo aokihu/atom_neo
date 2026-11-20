@@ -4,7 +4,7 @@ import type { MenuItem, MenuPreview } from "./menu-frame";
 const ITEMS: MenuItem[] = [
   { key: "session", label: "Session", detail: "Chat and Core server" },
   { key: "gateway", label: "Gateway", detail: "Workspace-confirmed shortcut" },
-  { key: "configure", label: "Configure", detail: "Workspace and advanced settings" },
+  { key: "configure", label: "Configure", detail: "Workspace, providers, theme and Gateway" },
   { key: "backup", label: "Backup", detail: "Export or import sandbox config" },
   { key: "quit", label: "Quit", detail: "Close Atom Neo" },
 ];

@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Modal } from "../modal";
-import { SelectableRow, useTheme } from "@atom-neo/tui-kit";
+import { describeDecisions } from "../components/DecisionsModal";
+import type { WizardAction, WizardMenuKey, WizardUiState } from "../wizard/wizard-reducer";
 import type { WizardState } from "../wizard-logic";
-import { describeDecisions } from "./DecisionsModal";
+import { MenuScreen } from "./menu-frame";
+import type { MenuItem, MenuPreview } from "./menu-frame";
 
 export const MENU_KEYS = ["providers", "profiles", "decisions", "theme", "gateway", "save"] as const;
 export type MenuKey = (typeof MENU_KEYS)[number];
@@ -19,7 +19,7 @@ export function buildMenuItems(state: WizardState): { label: string; value: Menu
   ];
 }
 
-/** Detail lines shown in the left panel for the currently selected menu item. */
+/** Detail lines shown in the right preview for the selected Configure item. */
 export function describeSelection(key: MenuKey, state: WizardState): string[] {
   switch (key) {
     case "providers": {
@@ -81,53 +81,54 @@ export function describeSelection(key: MenuKey, state: WizardState): string[] {
   }
 }
 
-export function MenuModal({ state, onSelect, onClose }: {
-  state: WizardState;
-  onSelect: (key: MenuKey) => void;
-  onClose: () => void;
+export function ConfigureView({ ui, dispatch, workspace, gateway, core, suspended, onWorkspace, notice, error }: {
+  ui: WizardUiState;
+  dispatch: (action: WizardAction) => void;
+  workspace: string;
+  gateway: "online" | "offline" | "unknown";
+  core: "online" | "offline" | "unknown";
+  suspended?: boolean;
+  onWorkspace: () => void;
+  notice?: string;
+  error?: string;
 }) {
-  const { colors } = useTheme();
-  const items = buildMenuItems(state);
-  const [selected, setSelected] = useState(0);
-  const details = describeSelection(items[selected].value, state);
+  const items: MenuItem[] = [
+    { key: "workspace", label: "Workspace path", detail: workspace },
+    ...buildMenuItems(ui.wizard).map(item => ({ key: item.value, label: item.label })),
+    { key: "back", label: "‹ Back" },
+  ];
+
+  const preview = (item: MenuItem): MenuPreview => {
+    if (item.key === "workspace") {
+      return { title: "WORKSPACE PATH", lines: [workspace, "", "config.json · .env · .atom"] };
+    }
+    if (item.key === "back") {
+      return { title: "BACK", lines: ["Return to Home.", "", "Unsaved changes ask for confirmation."] };
+    }
+    return {
+      title: item.label.replace(/\(.*\)/, "").trim().toUpperCase(),
+      lines: describeSelection(item.key as MenuKey, ui.wizard),
+    };
+  };
 
   return (
-    <Modal
-      open
-      title="CONFIGURATION"
-      width={96}
-      height={16}
-      onClose={onClose}
-      listLength={items.length}
-      selectedListIndex={selected}
-      onListNavigate={setSelected}
-      onListActivate={(i) => onSelect(items[i].value)}
-      hint="↑/↓ select · Enter open · Esc quit"
-    >
-      <box flexDirection="row" flexGrow={1}>
-        <box
-          flexDirection="column"
-          flexGrow={1}
-          flexBasis={0}
-          paddingRight={1}
-          marginRight={1}
-          border={["right"]}
-          borderStyle="single"
-          borderColor={colors.border.default}
-        >
-          {items.map((item, i) => (
-            <SelectableRow key={item.value} selected={i === selected} label={item.label} />
-          ))}
-        </box>
-        <box flexDirection="column" flexGrow={1} flexBasis={0} paddingLeft={1}>
-          <text fg={colors.text.secondary}>{items[selected].label}</text>
-          <box marginTop={1} flexDirection="column">
-            {details.map((line, i) => (
-              <text key={i} fg={colors.text.muted}>{line || " "}</text>
-            ))}
-          </box>
-        </box>
-      </box>
-    </Modal>
+    <MenuScreen
+      title="Configure"
+      workspace={workspace}
+      gateway={gateway}
+      core={core}
+      items={items}
+      preview={preview}
+      suspended={suspended}
+      onSelect={(key) => {
+        if (key === "workspace") onWorkspace();
+        else if (key === "back") dispatch({ type: "quit-request" });
+        else dispatch({ type: "menu-select", key: key as WizardMenuKey });
+      }}
+      onBack={() => dispatch({ type: "quit-request" })}
+      hint="↑/↓ move · Enter open · Esc back"
+      notice={notice}
+      error={error}
+    />
   );
 }
