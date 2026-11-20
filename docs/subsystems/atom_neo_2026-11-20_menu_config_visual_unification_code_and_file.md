@@ -184,7 +184,7 @@ function defaultPreview(item: MenuItem, hint: string): MenuPreview {
 import { MenuScreen } from "./menu-frame";
 import type { MenuItem, MenuPreview } from "./menu-frame";
 import type { WizardAction, WizardUiState } from "../wizard/wizard-reducer";
-import { describeSelection, buildMenuItems } from "../components/MenuModal";
+import { describeSelection, buildMenuItems } from "./configure-view";
 
 export type ConfigureMenuProps = {
   ui: WizardUiState;
@@ -348,8 +348,8 @@ return (
 ### 5.3 `WizardViews` 调整
 
 ```tsx
-// 删除 WizardProviderViews 中的 menu 分支
-{view?.kind === "menu" && !embedded && <LegacyMenuModal ... />}
+// WizardProviderViews 不渲染 menu；配置模式的 menu 只由 ConfigureView 渲染。
+{view?.kind === "providers" && <ProvidersModal ... />}
 ```
 
 配置模式下 `view.kind === "menu"` 只由 `ConfigureView` 渲染；first-run 模式不会出现 menu 视图。
@@ -563,3 +563,10 @@ git diff --check
 ```
 
 确认三者进入同一视觉体系，且返回路径一致。
+
+## 11. 复审修复补充
+
+- `configure-view.tsx` 的 wizard 菜单项与 `describeSelection` 全部在本文件内，`MenuModal`/`LegacyMenuModal` 已删除。
+- Workspace 切换使用 `MenuConfirm`：确认后 `setWorkspace` + `refreshSettings` + WizardApp key epoch 重挂载；取消不改变 workspace/state。
+- `startWizard` 仅支持 `first-run`；embedded WizardApp 无背景、无嵌套 ThemeProvider，主题通过 `chrome.onThemeChange` 更新外层 MenuApp。
+- 列表 label/detail 通过 `truncateByWidth` 预截断，`SelectableRow truncate` 保证单行；表单 chrome 统一到 Confirm/ApiKey/Models/Project/GatewayInstanceForm/WizardQuit。

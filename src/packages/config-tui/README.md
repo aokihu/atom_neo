@@ -20,8 +20,7 @@
 | `src/wizard-logic.ts` | 配置文件读写、字段校验等纯逻辑入口 |
 | `src/components/WizardApp.tsx` | reducer 编排、视图组合、保存流程 |
 | `src/wizard/wizard-*` | wizard 状态、reducer、预填、编辑草稿 |
-| `src/components/ProvidersModal.tsx` | Provider 列表；embedded 模式使用 MenuScreen 分栏与右侧详情 |
-| `src/components/ProvidersModal.tsx` | provider 列表与新增 |
+| `src/components/ProvidersModal.tsx` | Provider 列表；embedded 模式使用 MenuScreen 分栏、右侧详情与 Add Provider 覆盖层 |
 | `src/components/ApiKeyModal.tsx` | API Key 输入（只写入 `.env`） |
 | `src/components/ModelsModal.tsx` | 模型、provider 类型、端点、thinking/contextLimit |
 | `src/components/ProfilesModal.tsx` | 三档模型映射 |
@@ -54,4 +53,4 @@ bun test src/packages/config-tui/src
 bun run --cwd src/packages/config-tui typecheck
 ```
 
-重点：`menu/menu-app.test.tsx`（路由、theme/port 刷新、失败反馈、WorkspaceGate C、Wizard 返回与内部 Gateway 入口、Home 无 breadcrumb、64/40 列顶栏与深路径 breadcrumb）、`menu/menu-views.test.tsx`（长列表滚动、路径省略、History 删除确认键盘隔离/attached 保护、Core 启停）、`menu/menu-frame.test.ts`（`menuContentWidth` / `truncateByWidth` / `truncateMiddle` 的显示宽度、CJK、emoji、组合字符）、`menu/backup-view.test.tsx`（遮罩密码、短密码、明文警告、加密导入）、`gateway-instance-form.test.ts`（secret 遮罩/编辑/提交）、`gateway-status.test.ts`（admin 请求/诊断/保存）、`components/GatewayModal.test.tsx`（离线/列表/操作/重载错误/编辑）。
+重点：`menu/menu-app.test.tsx`（路由、theme/port 刷新、失败反馈、WorkspaceGate C、Wizard 返回与内部 Gateway 入口、Home 无 breadcrumb、64/40 列顶栏与深路径 breadcrumb）、`menu/menu-views.test.tsx`（长列表滚动、路径省略、History 删除确认键盘隔离/attached 保护、Core 启停）、`menu/menu-frame.test.ts`（`menuContentWidth` / `truncateByWidth` / `truncateMiddle` 的显示宽度、CJK、emoji、组合字符）、`menu/configure-view.test.tsx`（扁平 Configure 菜单）、`components/wizard-chrome.test.tsx`（Confirm/ApiKey/Models/Project chrome）、`menu/backup-view.test.tsx`（遮罩密码、短密码、明文警告、加密导入）、`gateway-instance-form.test.ts`（secret 遮罩/编辑/提交）、`gateway-status.test.ts`（admin 请求/诊断/保存）、`components/GatewayModal.test.tsx`（离线/列表/操作/重载错误/编辑）。

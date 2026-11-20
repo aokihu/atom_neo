@@ -241,7 +241,15 @@ atom config gateway
 
 验证：
 
-- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 189 pass
+- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 200 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 26 pass
-- 全量 `bun test` → 2791 pass、27 skip、0 fail
+- 全量 `bun test` → 2802 pass、27 skip、0 fail
 - `bun run typecheck`、`typecheck:node`、`docs:check`、`git diff --check` 通过
+
+## 11. 复审修复
+
+- Workspace 切换语义：确认后丢弃未保存 Configure state，并从新 workspace 重挂载 WizardApp；取消保持原 workspace/state；相同路径直接关闭。
+- 列表行严格单行：MenuScreen 按可用宽度预截断 label/detail，SelectableRow 支持 `truncate`；64/40 列无折行。
+- `startWizard` 仅支持 first-run；embedded Configure 删除嵌套 ThemeProvider，主题通过 `onThemeChange` 驱动外层即时预览。
+- Confirm/ApiKey/Models/Project/GatewayInstanceForm/WizardQuit 统一 `ATOM NEO ·` 标题、版本号与 title truncate。
+- 测试补充 A→B workspace 文件断言、Add Provider 覆盖层、表单 chrome、100/64/40 Home/Session/Configure/Backup PTY。

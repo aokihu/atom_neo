@@ -474,8 +474,22 @@ integration("Menu shell stays single-line at 100/64/40 columns", async () => {
     ], [binary, "config", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
     expect(configure.tail).toContain("Home / Configure");
     expect(configure.tail).toContain(`v${version}`);
+
+    const session = await driveMenu([
+      { wait: "Session", delay: 0.2, send: "\r", keyDelay: 0.08 },
+      { wait: "Continue", delay: 0.3, send: "\x03" },
+    ], [binary, "menu", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
+    expect(session.tail).toContain("Continue");
+    expect(session.tail).toContain(`v${version}`);
+
+    const backup = await driveMenu([
+      { wait: "Session", delay: 0.2, send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+      { wait: "Import", delay: 0.3, send: "\x03" },
+    ], [binary, "menu", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
+    expect(backup.tail).toContain("Import");
+    expect(backup.tail).toContain(`v${version}`);
   }
-}, 60000);
+}, 90000);
 
 integration("unconfigured atom config gateway starts at Workspace and never writes config", async () => {
   const path = emptySandbox("empty-config-gateway");

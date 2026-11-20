@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { act } from "react";
@@ -31,6 +31,7 @@ function actions(overrides: Partial<MenuActions> = {}): MenuActions {
     },
     hasConfig: () => true,
     validateWorkspace: () => undefined,
+    normalizeWorkspace: (path) => path,
     setWorkspace: (path) => path,
     refreshSettings: () => ({ theme: "edex", gatewayPort: 3000 }),
     coreStatus: async () => "offline",
@@ -270,6 +271,16 @@ test("Configure Providers uses the split list and live provider preview", async 
   expect(app.frame()).toContain("ATOM NEO · Configure");
 });
 
+test("Configure Add Provider opens an overlay without losing the shell", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  await app.press("ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ADD PROVIDER");
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("ATOM NEO · Providers & Models");
+  expect(app.frame()).toContain("➕ Add Provider");
+});
+
 test("Configure Theme previews real colors before applying", async () => {
   const app = await mount({ initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
@@ -463,6 +474,92 @@ test("Configure workspace editing preserves unsaved wizard state", async () => {
   await app.press("ESCAPE");
   expect(app.frame()).toContain("ATOM NEO · Configure");
   expect(app.frame()).toContain("Theme (nord)");
+});
+
+function workspaceSandboxes(themeA: string, themeB: string) {
+  const a = mkdtempSync(join(tmpdir(), "atom-menu-workspace-a-"));
+  const b = mkdtempSync(join(tmpdir(), "atom-menu-workspace-b-"));
+  tempDirs.push(a, b);
+  writeFileSync(join(a, "config.json"), JSON.stringify({ version: 2, tui: { theme: themeA } }));
+  writeFileSync(join(b, "config.json"), JSON.stringify({ version: 2, tui: { theme: themeB } }));
+  return { a, b };
+}
+
+function workspaceActions(a: string, b: string, themeA: string, themeB: string, overrides: Partial<MenuActions> = {}) {
+  let current = a;
+  const theme = () => current === b ? themeB : themeA;
+  return actions({
+    theme: themeA,
+    normalizeWorkspace: (path) => path,
+    setWorkspace: (path) => { current = path; return path; },
+    refreshSettings: () => ({ theme: theme(), gatewayPort: 3000 }),
+    ...overrides,
+  });
+}
+
+function clearInputKeys(value: string): string[] {
+  return ["END", ...Array.from({ length: value.length }, () => "BACKSPACE")];
+}
+
+test("switching workspace discards unsaved state and reloads the new sandbox", async () => {
+  const { a, b } = workspaceSandboxes("github-dark", "nord");
+  const app = await mount({ sandbox: a, initialRoute: "configure", actions: workspaceActions(a, b, "github-dark", "nord") });
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Theme (dracula)");
+  await app.press("RETURN");
+  await app.press(...clearInputKeys(a));
+  await app.type(b);
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Switch workspace?");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Theme (nord)");
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Saved");
+  expect(JSON.parse(readFileSync(join(b, "config.json"), "utf8")).tui.theme).toBe("nord");
+  expect(JSON.parse(readFileSync(join(a, "config.json"), "utf8")).tui.theme).toBe("github-dark");
+});
+
+test("cancelling a workspace switch keeps the old workspace and unsaved state", async () => {
+  const { a, b } = workspaceSandboxes("github-dark", "nord");
+  const app = await mount({ sandbox: a, initialRoute: "configure", actions: workspaceActions(a, b, "github-dark", "nord") });
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Theme (dracula)");
+  await app.press("RETURN");
+  await app.press(...clearInputKeys(a));
+  await app.type(b);
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Switch workspace?");
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("Theme (dracula)");
+  expect(app.frame()).toContain(a);
+});
+
+test("100-column Configure renders left navigation and right preview across the divider", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  const line = app.frame().split("\n").find(value => value.includes("Workspace path") && value.includes("WORKSPACE PATH"));
+  expect(line).toBeDefined();
+  const label = line!.indexOf("Workspace path");
+  const divider = line!.indexOf("│", label);
+  expect(label).toBeLessThan(divider);
+  expect(divider).toBeLessThan(line!.indexOf("WORKSPACE PATH"));
+});
+
+test.each([64, 40])("Configure long labels and details never wrap at %i columns", async (width) => {
+  const workspace = "/Volumes/Projects/atom_neo/very/long/workspace/path/DO-NOT-WRAP";
+  const app = await mount({ initialRoute: "configure", width, sandbox: workspace });
+  const lines = contentLines(app.frame());
+  expect(lines.filter(line => line.includes("Gateway (clients"))).toHaveLength(1);
+  expect(lines.some(line => line.trim() === "3000)" || line.trim() === "management")).toBe(false);
+  const workspaceRow = lines.findIndex(line => line.includes("Workspace path"));
+  expect(workspaceRow).toBeGreaterThanOrEqual(0);
+  expect(lines[workspaceRow]).not.toContain("DO-NOT-WRAP");
+  expect(lines[workspaceRow + 1]?.startsWith("/Volumes/Projects/atom_neo/very")).toBe(false);
 });
 
 test("Configure Escape asks for quit confirmation", async () => {

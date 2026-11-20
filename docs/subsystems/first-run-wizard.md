@@ -4,7 +4,7 @@
 > **Package**: `@atom-neo/config-tui` (`src/packages/config-tui/`)
 > **启动方式**: 子进程（`spawnProcess` / `node:child_process`）或独立进程入口，与主进程隔离
 
-`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。MenuApp 的 Configure 直接以 embedded 模式挂载同一 `WizardApp`：不创建独立背景，保存/取消后回到同一 Configure，不复制 wizard 状态。Workspace 编辑使用覆盖层，避免卸载 WizardApp 丢失未保存状态。
+`startWizard` 仅支持 `first-run`，返回是否真正保存完成；first-run 取消仍拒绝并非零退出。配置编辑不再走独立 `startWizard("config")`，只通过 `atom config` / MenuApp Configure。MenuApp 的 Configure 直接以 embedded 模式挂载同一 `WizardApp`：不创建独立背景、不嵌套 ThemeProvider；主题通过 `onThemeChange` 驱动外层 MenuApp 即时预览，保存/取消后回到同一 Configure。Workspace 编辑使用覆盖层；确认切换 workspace 会丢弃未保存设置并从新 workspace 重新加载，取消则保持原 workspace 与 wizard state。
 
 ---
 
@@ -48,14 +48,13 @@ src/packages/config-tui/
 └── src/
     ├── index.ts            # export { startWizard, startMenuApp }
     ├── app.tsx             # startWizard：渲染器生命周期 + Ctrl+C/D(EOF) 退出语义
-    ├── menu/               # OpenTUI MenuApp（Home/Session/Gateway/Configure/Backup）
+    ├── menu/               # OpenTUI MenuApp；configure-view.tsx 为扁平 Configure
     ├── wizard-logic.ts     # 单一文件：types + pending 状态机 + commit + load + 解析器
     ├── wizard-logic.test.ts
     ├── modal/index.tsx     # 薄包装：tui-kit Modal + chrome="bordered"
     └── components/
-        ├── WizardApp.tsx      # 编排：状态机 + 视图栈 + 退出确认（纯色背景）
-        ├── configure-view.tsx # Configure 左导航 + 右详情（buildMenuItems/describeSelection）
-        ├── ProvidersModal.tsx # provider 列表 + 新增
+        ├── WizardApp.tsx      # 编排：状态机 + 视图栈 + 退出确认；embedded 无背景/无嵌套 ThemeProvider
+        ├── ProvidersModal.tsx # provider 列表 + 新增；embedded 使用统一分栏
         ├── ApiKeyModal.tsx    # API Key（明文，仅写入 .env）
         ├── ModelsModal.tsx    # 模型增删 + provider 类型 + 端点或 LLM 参数
         ├── ProfilesModal.tsx  # 三档对话模型映射

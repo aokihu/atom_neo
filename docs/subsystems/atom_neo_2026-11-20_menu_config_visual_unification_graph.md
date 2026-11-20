@@ -235,5 +235,6 @@ terminal width
 | `MenuModal` 删除 | 测试、first-run、wizard view 引用遗漏 | 先迁移 `buildMenuItems` / `describeSelection`，再删除；全量 rg |
 | Providers/Theme 分栏 | 键盘/焦点/滚动回归 | 复用 `MenuScreen`，补 PTY 与渲染测试 |
 | GatewayModal | 内部状态机多，视觉改造误伤行为 | 只改 chrome，不改 actions / fetch / form 逻辑 |
-| 窄窗口 | 版本号、workspace、hint 折行 | 继续用 shared `stringWidth`；100/64/40 PTY |
+| 窄窗口 | 版本号、workspace、hint、长 label/detail 折行 | 继续用 shared `stringWidth`；MenuScreen 预截断 + SelectableRow `truncate`；100/64/40 PTY |
+| Workspace 切换 | 旧 wizard state 写入新 sandbox | 确认后丢弃并重挂载 WizardApp；取消保持原 state |
 | 路由删除 | `atom config gateway` 返回路径错乱 | breadcrumb 与 `gateway-real.back` 断言；PTY 覆盖 |

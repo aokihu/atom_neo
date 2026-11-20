@@ -25,6 +25,7 @@ function actions(overrides: Partial<MenuActions> = {}): MenuActions {
     gateway: { install: async () => "", load: async () => "", pack: async () => "" },
     hasConfig: () => true,
     validateWorkspace: () => undefined,
+    normalizeWorkspace: (path) => path,
     setWorkspace: (path) => path,
     refreshSettings: () => ({ theme: "edex", gatewayPort: 3000 }),
     coreStatus: async () => "online",

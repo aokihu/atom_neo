@@ -59,7 +59,8 @@ atom config gateway [--sandbox <path>]
 - 三行使用同一左缩进；宽度按 `@atom-neo/shared` 的 `stringWidth` 计算。标题先按可用宽度截断并保留完整版本号，breadcrumb 单行截断，workspace 在扣除 `workspace: ` 前缀后中部省略。64/40 列下标题+版本、breadcrumb、workspace、Gateway/Core 状态均保持单行。
 - 启动失败重试时使用最后一次 launch 选择的 workspace 重新打开 MenuApp，不回退到原始 `args.sandbox`。
 - MenuScreen 统一使用左右分栏：`>=80` 列左侧导航、右侧 preview；`64–79` 列单列并内联 detail；`<64` 列隐藏 detail。长列表保持 10 行窗口滚动。
-- Configure 使用同一个 MenuScreen/预览逻辑，Workspace 编辑为覆盖层，不卸载 embedded WizardApp，未保存的 wizard state 保持不变。
+- Configure 使用同一个 MenuScreen/预览逻辑，Workspace 编辑为覆盖层，不卸载 embedded WizardApp。确认切换 workspace 视为放弃未保存设置并从新 workspace 重新加载（WizardApp 重挂载）；取消则保持原 workspace 与 wizard state。路径未变化时直接关闭覆盖层。
+- 配置模式只有 embedded WizardApp；独立 `startWizard` 仅用于 first-run。
 - `createMenuActions` 严格只读配置：`config.json` 缺失时 theme=edex、Gateway port=3000，不创建目录或文件。
 - 修改 Workspace 会规范化绝对路径并更新后续页面使用的 sandbox；取消不写配置。
 - theme / Gateway port 是 MenuApp state；Wizard 保存/取消、端口编辑或 workspace 切换后通过 `refreshSettings()` 重新读取并渲染。
