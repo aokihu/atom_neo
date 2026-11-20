@@ -74,5 +74,7 @@ export interface ModalProps {
   contentPaddingX?: number;
   /** Optional helper line rendered below the action bar. */
   hint?: string;
+  /** Opt in to single-line hint truncation; default allows normal wrapping. */
+  hintTruncate?: boolean;
   chrome?: ModalChrome;
 }

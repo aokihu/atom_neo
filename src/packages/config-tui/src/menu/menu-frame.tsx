@@ -360,7 +360,7 @@ export function MenuConfirm({ title, message, confirmLabel, onConfirm, onCancel 
       actions={actions}
       onAction={(key) => key === "confirm" ? onConfirm() : onCancel()}
       onClose={onCancel}
-      hint="Tab/←/→ select · Enter confirm · Esc cancel"
+      hint="Tab/←/→ · Enter · Esc"
     >
       <text>{message}</text>
     </Modal>

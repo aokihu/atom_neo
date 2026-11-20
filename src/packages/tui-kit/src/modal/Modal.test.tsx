@@ -16,7 +16,7 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight, title = "Test", titleTruncate, width = 48 }: {
+async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight, title = "Test", titleTruncate, width = 48, hint = "↑/↓ select · Tab actions", hintTruncate }: {
   listLength?: number;
   focusRef?: Ref<BoxRenderable>;
   actions?: ModalAction[];
@@ -24,6 +24,8 @@ async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight
   title?: string;
   titleTruncate?: boolean;
   width?: number;
+  hint?: string;
+  hintTruncate?: boolean;
 } = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
@@ -50,7 +52,8 @@ async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight
         onListNavigate={index => listMoves.push(index)}
         onListActivate={index => triggered.push(`list:${index}`)}
         focusRef={focusRef}
-        hint="↑/↓ select · Tab actions"
+        hint={hint}
+        hintTruncate={hintTruncate}
       />
     );
   }
@@ -160,6 +163,41 @@ test("titleTruncate opts into single-line ellipsis without headerRight", async (
     const frame = ctx.setup.captureCharFrame();
     expect(frame).toContain("...");
     expect(frame).not.toContain("A very long title that must be truncated");
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("wraps a long hint by default at narrow width", async () => {
+  const hint = "This deliberately long hint must wrap on a narrow terminal";
+  const ctx = await mountModal({ hint, width: 40 });
+  try {
+    await ctx.render(true);
+    const lines = ctx.setup.captureCharFrame().split("\n");
+    const hintLines = lines.filter(line => /This|deliberately|must|wrap|narrow|terminal/.test(line));
+    expect(hintLines.length).toBeGreaterThan(1);
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("hintTruncate makes a long hint single-line without losing the header version", async () => {
+  const hint = "This deliberately long hint must remain on one truncated line";
+  const ctx = await mountModal({
+    hint,
+    hintTruncate: true,
+    width: 40,
+    title: "A very long modal title that needs truncation",
+    titleTruncate: true,
+    headerRight: <text fg="#888888">v9.9.9</text>,
+  });
+  try {
+    await ctx.render(true);
+    const lines = ctx.setup.captureCharFrame().split("\n");
+    const hintLines = lines.filter(line => /This|deliberately|remain|truncated/.test(line));
+    expect(hintLines).toHaveLength(1);
+    const title = lines.find(line => line.includes("v9.9.9"));
+    expect(title?.trimEnd().replace(/[│]/g, "").trimEnd().endsWith("v9.9.9")).toBe(true);
   } finally {
     await cleanup(ctx);
   }

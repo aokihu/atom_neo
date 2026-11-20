@@ -79,6 +79,7 @@ export function Modal({
   titlePadding = 1,
   contentPaddingX = 1,
   hint,
+  hintTruncate = false,
   chrome = "plain",
 }: ModalProps) {
   const { colors } = useTheme();
@@ -255,7 +256,7 @@ export function Modal({
         />
         {hint && (
           <box flexShrink={0} paddingTop={1}>
-            <text fg={colors.text.muted} wrapMode="none" truncate>{hint}</text>
+            <text fg={colors.text.muted} {...(hintTruncate ? { wrapMode: "none" as const, truncate: true } : {})}>{hint}</text>
           </box>
         )}
       </box>

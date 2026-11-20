@@ -184,7 +184,7 @@ function defaultPreview(item: MenuItem, hint: string): MenuPreview {
 import { MenuScreen } from "./menu-frame";
 import type { MenuItem, MenuPreview } from "./menu-frame";
 import type { WizardAction, WizardUiState } from "../wizard/wizard-reducer";
-import { describeSelection, buildMenuItems } from "./configure-view";
+// buildMenuItems / describeSelection are defined in this same file.
 
 export type ConfigureMenuProps = {
   ui: WizardUiState;
@@ -194,7 +194,8 @@ export type ConfigureMenuProps = {
   core: "online" | "offline" | "unknown";
   suspended?: boolean;
   onWorkspace: () => void;
-  onBack: () => void;
+  notice?: string;
+  error?: string;
 };
 
 export function ConfigureView({ ui, dispatch, ...props }: ConfigureMenuProps) {
@@ -268,6 +269,7 @@ const [pendingWorkspace, setPendingWorkspace] = useState<string>();
 {workspaceEditing ? (
   <MenuPrompt
     title="Configure / Workspace"
+    label="Workspace path"
     value={workspace}
     onSubmit={value => {
       const problem = actions.validateWorkspace(value);
@@ -286,6 +288,7 @@ const [pendingWorkspace, setPendingWorkspace] = useState<string>();
   <MenuConfirm
     title="Switch workspace"
     message="Switch workspace? Unsaved Configure changes will be discarded."
+    confirmLabel="Switch"
     onConfirm={() => {
       actions.setWorkspace(pendingWorkspace);
       const settings = actions.refreshSettings();
@@ -312,7 +315,9 @@ export type WizardChrome = {
   core: "online" | "offline" | "unknown";
   suspended?: boolean;
   onWorkspace: () => void;
-  onBack: () => void;
+  onThemeChange?: (theme: string) => void;
+  notice?: string;
+  error?: string;
 };
 
 export function WizardApp({

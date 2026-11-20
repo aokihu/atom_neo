@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { ThemeProvider } from "@atom-neo/tui-kit";
-import { MenuChromeProvider } from "../menu/menu-frame";
+import { MenuChromeProvider, MenuConfirm } from "../menu/menu-frame";
 import { initialState } from "../wizard-logic";
 import { ConfirmModal } from "./ConfirmModal";
 import { ApiKeyModal } from "./ApiKeyModal";
@@ -95,10 +95,9 @@ function assertNarrowHeader(frame: string, expectedTitle: string) {
   const version = titleLine!.indexOf("v9.9.9");
   expect(version).toBeGreaterThan(titleLine!.indexOf(expectedTitle));
   expect(titleLine![version - 1]).toBe(" ");
-  expect(lines.filter(line => line.includes("Tab/")).length).toBeLessThanOrEqual(1);
 }
 
-test("Confirm and QuitConfirm keep title, version and hint single-line at 40 columns", async () => {
+test("Confirm and QuitConfirm keep title and version single-line at 40 columns", async () => {
   const confirm = await mountModal(
     <ConfirmModal state={initialState("config")} onSave={() => {}} onBack={() => {}} />,
     { width: 40 },
@@ -110,6 +109,18 @@ test("Confirm and QuitConfirm keep title, version and hint single-line at 40 col
     { width: 40 },
   );
   assertNarrowHeader(quit, "ATOM NEO");
+});
+
+test("MenuConfirm keeps the full short hint at 40 columns", async () => {
+  const frame = await mountModal(
+    <MenuConfirm title="Delete" message="Delete session?" confirmLabel="Delete" onConfirm={() => {}} onCancel={() => {}} />,
+    { width: 40 },
+  );
+  assertNarrowHeader(frame, "Delete");
+  const hint = frame.split("\n").find(line => line.includes("Tab/"));
+  const clean = hint?.replace(/[│]/g, "").trim() ?? "";
+  expect(clean).toContain("Enter");
+  expect(clean.endsWith("Esc")).toBe(true);
 });
 
 test("GatewayInstanceForm uses unified title, version and width", async () => {
