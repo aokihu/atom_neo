@@ -1,5 +1,6 @@
 import { useKeyboard } from "@opentui/react";
 import { MenuScreen } from "./menu-frame";
+import type { MenuPreview } from "./menu-frame";
 
 export function WorkspaceGate({ workspace, gateway, core, error, onContinue, onChange, onBack }: {
   workspace: string;
@@ -25,6 +26,11 @@ export function WorkspaceGate({ workspace, gateway, core, error, onContinue, onC
         { key: "change", label: "Change workspace ›" },
         { key: "back", label: "‹ Back" },
       ]}
+      preview={(item): MenuPreview => {
+        if (item.key === "continue") return { title: "GATEWAY", lines: ["Open Gateway configuration", "for the current workspace.", "", workspace] };
+        if (item.key === "change") return { title: "CHANGE WORKSPACE", lines: ["Choose another workspace", "before Gateway configuration."] };
+        return { title: "BACK", lines: ["Return to Home.", "", "Esc back."] };
+      }}
       onSelect={(key) => key === "continue" ? onContinue() : key === "change" ? onChange() : onBack()}
       onBack={onBack}
       hint="Enter continue · C change · Esc back"

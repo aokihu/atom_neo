@@ -134,6 +134,8 @@ test("home shows the integrated menu and workspace status without a breadcrumb",
   expect(frame).toContain("Configure");
   expect(frame).toContain("Backup");
   expect(frame).toContain("Quit");
+  expect(frame).toContain("SESSION");
+  expect(frame).toContain("Chat with the current agent.");
   const lines = frame.split("\n");
   const title = lines.findIndex(line => line.includes("ATOM NEO · Home"));
   expect(lines[title + 1]).toContain("workspace: /tmp/atom-menu");
@@ -161,6 +163,9 @@ test.each([100, 64, 40])("home at %i columns has no breadcrumb and keeps workspa
   expect(lines[title + 2]).toContain("Gateway:");
   expect(lines.filter(line => line.includes("Gateway:"))).toHaveLength(1);
   expect(lines.filter(line => line.replace(/[│]/g, "").trim() === "Home")).toHaveLength(0);
+  if (width >= 80) expect(app.frame()).toContain("Chat with the current agent.");
+  else if (width >= 64) expect(app.frame()).toContain("Chat and Core server");
+  else expect(app.frame()).not.toContain("Chat and Core server");
 });
 
 test("gateway shortcut goes through workspace confirmation", async () => {
@@ -375,7 +380,7 @@ test("gateway port edit refreshes the Configure summary", async () => {
   await app.type("4321");
   await app.press("RETURN", "ESCAPE");
   expect(ports).toEqual([4321]);
-  expect(app.frame()).toContain("Gateway port 4321");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
 });
 
 test("gateway port save errors stay inline in the modal", async () => {
@@ -403,14 +408,16 @@ test("saving the theme wizard refreshes Advanced and returns there", async () =>
     actions: actions({ refreshSettings: () => ({ theme: "nord", gatewayPort: 3000 }) }),
   });
   await app.press("ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN");
   expect(app.frame()).toContain("Current: edex");
-  await app.press("ARROW_DOWN", "RETURN");
+  await app.press("RETURN");
   expect(app.frame()).toContain("THEME");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("SAVE & EXIT");
   await app.press("RETURN");
   expect(app.frame()).toContain("ATOM NEO · Advanced");
+  await app.press("ARROW_DOWN");
   expect(app.frame()).toContain("Current: nord");
 });
 

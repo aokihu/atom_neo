@@ -66,6 +66,37 @@ export type MenuItem = {
   detail?: string;
 };
 
+export type MenuPreview = {
+  title: string;
+  lines: string[];
+};
+
+const SPLIT_MIN_WIDTH = 80;
+const NAV_WIDTH = 34;
+
+function defaultPreview(item: MenuItem, hint: string): MenuPreview {
+  return {
+    title: item.label.replace(/[›‹]\s*/g, "").trim().toUpperCase(),
+    lines: [item.detail ?? "", "", hint],
+  };
+}
+
+function MenuPreviewPane({ preview, width }: { preview: MenuPreview; width: number }) {
+  const { colors } = useTheme();
+  return (
+    <box flexDirection="column">
+      <text fg={colors.text.bright} wrapMode="none" truncate>{truncateByWidth(preview.title, width)}</text>
+      <box marginTop={1} flexDirection="column">
+        {preview.lines.map((line, index) => (
+          <text key={index} fg={colors.text.muted} wrapMode="none" truncate>
+            {truncateByWidth(line || " ", width)}
+          </text>
+        ))}
+      </box>
+    </box>
+  );
+}
+
 type MenuChrome = { version?: string; breadcrumb?: string };
 const MenuChromeContext = createContext<MenuChrome>({});
 
@@ -100,7 +131,7 @@ export function MenuStatus({ workspace, gateway, core }: {
 }
 
 /** Shared OpenTUI menu surface: frame, status header, list and keyboard navigation. */
-export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, children }: {
+export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, preview, children }: {
   title: string;
   workspace: string;
   gateway: "online" | "offline" | "unknown";
@@ -115,6 +146,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   notice?: string;
   /** Keep the list visible but release all keyboard handling to an overlay. */
   suspended?: boolean;
+  preview?: (item: MenuItem) => MenuPreview;
   children?: ReactNode;
 }) {
   const { colors } = useTheme();
@@ -129,6 +161,34 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const maxVisible = 10;
   const windowStart = Math.max(0, Math.min(bounded - maxVisible + 1, items.length - maxVisible));
   const visibleItems = items.slice(windowStart, windowStart + maxVisible);
+  const split = width >= SPLIT_MIN_WIDTH;
+  const showInlineDetail = width >= 64 && !split;
+  const selectedItem = items[bounded];
+  const previewWidth = Math.max(12, contentWidth - NAV_WIDTH - 3);
+  const selectedPreview = selectedItem
+    ? preview?.(selectedItem) ?? defaultPreview(selectedItem, hint)
+    : undefined;
+  const renderRows = (detail: boolean) => (
+    <>
+      {items.length === 0
+        ? <text fg={colors.text.muted}>No items.</text>
+        : visibleItems.map((item, offset) => {
+          const index = windowStart + offset;
+          return (
+            <SelectableRow
+              key={item.key}
+              selected={index === bounded}
+              label={item.label}
+              labelWidth={detail ? 24 : Math.min(30, Math.max(12, contentWidth - 5))}
+              detail={detail ? item.detail : undefined}
+            />
+          );
+        })}
+      {items.length > maxVisible
+        ? <text fg={colors.text.muted}>{`${windowStart + 1}-${windowStart + visibleItems.length} of ${items.length}`}</text>
+        : null}
+    </>
+  );
 
   useEffect(() => {
     setSelected(0);
@@ -166,23 +226,25 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       <box flexDirection="column">
         <MenuStatus workspace={workspace} gateway={gateway} core={core} />
         {children}
-        {items.length === 0
-          ? <text fg={colors.text.muted}>No items.</text>
-          : visibleItems.map((item, offset) => {
-            const index = windowStart + offset;
-            return (
-              <SelectableRow
-                key={item.key}
-                selected={index === bounded}
-                label={item.label}
-                labelWidth={32}
-                detail={item.detail}
-              />
-            );
-          })}
-        {items.length > maxVisible
-          ? <text fg={colors.text.muted}>{`${windowStart + 1}-${windowStart + visibleItems.length} of ${items.length}`}</text>
-          : null}
+        {split ? (
+          <box flexDirection="row" flexGrow={1}>
+            <box width={NAV_WIDTH} flexDirection="column">
+              {renderRows(false)}
+            </box>
+            <box
+              flexGrow={1}
+              flexDirection="column"
+              border={["left"]}
+              borderStyle="single"
+              borderColor={colors.border.default}
+              paddingLeft={2}
+            >
+              {selectedPreview ? <MenuPreviewPane preview={selectedPreview} width={previewWidth} /> : null}
+            </box>
+          </box>
+        ) : (
+          <box flexDirection="column">{renderRows(showInlineDetail)}</box>
+        )}
         {error ? <box marginTop={1}><text fg={colors.status.error}>{error}</text></box> : null}
         {notice ? <box marginTop={1}><text fg={colors.status.success}>{notice}</text></box> : null}
       </box>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MenuScreen } from "./menu-frame";
+import type { MenuPreview } from "./menu-frame";
 import type { MenuActions, MenuLaunch } from "./menu-types";
 
 export function CoreServerView({ workspace, gateway, core, actions, onLaunch, onBack, onRefreshStatus }: {
@@ -63,6 +64,12 @@ export function CoreServerView({ workspace, gateway, core, actions, onLaunch, on
         { key: "attach", label: "Attach Server", detail: core === "online" ? "Open the TUI" : "Core offline" },
         { key: "back", label: "‹ Back" },
       ]}
+      preview={(item): MenuPreview => {
+        if (item.key === "start") return { title: "START SERVER", lines: [core === "online" ? "Core already running." : "Run Core in this terminal.", "", core === "online" ? "Use Attach Server." : "Enter to start."] };
+        if (item.key === "stop") return { title: "STOP SERVER", lines: [core === "online" ? "Request controlled shutdown." : "Core is offline.", "", "Uses the admin token."] };
+        if (item.key === "attach") return { title: "ATTACH SERVER", lines: [core === "online" ? "Open the TUI with this Core." : "Core is offline.", "", "Enter to attach."] };
+        return { title: "BACK", lines: ["Return to Session.", "", "Esc back."] };
+      }}
       onSelect={(key) => {
         if (key === "start") {
           if (core === "online") {

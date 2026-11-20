@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MenuConfirm, MenuScreen } from "./menu-frame";
+import type { MenuPreview } from "./menu-frame";
 import type { MenuActions, SessionSummary } from "./menu-types";
 
 function shortSession(sessionId: string): string {
@@ -85,6 +86,12 @@ export function HistoryView({ workspace, gateway, core, actions, externalError, 
           }
           setError("");
           setPendingDelete(session);
+        }}
+        preview={(item): MenuPreview => {
+          const match = sessions.find(entry => entry.sessionId === item.key);
+          if (match) return { title: "SESSION", lines: [match.sessionId, "", detail(match), "Enter open · Del delete"] };
+          if (item.key === "refresh") return { title: "REFRESH", lines: ["Reload sessions from Core.", "", "Enter refresh."] };
+          return { title: "BACK", lines: ["Return to Session.", "", "Esc back."] };
         }}
         onSelectionChange={setSelected}
         hint="↑/↓ move · Enter open · Del delete · Esc back"

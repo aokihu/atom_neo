@@ -5,6 +5,8 @@ import { createRoot } from "@opentui/react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { HistoryView } from "./history-view";
 import { CoreServerView } from "./core-server-view";
+import { SessionView } from "./session-view";
+import { BackupView } from "./backup-view";
 import type { MenuActions, MenuLaunch, SessionSummary } from "./menu-types";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -69,6 +71,32 @@ async function mount(element: ReactNode, options: { width?: number; height?: num
   };
   return { press, frame: setup.captureCharFrame };
 }
+
+test("session and backup screens use the split preview at 100 columns", async () => {
+  const session = await mount(
+    <SessionView workspace="/tmp/atom" gateway="offline" core="online"
+      onChat={() => {}} onHistory={() => {}} onCoreServer={() => {}} onBack={() => {}} />,
+  );
+  expect(session.frame()).toContain("NEW CHAT");
+  expect(session.frame()).toContain("Start a fresh TUI session.");
+
+  const backup = await mount(
+    <BackupView workspace="/tmp/atom" gateway="offline" core="online"
+      onExport={() => {}} onImport={() => {}} onBack={() => {}} />,
+  );
+  expect(backup.frame()).toContain("EXPORT");
+  expect(backup.frame()).toContain("Package config.json and .env.");
+});
+
+test.each([64, 40])("backup details follow the responsive single-column rules at %i columns", async (width) => {
+  const view = await mount(
+    <BackupView workspace="/tmp/atom" gateway="offline" core="online"
+      onExport={() => {}} onImport={() => {}} onBack={() => {}} />,
+    { width, height: 24 },
+  );
+  if (width >= 64) expect(view.frame()).toContain("config.json + .env");
+  else expect(view.frame()).not.toContain("config.json + .env");
+});
 
 test("history lists sessions and deletes through MenuActions without opening or going back", async () => {
   const deleted: string[] = [];

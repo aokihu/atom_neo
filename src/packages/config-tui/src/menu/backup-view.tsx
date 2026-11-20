@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MenuConfirm, MenuPrompt, MenuScreen, MenuSecretPrompt } from "./menu-frame";
+import type { MenuPreview } from "./menu-frame";
 import type { MenuActions } from "./menu-types";
 
 export function BackupView({ workspace, gateway, core, notice, onExport, onImport, onBack }: {
@@ -22,6 +23,11 @@ export function BackupView({ workspace, gateway, core, notice, onExport, onImpor
         { key: "import", label: "Import ›", detail: "Restore from .atombak" },
         { key: "back", label: "‹ Back" },
       ]}
+      preview={(item): MenuPreview => {
+        if (item.key === "export") return { title: "EXPORT", lines: ["Package config.json and .env.", "", "Password optional; plaintext requires confirmation."] };
+        if (item.key === "import") return { title: "IMPORT", lines: ["Restore from an .atombak archive.", "", "Encrypted archives ask for a password."] };
+        return { title: "BACK", lines: ["Return to Home.", "", "Esc back."] };
+      }}
       onSelect={(key) => key === "export" ? onExport() : key === "import" ? onImport() : onBack()}
       onBack={onBack}
       hint="↑/↓ move · Enter open · Esc back"
