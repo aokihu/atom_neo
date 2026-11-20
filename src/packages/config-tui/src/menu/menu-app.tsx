@@ -32,7 +32,6 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [workspaceEditing, setWorkspaceEditing] = useState(false);
   const [pendingWorkspace, setPendingWorkspace] = useState<string>();
-  const [wizardEpoch, setWizardEpoch] = useState(0);
 
   const refreshStatuses = async () => {
     const [gatewayState, coreState] = await Promise.all([
@@ -167,7 +166,7 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
       ) : route.name === "configure" ? (
         <>
           <WizardApp
-            key={`${workspace}:${wizardEpoch}`}
+            key={workspace}
             sandboxPath={workspace}
             mode="config"
             initialView="menu"
@@ -236,7 +235,6 @@ export function MenuApp({ sandbox, initialRoute = "home", initialError, version,
                 setPendingWorkspace(undefined);
                 setError("");
                 setNotice("");
-                setWizardEpoch(epoch => epoch + 1);
               }}
               onCancel={() => setPendingWorkspace(undefined)}
             />

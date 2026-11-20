@@ -251,34 +251,50 @@ Workspace 编辑不能切换到 MenuApp 顶层 `workspace` 路由，否则 `Wiza
 
 ```tsx
 const [workspaceEditing, setWorkspaceEditing] = useState(false);
+const [pendingWorkspace, setPendingWorkspace] = useState<string>();
 
 <WizardApp
-  ...
+  key={workspace}
   chrome={{
     workspace,
     gateway,
     core,
-    suspended: workspaceEditing,
+    suspended: workspaceEditing || Boolean(pendingWorkspace),
     onWorkspace: () => setWorkspaceEditing(true),
-    onBack: () => go({ name: "home" }),
+    onThemeChange: setTheme,
   }}
 />
 
 {workspaceEditing ? (
   <MenuPrompt
     title="Configure / Workspace"
-    label="Workspace path"
     value={workspace}
     onSubmit={value => {
       const problem = actions.validateWorkspace(value);
       if (problem) return setError(problem);
-      const normalized = actions.setWorkspace(value);
-      setWorkspace(normalized);
-      setTheme(actions.refreshSettings().theme);
+      const target = actions.normalizeWorkspace(value);
       setWorkspaceEditing(false);
+      if (target === workspace) return;
+      setPendingWorkspace(target);
     }}
     onCancel={() => setWorkspaceEditing(false)}
-    hint="Enter save · Esc cancel"
+    hint="Enter continue · Esc cancel"
+  />
+) : null}
+
+{pendingWorkspace ? (
+  <MenuConfirm
+    title="Switch workspace"
+    message="Switch workspace? Unsaved Configure changes will be discarded."
+    onConfirm={() => {
+      actions.setWorkspace(pendingWorkspace);
+      const settings = actions.refreshSettings();
+      setWorkspace(pendingWorkspace);
+      setTheme(settings.theme);
+      setGatewayPort(settings.gatewayPort);
+      setPendingWorkspace(undefined);
+    }}
+    onCancel={() => setPendingWorkspace(undefined)}
   />
 ) : null}
 ```
@@ -317,10 +333,13 @@ export function WizardApp({
 ```tsx
 const embedded = mode === "config" && chrome !== undefined;
 
-return (
-  <ThemeProvider theme={wizard.theme}>
-    {!embedded && <WizardBackground />}
+useEffect(() => {
+  if (embedded) chrome?.onThemeChange?.(wizard.theme);
+}, [embedded, chrome?.onThemeChange, wizard.theme]);
 
+const content = (
+  <>
+    {!embedded && <WizardBackground />}
     {view?.kind === "menu" && embedded && chrome ? (
       <ConfigureView
         ui={ui}
@@ -330,10 +349,8 @@ return (
         core={chrome.core}
         suspended={chrome.suspended}
         onWorkspace={chrome.onWorkspace}
-        onBack={chrome.onBack}
       />
     ) : null}
-
     <WizardProviderViews {...views} onModelsSubmit={submitModels} />
     <WizardSettingsViews {...views} ... onSave={save} />
     <WizardQuitConfirm
@@ -341,8 +358,10 @@ return (
       onQuit={onAbort}
       onCancel={() => dispatch({ type: "quit-cancel" })}
     />
-  </ThemeProvider>
+  </>
 );
+
+return embedded ? content : <ThemeProvider theme={wizard.theme}>{content}</ThemeProvider>;
 ```
 
 ### 5.3 `WizardViews` 调整

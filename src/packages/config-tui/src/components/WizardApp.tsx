@@ -52,7 +52,7 @@ export function WizardApp({ sandboxPath, mode, initialView, gatewayActions, onCo
 
   useEffect(() => {
     if (embedded) chrome?.onThemeChange?.(wizard.theme);
-  }, [embedded, chrome, wizard.theme]);
+  }, [embedded, chrome?.onThemeChange, wizard.theme]);
 
   const content = (
     <>

@@ -523,6 +523,21 @@ test("switching workspace discards unsaved state and reloads the new sandbox", a
   expect(JSON.parse(readFileSync(join(a, "config.json"), "utf8")).tui.theme).toBe("github-dark");
 });
 
+test("entering the same workspace closes the prompt without reloading state", async () => {
+  const { a, b } = workspaceSandboxes("github-dark", "nord");
+  const app = await mount({ sandbox: a, initialRoute: "configure", actions: workspaceActions(a, b, "github-dark", "nord") });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Theme (dracula)");
+  await app.press("RETURN");
+  await app.press(...clearInputKeys(a));
+  await app.type(a);
+  await app.press("RETURN");
+  expect(app.frame()).not.toContain("Switch workspace?");
+  expect(app.frame()).toContain("Theme (dracula)");
+  expect(app.frame()).toContain(a);
+});
+
 test("cancelling a workspace switch keeps the old workspace and unsaved state", async () => {
   const { a, b } = workspaceSandboxes("github-dark", "nord");
   const app = await mount({ sandbox: a, initialRoute: "configure", actions: workspaceActions(a, b, "github-dark", "nord") });
@@ -555,6 +570,7 @@ test.each([64, 40])("Configure long labels and details never wrap at %i columns"
   const app = await mount({ initialRoute: "configure", width, sandbox: workspace });
   const lines = contentLines(app.frame());
   expect(lines.filter(line => line.includes("Gateway (clients"))).toHaveLength(1);
+  if (width >= 64) expect(lines.some(line => line.includes("Gateway (clients · port 3000)"))).toBe(true);
   expect(lines.some(line => line.trim() === "3000)" || line.trim() === "management")).toBe(false);
   const workspaceRow = lines.findIndex(line => line.includes("Workspace path"));
   expect(workspaceRow).toBeGreaterThanOrEqual(0);

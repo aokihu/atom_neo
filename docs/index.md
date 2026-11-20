@@ -14,12 +14,12 @@
 | [project-structure.md](./overview/project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
 | [bootstrap.md](./overview/bootstrap.md) | 启动序列、初始化顺序 | 理解启动流程 |
 | [startup-menu.md](./subsystems/startup-menu.md) | OpenTUI MenuApp：Home/Session/Gateway/Configure/Backup、workspace、History/Core Server、非 TTY 拒绝 | 修改 menu/config 入口 |
-| [atom_neo_2026-11-19_menu_config_integration_plan.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_plan.md) | Menu 与 Config 整合计划（已实施 M1–M5）：OpenTUI MenuApp、Session/History/Core Server、Configure/Advanced/Gateway、Backup | 追踪整合范围与验收 |
+| [atom_neo_2026-11-19_menu_config_integration_plan.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_plan.md) | Menu 与 Config 整合计划（已实施 M1–M5）：OpenTUI MenuApp、Session/History/Core Server、Configure/Gateway、Backup | 追踪整合范围与验收 |
 | [atom_neo_2026-11-19_menu_config_integration_code_and_file.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_code_and_file.md) | Menu 与 Config 整合文件与代码（已实施）：路由、MenuApp、CLI、Core API、测试 | 审阅实现与文件影响面 |
 | [atom_neo_2026-11-19_menu_config_integration_graph.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_graph.md) | Menu 与 Config 整合关系图（已实施）：路由状态、模块依赖、启动/History/Gateway 序列 | 理解实现关系与风险 |
-| [atom_neo_2026-11-20_menu_config_visual_unification_plan.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_plan.md) | Menu 与 Config 视觉统一计划（设计已确认，待实施）：统一 Shell、扁平化 Configure、Providers/Theme 分栏、`atom config` 落点 | 追踪视觉统一范围与验收 |
-| [atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md) | Menu 与 Config 视觉统一文件与代码（待实施）：路由、MenuScreen 分栏、ConfigureView、WizardApp embedded、测试清单 | 编码前审阅文件影响面 |
-| [atom_neo_2026-11-20_menu_config_visual_unification_graph.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_graph.md) | Menu 与 Config 视觉统一关系图（待实施）：模块依赖、路由状态、启动/保存/Theme 序列、响应式与风险 | 理解改动关系与风险 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_plan.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_plan.md) | Menu 与 Config 视觉统一计划（已实施 M1–M5）：统一 Shell、扁平化 Configure、Providers/Theme 分栏、`atom config` 落点 | 追踪视觉统一范围与验收 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md) | Menu 与 Config 视觉统一文件与代码（已实施 M1–M5）：路由、MenuScreen 分栏、ConfigureView、WizardApp embedded、测试清单 | 编码前审阅文件影响面 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_graph.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_graph.md) | Menu 与 Config 视觉统一关系图（已实施 M1–M5）：模块依赖、路由状态、启动/保存/Theme 序列、响应式与风险 | 理解改动关系与风险 |
 | [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 
 ## 开发规范（编码时必查）
@@ -46,7 +46,7 @@
 | [jev-decisions.md](./subsystems/jev-decisions.md) | Jev 独立调用模块、配置、回退与验收 | 接入结构化决策模型 |
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
-| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + MenuApp Advanced / `atom config` 复用 WizardApp 与 GatewayModal（OpenTUI、原子回滚） | 实现首次启动流程/配置编辑 |
+| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `atom config` Configure（embedded WizardApp）与 GatewayModal（OpenTUI、原子回滚） | 实现首次启动流程/配置编辑 |
 | [tui-interface.md](./tui-interface.md) | eDEX 风格 OpenTUI 布局、工具调用背景提示与参数摘要、ROUNDS 预算、TODO 滚动跟随与响应式约束 | 修改 TUI 界面 |
 | [tui-modal.md](./tui-modal.md) | TUI 通用 Modal 组件 — 标题/内容/ActionBar + 键盘导航 + 定位 | 实现 TUI 浮层/确认框 |
 | [future-features.md](./future-features.md) | 已设计但未实现的功能清单 | 设计时查，避免遗忘 |

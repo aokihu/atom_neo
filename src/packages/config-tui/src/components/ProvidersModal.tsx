@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../modal";
-import { FieldInput, SelectableRow } from "@atom-neo/tui-kit";
+import { FieldInput, SelectableRow, useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 import { OPENROUTER_JEV } from "../wizard-logic";
 import { MenuScreen } from "../menu/menu-frame";
 import type { MenuPreview } from "../menu/menu-frame";
@@ -33,6 +34,9 @@ export function ProvidersModal({ state, allowJev, chrome, onSelect, onAdd, onBac
   onAdd: (id: string) => void;
   onBack: () => void;
 }) {
+  const { colors } = useTheme();
+  const { version } = useMenuChrome();
+  const versionRight = version ? <text fg={colors.text.muted}>v{version}</text> : undefined;
   const [adding, setAdding] = useState(false);
   const [newId, setNewId] = useState("");
   const [selected, setSelected] = useState(0);
@@ -59,7 +63,9 @@ export function ProvidersModal({ state, allowJev, chrome, onSelect, onAdd, onBac
   const addForm = adding ? (
     <Modal
       open
-      title="ADD PROVIDER"
+      title="ATOM NEO · ADD PROVIDER"
+      headerRight={versionRight}
+      titleTruncate
       width={56}
       interactive={false}
       onClose={closeAdd}
@@ -106,7 +112,9 @@ export function ProvidersModal({ state, allowJev, chrome, onSelect, onAdd, onBac
     <>
       <Modal
         open
-        title="PROVIDERS"
+        title="ATOM NEO · PROVIDERS"
+        headerRight={versionRight}
+        titleTruncate
         width={52}
         onClose={onBack}
         listLength={items.length}

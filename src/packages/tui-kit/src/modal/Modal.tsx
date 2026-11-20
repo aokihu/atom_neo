@@ -233,7 +233,7 @@ export function Modal({
             justifyContent="space-between"
             {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}
           >
-            <box flexShrink={1} minWidth={0}>
+            <box flexShrink={1} minWidth={0} marginRight={headerRight ? 1 : 0}>
               {title
                 ? <text fg={colors.text.bright} attributes={TextAttributes.BOLD} wrapMode="none" truncate>{title}</text>
                 : null}
@@ -255,7 +255,7 @@ export function Modal({
         />
         {hint && (
           <box flexShrink={0} paddingTop={1}>
-            <text fg={colors.text.muted}>{hint}</text>
+            <text fg={colors.text.muted} wrapMode="none" truncate>{hint}</text>
           </box>
         )}
       </box>

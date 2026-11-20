@@ -186,8 +186,8 @@ ThemeView
   │        ├─ wizard.theme = theme
   │        └─ view = menu
   │
-  ├── WizardApp ThemeProvider theme={wizard.theme}
-  │        └─ 立即重绘整个 shell
+  ├── WizardApp useEffect → chrome.onThemeChange(wizard.theme)
+  │        └─ MenuApp setTheme → 外层唯一 ThemeProvider 立即重绘 shell
   │
   └── Save & Exit
            └─ commit() → config.json.tui.theme
@@ -196,6 +196,7 @@ ThemeView
 说明：
 
 - Theme 预览仍是 wizard state 驱动，不直接写 config.json。
+- embedded WizardApp 不嵌套 ThemeProvider；外层 MenuApp ThemeProvider 是唯一主题源。
 - Core 运行中的主题重载由既有 `reloadConfig` 修复覆盖，不在本目标内重复实现。
 
 ---

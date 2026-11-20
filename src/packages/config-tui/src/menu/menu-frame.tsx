@@ -180,21 +180,22 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
     ? preview?.(selectedItem) ?? defaultPreview(selectedItem, hint)
     : undefined;
   const renderRows = (detail: boolean) => {
-    const labelMax = split ? NAV_WIDTH - 4 : detail ? 24 : Math.max(4, contentWidth - 4);
-    const detailMax = detail ? Math.max(1, contentWidth - labelMax - 3) : 0;
     return (
       <>
         {items.length === 0
           ? <text fg={colors.text.muted}>No items.</text>
           : visibleItems.map((item, offset) => {
             const index = windowStart + offset;
+            const hasDetail = detail && Boolean(item.detail?.trim());
+            const labelMax = split ? NAV_WIDTH - 4 : hasDetail ? 24 : Math.max(4, contentWidth - 4);
+            const detailMax = hasDetail ? Math.max(1, contentWidth - labelMax - 3) : 0;
             return (
               <SelectableRow
                 key={item.key}
                 selected={index === bounded}
                 label={truncateByWidth(item.label, labelMax)}
                 labelWidth={labelMax}
-                detail={detail ? truncateByWidth(item.detail ?? "", detailMax) : undefined}
+                detail={hasDetail ? truncateByWidth(item.detail ?? "", detailMax) : undefined}
                 truncate
               />
             );
