@@ -198,6 +198,8 @@ test("hintTruncate makes a long hint single-line without losing the header versi
     expect(hintLines).toHaveLength(1);
     const title = lines.find(line => line.includes("v9.9.9"));
     expect(title?.trimEnd().replace(/[│]/g, "").trimEnd().endsWith("v9.9.9")).toBe(true);
+    const version = title!.indexOf("v9.9.9");
+    expect(title![version - 1]).toBe(" ");
   } finally {
     await cleanup(ctx);
   }

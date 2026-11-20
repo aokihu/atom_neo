@@ -69,7 +69,8 @@ Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与�
 | `interactive` | `boolean` | 默认 `true`；为 `false` 时忽略 Modal 键盘（表单自行处理按键） |
 | `titlePadding` | `number` | 标题内边距，默认 `1` |
 | `contentPaddingX` | `number` | 内容水平内边距，默认 `1` |
-| `hint` | `string?` | 在 ActionBar 下方渲染的灰色提示行 |
+| `hint` | `string?` | 在 ActionBar 下方渲染的灰色提示行；默认按可用宽度正常换行 |
+| `hintTruncate` | `boolean?` | 默认 `false`；为 `true` 时 hint 单行截断。MenuScreen 使用自身预截断 hint，不依赖该开关 |
 | `chrome` | `"plain" \| "bordered"` | 默认 `plain`（聊天 TUI 样式）；`bordered` 为配置向导样式。两者均使用单线边框，`bordered` 额外调整标题内边距与垂直定位 |
 
 ### `ModalAction`
