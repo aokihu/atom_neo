@@ -432,13 +432,14 @@ integration("MenuApp Home, Gateway shortcut, workspace gate, and quit confirmati
   expect(existsSync(join(path, ".atom/gateway-runtime.json"))).toBe(false);
 }, 30000);
 
-integration("MenuApp Configure/Advanced/Gateway direct entries and narrow layout", async () => {
+integration("MenuApp Configure/Providers/Theme/Gateway entries and narrow layout", async () => {
   const path = sandbox("menuapp-configure");
   const home = join(temp, "menuapp-configure-home");
   const configured = await driveMenu([
-    { wait: "Workspace path", send: "\x1b[B\r", keyDelay: 0.08 },
-    { wait: "Current: edex", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
-    { wait: "Install client package", send: "\x03" },
+    { wait: "Providers (1)", send: "\x1b[B\r", keyDelay: 0.08 },
+    { wait: "DEEPSEEK", send: "\x1b" },
+    { wait: "Theme (edex)", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "background", send: "\x03" },
   ], [binary, "config", "--sandbox", path], home);
   expect(configured.commands).toEqual([]);
 
@@ -456,6 +457,26 @@ integration("MenuApp Configure/Advanced/Gateway direct entries and narrow layout
   expect(narrow.tail).toContain("ATOM NEO · Configure");
 }, 40000);
 
+integration("Menu shell stays single-line at 100/64/40 columns", async () => {
+  const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
+  for (const cols of [100, 64, 40]) {
+    const path = sandbox(`menu-shell-${cols}`);
+    const home = join(temp, `menu-shell-${cols}-home`);
+    const menu = await driveMenu([
+      { wait: "Session", send: "\x03" },
+    ], [binary, "menu", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
+    expect(menu.tail).toContain("ATOM NEO");
+    expect(menu.tail).toContain("workspace:");
+    expect(menu.tail).toContain(`v${version}`);
+
+    const configure = await driveMenu([
+      { wait: "ATOM NEO · Configure", send: "\x03" },
+    ], [binary, "config", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
+    expect(configure.tail).toContain("Home / Configure");
+    expect(configure.tail).toContain(`v${version}`);
+  }
+}, 60000);
+
 integration("unconfigured atom config gateway starts at Workspace and never writes config", async () => {
   const path = emptySandbox("empty-config-gateway");
   const result = await driveMenu([
@@ -469,12 +490,13 @@ integration("unconfigured config saves the workspace and Gateway port without wr
   const path = emptySandbox("empty-config-save");
   const result = await driveMenu([
     { wait: "ATOM NEO · Configure", send: "\r" },
-    { wait: "ATOM NEO · Workspace", send: "\r" },
-    { wait: "Advanced configuration", send: "\x1b[B\r", keyDelay: 0.08 },
-    { wait: "Providers & Models", send: "\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "ATOM NEO · Configure / Workspace", send: "\r" },
+    { wait: "Gateway (clients · port 3000)", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
     { wait: "Install client package", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
     { wait: "GATEWAY PORT", send: "\x1b[F\x7f\x7f\x7f\x7f4321\r" },
-    { wait: "GATEWAY CLIENTS", delay: 0.5, send: "\x03" },
+    { wait: "Gateway (clients · port 4321)", send: "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "SAVE & EXIT", send: "\r" },
+    { wait: "Saved", send: "\x03" },
   ], [binary, "config", "--sandbox", path], join(temp, "empty-config-save-home"));
   expect(result.commands).toEqual([]);
   expect(JSON.parse(readFileSync(join(path, "config.json"), "utf8")).gateway.port).toBe(4321);
