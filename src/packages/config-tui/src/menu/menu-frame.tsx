@@ -69,6 +69,7 @@ export type MenuItem = {
 export type MenuPreview = {
   title: string;
   lines: string[];
+  content?: ReactNode;
 };
 
 const SPLIT_MIN_WIDTH = 80;
@@ -92,6 +93,7 @@ function MenuPreviewPane({ preview, width }: { preview: MenuPreview; width: numb
             {truncateByWidth(line || " ", width)}
           </text>
         ))}
+        {preview.content ? <box marginTop={1}>{preview.content}</box> : null}
       </box>
     </box>
   );
@@ -104,20 +106,27 @@ export function MenuChromeProvider({ version, breadcrumb, children }: MenuChrome
   return <MenuChromeContext.Provider value={{ version, breadcrumb }}>{children}</MenuChromeContext.Provider>;
 }
 
-export function MenuStatus({ workspace, gateway, core }: {
+export function useMenuChrome(): MenuChrome {
+  return useContext(MenuChromeContext);
+}
+
+export function MenuStatus({ workspace, gateway, core, breadcrumb }: {
   workspace: string;
   gateway: "online" | "offline" | "unknown";
   core: "online" | "offline" | "unknown";
+  breadcrumb?: string;
 }) {
   const { colors } = useTheme();
   const { width } = useTerminalDimensions();
-  const { breadcrumb } = useContext(MenuChromeContext);
+  const { breadcrumb: inheritedBreadcrumb } = useContext(MenuChromeContext);
+  const crumbText = breadcrumb ?? inheritedBreadcrumb;
+
   const status = (value: string) => value === "online" ? colors.status.success : value === "offline" ? colors.status.warning : colors.text.muted;
   const contentWidth = menuContentWidth(width);
   const prefix = "workspace: ";
   const pathWidth = Math.max(1, contentWidth - stringWidth(prefix));
   const shown = truncateMiddle(workspace, pathWidth);
-  const crumb = breadcrumb ? truncateByWidth(breadcrumb, contentWidth) : undefined;
+  const crumb = crumbText ? truncateByWidth(crumbText, contentWidth) : undefined;
   return (
     <box flexDirection="column" marginBottom={1}>
       {crumb ? <text fg={colors.text.muted} wrapMode="none" truncate>{crumb}</text> : null}
@@ -131,7 +140,7 @@ export function MenuStatus({ workspace, gateway, core }: {
 }
 
 /** Shared OpenTUI menu surface: frame, status header, list and keyboard navigation. */
-export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, preview, children }: {
+export function MenuScreen({ title, workspace, gateway, core, items, onSelect, onBack, onDelete, onSelectionChange, hint, error, notice, suspended = false, preview, breadcrumb, children }: {
   title: string;
   workspace: string;
   gateway: "online" | "offline" | "unknown";
@@ -147,6 +156,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   /** Keep the list visible but release all keyboard handling to an overlay. */
   suspended?: boolean;
   preview?: (item: MenuItem) => MenuPreview;
+  breadcrumb?: string;
   children?: ReactNode;
 }) {
   const { colors } = useTheme();
@@ -224,7 +234,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       hint={hint}
     >
       <box flexDirection="column">
-        <MenuStatus workspace={workspace} gateway={gateway} core={core} />
+        <MenuStatus workspace={workspace} gateway={gateway} core={core} breadcrumb={breadcrumb} />
         {children}
         {split ? (
           <box flexDirection="row" flexGrow={1}>
@@ -262,8 +272,19 @@ export function MenuPrompt({ title, label, value, placeholder, error, onSubmit, 
   onCancel: () => void;
   hint: string;
 }) {
+  const { colors } = useTheme();
+  const { version } = useMenuChrome();
   return (
-    <Modal open title={`ATOM NEO · ${title}`} width={72} interactive={false} onClose={onCancel} hint={hint}>
+    <Modal
+      open
+      title={`ATOM NEO · ${title}`}
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
+      width={72}
+      interactive={false}
+      onClose={onCancel}
+      hint={hint}
+    >
       <FieldInput
         label={label}
         value={value}
@@ -285,8 +306,19 @@ export function MenuSecretPrompt({ title, label, placeholder, error, onSubmit, o
   onCancel: () => void;
   hint: string;
 }) {
+  const { colors } = useTheme();
+  const { version } = useMenuChrome();
   return (
-    <Modal open title={`ATOM NEO · ${title}`} width={72} interactive={false} onClose={onCancel} hint={hint}>
+    <Modal
+      open
+      title={`ATOM NEO · ${title}`}
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
+      width={72}
+      interactive={false}
+      onClose={onCancel}
+      hint={hint}
+    >
       <SecretFieldInput
         label={label}
         placeholder={placeholder}
@@ -305,6 +337,8 @@ export function MenuConfirm({ title, message, confirmLabel, onConfirm, onCancel 
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { colors } = useTheme();
+  const { version } = useMenuChrome();
   const actions: ModalAction[] = [
     { key: "cancel", label: "Cancel", role: "cancel" },
     { key: "confirm", label: confirmLabel, role: "confirm", variant: "primary" },
@@ -313,6 +347,8 @@ export function MenuConfirm({ title, message, confirmLabel, onConfirm, onCancel 
     <Modal
       open
       title={`ATOM NEO · ${title}`}
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
       width={64}
       actions={actions}
       onAction={(key) => key === "confirm" ? onConfirm() : onCancel()}

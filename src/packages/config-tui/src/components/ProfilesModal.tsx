@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
-import { SelectableRow } from "@atom-neo/tui-kit";
+import { SelectableRow, useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 
 const LEVELS = ["advanced", "balanced", "basic"] as const;
 
@@ -22,6 +23,8 @@ export function ProfilesModal({ profiles, modelIds, onSubmit, onBack }: {
   onSubmit: (profiles: { advanced: string; balanced: string; basic: string }) => void;
   onBack: () => void;
 }) {
+  const { colors } = useTheme();
+  const { version } = useMenuChrome();
   const [draft, setDraft] = useState({ ...profiles });
   const [levelIndex, setLevelIndex] = useState(0);
 
@@ -38,8 +41,10 @@ export function ProfilesModal({ profiles, modelIds, onSubmit, onBack }: {
   return (
     <Modal
       open
-      title="MODEL PROFILES"
-      width={60}
+      title="ATOM NEO · MODEL PROFILES"
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
+      width={64}
       actions={ACTIONS}
       defaultActionKey="save"
       onClose={onBack}

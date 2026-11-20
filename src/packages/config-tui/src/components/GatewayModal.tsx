@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FieldInput, SelectableRow, useTheme } from "@atom-neo/tui-kit";
 import { Modal } from "../modal";
+import { useMenuChrome } from "../menu/menu-frame";
 import { parsePort } from "../wizard-logic";
 import {
   fetchGatewayDiagnostics,
@@ -79,6 +80,8 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
   onBack: () => void;
 }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
+  const versionRight = version ? <text fg={colors.text.muted}>v{version}</text> : undefined;
   const [clients, setClients] = useState<GatewayInstanceStatus[] | null | undefined>(undefined);
   const [offline, setOffline] = useState(false);
   const [view, setView] = useState<View>("clients");
@@ -177,7 +180,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
   if (view === "edit" && active) {
     return (
       <GatewayInstanceForm
-        title={`INSTANCE CONFIG · ${active.id}`}
+        title={`ATOM NEO · INSTANCE CONFIG · ${active.id}`}
         mode="edit"
         fields={active.config}
         initialValues={active.clientArgs}
@@ -191,7 +194,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
 
   if (view === "port") {
     return (
-      <Modal open title="GATEWAY PORT" width={56} interactive={false} onClose={() => open("clients")} hint="Enter save · Esc cancel">
+      <Modal open title="ATOM NEO · GATEWAY PORT" headerRight={versionRight} titleTruncate width={56} interactive={false} onClose={() => open("clients")} hint="Enter save · Esc cancel">
         <FieldInput
           label="Port"
           value={String(port)}
@@ -223,7 +226,9 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
     return (
       <Modal
         open
-        title={view === "install" ? "INSTALL CLIENT PACKAGE" : view === "load-dir" ? "LOAD CLIENT DIRECTORY" : "PACK CLIENT"}
+        title={`ATOM NEO · ${view === "install" ? "INSTALL CLIENT PACKAGE" : view === "load-dir" ? "LOAD CLIENT DIRECTORY" : "PACK CLIENT"}`}
+        headerRight={versionRight}
+        titleTruncate
         width={72}
         interactive={false}
         onClose={() => open("clients")}
@@ -254,7 +259,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
 
   if (view === "load-id") {
     return (
-      <Modal open title="LOAD CLIENT DIRECTORY" width={72} interactive={false} onClose={() => open("clients")} hint="Enter continue · Esc cancel">
+      <Modal open title="ATOM NEO · LOAD CLIENT DIRECTORY" headerRight={versionRight} titleTruncate width={72} interactive={false} onClose={() => open("clients")} hint="Enter continue · Esc cancel">
         <FieldInput
           key="load-id"
           label="Instance ID (optional)"
@@ -273,7 +278,9 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
     return (
       <Modal
         open
-        title={`${view === "check" ? "CLIENT CHECK" : "DIAGNOSTICS"} · ${activeId ?? ""}`}
+        title={`ATOM NEO · ${view === "check" ? "CLIENT CHECK" : "DIAGNOSTICS"} · ${activeId ?? ""}`}
+        headerRight={versionRight}
+        titleTruncate
         width={96}
         height={20}
         onClose={() => open("actions")}
@@ -314,7 +321,9 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
     return (
       <Modal
         open
-        title={`INSTANCE · ${active.id}`}
+        title={`ATOM NEO · INSTANCE · ${active.id}`}
+        headerRight={versionRight}
+        titleTruncate
         width={80}
         onClose={() => open("clients")}
         listLength={items.length}
@@ -369,7 +378,9 @@ export function GatewayModal({ sandbox, port, gatewayActions, onSubmit, onBack }
   return (
     <Modal
       open
-      title="GATEWAY CLIENTS"
+      title="ATOM NEO · GATEWAY CLIENTS"
+      headerRight={versionRight}
+      titleTruncate
       width={96}
       height={22}
       onClose={onBack}

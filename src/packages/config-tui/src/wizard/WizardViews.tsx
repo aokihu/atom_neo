@@ -25,7 +25,7 @@ type CommonProps = {
   chrome?: WizardChrome;
 };
 
-export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch, onModelsSubmit }: CommonProps & {
+export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch, chrome, onModelsSubmit }: CommonProps & {
   onModelsSubmit: (patch: ModelEdit) => boolean;
 }) {
   const provider = pending?.id ?? wizard.provider;
@@ -34,8 +34,9 @@ export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch,
     <>
       {view?.kind === "providers" && (
         <ProvidersModal
-          providers={Object.keys(wizard.editedProviders)}
+          state={wizard}
           allowJev={allowJev}
+          chrome={chrome}
           onSelect={id => dispatch({ type: "providers-select", id })}
           onAdd={id => dispatch({ type: "providers-add", id })}
           onBack={() => dispatch({ type: "providers-back" })}
@@ -101,6 +102,7 @@ export function WizardSettingsViews({ view, wizard, dispatch, sandboxPath, gatew
       {view?.kind === "theme" && (
         <ThemeModal
           theme={wizard.theme}
+          chrome={chrome}
           onSubmit={theme => dispatch({ type: "theme-submit", theme })}
           onBack={() => dispatch({ type: "theme-back" })}
         />

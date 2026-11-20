@@ -259,6 +259,28 @@ test("atom config opens the flat Configure menu without Advanced", async () => {
   expect(app.frame()).toContain("No providers configured yet.");
 });
 
+test("Configure Providers uses the split list and live provider preview", async () => {
+  const app = await mount({ initialRoute: "configure", version: "9.9.9" });
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Providers & Models");
+  expect(app.frame()).toContain("v9.9.9");
+  expect(app.frame()).toContain("DEEPSEEK");
+  expect(app.frame()).toContain("Models");
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
+});
+
+test("Configure Theme previews real colors before applying", async () => {
+  const app = await mount({ initialRoute: "configure" });
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("THEME PREVIEW");
+  expect(app.frame()).toContain("background  #05090c");
+  await app.press("ARROW_DOWN");
+  expect(app.frame()).toContain("background  #0d1117");
+  await app.press("RETURN");
+  expect(app.frame()).toContain("Theme (github-dark)");
+});
+
 test("configure Gateway opens the shared GatewayModal", async () => {
   const app = await mount({ initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");

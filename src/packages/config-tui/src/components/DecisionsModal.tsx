@@ -3,6 +3,7 @@ import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 import { useTheme } from "@atom-neo/tui-kit";
 import { DEFAULT_DECISION_MODES } from "../wizard-logic";
+import { useMenuChrome } from "../menu/menu-frame";
 import type { DecisionModes, WizardState } from "../wizard-logic";
 
 type DecisionSettings = DecisionModes & { fast?: string };
@@ -29,6 +30,7 @@ export function DecisionsModal({ state, modelIds, onSubmit, onProviders, onBack 
   onBack: () => void;
 }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
   const [draft, setDraft] = useState<DecisionSettings>({
     ...DEFAULT_DECISION_MODES,
     ...state.decisionMode,
@@ -57,7 +59,9 @@ export function DecisionsModal({ state, modelIds, onSubmit, onProviders, onBack 
   }
 
   return (
-    <Modal open title="DECISIONS" width={76} actions={actions} defaultActionKey="save"
+    <Modal open title="ATOM NEO · DECISIONS"
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate width={76} actions={actions} defaultActionKey="save"
       listLength={rows.length} selectedListIndex={selected} onListNavigate={setSelected}
       onListActivate={cycle} onClose={onBack}
       onAction={key => {
