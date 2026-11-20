@@ -1,6 +1,6 @@
 # config-tui
 
-统一 MenuApp 与配置向导 UI（OpenTUI）。由 `atom menu` / `atom config` / `atom config gateway` 启动，首次运行使用 `--wizard`，MenuApp Advanced 路由级复用 `WizardApp`。
+统一 MenuApp 与配置向导 UI（OpenTUI）。由 `atom menu` / `atom config` / `atom config gateway` 启动，首次运行使用 `--wizard`；MenuApp 的 Configure 以 embedded 模式复用 `WizardApp`，无独立 Advanced 页面。
 
 ## 模块
 
@@ -10,7 +10,8 @@
 | `src/menu/menu-app.tsx` | 统一 OpenTUI MenuApp；Home/Session/Gateway/Configure/Backup 路由、workspace、theme 与 Gateway port state |
 | `src/menu/menu-routes.ts` | 路由类型与无配置时的 Workspace 重定向 |
 | `src/menu/menu-home.tsx` | Home 菜单 |
-| `src/menu/menu-frame.tsx` | 列表窗口滚动、状态头、路径省略、表单/secret/确认通用 UI |
+| `src/menu/menu-frame.tsx` | 响应式左右分栏、preview、列表窗口滚动、状态头、路径省略、表单/secret/确认通用 UI |
+| `src/menu/configure-view.tsx` | 扁平 Configure、左导航/右详情、wizard 菜单项与 `describeSelection` |
 | `src/menu/menu-types.ts` | `MenuActions` / `SessionSummary` / `MenuLaunch` 注入契约 |
 | `src/menu/workspace-gate.tsx` | 顶级 Gateway 快捷入口的 workspace 确认（Enter / C / Esc） |
 | `src/menu/session-view.tsx` / `history-view.tsx` / `core-server-view.tsx` | Session、History（删除确认/attached 保护）、Core Server |
@@ -19,7 +20,7 @@
 | `src/wizard-logic.ts` | 配置文件读写、字段校验等纯逻辑入口 |
 | `src/components/WizardApp.tsx` | reducer 编排、视图组合、保存流程 |
 | `src/wizard/wizard-*` | wizard 状态、reducer、预填、编辑草稿 |
-| `src/components/MenuModal.tsx` | 一级菜单（Providers/Profiles/Decisions/Theme/Gateway/Save） |
+| `src/components/ProvidersModal.tsx` | Provider 列表；embedded 模式使用 MenuScreen 分栏与右侧详情 |
 | `src/components/ProvidersModal.tsx` | provider 列表与新增 |
 | `src/components/ApiKeyModal.tsx` | API Key 输入（只写入 `.env`） |
 | `src/components/ModelsModal.tsx` | 模型、provider 类型、端点、thinking/contextLimit |

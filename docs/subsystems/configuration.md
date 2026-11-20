@@ -29,14 +29,14 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 - `config.json` 后续手动修改不会失效 —— overlay 只覆盖被改过的字段
 - **禁止运行时覆盖的字段**：`gateway` 子树（端口/客户端需重启才生效）；密钥本就只存于 `.env`（见 §7）
 
-**Gateway Client 配置（2026-11-15，M1/M2 已实施）**：实例配置只接受 `package` / `directory` 二选一，**不再接受旧 `binary` / 实例级 `platform`**；`platform`、入口命令与 cwd 由 Client 根目录的 `manifest.json` 解析。凭据只存 `.env`，实例保存 `field -> ATOM_CLIENT_<ID>_<FIELD>` 引用。Gateway 实例配置（`gateway.clients` 与实例凭据）的唯一写入入口是 shared `config/client-instance.ts`：写入前获取 `.atom/gateway/config.lock`，成功后递增 `.atom/gateway/state.json` 的 `configRevision`，失败或取消恢复原文件；Gateway 只读。其他配置由 `atom config` / MenuApp Advanced 的既有向导写入。M2 已增加本地 pack/install、`packages.json` registry、离线实例配置 API 与首次实例表单；M2.1 为 registry read-modify-write 增加 `.atom/gateway/packages.lock`（5s 有界重试/超时）。`.atom/gateway/config.lock` 当前立即失败并返回 `Gateway config is locked: <path>`，不自动重试；进程崩溃留下的 stale lock 需确认 PID 已退出后手动删除（锁文件写入持有者 PID）。M3a 的 `atom gateway reload` 由 `main.ts` 重新读取 sandbox `config.json`/`.env`、registry 与 manifest 后调用管理接口；Gateway 包不直接读取 sandbox。M3b 的配置 UI 已支持在线实例编辑：字段由 manifest.config 驱动，secret 只显示固定遮罩，空白表示保持已配置值；保存复用 `upsertInstance`，不直接写文件。`atom gateway load --id <id>` 可为同一目录登记不同实例，省略时使用 manifest.id；启动前 resolver 校验 `clientArgs` enum、应用可选非 secret default，并拒绝 secret 进入 `clientArgs`。复审补齐 config-only 闭环：UI 从 `listInstances` 读取未登记实例并与 supervisor 状态按 id 合并，显示 `configured / unregistered`；可编辑 secret 后 register/start，离线也可编辑。`atom gateway list` 同样合并 config 与 supervisor，JSON 区分 `configured/registered/offline`。`atom config gateway` 可直接打开 Gateway 实例管理；`atom config` 打开 Configure 页面；旧的 `--config` flag 已移除。G5 官方安装/升级通过 `ATOM_GATEWAY_SOURCE_INDEX` 或 `--source` 读取来源索引；仓库不提供默认生产地址，索引 URL 与 checksum 由发布流程生成。远程索引/归档仅允许 HTTPS，HTTP 只允许 loopback 用于本地测试；发布索引默认按 `id@version/target` 合并。Core runtime overlay 继续拒绝 gateway 子树，端口修改仍需重启。详见 [接入与发行规划](../communication/gateway-client-design.md) 和 [开发计划](../communication/gateway-development-plan.md)。
+**Gateway Client 配置（2026-11-15，M1/M2 已实施）**：实例配置只接受 `package` / `directory` 二选一，**不再接受旧 `binary` / 实例级 `platform`**；`platform`、入口命令与 cwd 由 Client 根目录的 `manifest.json` 解析。凭据只存 `.env`，实例保存 `field -> ATOM_CLIENT_<ID>_<FIELD>` 引用。Gateway 实例配置（`gateway.clients` 与实例凭据）的唯一写入入口是 shared `config/client-instance.ts`：写入前获取 `.atom/gateway/config.lock`，成功后递增 `.atom/gateway/state.json` 的 `configRevision`，失败或取消恢复原文件；Gateway 只读。其他配置由 `atom config` / MenuApp Configure 的 embedded wizard 写入。M2 已增加本地 pack/install、`packages.json` registry、离线实例配置 API 与首次实例表单；M2.1 为 registry read-modify-write 增加 `.atom/gateway/packages.lock`（5s 有界重试/超时）。`.atom/gateway/config.lock` 当前立即失败并返回 `Gateway config is locked: <path>`，不自动重试；进程崩溃留下的 stale lock 需确认 PID 已退出后手动删除（锁文件写入持有者 PID）。M3a 的 `atom gateway reload` 由 `main.ts` 重新读取 sandbox `config.json`/`.env`、registry 与 manifest 后调用管理接口；Gateway 包不直接读取 sandbox。M3b 的配置 UI 已支持在线实例编辑：字段由 manifest.config 驱动，secret 只显示固定遮罩，空白表示保持已配置值；保存复用 `upsertInstance`，不直接写文件。`atom gateway load --id <id>` 可为同一目录登记不同实例，省略时使用 manifest.id；启动前 resolver 校验 `clientArgs` enum、应用可选非 secret default，并拒绝 secret 进入 `clientArgs`。复审补齐 config-only 闭环：UI 从 `listInstances` 读取未登记实例并与 supervisor 状态按 id 合并，显示 `configured / unregistered`；可编辑 secret 后 register/start，离线也可编辑。`atom gateway list` 同样合并 config 与 supervisor，JSON 区分 `configured/registered/offline`。`atom config gateway` 可直接打开 Gateway 实例管理；`atom config` 打开 Configure 页面；旧的 `--config` flag 已移除。G5 官方安装/升级通过 `ATOM_GATEWAY_SOURCE_INDEX` 或 `--source` 读取来源索引；仓库不提供默认生产地址，索引 URL 与 checksum 由发布流程生成。远程索引/归档仅允许 HTTPS，HTTP 只允许 loopback 用于本地测试；发布索引默认按 `id@version/target` 合并。Core runtime overlay 继续拒绝 gateway 子树，端口修改仍需重启。详见 [接入与发行规划](../communication/gateway-client-design.md) 和 [开发计划](../communication/gateway-development-plan.md)。
 
 **配置读写入口**：
 
 | 入口 | 写入层 | 时机 |
 |------|--------|------|
 | 手动编辑 config.json / .env | 用户配置（基线） | 随时 |
-| `atom config` / MenuApp Advanced（`@atom-neo/config-tui`，OpenTUI） | config.json（按 provider 合并）+ .env | 随时、交互式，详见 [first-run-wizard.md](./first-run-wizard.md) |
+| `atom config` / MenuApp Configure（`@atom-neo/config-tui`，OpenTUI） | config.json（按 provider 合并）+ .env | 随时、交互式，详见 [first-run-wizard.md](./first-run-wizard.md) |
 | 运行时 settings（TUI `/settings`） | `.atom/runtime-config.json`（overlay） | 运行中即时生效，见 §8 |
 | `atom export` / `atom import`（或 MenuApp Backup） | config.json + .env（归档迁移） | 备份、跨机器迁移，详见 [backup.md](./backup.md) |
 
@@ -108,7 +108,7 @@ $SANDBOX/.atom/runtime-config.json    运行时配置（overlay）
 }
 ```
 
-**自动创建**: bootstrap 启动需要完整配置的模式时，若 `$SANDBOX/config.json` 不存在，自动写入上述最小可用配置。解析失败（格式错误）时只返回默认值，不覆盖文件。例外：MenuApp 的 `createMenuActions` 与 `atom config gateway` 路由判定严格只读，不创建或规范化 `config.json`；只有用户显式保存 Workspace/Advanced/Gateway port 时才写盘。
+**自动创建**: bootstrap 启动需要完整配置的模式时，若 `$SANDBOX/config.json` 不存在，自动写入上述最小可用配置。解析失败（格式错误）时只返回默认值，不覆盖文件。例外：MenuApp 的 `createMenuActions` 与 `atom config gateway` 路由判定严格只读，不创建或规范化 `config.json`；只有用户显式 Save & Exit（或 Gateway port 保存）时才写盘。
 
 **无效 provider 恢复**: 若 config.json 中某个 `providers[x]` 条目校验失败（如缺 `apiKeyEnv` 或 `models` 为空），`loadConfig` 会丢弃该条目并保留其余配置，而不是整体回退默认值。这保证单个损坏条目不会让 gateway/mcpServers 等配置全部失效。
 

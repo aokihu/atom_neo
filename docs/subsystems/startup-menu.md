@@ -20,11 +20,14 @@ Session
 Gateway（快捷入口）
 └─ Workspace 确认 → GatewayModal
 Configure
-├─ Workspace path
-└─ Advanced configuration
-   ├─ Providers & Models
-   ├─ Theme
-   └─ Gateway → GatewayModal（真实入口）
+├─ Workspace path（覆盖层编辑）
+├─ Providers & Models
+├─ Model Profiles
+├─ Decisions
+├─ Theme
+├─ Gateway → GatewayModal（真实入口）
+├─ Save & Exit
+└─ Back
 Backup
 ├─ Export
 └─ Import
@@ -40,7 +43,7 @@ atom config gateway [--sandbox <path>]
 ```
 
 - `atom menu`：从 Home 开始。
-- `atom config`：打开 Configure 页面。
+- `atom config`：一步打开统一的 Configure 设置页，与 `atom menu → Configure` 完全一致。
 - `atom config gateway`：
   - 目标 sandbox 存在 `config.json`：直接进入 Gateway 配置；
   - 目标 sandbox 没有配置：无论是否显式 `--sandbox`，先进入 Configure → Workspace path，保存后进入 Gateway；
@@ -55,6 +58,8 @@ atom config gateway [--sandbox <path>]
 - 顶栏第一行左侧 `ATOM NEO · <页面名>`、右侧 muted 版本号（`Modal.headerRight`，同一行右对齐）；第二行 breadcrumb；第三行 workspace；随后是 Gateway/Core 状态。Home 的结构化 breadcrumb 为 `undefined`，空值不渲染 breadcrumb 行，workspace 直接跟随标题行。
 - 三行使用同一左缩进；宽度按 `@atom-neo/shared` 的 `stringWidth` 计算。标题先按可用宽度截断并保留完整版本号，breadcrumb 单行截断，workspace 在扣除 `workspace: ` 前缀后中部省略。64/40 列下标题+版本、breadcrumb、workspace、Gateway/Core 状态均保持单行。
 - 启动失败重试时使用最后一次 launch 选择的 workspace 重新打开 MenuApp，不回退到原始 `args.sandbox`。
+- MenuScreen 统一使用左右分栏：`>=80` 列左侧导航、右侧 preview；`64–79` 列单列并内联 detail；`<64` 列隐藏 detail。长列表保持 10 行窗口滚动。
+- Configure 使用同一个 MenuScreen/预览逻辑，Workspace 编辑为覆盖层，不卸载 embedded WizardApp，未保存的 wizard state 保持不变。
 - `createMenuActions` 严格只读配置：`config.json` 缺失时 theme=edex、Gateway port=3000，不创建目录或文件。
 - 修改 Workspace 会规范化绝对路径并更新后续页面使用的 sandbox；取消不写配置。
 - theme / Gateway port 是 MenuApp state；Wizard 保存/取消、端口编辑或 workspace 切换后通过 `refreshSettings()` 重新读取并渲染。
@@ -73,9 +78,9 @@ atom config gateway [--sandbox <path>]
 ## Gateway 快捷入口与真实入口
 
 - **快捷入口**：Home → Gateway → WorkspaceGate。Continue 才进入 `GatewayModal`；C 或 Change workspace 进入 Workspace path，保存后返回确认页；Esc 返回 Home。
-- **真实入口**：Configure → Advanced → Gateway，直接使用当前已确认 workspace，不再经过 WorkspaceGate。
-- Advanced 打开的 Wizard 保存/取消后返回 Advanced，不重置到 Configure。
-- Wizard 内的 Gateway 项明确允许，复用同一个 `GatewayModal`，保存/返回后回到 Wizard 菜单；它不是绕过 WorkspaceGate 的顶级快捷入口，主真实入口仍是 Advanced → Gateway。
+- **真实入口**：Configure → Gateway，直接使用当前已确认 workspace，不再经过 WorkspaceGate。
+- Configure 由 embedded WizardApp 承载；Providers/Profiles/Decisions/Theme/Gateway 保存或取消后回到同一 Configure。
+- Configure → Save & Exit 提交 `config.json` / `.env` 后停留 Configure 并显示 `Saved`；Back/Esc 在未保存时走 Quit 确认。
 - `GatewayModal` / `GatewayInstanceForm` 与 `atom gateway` CLI actions 复用，不复制表单。
 - Gateway 端口保存只校验 1–65535 并在原 config 上合并；损坏的 `config.json` 返回内联错误，不崩溃渲染器。
 - 安装/加载/保存不自动 start；Register/Start 需显式操作。

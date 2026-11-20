@@ -309,7 +309,7 @@ USAGE
 
 COMMANDS
   menu                   打开 OpenTUI 菜单（Session / Gateway / Configure / Backup）
-  config                 配置工作区；config gateway 直接打开 Gateway 配置
+  config                 打开统一 Configure 设置页；config gateway 直接打开 Gateway 配置
   export                 导出 config.json + .env 为 .atombak 归档
   import                 从 .atombak 归档导入配置
   gateway <action>       Gateway 实例管理: install | upgrade | load | reload | list | start | stop | check | logs | pack | uninstall

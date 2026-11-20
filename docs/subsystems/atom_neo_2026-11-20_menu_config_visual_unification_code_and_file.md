@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-20
 > 开发目标：`menu_config_visual_unification`
-> 状态：**设计已确认，待实施**。
+> 状态：**M1–M5 已实施**。
 >
 > 计划见 [plan](./atom_neo_2026-11-20_menu_config_visual_unification_plan.md)；
 > 关系图见 [graph](./atom_neo_2026-11-20_menu_config_visual_unification_graph.md)。
@@ -19,7 +19,7 @@
 | `src/packages/config-tui/src/menu/menu-routes.ts` | 修改 | 扁平化 Configure；移除 `advanced` / `wizard`；更新 breadcrumb |
 | `config-tui/src/menu/configure-view.tsx`（新建） | 新建 | Configure 左导航 + 右详情；复用 wizard state/dispatch |
 | `src/packages/config-tui/src/components/WizardApp.tsx` | 修改 | 增加 embedded `chrome` 模式；配置模式不再渲染独立背景 |
-| `src/packages/config-tui/src/components/MenuModal.tsx` | 删除 | 能力迁移到 `menu/configure-view.tsx`，避免两套菜单 |
+| `components/MenuModal.tsx` | 删除 | 能力迁移到 `menu/configure-view.tsx`，避免两套菜单 |
 | `src/packages/config-tui/src/wizard/WizardViews.tsx` | 修改 | `view.kind === "menu"` 不再由 WizardViews 渲染；改由 Configure 路由渲染 |
 | `src/packages/config-tui/src/components/ProvidersModal.tsx` | 修改 | 迁移到统一分栏列表 + 右侧详情 |
 | `src/packages/config-tui/src/components/ThemeModal.tsx` | 修改 | 迁移到统一分栏列表 + 色块预览 |
@@ -29,7 +29,7 @@
 | `src/packages/config-tui/src/menu/backup-view.tsx` | 修改 | 表单/确认统一 chrome 与宽度 |
 | `src/packages/config-tui/src/menu/menu-app.test.tsx` | 修改 | 新首页/Configure/路由/窄窗口断言 |
 | `src/packages/config-tui/src/menu/menu-views.test.tsx` | 修改 | Session/History/Core/Backup 分栏预览断言 |
-| `src/packages/config-tui/src/components/MenuModal.test.ts` | 删除/替换 | 迁移为 `configure-view.test.tsx` |
+| `components/MenuModal.test.ts` | 删除/替换 | 迁移为 `menu/configure-view.test.tsx` |
 | `src/packages/config-tui/src/wizard/wizard-view.test.ts` | 修改 | menu view 归属变化 |
 | `src/bootstrap/startup.integration.test.ts` | 修改 | PTY：100/64/40 列、`atom menu` / `atom config` 落点 |
 | `docs/subsystems/startup-menu.md` | 修改 | 新视觉、路由、CLI 快捷入口 |

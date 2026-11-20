@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-20
 > 开发目标：`menu_config_visual_unification`
-> 状态：**设计已确认，待实施**。
+> 状态：**M1–M5 已实施**。MenuApp/Configure 已统一为左右分栏 shell；最终验证见第 10 节。
 >
 > 关联文档：
 > - [启动菜单](startup-menu.md)
@@ -227,3 +227,21 @@ atom config gateway
 - 移除 `advanced` 路由会影响现有测试、breadcrumb、文档和 `atom config gateway` 返回路径，需要一次性同步。
 - Providers/Theme 从 Modal 改为分栏页面会增加键盘与焦点处理，需要补 PTY 覆盖。
 - 运行中 Core 的配置重载语义已由 2026-11-19 修复覆盖，本目标不重复修改。
+
+## 10. 实施记录
+
+| 里程碑 | commit | 结果 |
+|---|---|---|
+| docs | `a6669dc` | 三份设计文档与索引 |
+| M1 | `df56741` | MenuScreen 分栏/preview；Home/Session/History/Core/Backup 迁移 |
+| M2 | `3073f9b` | Configure 扁平化、embedded WizardApp、Workspace 覆盖层、Save & Saved |
+| M3 | `714358a` | Providers/Theme 分栏；Profiles/Decisions/Gateway/Backup chrome 统一 |
+| M4 | `af46135` | 100/64/40 PTY、扁平 Configure、Responsive shell |
+| M5 | 本文档 commit | CLI help、startup/first-run/configuration/tui-interface/README |
+
+验证：
+
+- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 189 pass
+- `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 26 pass
+- 全量 `bun test` → 2791 pass、27 skip、0 fail
+- `bun run typecheck`、`typecheck:node`、`docs:check`、`git diff --check` 通过

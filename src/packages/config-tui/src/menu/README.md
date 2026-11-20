@@ -11,8 +11,7 @@ OpenTUI 的 menu/config 统一入口，由 `atom menu`、`atom config`、`atom c
 | History | 读取 Core `GET /api/sessions`；打开/删除 |
 | Core Server | Start / Stop（受控 shutdown）/ Attach |
 | Gateway shortcut | 先经过 WorkspaceGate，再进入现有 `GatewayModal` |
-| Configure | Workspace path / Advanced configuration |
-| Advanced | Providers & Models / Theme / Gateway（复用 `WizardApp` / `GatewayModal`） |
+| Configure | Workspace path / Providers & Models / Model Profiles / Decisions / Theme / Gateway / Save & Exit / Back（embedded `WizardApp`） |
 | Backup | Export / Import 表单，复用 `bootstrap/backup` |
 | WorkspaceGate | Enter 继续 · C / Change workspace 进入路径编辑 · Esc 返回 |
 
@@ -27,7 +26,7 @@ OpenTUI 的 menu/config 统一入口，由 `atom menu`、`atom config`、`atom c
 
 ## 测试
 
-- `menu-app.test.tsx`：Home、workspace gate/C、Configure/Advanced/Gateway、theme/port 刷新、Wizard 返回、失败反馈、Quit。
+- `menu-app.test.tsx`：Home、workspace gate/C、扁平 Configure、embedded Wizard、Save & Exit、workspace 覆盖层、failure/Quit、100/64/40 顶栏。
 - `menu-views.test.tsx`：长列表滚动、长路径省略、History 删除确认键盘隔离/attached 保护、Core Server start/stop/attach。
 - `menu-frame.test.ts`：`menuContentWidth` / `truncateByWidth` / `truncateMiddle` 的显示宽度、CJK、emoji、组合字符与中部省略。
 - `backup-view.test.tsx`：遮罩密码、短密码拒绝、明文警告、加密导入与取消。

@@ -1,10 +1,10 @@
 # First-Run Wizard & Config TUI
 
-> **Purpose**: 首次运行向导、MenuApp Advanced 配置与 `atom config` 编辑器的行为规格（OpenTUI 窗口化界面）。
+> **Purpose**: 首次运行向导、MenuApp Configure（embedded WizardApp）与 `atom config` 编辑器的行为规格（OpenTUI 窗口化界面）。
 > **Package**: `@atom-neo/config-tui` (`src/packages/config-tui/`)
 > **启动方式**: 子进程（`spawnProcess` / `node:child_process`）或独立进程入口，与主进程隔离
 
-`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。MenuApp Advanced 打开的 Wizard 保存/取消后返回 Advanced（`{ name: "wizard", back: "advanced" }`），不复制 wizard 状态，也不重置到 Configure。
+`startWizard` 返回是否真正保存完成；config 取消返回 false，first-run 取消仍拒绝并非零退出。MenuApp 的 Configure 直接以 embedded 模式挂载同一 `WizardApp`：不创建独立背景，保存/取消后回到同一 Configure，不复制 wizard 状态。Workspace 编辑使用覆盖层，避免卸载 WizardApp 丢失未保存状态。
 
 ---
 
@@ -17,7 +17,7 @@ src/main.ts (主进程)
   │
   ├── 1.5 Early exits
   │     ├─ --wizard → startWizard(sandbox, "first-run") → return
-  │     └─ config → MenuApp Configure / Advanced → WizardApp → return
+  │     └─ config → MenuApp Configure → embedded WizardApp → return
   │
   ├── 5. isFirstRun(args.sandbox)
   │     ├─ .atom/installed 不存在 → spawnWizard() → 自孵化子进程 (--wizard)
@@ -54,7 +54,7 @@ src/packages/config-tui/
     ├── modal/index.tsx     # 薄包装：tui-kit Modal + chrome="bordered"
     └── components/
         ├── WizardApp.tsx      # 编排：状态机 + 视图栈 + 退出确认（纯色背景）
-        ├── MenuModal.tsx      # 一级菜单：左详情 + 右列表（describeSelection 纯函数）
+        ├── configure-view.tsx # Configure 左导航 + 右详情（buildMenuItems/describeSelection）
         ├── ProvidersModal.tsx # provider 列表 + 新增
         ├── ApiKeyModal.tsx    # API Key（明文，仅写入 .env）
         ├── ModelsModal.tsx    # 模型增删 + provider 类型 + 端点或 LLM 参数
@@ -80,25 +80,27 @@ src/packages/config-tui/
 ## 3. 窗口化界面（Windows 风格）
 
 ```
-（纯色背景，随当前主题变化）
-        ╭───────────── CONFIGURATION ──────────────╮
-        │ ┌───────┐ ┌─ Providers (1) ────────────┐ │
-        │ │▸Providers (1)│ │ deepseek             │ │
-        │ │ Model Profiles│ │   models: v4-pro,   │ │
-        │ │ Decisions     │ │                     │ │
-        │ │ Theme (edex)│ │           v4-flash    │ │
-        │ │ Gateway (clients·port)│ │ thinking: enabled │ │
-        │ │               │ │   install/load/pack │ │
-        │ │ Save & Exit│ │                        │ │
-        │ └───────┘ └────────────────────────────┘ │
-        ├──────────────────────────────────────────┤
-        │ ↑/↓ select · Enter open · Esc quit       │
-        ╰──────────────────────────────────────────╯
+╭ ATOM NEO · Configure ─────────────────────────────── vX.Y.Z ╮
+│ Home / Configure                                            │
+│ workspace: /path/to/sandbox                                 │
+│ Gateway: offline      Core: offline                         │
+│                                                             │
+│ ▸ Workspace path        │  WORKSPACE PATH                   │
+│   Providers (1)         │                                   │
+│   Model Profiles        │  /path/to/sandbox                 │
+│   Decisions             │  config.json · .env · .atom       │
+│   Theme (edex)          │                                   │
+│   Gateway (port 3000)   │                                   │
+│   Save & Exit           │                                   │
+│   ‹ Back                │                                   │
+│                                                             │
+│ ↑/↓ move · Enter open · Esc back                            │
+╰─────────────────────────────────────────────────────────────╯
 ```
 
-- **左栏（50%）**：垂直平铺一级菜单（6 项）
-- **右栏（50%）**：设置数据详情，随左栏菜单选中项实时变化（providers 逐项列出 models/thinking；三档映射；当前主题；网关端口；保存目标说明）
-- Modal 宽度为加宽版（96 列），左右比例 1:1；仅保留中央 Modal，背景为纯色页面
+- **左栏**：Configure 直接列出 Workspace 与 wizard 设置项，无 Advanced 层级。
+- **右栏**：随选中项实时显示 provider/模型、profiles、decisions、theme、Gateway 或 Save 目标。
+- 同一 `MenuScreen` 在 `>=80` 列分栏，`64–79` 列内联 detail，`<64` 列精简为单列。
 
 **键位约定**：
 
@@ -136,24 +138,26 @@ Esc 逐层回退；根层 Esc 弹退出确认。
 
 ## 5. 步骤流程（config 模式）
 
-平铺一级菜单（`MenuModal`），选择节次进入编辑，完成后返回菜单：
+统一 Configure 分栏（`ConfigureView` + embedded `WizardApp`），选择节次进入编辑，完成后返回同一 Configure：
 
 ```text
-MenuModal
-  ├─ Providers (N)     → ProvidersModal → ApiKeyModal → ModelsModal → finalize → 返回 Provider 列表
+ConfigureView
+  ├─ Workspace path    → 覆盖层编辑，保持 wizard state
+  ├─ Providers (N)     → ProvidersView（左列表 + 右详情）→ ApiKeyModal → ModelsModal → 返回
   ├─ Model Profiles    → ProfilesModal（只列出 LLM；预填）
   ├─ Decisions         → DecisionsModal（fast、Prediction、Post-Conversation、Continuation）
-  ├─ Theme (edex)      → ThemeModal（预填）
-  ├─ Gateway (clients · port) → GatewayModal（实例列表/安装/加载/编辑/register/start/诊断；端口仍在高级设置）
-  └─ Save & Exit       → ConfirmModal → commit
-Esc（菜单层）→ 退出确认
+  ├─ Theme             → ThemeView（左列表 + 真实色块预览，选择后即时预览）
+  ├─ Gateway (clients · port) → GatewayModal（实例列表/安装/加载/编辑/register/start/诊断）
+  ├─ Save & Exit       → ConfirmModal → commit → Configure + Saved
+  └─ Back              → 未保存退出确认
+Esc（Configure）→ 退出确认
 ```
 
 ProjectModal 在 config 模式跳过（不重写 AGENTS.md）。
 
 ### Gateway 管理视图
 
-`atom config gateway [--sandbox <path>]` 可直接打开本视图；未显式指定 sandbox 且当前目录没有配置时，先进入 Configure → Workspace path。`atom menu` 的 Gateway 快捷入口复用同一 GatewayModal，但必须先经过 WorkspaceGate；Configure → Advanced → Gateway 是真实入口。`atom config` 不带 `gateway` 时打开 Configure 页面。
+`atom config gateway [--sandbox <path>]` 可直接打开本视图；目标 sandbox 没有配置时先进入 Workspace path。`atom menu` 的 Gateway 快捷入口复用同一 GatewayModal，但必须先经过 WorkspaceGate；Configure → Gateway 是真实入口。`atom config` 不带 `gateway` 时打开统一 Configure 设置页。
 
 `GatewayModal` 在保留端口编辑的同时提供实例管理；Gateway 离线时显示 `OFFLINE`，仍可执行 install/load/pack。
 

@@ -3,7 +3,7 @@
 > 项目：`atom_neo`
 > 日期：2026-11-20
 > 开发目标：`menu_config_visual_unification`
-> 状态：**设计已确认，待实施**。
+> 状态：**M1–M5 已实施**。
 >
 > 计划见 [plan](./atom_neo_2026-11-20_menu_config_visual_unification_plan.md)；
 > 文件与代码见 [code_and_file](./atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md)。
