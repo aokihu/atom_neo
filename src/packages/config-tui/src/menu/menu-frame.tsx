@@ -163,9 +163,10 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const { colors } = useTheme();
   const { version } = useContext(MenuChromeContext);
   const { width, height: screenHeight } = useTerminalDimensions();
-  // Plain Modals start at floor(screenHeight / 3); shrink only enough to keep
-  // the fixed 24-row panel and its hint inside smaller terminals.
-  const menuHeight = Math.min(24, Math.max(16, screenHeight - Math.floor(screenHeight / 3)));
+  // Keep the 24-row shell; only shrink below 26 rows. If the Modal's default
+  // 1/3 anchor would push the shell off-screen, pin it to the top instead.
+  const menuHeight = Math.min(24, Math.max(16, screenHeight - 2));
+  const menuPlacement = screenHeight - Math.floor(screenHeight / 3) < menuHeight ? "top" : "center";
   const contentWidth = menuContentWidth(width);
   const versionText = version ? `v${version}` : "";
   const titleMax = Math.max(1, contentWidth - (versionText ? stringWidth(versionText) + 1 : 0));
@@ -230,6 +231,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       titleTruncate
       width={MENU_WIDTH}
       height={menuHeight}
+      placement={menuPlacement}
       titlePadding={0}
       contentPaddingX={0}
       interactive={!suspended}
