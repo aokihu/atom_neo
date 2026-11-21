@@ -145,11 +145,19 @@ test("home shows the integrated menu and workspace status without a breadcrumb",
   expect(lines.filter(line => line.replace(/[│]/g, "").trim() === "Home")).toHaveLength(0);
 });
 
-test("breadcrumbFor uses undefined for Home and strings for parent paths", () => {
-  expect(breadcrumbFor({ name: "home" })).toBeUndefined();
-  expect(breadcrumbFor({ name: "backup" })).toBe("Home / Backup");
-  expect(breadcrumbFor({ name: "session" })).toBe("Home / Session");
+test("breadcrumbFor only returns parent context not represented by the title", () => {
+  for (const route of [
+    { name: "home" }, { name: "session" }, { name: "history" }, { name: "core-server" },
+    { name: "gateway-shortcut" }, { name: "configure" }, { name: "backup" },
+    { name: "backup-export" }, { name: "backup-import" },
+  ] as const) {
+    expect(breadcrumbFor(route)).toBeUndefined();
+  }
+  expect(breadcrumbFor({ name: "gateway-real", back: "configure" })).toBe("Home / Configure / Gateway");
+  expect(breadcrumbFor({ name: "gateway-real", back: "gateway-shortcut" })).toBe("Home / Gateway / Configuration");
+  expect(breadcrumbFor({ name: "workspace", after: "configure" })).toBe("Home / Configure / Workspace");
   expect(breadcrumbFor({ name: "workspace", after: "gateway-shortcut" })).toBe("Home / Gateway / Workspace");
+  expect(breadcrumbFor({ name: "workspace", after: "gateway-real" })).toBe("Gateway / Workspace");
 });
 
 test.each([100, 64, 40])("home at %i columns has no breadcrumb and keeps workspace/status adjacent", async (width) => {
@@ -169,16 +177,44 @@ test.each([100, 64, 40])("home at %i columns has no breadcrumb and keeps workspa
   else expect(app.frame()).not.toContain("Chat and Core server");
 });
 
+function assertTitleOwnsContext(frame: string, title: string, absentCrumb: string) {
+  const lines = contentLines(frame);
+  const index = lines.findIndex(line => line.includes(title));
+  expect(index).toBeGreaterThanOrEqual(0);
+  expect(lines[index + 1]?.startsWith("workspace:")).toBe(true);
+  expect(lines.some(line => line.includes(absentCrumb))).toBe(false);
+}
+
+test("title-owned pages render no breadcrumb", async () => {
+  const session = await mount();
+  await session.press("RETURN");
+  assertTitleOwnsContext(session.frame(), "ATOM NEO · Session", "Home / Session");
+
+  const history = await mount();
+  await history.press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  assertTitleOwnsContext(history.frame(), "ATOM NEO · Session / History", "Home / Session");
+
+  const core = await mount();
+  await core.press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  assertTitleOwnsContext(core.frame(), "ATOM NEO · Session / Core Server", "Home / Session");
+
+  const backup = await mount();
+  await backup.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  assertTitleOwnsContext(backup.frame(), "ATOM NEO · Backup", "Home / Backup");
+
+  const configure = await mount({ initialRoute: "configure" });
+  assertTitleOwnsContext(configure.frame(), "ATOM NEO · Configure", "Home / Configure");
+});
+
 test("gateway shortcut goes through workspace confirmation", async () => {
   const app = await mount();
   await app.press("ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("Gateway configuration uses this workspace.");
   expect(app.frame()).toContain("Continue to Gateway");
   const lines = contentLines(app.frame());
-  expect(lines.filter(line => line === "Home / Gateway")).toHaveLength(1);
   const title = lines.findIndex(line => line.includes("ATOM NEO · Gateway"));
-  expect(lines[title + 1]).toBe("Home / Gateway");
-  expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
+  expect(lines[title + 1]?.startsWith("workspace:")).toBe(true);
+  expect(lines.some(line => line.includes("Home / Gateway"))).toBe(false);
   await app.press("ESCAPE");
   expect(app.frame()).toContain("ATOM NEO · Home");
 });
@@ -265,6 +301,7 @@ test("Configure Providers uses the split list and live provider preview", async 
   await app.press("ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("ATOM NEO · Providers & Models");
   expect(app.frame()).toContain("v9.9.9");
+  expect(app.frame()).toContain("Home / Configure / Providers & Models");
   expect(app.frame()).toContain("DEEPSEEK");
   expect(app.frame()).toContain("Models");
   await app.press("ESCAPE");
@@ -285,6 +322,7 @@ test("Configure Theme previews real colors before applying", async () => {
   const app = await mount({ initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("THEME PREVIEW");
+  expect(app.frame()).toContain("Home / Configure / Theme");
   expect(app.frame()).toContain("background  #05090c");
   await app.press("ARROW_DOWN");
   expect(app.frame()).toContain("background  #0d1117");
@@ -316,10 +354,10 @@ test.each([100, 64, 40])("top bar keeps title+version on one line at %i columns"
   expect(lines[title]!.indexOf("v9.9.9")).toBeGreaterThan(lines[title]!.indexOf("ATOM NEO"));
   expect(lines[title]!.trimEnd().endsWith("v9.9.9")).toBe(true);
   expect(lines.filter(line => line.includes("v9.9.9"))).toHaveLength(1);
-  expect(lines[title + 1]).toContain("Home / Backup");
-  expect(lines.filter(line => line.includes("Home / Backup"))).toHaveLength(1);
-  expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
+  expect(lines[title + 1]).toContain("workspace:");
   expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
+  expect(lines[title + 2]?.startsWith("Gateway:")).toBe(true);
+  expect(lines.some(line => line.includes("Home / Backup"))).toBe(false);
 });
 
 test.each([64, 40])("narrow top bar keeps a long CJK workspace on one line at %i columns", async (width) => {
@@ -330,28 +368,27 @@ test.each([64, 40])("narrow top bar keeps a long CJK workspace on one line at %i
   const title = lines.findIndex(line => line.includes("ATOM NEO"));
   expect(lines[title]!.trimEnd().endsWith("v1.2.3")).toBe(true);
   expect(lines.filter(line => line.includes("v1.2.3"))).toHaveLength(1);
-  expect(lines[title + 1]).toBe("Home / Session / History");
-  expect(lines.filter(line => line === "Home / Session / History")).toHaveLength(1);
+  expect(lines[title + 1]).toContain("workspace:");
+  expect(lines.some(line => line.includes("Home / Session"))).toBe(false);
   const workspaceLines = lines.filter(line => line.startsWith("workspace:"));
   expect(workspaceLines).toHaveLength(1);
   expect(stringWidth(workspaceLines[0]!)).toBeLessThanOrEqual(menuContentWidth(width));
-  expect(lines[title + 2]).toBe(workspaceLines[0]!);
+  expect(lines[title + 1]).toBe(workspaceLines[0]!);
   const statusLines = lines.filter(line => line.startsWith("Gateway:"));
   expect(statusLines).toHaveLength(1);
-  expect(lines[title + 3]).toBe(statusLines[0]!);
+  expect(lines[title + 2]).toBe(statusLines[0]!);
   expect(stringWidth(statusLines[0]!)).toBeLessThanOrEqual(menuContentWidth(width));
 });
 
-test("40-column breadcrumb stays on one line before workspace and status", async () => {
+test("40-column Core Server title has no breadcrumb and keeps workspace/status adjacent", async () => {
   const app = await mount({ version: "9.9.9", width: 40 });
   await app.press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   const lines = contentLines(app.frame());
   const title = lines.findIndex(line => line.includes("ATOM NEO"));
-  expect(lines[title + 1]).toBe("Home / Session / Core Server");
-  expect(lines.filter(line => line === "Home / Session / Core Server")).toHaveLength(1);
-  expect(lines[title + 2]?.startsWith("workspace:")).toBe(true);
+  expect(lines.some(line => line.includes("Home / Session"))).toBe(false);
+  expect(lines[title + 1]).toContain("workspace:");
   expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
-  expect(lines[title + 3]?.startsWith("Gateway:")).toBe(true);
+  expect(lines[title + 2]?.startsWith("Gateway:")).toBe(true);
   expect(lines.filter(line => line.startsWith("Gateway:"))).toHaveLength(1);
 });
 
@@ -393,7 +430,8 @@ test("40-column header truncates a long title but keeps the version intact", asy
   expect(lines[title]).toContain("v9.9.9");
   expect(lines[title]!.indexOf("v9.9.9")).toBeGreaterThan(lines[title]!.indexOf("ATOM NEO"));
   expect(lines[title]!.trimEnd().endsWith("v9.9.9")).toBe(true);
-  expect(lines[title + 1]).toContain("Home / Session / History");
+  expect(lines[title + 1]).toContain("workspace:");
+  expect(lines.some(line => line.includes("Home / Session"))).toBe(false);
   expect(lines.filter(line => line.startsWith("workspace:"))).toHaveLength(1);
 });
 

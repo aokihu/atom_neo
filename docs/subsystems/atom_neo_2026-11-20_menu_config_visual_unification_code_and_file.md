@@ -77,21 +77,22 @@ Providers / Profiles / Decisions / Theme 不再由 MenuApp 顶层路由持有，
 ```ts
 export function breadcrumbFor(route: MenuRoute): string | undefined {
   switch (route.name) {
-    case "home": return undefined;
-    case "session": return "Home / Session";
-    case "history": return "Home / Session / History";
-    case "core-server": return "Home / Session / Core Server";
-    case "gateway-shortcut": return "Home / Gateway";
+    case "home":
+    case "session":
+    case "history":
+    case "core-server":
+    case "gateway-shortcut":
+    case "configure":
+    case "backup":
+    case "backup-export":
+    case "backup-import":
+      return undefined;
     case "gateway-real":
       return route.back === "gateway-shortcut" ? "Home / Gateway / Configuration" : "Home / Configure / Gateway";
-    case "configure": return "Home / Configure";
     case "workspace":
       return route.after === "gateway-shortcut" ? "Home / Gateway / Workspace"
         : route.after === "gateway-real" ? "Gateway / Workspace"
           : "Home / Configure / Workspace";
-    case "backup": return "Home / Backup";
-    case "backup-export": return "Home / Backup / Export";
-    case "backup-import": return "Home / Backup / Import";
   }
 }
 ```
@@ -542,7 +543,7 @@ providers/theme/profiles/decisions/gateway
 ### 8.2 PTY
 
 ```text
-100 列：Home / Configure / Theme / Gateway / Backup
+100 列：Home / Configure / Providers / Theme / Gateway / Backup（仅父级上下文页面显示 breadcrumb）
 64 列：左右分栏退化为单列，detail 内联
 40 列：标题、版本、workspace、hint 不折行
 atom menu → Home

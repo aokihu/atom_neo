@@ -21,24 +21,29 @@ export function routeFor(initial: "home" | "configure" | "gateway", hasConfig: b
   return { name: "home" };
 }
 
-/** Human-readable route path for the shared top bar; undefined means no parent path. */
+/**
+ * Parent context not already represented by the page title. Returning undefined
+ * removes the breadcrumb row entirely; only Gateway configuration, Workspace,
+ * Providers and Theme need a parent trail.
+ */
 export function breadcrumbFor(route: MenuRoute): string | undefined {
   switch (route.name) {
-    case "home": return undefined;
-    case "session": return "Home / Session";
-    case "history": return "Home / Session / History";
-    case "core-server": return "Home / Session / Core Server";
-    case "gateway-shortcut": return "Home / Gateway";
+    case "home":
+    case "session":
+    case "history":
+    case "core-server":
+    case "gateway-shortcut":
+    case "configure":
+    case "backup":
+    case "backup-export":
+    case "backup-import":
+      return undefined;
     case "gateway-real":
       return route.back === "gateway-shortcut" ? "Home / Gateway / Configuration"
         : "Home / Configure / Gateway";
-    case "configure": return "Home / Configure";
     case "workspace":
       return route.after === "gateway-shortcut" ? "Home / Gateway / Workspace"
         : route.after === "gateway-real" ? "Gateway / Workspace"
           : "Home / Configure / Workspace";
-    case "backup": return "Home / Backup";
-    case "backup-export": return "Home / Backup / Export";
-    case "backup-import": return "Home / Backup / Import";
   }
 }

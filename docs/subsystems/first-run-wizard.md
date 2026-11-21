@@ -80,7 +80,6 @@ src/packages/config-tui/
 
 ```
 ╭ ATOM NEO · Configure ─────────────────────────────── vX.Y.Z ╮
-│ Home / Configure                                            │
 │ workspace: /path/to/sandbox                                 │
 │ Gateway: offline      Core: offline                         │
 │                                                             │

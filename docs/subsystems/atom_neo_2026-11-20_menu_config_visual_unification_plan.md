@@ -36,7 +36,7 @@
 | `atom config` 落点 | **Configure 首页**，与 `atom menu → Configure` 完全一致 |
 | 整体布局 | **左右分栏**：左侧导航、右侧详情；64 列以下退化为单列 |
 | 主视觉参考 | `atom config` 的分栏与详情面板 |
-| 吸收的 menu 视觉 | 品牌标题、版本号、breadcrumb、workspace、Gateway/Core 状态、选中行、错误/提示、长列表滚动、窄窗口截断 |
+| 吸收的 menu 视觉 | 品牌标题、版本号、父级上下文 breadcrumb、workspace、Gateway/Core 状态、选中行、错误/提示、长列表滚动、窄窗口截断 |
 | CLI | `atom menu`、`atom config`、`atom config gateway` 全部保留 |
 
 ---
@@ -77,7 +77,7 @@ Home
 
 ```text
 ╭─ ATOM NEO · <页面名> ───────────────────────────────────── vX.Y.Z ─╮
-│ [breadcrumb，仅多段路径显示]                                       │
+│ [breadcrumb，仅标题未体现的父级上下文]                            │
 │ workspace: /path/to/workspace                                      │
 │ Gateway: ● online/offline      Core: ● online/offline              │
 │                                                                    │
@@ -241,9 +241,9 @@ atom config gateway
 
 验证：
 
-- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 207 pass
+- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 208 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 26 pass
-- 全量 `bun test` → 2809 pass、27 skip、0 fail
+- 全量 `bun test` → 2810 pass、27 skip、0 fail
 - `bun run typecheck`、`typecheck:node`、`docs:check`、`git diff --check` 通过
 
 ## 11. 复审修复

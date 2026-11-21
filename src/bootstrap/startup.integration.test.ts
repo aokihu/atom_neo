@@ -472,7 +472,7 @@ integration("Menu shell stays single-line at 100/64/40 columns", async () => {
     const configure = await driveMenu([
       { wait: "ATOM NEO · Configure", send: "\x03" },
     ], [binary, "config", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
-    expect(configure.tail).toContain("Home / Configure");
+    expect(configure.tail).not.toContain("Home / Configure");
     expect(configure.tail).toContain(`v${version}`);
 
     const session = await driveMenu([
