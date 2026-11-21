@@ -163,7 +163,9 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
   const { colors } = useTheme();
   const { version } = useContext(MenuChromeContext);
   const { width, height: screenHeight } = useTerminalDimensions();
-  const menuHeight = Math.min(24, Math.max(10, screenHeight - Math.floor(screenHeight / 3) - 2));
+  // Plain Modals start at floor(screenHeight / 3); shrink only enough to keep
+  // the fixed 24-row panel and its hint inside smaller terminals.
+  const menuHeight = Math.min(24, Math.max(16, screenHeight - Math.floor(screenHeight / 3)));
   const contentWidth = menuContentWidth(width);
   const versionText = version ? `v${version}` : "";
   const titleMax = Math.max(1, contentWidth - (versionText ? stringWidth(versionText) + 1 : 0));

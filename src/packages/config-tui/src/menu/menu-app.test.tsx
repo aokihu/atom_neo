@@ -352,20 +352,30 @@ function assertFullHeightDivider(frame: string, leftText: string) {
   expect(status).toBeGreaterThan(0);
   expect(bodyStart).toBeGreaterThan(status);
   expect(hint).toBeGreaterThan(bodyStart);
+  expect(lines.filter(line => line.includes("Enter open"))).toHaveLength(1);
   // Modal hint owns one padding row above its text; the divider must span the body before it.
   for (let index = bodyStart; index < hint - 1; index++) {
     expect(lines[index]![divider], `divider missing on body row ${index}`).toBe("│");
   }
 }
 
-test("100-column Home divider spans the full body height", async () => {
-  const app = await mount({ height: 40 });
+test.each([26, 40])("100-column Home divider spans the full body at %i rows", async (height) => {
+  const app = await mount({ height });
   assertFullHeightDivider(app.frame(), "▸ Session");
+  expect(app.frame()).toContain("Quit");
 });
 
-test("100-column Configure divider spans the full body height", async () => {
-  const app = await mount({ initialRoute: "configure", height: 40 });
+test.each([26, 40])("100-column Configure divider spans the full body at %i rows", async (height) => {
+  const app = await mount({ initialRoute: "configure", height });
   assertFullHeightDivider(app.frame(), "Workspace path");
+  expect(app.frame()).toContain("Save & Exit");
+  expect(app.frame()).toContain("‹ Back");
+});
+
+test("24-row terminal keeps the menu usable", async () => {
+  const app = await mount({ height: 24 });
+  expect(app.frame()).toContain("ATOM NEO · Home");
+  expect(app.frame()).toContain("workspace:");
 });
 
 test.each([64, 40])("Home at %i columns has no internal divider", async (width) => {
