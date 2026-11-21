@@ -182,7 +182,6 @@ function assertTitleOwnsContext(frame: string, title: string, absentCrumb: strin
   const index = lines.findIndex(line => line.includes(title));
   expect(index).toBeGreaterThanOrEqual(0);
   expect(lines[index + 1]).toContain("workspace:");
-  expect(lines[index + 1]!.trim()).not.toBe("");
   expect(lines.some(line => line.includes(absentCrumb))).toBe(false);
 }
 

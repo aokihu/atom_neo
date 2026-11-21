@@ -388,7 +388,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, breadcrumb: breadc
       open
       title="ATOM NEO · GATEWAY CLIENTS"
       breadcrumb={breadcrumb}
-        headerRight={versionRight}
+      headerRight={versionRight}
       titleTruncate
       width={96}
       height={22}
