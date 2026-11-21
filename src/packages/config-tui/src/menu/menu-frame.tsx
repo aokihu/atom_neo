@@ -162,7 +162,8 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
 }) {
   const { colors } = useTheme();
   const { version } = useContext(MenuChromeContext);
-  const { width } = useTerminalDimensions();
+  const { width, height: screenHeight } = useTerminalDimensions();
+  const menuHeight = Math.min(24, Math.max(10, screenHeight - Math.floor(screenHeight / 3) - 2));
   const contentWidth = menuContentWidth(width);
   const versionText = version ? `v${version}` : "";
   const titleMax = Math.max(1, contentWidth - (versionText ? stringWidth(versionText) + 1 : 0));
@@ -226,7 +227,7 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       headerRight={version ? <text fg={colors.text.muted} wrapMode="none">{versionText}</text> : undefined}
       titleTruncate
       width={MENU_WIDTH}
-      height={24}
+      height={menuHeight}
       titlePadding={0}
       contentPaddingX={0}
       interactive={!suspended}
@@ -240,17 +241,19 @@ export function MenuScreen({ title, workspace, gateway, core, items, onSelect, o
       onClose={onBack}
       hint={truncateByWidth(hint, contentWidth)}
     >
-      <box flexDirection="column">
+      <box flexDirection="column" flexGrow={1} height="100%" minHeight={0}>
         <MenuStatus workspace={workspace} gateway={gateway} core={core} breadcrumb={breadcrumb} />
         {children}
         {split ? (
-          <box flexDirection="row" flexGrow={1}>
+          <box flexDirection="row" flexGrow={1} minHeight={0} alignItems="stretch">
             <box width={NAV_WIDTH} flexDirection="column">
               {renderRows(false)}
             </box>
             <box
               flexGrow={1}
               flexDirection="column"
+              alignSelf="stretch"
+              minHeight={0}
               border={["left"]}
               borderStyle="single"
               borderColor={colors.border.default}

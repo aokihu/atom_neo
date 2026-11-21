@@ -340,6 +340,41 @@ function contentLines(frame: string): string[] {
     .filter(Boolean);
 }
 
+function assertFullHeightDivider(frame: string, leftText: string) {
+  const lines = frame.split("\n");
+  const anchor = lines.find(line => line.includes(leftText));
+  expect(anchor).toBeDefined();
+  const divider = anchor!.indexOf("│", anchor!.indexOf(leftText) + leftText.length);
+  expect(divider).toBeGreaterThan(2);
+  const status = lines.findIndex(line => line.includes("Gateway:") && line.includes("Core:"));
+  const bodyStart = lines.findIndex(line => line.includes(leftText));
+  const hint = lines.findIndex(line => line.includes("Enter open"));
+  expect(status).toBeGreaterThan(0);
+  expect(bodyStart).toBeGreaterThan(status);
+  expect(hint).toBeGreaterThan(bodyStart);
+  // Modal hint owns one padding row above its text; the divider must span the body before it.
+  for (let index = bodyStart; index < hint - 1; index++) {
+    expect(lines[index]![divider], `divider missing on body row ${index}`).toBe("│");
+  }
+}
+
+test("100-column Home divider spans the full body height", async () => {
+  const app = await mount({ height: 40 });
+  assertFullHeightDivider(app.frame(), "▸ Session");
+});
+
+test("100-column Configure divider spans the full body height", async () => {
+  const app = await mount({ initialRoute: "configure", height: 40 });
+  assertFullHeightDivider(app.frame(), "Workspace path");
+});
+
+test.each([64, 40])("Home at %i columns has no internal divider", async (width) => {
+  const app = await mount({ width });
+  const lines = app.frame().split("\n");
+  expect(lines.every(line => (line.match(/│/g)?.length ?? 0) <= 2)).toBe(true);
+  expect(app.frame()).not.toContain("Chat with the current agent.");
+});
+
 // Layout contract: version is rendered muted by MenuScreen's headerRight;
 // frame capture verifies placement and single-line behavior.
 test.each([100, 64, 40])("top bar keeps title+version on one line at %i columns", async (width) => {

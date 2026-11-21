@@ -241,9 +241,9 @@ atom config gateway
 
 验证：
 
-- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 211 pass
+- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 215 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 26 pass
-- 全量 `bun test` → 2813 pass、27 skip、0 fail
+- 全量 `bun test` → 2817 pass、27 skip、0 fail
 - `bun run typecheck`、`typecheck:node`、`docs:check`、`git diff --check` 通过
 
 ## 11. 复审修复
