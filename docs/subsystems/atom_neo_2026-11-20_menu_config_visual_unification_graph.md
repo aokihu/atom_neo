@@ -52,7 +52,7 @@
 - `WizardApp` 只保留 wizard 状态与视图调度；配置模式下不创建独立背景。
 - `MenuModal.tsx` 删除后，`buildMenuItems` / `describeSelection` 迁移到 `configure-view.tsx`。
 - `GatewayModal` / `Backup` 继续复用现有 actions，不复制后端逻辑。
-- Breadcrumb 只显示标题未体现的父级上下文：Home/Session/History/Core/Configure/Backup/Export/Import 返回 `undefined`；仅 Gateway 真实配置、Workspace、Providers、Theme 显示。
+- Breadcrumb 只显示标题未体现的父级上下文：Home/Session/History/Core/Configure/Backup/Export/Import 返回 `undefined`；仅 Gateway 真实配置、Workspace、Providers、Theme 显示。GatewayModal/MenuPrompt 将 context breadcrumb 显式传给 Modal row，first-run 不读取。
 
 ---
 

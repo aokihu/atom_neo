@@ -54,6 +54,7 @@ const actionSignature = (actions: ModalAction[]) =>
 export function Modal({
   open,
   title,
+  breadcrumb,
   headerRight,
   titleTruncate = false,
   width = 60,
@@ -246,6 +247,11 @@ export function Modal({
             <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>{title}</text>
           </box>
         ))}
+        {breadcrumb ? (
+          <box flexShrink={0} paddingX={contentPaddingX}>
+            <text fg={colors.text.muted} wrapMode="none" truncate>{breadcrumb}</text>
+          </box>
+        ) : null}
         <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>
           {children}
         </box>

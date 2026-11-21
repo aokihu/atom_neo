@@ -447,6 +447,7 @@ integration("MenuApp Configure/Providers/Theme/Gateway entries and narrow layout
     { wait: "Install client package", send: "\x03" },
   ], [binary, "config", "gateway", "--sandbox", path], home);
   expect(direct.commands).toEqual([]);
+  expect(direct.tail).toContain("Home / Configure / Gateway");
 
   const narrow = await driveMenu([
     { wait: "Install client package", send: "\x1b" },
@@ -480,6 +481,7 @@ integration("Menu shell stays single-line at 100/64/40 columns", async () => {
       { wait: "Continue", delay: 0.3, send: "\x03" },
     ], [binary, "menu", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
     expect(session.tail).toContain("Continue");
+    expect(session.tail).not.toContain("Home / Session");
     expect(session.tail).toContain(`v${version}`);
 
     const backup = await driveMenu([
@@ -487,6 +489,7 @@ integration("Menu shell stays single-line at 100/64/40 columns", async () => {
       { wait: "Import", delay: 0.3, send: "\x03" },
     ], [binary, "menu", "--sandbox", path], home, { ATOM_PTY_COLS: String(cols), ATOM_PTY_ROWS: "26" });
     expect(backup.tail).toContain("Import");
+    expect(backup.tail).not.toContain("Home / Backup");
     expect(backup.tail).toContain(`v${version}`);
   }
 }, 90000);
@@ -497,6 +500,7 @@ integration("unconfigured atom config gateway starts at Workspace and never writ
     { wait: "Workspace path", send: "\x03" },
   ], [binary, "config", "gateway", "--sandbox", path], join(temp, "empty-config-gateway-home"));
   expect(result.commands).toEqual([]);
+  expect(result.tail).toContain("Gateway / Workspace");
   expect(existsSync(join(path, "config.json"))).toBe(false);
 }, 30000);
 

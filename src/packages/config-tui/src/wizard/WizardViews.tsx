@@ -113,6 +113,7 @@ export function WizardSettingsViews({ view, wizard, dispatch, sandboxPath, gatew
           sandbox={sandboxPath}
           port={wizard.gatewayPort}
           gatewayActions={gatewayActions}
+          breadcrumb="Home / Configure / Gateway"
           onSubmit={port => dispatch({ type: "gateway-submit", port })}
           onBack={() => dispatch({ type: "gateway-back" })}
         />

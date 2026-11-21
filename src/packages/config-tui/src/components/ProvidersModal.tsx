@@ -64,6 +64,7 @@ export function ProvidersModal({ state, allowJev, chrome, onSelect, onAdd, onBac
     <Modal
       open
       title="ATOM NEO · ADD PROVIDER"
+      breadcrumb={chrome ? "Home / Configure / Providers & Models" : undefined}
       headerRight={versionRight}
       titleTruncate
       width={56}
@@ -113,6 +114,7 @@ export function ProvidersModal({ state, allowJev, chrome, onSelect, onAdd, onBac
       <Modal
         open
         title="ATOM NEO · PROVIDERS"
+        breadcrumb={chrome ? "Home / Configure / Providers & Models" : undefined}
         headerRight={versionRight}
         titleTruncate
         width={52}

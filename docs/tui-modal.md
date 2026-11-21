@@ -47,6 +47,7 @@ Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与�
 |------|------|------|
 | `open` | `boolean` | 是否显示，`false` 时返回 `null` |
 | `title` | `string?` | 标题栏文本，省略则不渲染标题栏 |
+| `breadcrumb` | `string?` | 可选父级上下文，渲染在标题行下方；不自动读取 context，长文本单行截断 |
 | `width` | `number` | 宽度，默认 `60`，自动夹紧到 `[20, screenWidth-4]` |
 | `height` | `number?` | 高度，省略则按内容自适应 |
 | `placement` | `ModalPlacement` | 无锚点时的屏幕定位，默认 `center`（`center`/`top`/`bottom`） |

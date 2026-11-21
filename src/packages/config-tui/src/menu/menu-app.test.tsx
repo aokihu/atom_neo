@@ -178,10 +178,11 @@ test.each([100, 64, 40])("home at %i columns has no breadcrumb and keeps workspa
 });
 
 function assertTitleOwnsContext(frame: string, title: string, absentCrumb: string) {
-  const lines = contentLines(frame);
+  const lines = frame.split("\n");
   const index = lines.findIndex(line => line.includes(title));
   expect(index).toBeGreaterThanOrEqual(0);
-  expect(lines[index + 1]?.startsWith("workspace:")).toBe(true);
+  expect(lines[index + 1]).toContain("workspace:");
+  expect(lines[index + 1]!.trim()).not.toBe("");
   expect(lines.some(line => line.includes(absentCrumb))).toBe(false);
 }
 
@@ -219,23 +220,18 @@ test("gateway shortcut goes through workspace confirmation", async () => {
   expect(app.frame()).toContain("ATOM NEO · Home");
 });
 
-test("Workspace route breadcrumb renders through the shared chrome", async () => {
-  const view = await mountNode(
-    <MenuChromeProvider version="1.2.3" breadcrumb={breadcrumbFor({ name: "workspace", after: "gateway-shortcut" })}>
-      <MenuScreen
-        title="Workspace"
-        workspace="/tmp/atom"
-        gateway="offline"
-        core="online"
-        items={[{ key: "back", label: "‹ Back" }]}
-        onSelect={() => {}}
-        onBack={() => {}}
-        hint="Esc back"
-      />
-    </MenuChromeProvider>,
-  );
-  const lines = contentLines(view.frame());
-  expect(lines.filter(line => line === "Home / Gateway / Workspace")).toHaveLength(1);
+test("top-level Gateway change-workspace shows the parent breadcrumb", async () => {
+  const app = await mount();
+  await app.press("ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Workspace");
+  expect(app.frame()).toContain("Home / Gateway / Workspace");
+});
+
+test("gateway-real renders Home / Configure / Gateway", async () => {
+  const app = await mount({ initialRoute: "gateway" });
+  expect(app.frame()).toContain("GATEWAY CLIENTS");
+  expect(app.frame()).toContain("Home / Configure / Gateway");
 });
 
 test("empty breadcrumb renders workspace directly below the title", async () => {
@@ -269,6 +265,7 @@ test("atom config opens Configure and atom config gateway requests workspace whe
     actions: actions({ hasConfig: () => false }),
   });
   expect(unconfigured.frame()).toContain("ATOM NEO · Workspace");
+  expect(unconfigured.frame()).toContain("Gateway / Workspace");
   expect(unconfigured.frame()).toContain("Workspace path");
 });
 
@@ -277,6 +274,7 @@ test("gateway shortcut Continue reaches the shared GatewayModal", async () => {
   await app.press("ARROW_DOWN", "RETURN");
   await app.press("RETURN");
   expect(app.frame()).toContain("GATEWAY CLIENTS");
+  expect(app.frame()).toContain("Home / Gateway / Configuration");
 });
 
 test("atom config opens the flat Configure menu without Advanced", async () => {
@@ -334,6 +332,7 @@ test("configure Gateway opens the shared GatewayModal", async () => {
   const app = await mount({ initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("GATEWAY CLIENTS");
+  expect(app.frame()).toContain("Home / Configure / Gateway");
 });
 
 function contentLines(frame: string): string[] {

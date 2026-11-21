@@ -16,7 +16,7 @@ const ACTIONS: ModalAction[] = [
 beforeEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true }); });
 afterEach(() => { Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false }); });
 
-async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight, title = "Test", titleTruncate, width = 48, hint = "↑/↓ select · Tab actions", hintTruncate }: {
+async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight, title = "Test", titleTruncate, width = 48, hint = "↑/↓ select · Tab actions", hintTruncate, breadcrumb }: {
   listLength?: number;
   focusRef?: Ref<BoxRenderable>;
   actions?: ModalAction[];
@@ -26,6 +26,7 @@ async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight
   width?: number;
   hint?: string;
   hintTruncate?: boolean;
+  breadcrumb?: string;
 } = {}) {
   const setup = await createTestRenderer({ width: 80, height: 24 });
   const root = createRoot(setup.renderer);
@@ -40,6 +41,7 @@ async function mountModal({ listLength, focusRef, actions = ACTIONS, headerRight
       <Modal
         open={open}
         title={title}
+        breadcrumb={breadcrumb}
         headerRight={headerRight}
         titleTruncate={titleTruncate}
         width={width}
@@ -163,6 +165,45 @@ test("titleTruncate opts into single-line ellipsis without headerRight", async (
     const frame = ctx.setup.captureCharFrame();
     expect(frame).toContain("...");
     expect(frame).not.toContain("A very long title that must be truncated");
+  } finally {
+    await cleanup(ctx);
+  }
+});
+
+test("renders breadcrumb only when explicitly provided", async () => {
+  const withCrumb = await mountModal({ breadcrumb: "Home / Configure / Gateway" });
+  try {
+    await withCrumb.render(true);
+    expect(withCrumb.setup.captureCharFrame()).toContain("Home / Configure / Gateway");
+  } finally {
+    await cleanup(withCrumb);
+  }
+  const withoutCrumb = await mountModal();
+  try {
+    await withoutCrumb.render(true);
+    expect(withoutCrumb.setup.captureCharFrame()).not.toContain("Home / Configure / Gateway");
+  } finally {
+    await cleanup(withoutCrumb);
+  }
+});
+
+test("breadcrumb truncates on one line without colliding with the title version", async () => {
+  const ctx = await mountModal({
+    title: "Gateway",
+    titleTruncate: true,
+    headerRight: <text fg="#888888">v9.9.9</text>,
+    breadcrumb: "Home / Configure / Gateway / Very Long Parent Context",
+    width: 40,
+  });
+  try {
+    await ctx.render(true);
+    const lines = ctx.setup.captureCharFrame().split("\n");
+    const crumbs = lines.filter(line => line.includes("Home /"));
+    expect(crumbs).toHaveLength(1);
+    expect(crumbs[0]).toContain("Home /");
+    expect(crumbs[0]).toContain("Parent Context");
+    expect(crumbs[0]).not.toContain("Very Long Parent Context");
+    expect(lines.filter(line => line.includes("v9.9.9"))).toHaveLength(1);
   } finally {
     await cleanup(ctx);
   }

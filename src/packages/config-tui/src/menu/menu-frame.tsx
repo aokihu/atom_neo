@@ -280,11 +280,12 @@ export function MenuPrompt({ title, label, value, placeholder, error, onSubmit, 
   hint: string;
 }) {
   const { colors } = useTheme();
-  const { version } = useMenuChrome();
+  const { version, breadcrumb } = useMenuChrome();
   return (
     <Modal
       open
       title={`ATOM NEO · ${title}`}
+      breadcrumb={breadcrumb}
       headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
       titleTruncate
       width={72}
@@ -314,11 +315,12 @@ export function MenuSecretPrompt({ title, label, placeholder, error, onSubmit, o
   hint: string;
 }) {
   const { colors } = useTheme();
-  const { version } = useMenuChrome();
+  const { version, breadcrumb } = useMenuChrome();
   return (
     <Modal
       open
       title={`ATOM NEO · ${title}`}
+      breadcrumb={breadcrumb}
       headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
       titleTruncate
       width={72}

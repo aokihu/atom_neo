@@ -33,11 +33,13 @@ export function GatewayInstanceForm({
   initialValues,
   configuredSecrets = [],
   mode,
+  breadcrumb,
   error,
   onSubmit,
   onCancel,
 }: {
   title?: string;
+  breadcrumb?: string;
   fields: GatewayInstanceFields;
   initialValues?: Record<string, string>;
   configuredSecrets?: readonly string[];
@@ -100,6 +102,7 @@ export function GatewayInstanceForm({
         <Modal
           open
           title={displayTitle}
+          breadcrumb={breadcrumb}
           headerRight={versionRight}
           titleTruncate
           width={64}
@@ -132,6 +135,7 @@ export function GatewayInstanceForm({
         <Modal
           open
           title={`ATOM NEO · ${field.label}`}
+          breadcrumb={breadcrumb}
           headerRight={versionRight}
           titleTruncate
           width={56}
@@ -165,6 +169,7 @@ export function GatewayInstanceForm({
         <Modal
           open
           title={displayTitle}
+          breadcrumb={breadcrumb}
           headerRight={versionRight}
           titleTruncate
           width={64}
@@ -194,6 +199,7 @@ export function GatewayInstanceForm({
     <Modal
       open
       title={displayTitle}
+      breadcrumb={breadcrumb}
       headerRight={versionRight}
       titleTruncate
       width={64}

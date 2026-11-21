@@ -44,6 +44,8 @@ export interface ModalAction {
 export interface ModalProps {
   open: boolean;
   title?: string;
+  /** Optional parent context rendered below the title row; callers must pass it explicitly. */
+  breadcrumb?: string;
   /** Optional content rendered at the right edge of the title row. */
   headerRight?: React.ReactNode;
   /** Opt in to single-line title truncation; default keeps the original wrapping behavior. */

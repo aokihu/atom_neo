@@ -45,6 +45,9 @@ Modes are selected by whether `listLength > 0`.
 `chrome="plain"` (default) is the chat TUI look; `chrome="bordered"` adds the config
 wizard border. `hint` renders a muted helper line below the action bar.
 
+`breadcrumb` renders an optional muted parent-context row below the title. Callers
+must pass it explicitly; it is never read from a global context.
+
 `headerRight` renders optional content at the right edge of the title row. The title
 area shrinks with `minWidth=0` while `headerRight` keeps its width, and titles are
 single-line truncated when `headerRight` is present. `titleTruncate` opts into the

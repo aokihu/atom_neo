@@ -57,7 +57,7 @@ atom config gateway [--sandbox <path>]
 - MenuApp 维护单一 workspace；Session、History、Core Server、Gateway、Configure、Backup 全部使用它。
 - 顶栏第一行左侧 `ATOM NEO · <页面名>`、右侧 muted 版本号（`Modal.headerRight`，同一行右对齐）；breadcrumb 只显示标题未体现的父级上下文。
 - `breadcrumbFor` 对 Home/Session/History/Core Server/Gateway 快捷入口/Configure/Backup/Export/Import 返回 `undefined`，不渲染 breadcrumb 行，workspace 直接跟随标题行。
-- 仅 Gateway 真实配置、Workspace、Providers、Theme 显示多段父级 breadcrumb；工作区行随后是 Gateway/Core 状态。
+- 仅 Gateway 真实配置、Workspace、Providers、Theme 显示多段父级 breadcrumb；GatewayModal 与 Workspace `MenuPrompt` 通过 Modal `breadcrumb` prop 实际渲染该行，工作区行随后是 Gateway/Core 状态。
 - 三行使用同一左缩进；宽度按 `@atom-neo/shared` 的 `stringWidth` 计算。标题先按可用宽度截断并保留完整版本号，breadcrumb 单行截断，workspace 在扣除 `workspace: ` 前缀后中部省略。64/40 列下标题+版本、breadcrumb、workspace、Gateway/Core 状态均保持单行。
 - 启动失败重试时使用最后一次 launch 选择的 workspace 重新打开 MenuApp，不回退到原始 `args.sandbox`。
 - MenuScreen 统一使用左右分栏：`>=80` 列左侧导航、右侧 preview；`64–79` 列单列并内联 detail；`<64` 列隐藏 detail。长列表保持 10 行窗口滚动。

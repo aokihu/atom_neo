@@ -97,6 +97,8 @@ export function breadcrumbFor(route: MenuRoute): string | undefined {
 }
 ```
 
+Breadcrumb row 只在这些页面实际渲染：GatewayModal 与 Workspace `MenuPrompt` 从 `MenuChromeProvider` 读取并显式传给 tui-kit Modal；Providers/Theme 使用显式 breadcrumb。其余页面不渲染，first-run 不读取 context。
+
 ### 2.3 CLI 初始路由
 
 | 命令 | 初始路由 |
