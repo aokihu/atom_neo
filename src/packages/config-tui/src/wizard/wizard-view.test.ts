@@ -58,6 +58,24 @@ describe("view transitions", () => {
     }
   });
 
+  test("config theme selection stays on Theme until back", () => {
+    let state = run(ui("config"), { type: "menu-select", key: "theme" });
+    state = run(state, { type: "theme-submit", theme: "dracula" });
+    expect(kind(state)).toBe("theme");
+    expect(state.wizard.theme).toBe("dracula");
+    state = run(state, { type: "theme-submit", theme: "nord" });
+    expect(kind(state)).toBe("theme");
+    expect(state.wizard.theme).toBe("nord");
+    state = run(state, { type: "theme-back" });
+    expect(kind(state)).toBe("menu");
+  });
+
+  test("first-run theme selection advances to project", () => {
+    const state = run(ui("first-run"), { type: "theme-submit", theme: "nord" });
+    expect(kind(state)).toBe("project");
+    expect(state.wizard.theme).toBe("nord");
+  });
+
   test("first-run mode walks providers → key → models → profiles → decisions → theme → project → confirm", () => {
     let state = ui("first-run");
     const trail: (WizardViewKind | undefined)[] = [kind(state)];

@@ -168,7 +168,7 @@ export function wizardReducer(state: WizardUiState, action: WizardAction): Wizar
       return modeView(state, "menu", "profiles");
 
     case "theme-submit":
-      return modeView({ ...state, wizard: { ...state.wizard, theme: action.theme } }, "menu", "project");
+      return modeView({ ...state, wizard: { ...state.wizard, theme: action.theme } }, "theme", "project");
 
     case "theme-back":
       return modeView(state, "menu", "decisions");

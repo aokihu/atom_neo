@@ -189,7 +189,7 @@ atom config gateway
 ### M3 — 设置与编辑器视觉统一
 
 - Providers & Models 改为左列表 + 右详情。
-- Theme 改为左主题列表 + 右色块预览。
+- Theme 改为左主题列表 + 右色块预览；选择后停留 Theme 继续切换，Esc 返回 Configure，Save & Exit 才持久化。
 - Profiles / Decisions / Gateway / Backup 表单统一 Modal 宽度、标题、hint、版本号。
 - Gateway 内部 clients/actions 视图保持现有行为，只统一 chrome。
 
@@ -241,9 +241,9 @@ atom config gateway
 
 验证：
 
-- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 218 pass
+- `bun test src/packages/config-tui/src src/packages/tui-kit/src` → 221 pass
 - `ATOM_RUN_STARTUP_VALIDATION=1 bun test src/bootstrap/startup.integration.test.ts` → 26 pass
-- 全量 `bun test` → 2820 pass、27 skip、0 fail
+- 全量 `bun test` → 2823 pass、27 skip、0 fail
 - `bun run typecheck`、`typecheck:node`、`docs:check`、`git diff --check` 通过
 
 ## 11. 复审修复

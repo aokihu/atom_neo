@@ -305,6 +305,35 @@ test("Configure Providers uses the split list and live provider preview", async 
   expect(app.frame()).toContain("ATOM NEO · Configure");
 });
 
+test("Configure Theme stays open while selecting themes and saves on Save & Exit", async () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "atom-menu-theme-stay-"));
+  tempDirs.push(sandbox);
+  writeFileSync(join(sandbox, "config.json"), JSON.stringify({ version: 2, tui: { theme: "edex" } }));
+  const app = await mount({ sandbox, initialRoute: "configure" });
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Theme");
+  expect(app.frame()).toContain("Current: edex");
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Theme");
+  expect(app.frame()).toContain("Current: dracula");
+  expect(app.frame()).toContain("background  #282a36");
+
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Theme");
+  expect(app.frame()).toContain("Current: nord");
+  expect(app.frame()).toContain("background  #2e3440");
+
+  await app.press("ESCAPE");
+  expect(app.frame()).toContain("ATOM NEO · Configure");
+  expect(app.frame()).toContain("Theme (nord)");
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("RETURN");
+  expect(JSON.parse(readFileSync(join(sandbox, "config.json"), "utf8")).tui.theme).toBe("nord");
+});
+
 test("Configure Add Provider opens an overlay without losing the shell", async () => {
   const app = await mount({ initialRoute: "configure" });
   await app.press("ARROW_DOWN", "RETURN");
@@ -324,6 +353,9 @@ test("Configure Theme previews real colors before applying", async () => {
   await app.press("ARROW_DOWN");
   expect(app.frame()).toContain("background  #0d1117");
   await app.press("RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Theme");
+  expect(app.frame()).toContain("Current: github-dark");
+  await app.press("ESCAPE");
   expect(app.frame()).toContain("Theme (github-dark)");
 });
 
@@ -534,6 +566,9 @@ test("Save & Exit stays on Configure and shows Saved", async () => {
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("THEME");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Theme");
+  expect(app.frame()).toContain("Current: nord");
+  await app.press("ESCAPE");
   expect(app.frame()).toContain("ATOM NEO · Configure");
   expect(app.frame()).toContain("Theme (nord)");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
@@ -549,6 +584,8 @@ test("Configure workspace editing preserves unsaved wizard state", async () => {
   const app = await mount({ sandbox, initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Current: nord");
+  await app.press("ESCAPE");
   expect(app.frame()).toContain("Theme (nord)");
   await app.press("RETURN");
   expect(app.frame()).toContain("Configure / Workspace");
@@ -588,6 +625,8 @@ test("switching workspace discards unsaved state and reloads the new sandbox", a
 
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Current: dracula");
+  await app.press("ESCAPE");
   expect(app.frame()).toContain("Theme (dracula)");
   await app.press("RETURN");
   await app.press(...clearInputKeys(a));
@@ -609,6 +648,8 @@ test("entering the same workspace closes the prompt without reloading state", as
   const app = await mount({ sandbox: a, initialRoute: "configure", actions: workspaceActions(a, b, "github-dark", "nord") });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Current: dracula");
+  await app.press("ESCAPE");
   expect(app.frame()).toContain("Theme (dracula)");
   await app.press("RETURN");
   await app.press(...clearInputKeys(a));
@@ -625,6 +666,8 @@ test("cancelling a workspace switch keeps the old workspace and unsaved state", 
 
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   await app.press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("Current: dracula");
+  await app.press("ESCAPE");
   expect(app.frame()).toContain("Theme (dracula)");
   await app.press("RETURN");
   await app.press(...clearInputKeys(a));

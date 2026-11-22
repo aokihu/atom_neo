@@ -13,6 +13,7 @@ function themePreview(name: string): MenuPreview {
   return {
     title: "THEME PREVIEW",
     lines: [
+      `Current: ${name}`,
       `background  ${colors.bg.page}`,
       `text        ${colors.text.primary}`,
       `accent      ${colors.accent.brand}`,

@@ -185,7 +185,7 @@ ThemeView
   │        ▼
   │   wizardReducer
   │        ├─ wizard.theme = theme
-  │        └─ view = menu
+  │        └─ config: view = theme（停留）；first-run: project
   │
   ├── WizardApp useEffect → chrome.onThemeChange(wizard.theme)
   │        └─ MenuApp setTheme → 外层唯一 ThemeProvider 立即重绘 shell

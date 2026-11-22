@@ -82,7 +82,7 @@ atom config gateway [--sandbox <path>]
 
 - **快捷入口**：Home → Gateway → WorkspaceGate。Continue 才进入 `GatewayModal`；C 或 Change workspace 进入 Workspace path，保存后返回确认页；Esc 返回 Home。
 - **真实入口**：Configure → Gateway，直接使用当前已确认 workspace，不再经过 WorkspaceGate。
-- Configure 由 embedded WizardApp 承载；Providers/Profiles/Decisions/Theme/Gateway 保存或取消后回到同一 Configure。
+- Configure 由 embedded WizardApp 承载；Providers/Profiles/Decisions/Gateway 保存或取消后回到同一 Configure。Theme 选择后停留 Theme 并即时预览，Esc 返回 Configure；Save & Exit 才写入 `config.json`。
 - Configure → Save & Exit 提交 `config.json` / `.env` 后停留 Configure 并显示 `Saved`；Back/Esc 在未保存时走 Quit 确认。
 - `GatewayModal` / `GatewayInstanceForm` 与 `atom gateway` CLI actions 复用，不复制表单。
 - Gateway 端口保存只校验 1–65535 并在原 config 上合并；损坏的 `config.json` 返回内联错误，不崩溃渲染器。

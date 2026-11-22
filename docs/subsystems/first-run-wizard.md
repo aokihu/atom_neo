@@ -144,7 +144,7 @@ ConfigureView
   ├─ Providers (N)     → ProvidersView（左列表 + 右详情）→ ApiKeyModal → ModelsModal → 返回
   ├─ Model Profiles    → ProfilesModal（只列出 LLM；预填）
   ├─ Decisions         → DecisionsModal（fast、Prediction、Post-Conversation、Continuation）
-  ├─ Theme             → ThemeView（左列表 + 真实色块预览，选择后即时预览）
+  ├─ Theme             → ThemeView（左列表 + 真实色块预览；选择后停留 Theme 即时预览，Esc 回 Configure）
   ├─ Gateway (clients · port) → GatewayModal（实例列表/安装/加载/编辑/register/start/诊断）
   ├─ Save & Exit       → ConfirmModal → commit → Configure + Saved
   └─ Back              → 未保存退出确认

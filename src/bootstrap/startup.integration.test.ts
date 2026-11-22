@@ -439,9 +439,11 @@ integration("MenuApp Configure/Providers/Theme/Gateway entries and narrow layout
     { wait: "Providers (1)", send: "\x1b[B\r", keyDelay: 0.08 },
     { wait: "DEEPSEEK", send: "\x1b" },
     { wait: "Theme (edex)", send: "\x1b[B\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
-    { wait: "background", send: "\x03" },
+    { wait: "background", send: "\x1b[B\x1b[B\x1b[B\r", keyDelay: 0.08 },
+    { wait: "#282a36", send: "\x03" },
   ], [binary, "config", "--sandbox", path], home);
   expect(configured.commands).toEqual([]);
+  expect(configured.tail).toContain("#282a36");
 
   const direct = await driveMenu([
     { wait: "Install client package", send: "\x03" },
