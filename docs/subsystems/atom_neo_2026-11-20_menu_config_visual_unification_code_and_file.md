@@ -486,7 +486,7 @@ return embedded ? content : <ThemeProvider theme={wizard.theme}>{content}</Theme
 
 - `ThemeModal` 改为 shell 内列表 + `preview`。
 - 色块使用主题真实颜色。
-- 选择主题后立即 dispatch 并停留 Theme，当前项跟随新主题；Esc 返回 Configure，Save & Exit 才写入 `config.json`。
+- 移动主题项只更新 Preview；Enter 才 dispatch 应用为 Current 并停留 Theme，当前项跟随新主题；Esc 返回 Configure，Save & Exit 才写入 `config.json`。
 
 ### 7.3 Profiles / Decisions
 

@@ -196,7 +196,7 @@ ThemeView
 
 说明：
 
-- Theme 预览仍是 wizard state 驱动，不直接写 config.json。
+- Theme 移动仅更新 Preview 色块；Enter 才更新 wizard.theme（Current）并停留 Theme，不直接写 config.json。
 - embedded WizardApp 不嵌套 ThemeProvider；外层 MenuApp ThemeProvider 是唯一主题源。
 - Core 运行中的主题重载由既有 `reloadConfig` 修复覆盖，不在本目标内重复实现。
 

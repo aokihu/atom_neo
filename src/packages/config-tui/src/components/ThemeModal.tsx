@@ -8,18 +8,19 @@ import type { WizardChrome } from "./WizardApp";
 
 const THEME_SET = new Set<string>(THEME_NAMES);
 
-function themePreview(name: string): MenuPreview {
-  const colors = THEMES[name as keyof typeof THEMES] ?? THEMES.edex;
+function themePreview(previewName: string, appliedName: string): MenuPreview {
+  const colors = THEMES[previewName as keyof typeof THEMES] ?? THEMES.edex;
   return {
     title: "THEME PREVIEW",
     lines: [
-      `Current: ${name}`,
+      `Preview: ${previewName}`,
+      `Current: ${appliedName}`,
       `background  ${colors.bg.page}`,
       `text        ${colors.text.primary}`,
       `accent      ${colors.accent.brand}`,
       "",
-      "Applies immediately in this TUI.",
-      "Saved to config.json on Save & Exit.",
+      "Enter applies to this TUI.",
+      "Save & Exit persists to config.json.",
     ],
     content: (
       <box flexDirection="column">
@@ -50,7 +51,7 @@ export function ThemeModal({ theme, chrome, onSubmit, onBack }: {
         core={chrome.core}
         initialSelection={Math.max(0, THEME_NAMES.indexOf(theme as (typeof THEME_NAMES)[number]))}
         items={THEME_NAMES.map(name => ({ key: name, label: name, detail: name === theme ? "current" : undefined }))}
-        preview={item => themePreview(item.key)}
+        preview={item => themePreview(item.key, theme)}
         onSelect={key => {
           if (THEME_SET.has(key)) onSubmit(key);
         }}

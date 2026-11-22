@@ -344,19 +344,29 @@ test("Configure Add Provider opens an overlay without losing the shell", async (
   expect(app.frame()).toContain("➕ Add Provider");
 });
 
-test("Configure Theme previews real colors before applying", async () => {
+test("Configure Theme previews on move and applies only on Enter", async () => {
   const app = await mount({ initialRoute: "configure" });
   await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
   expect(app.frame()).toContain("THEME PREVIEW");
   expect(app.frame()).toContain("Home / Configure / Theme");
+  expect(app.frame()).toContain("Preview: edex");
+  expect(app.frame()).toContain("Current: edex");
   expect(app.frame()).toContain("background  #05090c");
+
   await app.press("ARROW_DOWN");
-  expect(app.frame()).toContain("background  #0d1117");
-  await app.press("RETURN");
   expect(app.frame()).toContain("ATOM NEO · Theme");
-  expect(app.frame()).toContain("Current: github-dark");
+  expect(app.frame()).toContain("Preview: github-dark");
+  expect(app.frame()).toContain("Current: edex");
+  expect(app.frame()).toContain("background  #0d1117");
+
   await app.press("ESCAPE");
-  expect(app.frame()).toContain("Theme (github-dark)");
+  expect(app.frame()).toContain("Theme (edex)");
+
+  await app.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+  await app.press("ARROW_DOWN", "RETURN");
+  expect(app.frame()).toContain("ATOM NEO · Theme");
+  expect(app.frame()).toContain("Preview: github-dark");
+  expect(app.frame()).toContain("Current: github-dark");
 });
 
 test("configure Gateway opens the shared GatewayModal", async () => {
