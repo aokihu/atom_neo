@@ -33,6 +33,7 @@ export interface RuntimeLike {
   appConfig: Record<string, any>;
   maxTokens: number;
   getResolvedModel(level?: string): ResolvedModel;
+  reloadConfig?(): Record<string, any>;
   updateRuntimeConfig?(patch: unknown): Record<string, any>;
   resetRuntimeConfig?(): Record<string, any>;
 }

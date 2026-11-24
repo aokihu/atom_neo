@@ -646,7 +646,7 @@ const ENV_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/;
 **位置**:
 - `src/bootstrap/backup.ts:78-89`
 - `src/bootstrap/runtime-file.ts:10-20`
-- `src/bootstrap/menu-history.ts:57-66`
+- `bootstrap/menu-history.ts:57-66`（历史文件，现已移除）
 - `src/packages/core/src/session/persistence-service.ts:469-503`
 
 **当前**:

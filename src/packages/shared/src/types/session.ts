@@ -20,6 +20,18 @@ export type SessionInitiator =
   | { type: "internal" }
   | { type: "unknown" };
 
+/** Read-only History DTO shared by Core and MenuApp. */
+export type SessionSummary = {
+  sessionId: string;
+  lastTuiUsedAt: number;
+  initiator: SessionInitiator;
+  status: string;
+  /** Holds an active task lease. */
+  active: boolean;
+  /** Reference-counted WS/TUI attach; zero releases deletion and sweep protection. */
+  attached: boolean;
+};
+
 export type SessionMessage = {
   seq?: number;
   role: "user" | "assistant" | "system";

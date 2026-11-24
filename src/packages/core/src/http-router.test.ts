@@ -1,7 +1,7 @@
 /**
  * HTTP router contract tests: health, admin rejection, task submission delegation, upgrade, 404.
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { HttpRequestContext } from "@atom-neo/shared";
 import { Logger } from "@atom-neo/shared";
 import { createHttpRouter, requireAdmin } from "./http-router";
@@ -47,6 +47,7 @@ function routerDeps(overrides: Partial<HttpRouterDeps> = {}): HttpRouterDeps {
     getMcpServerInfos: () => [],
     budgetLimits: () => ({ maxGlobalRounds: 10, maxLocalRounds: 5 }),
     isStopping: () => false,
+    requestShutdown: () => {},
     ...overrides,
   };
 }
@@ -98,6 +99,114 @@ describe("http router", () => {
     expect(data.serverInfo.port).toBe(3456);
   });
 
+  test("attach accepts an explicit sessionId for History open", async () => {
+    const restored = { sessionId: "session-history", lastTuiUsedAt: 0 };
+    const attached: string[] = [];
+    const route = createHttpRouter(routerDeps({
+      sessionStore: {
+        attachSession: (id: string) => {
+          attached.push(id);
+          return id === "session-history" ? restored : null;
+        },
+      } as unknown as SessionStore,
+    }));
+    const ok = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "session-history" }),
+    }), ctx);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ sessionId: "session-history" });
+    expect(attached).toEqual(["session-history"]);
+
+    const missing = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "missing" }),
+    }), ctx);
+    expect(missing.status).toBe(404);
+  });
+
+  test("attach without admin auth returns 403 without reloading config", async () => {
+    const reloadConfig = mock(() => ({}));
+    const route = createHttpRouter(routerDeps({
+      runtime: {
+        sandbox: "/tmp/atom",
+        appConfig: {},
+        maxTokens: 100,
+        getResolvedModel: () => ({ provider: "local", protocol: "deepseek", model: "local", apiKey: "test" }),
+        reloadConfig,
+      },
+    }));
+    const response = await route.fetch(request("/api/tui/attach", { method: "POST", body: "{}" }), ctx);
+    expect(response.status).toBe(403);
+    expect(reloadConfig).not.toHaveBeenCalled();
+  });
+
+  test("attach reloads config from disk before building serverInfo", async () => {
+    const runtime: any = {
+      sandbox: "/tmp/atom",
+      appConfig: { tui: { theme: "github-dark" } },
+      maxTokens: 100,
+      getResolvedModel: () => ({ provider: "local", protocol: "deepseek", model: "local", apiKey: "test" }),
+      reloadConfig: mock(() => {
+        runtime.appConfig = { tui: { theme: "tokyo-night" } };
+        return runtime.appConfig;
+      }),
+    };
+    const route = createHttpRouter(routerDeps({
+      runtime,
+      sessionStore: { attachTui: () => ({ sessionId: "session-reload" }) } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: "{}",
+    }), ctx);
+    expect(response.status).toBe(200);
+    expect(runtime.reloadConfig).toHaveBeenCalledTimes(1);
+    expect((await response.json() as any).serverInfo.theme).toBe("tokyo-night");
+  });
+
+  test("attach still succeeds with the old theme when config reload fails", async () => {
+    const warn = mock(() => {});
+    const runtime: any = {
+      sandbox: "/tmp/atom",
+      appConfig: { tui: { theme: "github-dark" } },
+      maxTokens: 100,
+      getResolvedModel: () => ({ provider: "local", protocol: "deepseek", model: "local", apiKey: "test" }),
+      reloadConfig: () => { throw new Error("bad config"); },
+    };
+    const route = createHttpRouter(routerDeps({
+      runtime,
+      logger: { warn } as any,
+      sessionStore: { attachTui: () => ({ sessionId: "session-reload-failed" }) } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: "{}",
+    }), ctx);
+    expect(response.status).toBe(200);
+    expect((await response.json() as any).serverInfo.theme).toBe("github-dark");
+    expect(warn).toHaveBeenCalledWith("tui attach config reload failed", { error: "bad config" });
+  });
+
+  test("attach persistence failures return 500 and do not mark attached", async () => {
+    const route = createHttpRouter(routerDeps({
+      sessionStore: {
+        attachSession: () => { throw new Error("Failed to persist TUI session"); },
+      } as unknown as SessionStore,
+    }));
+    const response = await route.fetch(request("/api/tui/attach", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret", "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "session-history" }),
+    }), ctx);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Failed to persist TUI session" });
+  });
+
   test("delegates POST /api/tasks to the shared submission service", async () => {
     const submitted: TaskSubmitInput[] = [];
     const route = createHttpRouter(routerDeps({
@@ -130,6 +239,92 @@ describe("http router", () => {
     const response = await route.fetch(request("/api/unknown"), ctx);
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not Found");
+  });
+
+  test("lists sessions only with admin auth", async () => {
+    const summaries = [{
+      sessionId: "tui-1",
+      lastTuiUsedAt: 1760000000000,
+      initiator: { type: "tui" as const },
+      status: "suspended",
+      active: false,
+      attached: false,
+    }];
+    const route = createHttpRouter(routerDeps({
+      sessionStore: { listSessions: () => summaries } as unknown as SessionStore,
+    }));
+    expect((await route.fetch(request("/api/sessions"), ctx)).status).toBe(403);
+    const response = await route.fetch(request("/api/sessions", {
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(summaries);
+  });
+
+  test("session detail and delete require admin and protect attached sessions", async () => {
+    let deleted = 0;
+    const route = createHttpRouter(routerDeps({
+      sessionStore: {
+        load: () => ({ sessionId: "s1", messages: [] }),
+        delete: () => { deleted++; return false; },
+      } as unknown as SessionStore,
+    }));
+    expect((await route.fetch(request("/api/sessions/s1"), ctx)).status).toBe(403);
+    expect((await route.fetch(request("/api/sessions/s1", { method: "DELETE" }), ctx)).status).toBe(403);
+    const detail = await route.fetch(request("/api/sessions/s1", {
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(detail.status).toBe(200);
+    const removed = await route.fetch(request("/api/sessions/s1", {
+      method: "DELETE",
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(removed.status).toBe(409);
+    expect(await removed.json()).toEqual({ error: "Session is active or attached" });
+    expect(deleted).toBe(1);
+  });
+});
+
+describe("admin shutdown", () => {
+  test("rejects shutdown without the admin token", async () => {
+    let calls = 0;
+    const route = createHttpRouter(routerDeps({ requestShutdown: () => { calls++; } }));
+    const response = await route.fetch(request("/api/admin/shutdown", { method: "POST" }), ctx);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "Forbidden" });
+    await Promise.resolve();
+    expect(calls).toBe(0);
+  });
+
+  test("returns 200 and schedules shutdown after the response", async () => {
+    let calls = 0;
+    const route = createHttpRouter(routerDeps({ requestShutdown: () => { calls++; } }));
+    const pending = route.fetch(request("/api/admin/shutdown", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(calls).toBe(0);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    await Bun.sleep(5);
+    expect(calls).toBe(1);
+  });
+
+  test("returns 503 without scheduling shutdown while stopping", async () => {
+    let calls = 0;
+    const route = createHttpRouter(routerDeps({
+      isStopping: () => true,
+      requestShutdown: () => { calls++; },
+    }));
+    const response = await route.fetch(request("/api/admin/shutdown", {
+      method: "POST",
+      headers: { "x-atom-admin-token": "secret" },
+    }), ctx);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "Core is stopping" });
+    await Promise.resolve();
+    expect(calls).toBe(0);
   });
 });
 

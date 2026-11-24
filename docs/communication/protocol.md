@@ -479,9 +479,21 @@ X-Gateway-Secret: 550e8400-e29b-41d4-a716-446655440000
 
 Secret 由 `crypto.randomUUID()` 在 Client 子进程启动时生成，仅存在于 Gateway 内存。Client 崩溃重启时自动轮换（旧 Secret 立即失效）。
 
-### 7.2 不对外提供 API
+### 7.2 本机管理 API
 
-Gateway 不向外部用户/TUI 提供任何 API。TUI 直连 Core 的 `/api/*` 和 `/ws/:sessionId`。
+Gateway 只提供回环地址的本机管理接口，使用 `x-atom-admin-token`：
+
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/admin/clients` | GET | 实例状态、来源/端口、诊断摘要（不含 secret） |
+| `/admin/clients` | POST | `{action:"start"\\|"stop"\\|"reload", clientId?}`；reload 需要 clientId |
+| `/admin/clients/:id/diagnostics` | GET | 本地诊断事件 + 可选 Client `/diagnostics` |
+
+`reload` 只 drain 目标实例；drain 期间 `/gateway/inbound` 返回 503，超时返回 409 并保留旧进程。诊断事件有界且脱敏，不使用 `/health` 作为平台认证。
+
+Client `GET /diagnostics` 的 `checks` 在 Gateway 侧二次限界：最多 20 条，每字段最多 200 字符（`at` 64），总 JSON 8 KiB，仅保留 `name|ok|at|detail`，未知字段丢弃，常见 Token/Secret/UUID 形态脱敏。
+
+Gateway 不向外部用户/TUI 提供 API。TUI 直连 Core 的 `/api/*` 和 `/ws/:sessionId`。
 
 ### 7.3 WebSocket
 

@@ -35,6 +35,7 @@ type ServerContext = {
 type WsData = {
   sessionId?: string;
   chatId?: string;
+  retained?: boolean;
 };
 
 type WsPeer = WebSocketPeer<WsData>;
@@ -55,8 +56,8 @@ export function createWsHandlers(ctx: ServerContext) {
     sessionStore: ctx.sessionStore,
   });
 
-  function send(ws: WsPeer, type: string, payload: unknown) {
-    ctx.broadcaster.send(ws, type, payload);
+  function send(ws: WsPeer, type: string, payload: unknown): boolean {
+    return ctx.broadcaster.send(ws, type, payload);
   }
 
   function rejectSubmission(ws: WsPeer, error: unknown): void {
@@ -74,8 +75,12 @@ export function createWsHandlers(ctx: ServerContext) {
       if (sid) {
         ctx.broadcaster.add(ws, sid);
         const session = ctx.sessionStore?.load(sid);
-        send(ws, WsMessages.Server.SessionReady, { sessionId: sid, messages: session?.messages ?? [], contextTokens: session?.contextTokens ?? 0, activeTaskIds: ctx.taskQueue.getSessionTasks(sid),
+        const sent = send(ws, WsMessages.Server.SessionReady, { sessionId: sid, messages: session?.messages ?? [], contextTokens: session?.contextTokens ?? 0, activeTaskIds: ctx.taskQueue.getSessionTasks(sid),
           telemetry: session ? buildSessionTelemetry(session, ctx.getLocalRoundLimit?.() ?? 5) : { sessionId: sid, rounds: null, todos: [] } });
+        if (sent && session && ctx.sessionStore && !wsData(ws).retained) {
+          ctx.sessionStore.retain(sid);
+          wsData(ws).retained = true;
+        }
       }
     },
     message(ws: WsPeer, msg: string | Uint8Array) {
@@ -157,6 +162,11 @@ export function createWsHandlers(ctx: ServerContext) {
     },
     close(ws: WsPeer) {
       ctx.broadcaster.remove(ws);
+      const data = wsData(ws);
+      if (data.retained && data.sessionId && ctx.sessionStore) {
+        ctx.sessionStore.detach(data.sessionId);
+        data.retained = false;
+      }
     },
   };
 }

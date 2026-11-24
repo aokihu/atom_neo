@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Logger } from "@atom-neo/shared";
 import type { HttpServer } from "@atom-neo/shared";
+import type { ResolvedClientConfig } from "./client-package/resolver";
+import { createFakeRuntime } from "./client-manager/test-helpers";
+import type { ClientConfig } from "./config";
 import { startGateway } from "./server";
 
 type ServedOptions = { port: number; host: string };
@@ -76,5 +79,66 @@ describe("startGateway", () => {
 
     expect(port).toBe(4322);
     expect(output).not.toContain("gateway");
+  });
+
+  test("requires configured clients to be resolved before starting", async () => {
+    const error = await startGateway({
+      port: 0,
+      clients: [{ id: "bot", directory: "./bot", stdio: "ignore" }],
+    }).then(() => null, (reason: Error) => reason);
+
+    expect(error?.message).toContain("clients must be resolved before starting");
+  });
+
+  test("rejects resolved clients that do not match configured IDs", async () => {
+    const error = await startGateway({
+      port: 0,
+      clients: [{ id: "bot", directory: "./bot", stdio: "ignore" }],
+      resolvedClients: [{
+        id: "other",
+        platform: "local",
+        command: ["/bin/other"],
+        cwd: "/tmp/other",
+        env: {},
+        stdio: "ignore",
+        source: { type: "directory", directory: "./other" },
+      }],
+    }).then(() => null, (reason: Error) => reason);
+
+    expect(error?.message).toContain("resolvedClients must match");
+  });
+
+  test("spawns clients with the live gateway port reported after serve", async () => {
+    const fake = createFakeRuntime();
+    const stops: boolean[] = [];
+    const client: ClientConfig = { id: "bot", directory: "./bot", stdio: "ignore" };
+    const resolved: ResolvedClientConfig = {
+      id: "bot",
+      platform: "local",
+      command: ["/bin/bot"],
+      cwd: "/tmp/bot",
+      env: {},
+      stdio: "ignore",
+      source: { type: "directory", directory: "./bot" },
+    };
+
+    const gateway = await startGateway({
+      port: 0,
+      clients: [client],
+      resolvedClients: [resolved],
+      clientRuntime: fake.runtime,
+      httpServer: fakeServer(4321, stops, () => {}),
+      logger: new Logger("info", () => {}),
+    });
+
+    const command = fake.spawnCalls[0]?.command ?? [];
+    expect(command).toContain("--gateway-url");
+    expect(command[command.indexOf("--gateway-url") + 1]).toBe("http://127.0.0.1:4321");
+    expect(command[command.indexOf("--port") + 1]).toBe("4200");
+    expect(command).not.toContain("http://127.0.0.1:0");
+
+    await gateway.stop();
+    expect(stops).toEqual([false, true]);
+    expect(fake.clock.pendingTimers).toBe(0);
   });
 });

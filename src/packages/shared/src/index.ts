@@ -1,6 +1,10 @@
 export { isAdminRequest } from "./utils/admin-auth";
 export type { AdminRequestContext } from "./utils/admin-auth";
-export { createChildProcessEnv } from "./utils/child-process-env";
+export { createChildProcessEnv, INSTANCE_CREDENTIAL_PREFIX } from "./utils/child-process-env";
+export { withFileLock } from "./utils/file-lock";
+export type { FileLockOptions } from "./utils/file-lock";
+export { localUrl, readRuntimeFile, runtimeFilePath } from "./runtime-file";
+export type { RuntimeFile } from "./runtime-file";
 export { spawnProcess } from "./utils/process";
 export type { ProcessHandle, SpawnProcessOptions } from "./utils/process";
 
@@ -18,6 +22,7 @@ export {
 } from "./types";
 export type {
   SessionInitiator,
+  SessionSummary,
   UUID,
   ISOTimeString,
   TaskItem,
@@ -126,6 +131,13 @@ export {
   ConfigSchema,
   RuntimeConfigSchema,
   ClientConfigSchema,
+  clientConfigMigrationHint,
+  clientSource,
+  credentialRef,
+  listInstances,
+  readConfigRevision,
+  removeInstance,
+  upsertInstance,
   ProviderProfilesSchema,
   ProviderDefinitionSchema,
   PROVIDERS,
@@ -148,6 +160,10 @@ export type {
   RuntimeConfig,
   DeepPartial,
   ClientConfig,
+  ClientSource,
+  InstanceFileWriter,
+  InstanceWriteOptions,
+  InstanceWriteResult,
   ProviderType,
   ProviderProtocol,
   ProviderPreset,

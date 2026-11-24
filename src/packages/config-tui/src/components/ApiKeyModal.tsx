@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal } from "../modal";
 import { FieldInput } from "@atom-neo/tui-kit";
 import { useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 
 type Phase = "key" | "env" | "baseUrl";
 
@@ -16,6 +17,8 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
   onCancel: () => void;
 }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
+  const versionRight = version ? <text fg={colors.text.muted}>v{version}</text> : undefined;
   const [phase, setPhase] = useState<Phase>("key");
   const [draftKey, setDraftKey] = useState(apiKey);
   const [draftEnv, setDraftEnv] = useState(apiKeyEnv);
@@ -35,11 +38,11 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
     );
   };
 
-  const title = `API KEY — ${provider.toUpperCase()}`;
+  const title = `ATOM NEO · API KEY — ${provider.toUpperCase()}`;
 
   if (phase === "env" && showEnv) {
     return (
-      <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
+      <Modal open title={title} headerRight={versionRight} titleTruncate width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
         <FieldInput
           key="env"
           label="Env Variable"
@@ -67,7 +70,7 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
 
   if (phase === "baseUrl" && showBaseUrl) {
     return (
-      <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
+      <Modal open title={title} headerRight={versionRight} titleTruncate width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
         <FieldInput
           key="baseUrl"
           label="Base URL"
@@ -83,7 +86,7 @@ export function ApiKeyModal({ provider, apiKey, apiKeyEnv, baseUrl, showEnv, sho
   }
 
   return (
-    <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
+    <Modal open title={title} headerRight={versionRight} titleTruncate width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc cancel">
       <box flexDirection="column">
         <FieldInput
           label="API Key"

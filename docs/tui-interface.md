@@ -160,4 +160,6 @@ src/packages/tui-kit/src/theme.tsx
 ```
 
 Wizard 的结构化 view/reducer 位于 `src/packages/config-tui/src/wizard/`，`WizardApp.tsx`
-只负责 state/reducer 编排与 view 组合。
+只负责 state/reducer 编排与 view 组合。`atom config` 与 MenuApp 的 Configure 使用同一 embedded `WizardApp`，菜单由 `menu/configure-view.tsx` 基于统一 `MenuScreen` 渲染；没有独立 Advanced 页面，Workspace 编辑以覆盖层保持 wizard state。MenuScreen 在 80 列以上提供左导航/右 preview，64–79 列内联 detail，窄窗口继续按显示宽度截断。
+
+配置向导的 Gateway 视图（`GatewayModal`）显示实例来源、supervisor 状态、端口、平台和最近错误，并提供 start/stop/reload/register、check、diagnostics、编辑、install/load/pack。config-only 实例与 supervisor 状态按 id 合并，显示 `configured / unregistered`，不代表进程状态；离线时显示 `OFFLINE`，config-only 仍可编辑。进程状态只来自 Supervisor/admin API，平台检查只来自 Client `/diagnostics`。secret 编辑使用 `SecretFieldInput` 固定宽度遮罩，列表与表单均不回显原始值；`GatewayInstanceForm` 的普通字段继续使用 `FieldInput`/`SelectableRow`。

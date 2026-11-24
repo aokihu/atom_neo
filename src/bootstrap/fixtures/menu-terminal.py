@@ -14,8 +14,10 @@ import termios
 import time
 
 steps = json.loads(sys.argv[1])
+rows = int(os.environ.get("ATOM_PTY_ROWS", "28"))
+cols = int(os.environ.get("ATOM_PTY_COLS", "80"))
 master, slave = pty.openpty()
-fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 28, 80, 0, 0))
+fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 original = termios.tcgetattr(slave)
 proc = subprocess.Popen(sys.argv[2:], stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
 output = bytearray()

@@ -8,7 +8,7 @@ import { VERSION } from "./version";
 import { parseArguments, printHelp } from "./bootstrap/cli";
 import type { BootArguments } from "./bootstrap/cli";
 import { loadConfig } from "./bootstrap/config";
-import { loadEnv } from "./bootstrap/env";
+import { loadEnv, readSandboxEnv } from "./bootstrap/env";
 import { initAtomDir, initAgentsMd } from "./bootstrap/agents";
 import { isFirstRun, runFirstRunWizard, markInstalled } from "./bootstrap/first-run";
 import { RuntimeService } from "./services/runtime/runtime-service";
@@ -17,8 +17,7 @@ import { AgentsCompilerService } from "./services/agents/agents-compiler";
 import { MemoryService } from "./services/memory/memory-service";
 import { SkillService } from "./services/skill/skill-service";
 import { NetworkService } from "./services/network/network-service";
-import { formatMenuCommand, MenuFlow } from "./bootstrap/menu-flow";
-import { readMenuHistory, saveMenuHistory } from "./bootstrap/menu-history";
+
 
 declare global {
   var AI_SDK_LOG_WARNINGS: LogWarningsFunction | false | undefined;
@@ -62,25 +61,21 @@ export async function main(): Promise<void> {
   }
   const args = parsed;
 
-  if (args.menu) {
-    const { startMenu } = await import("./bootstrap/menu");
-    const history = readMenuHistory();
-    const flow = new MenuFlow(args, history.commands);
-    flow.error = history.warning ?? "";
-    while (true) {
-      const request = await startMenu(flow);
-      if (!request) return;
-      try {
-        console.log(`执行命令: ${formatMenuCommand(request.args)}`);
-        await runApp(request.args, () => {
-          try { saveMenuHistory(request.command, request.parameters); }
-          catch (error) { console.error(`Cannot save menu history: ${error instanceof Error ? error.message : String(error)}`); }
-        });
-        return;
-      } catch (error) {
-        flow.error = error instanceof Error ? error.message : String(error);
-      }
-    }
+  if (args.menu || args.configRoute) {
+    const { startMenuApp } = await import("@atom-neo/config-tui");
+    const { createMenuActions } = await import("./bootstrap/menu-actions");
+    const { runMenuLoop } = await import("./bootstrap/menu-launch");
+    await runMenuLoop(
+      args,
+      (sandbox, error) => startMenuApp(sandbox, {
+        actions: () => createMenuActions(sandbox, args.port),
+        initialRoute: args.configRoute ?? "home",
+        error,
+        version: VERSION,
+      }),
+      runApp,
+    );
+    return;
   }
   await runApp(args);
 }
@@ -98,17 +93,19 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     return;
   }
 
-  // --wizard subprocess: run setup wizard and exit
-  if (args.wizard) {
-    const { startWizard } = await import("@atom-neo/config-tui");
-    await startWizard(args.sandbox, "first-run");
+  // atom gateway ...: standalone CLI or menu action, never initializes Core/Providers/TUI
+  if (args.gatewayCommand) {
+    const { runGatewayCommand } = await import("./bootstrap/gateway-command");
+    await runGatewayCommand(args.gatewayCommand, args);
+    onReady();
     return;
   }
 
-  // --config: standalone config wizard (edit config.json + .env) and exit
-  if (args.config) {
+  // --wizard subprocess: run setup wizard and exit
+  if (args.wizard) {
     const { startWizard } = await import("@atom-neo/config-tui");
-    if (await startWizard(args.sandbox, "config")) onReady();
+    const { createGatewayActions } = await import("./bootstrap/gateway-actions");
+    await startWizard(args.sandbox, "first-run", { gatewayActions: createGatewayActions(args.sandbox) });
     return;
   }
 
@@ -116,7 +113,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const host = args.coreServer!;
     loadEnv(args.sandbox);
     const token = readAttachToken(args.sandbox, host, process.env.ATOM_ADMIN_TOKEN);
-    await attachTui(localUrl(host, args.corePort!), token, args.continueSession, args.sandbox, onReady);
+    await attachTui(localUrl(host, args.corePort!), token, args.continueSession, args.sandbox, onReady, args.sessionId);
     return;
   }
   if (args.mode === "gateway") {
@@ -144,7 +141,7 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   logger.debug("log level active", { level: args.logLevel, ignore: args.logIgnore });
 
   // First-Run Detection
-  if (args.mode && Object.keys(appConfig.providers ?? {}).length === 0) throw new Error("Core requires provider configuration. Run --config with this sandbox first.");
+  if (args.mode && Object.keys(appConfig.providers ?? {}).length === 0) throw new Error("Core requires provider configuration. Run `atom config` with this sandbox first.");
   if (!args.mode && isFirstRun(args.sandbox)) {
     logger.info("first run detected, launching setup wizard");
     await runFirstRunWizard(args.sandbox);
@@ -206,13 +203,39 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
     const httpServer: HttpServer = await createHttpServer(runtimeKind);
     await sm.startAll();
     const { startCore } = await import("@atom-neo/core");
-    core = await startCore({ port: args.port, host: args.host, logger, services, runtime, adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer });
+    core = await startCore({
+      port: args.port, host: args.host, logger, services, runtime,
+      adminToken, allowRemoteAdmin: !!remoteAdminToken, version: VERSION, httpServer,
+      requestShutdown: () => {
+        void shutdown().then(() => process.exit(0), error => {
+          console.error(error);
+          process.exit(1);
+        });
+      },
+    });
     const url = localUrl(args.host, core.port);
     cleanupFiles.push(publishRuntimeFile(args.sandbox, "core", { url, token: adminToken, instanceId: crypto.randomUUID() }));
     if (args.mode === "core-gateway" || args.mode === "full") {
-      const { startGateway } = await import("@atom-neo/gateway");
+      const { startGateway, resolveClient, resolveClients, sandboxPackageRoot } = await import("@atom-neo/gateway");
+      const clientEnv = readSandboxEnv(args.sandbox);
+      const resolveOptions = {
+        packageRoot: sandboxPackageRoot(args.sandbox),
+        baseDir: args.sandbox,
+        readEnv: (key: string) => clientEnv[key] ?? process.env[key],
+      };
+      const resolvedClients = resolveClients(appConfig.gateway.clients, resolveOptions);
+      const reloadClient = async (id: string) => {
+        const current = loadConfig(args.sandbox).effective.gateway.clients.find((client) => client.id === id);
+        if (!current) throw new Error(`Unknown gateway client: ${id}`);
+        const env = readSandboxEnv(args.sandbox);
+        return resolveClient(current, {
+          packageRoot: sandboxPackageRoot(args.sandbox),
+          baseDir: args.sandbox,
+          readEnv: (key) => env[key] ?? process.env[key],
+        });
+      };
       const gatewayToken = crypto.randomUUID();
-      gateway = await startGateway({ port: appConfig.gateway?.port ?? 3000, coreUrl: url, clients: appConfig.gateway?.clients, adminToken: gatewayToken, logger, httpServer });
+      gateway = await startGateway({ port: appConfig.gateway.port, coreUrl: url, clients: appConfig.gateway.clients, resolvedClients, resolveClient: reloadClient, adminToken: gatewayToken, logger, httpServer });
       cleanupFiles.push(publishRuntimeFile(args.sandbox, "gateway", { url: localUrl("127.0.0.1", gateway.port), token: gatewayToken, instanceId: crypto.randomUUID() }));
     }
     const onSignal = () => { void shutdown().then(() => process.exit(0), error => { console.error(error); process.exit(1); }); };
@@ -229,10 +252,11 @@ async function runApp(args: BootArguments, onReady: () => void = () => {}): Prom
   }
 }
 
-async function attachTui(url: string, adminToken: string, continueSession: boolean, historySandbox: string, onReady: () => void): Promise<void> {
+async function attachTui(url: string, adminToken: string, continueSession: boolean, historySandbox: string, onReady: () => void, sessionId?: string): Promise<void> {
   const response = await fetch(`${url}/api/tui/attach`, {
     method: "POST", headers: { "x-atom-admin-token": adminToken, "Content-Type": "application/json" },
-    body: JSON.stringify({ continue: continueSession }), signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify({ continue: continueSession, ...(sessionId === undefined ? {} : { sessionId }) }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error(`Cannot attach Core (${response.status}); check sandbox and running instance`);
   const data = await response.json() as { sessionId: string; serverInfo: import("@atom-neo/tui").ServerInfo };

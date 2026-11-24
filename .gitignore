@@ -40,6 +40,7 @@ data/
 # Sandbox (runtime workspace)
 sandbox/
 clients/telegram-bot/telegram-bot
+clients/telegram-bot/bin/
 .bun-build
 
 # Runtime state (created by the app in the current working directory)

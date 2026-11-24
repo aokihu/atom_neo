@@ -1,6 +1,8 @@
 import type { SessionInitiator, ContinuationContext, InferenceFact, SessionMessage, TaskItem } from "@atom-neo/shared";
 import type { TodoItem } from "./context";
 
+export type { SessionSummary } from "@atom-neo/shared";
+
 export type ExecutionBudget = {
   goalId: string;
   goal: string;

@@ -158,7 +158,9 @@ describe("E2E: Core HTTP API", () => {
     });
 
     // Now retrieve
-    const r = await fetch(`${BASE}/api/sessions/${encodeURIComponent(sessionId)}`);
+    const r = await fetch(`${BASE}/api/sessions/${encodeURIComponent(sessionId)}`, {
+      headers: { "x-atom-admin-token": ADMIN_TOKEN },
+    });
     const messages: any[] = await r.json();
     expect(r.status).toBe(200);
     expect(Array.isArray(messages)).toBe(true);
@@ -166,8 +168,8 @@ describe("E2E: Core HTTP API", () => {
   });
 
   test("rejects an invalid session path", async () => {
-    const malformed = await fetch(`${BASE}/api/sessions/%`);
-    const multiSegment = await fetch(`${BASE}/api/sessions/team/member`);
+    const malformed = await fetch(`${BASE}/api/sessions/%`, { headers: { "x-atom-admin-token": ADMIN_TOKEN } });
+    const multiSegment = await fetch(`${BASE}/api/sessions/team/member`, { headers: { "x-atom-admin-token": ADMIN_TOKEN } });
 
     expect(malformed.status).toBe(400);
     expect(multiSegment.status).toBe(400);
@@ -201,11 +203,16 @@ describe("E2E: Core HTTP API", () => {
       }),
     });
 
-    const closed = await fetch(`${BASE}/api/sessions/e2e-close`, { method: "DELETE" });
+    const closed = await fetch(`${BASE}/api/sessions/e2e-close`, {
+      method: "DELETE",
+      headers: { "x-atom-admin-token": ADMIN_TOKEN },
+    });
     const body: any = await closed.json();
     expect(body).toEqual({ ok: true, sessionId: "e2e-close" });
 
-    const read = await fetch(`${BASE}/api/sessions/e2e-close`);
+    const read = await fetch(`${BASE}/api/sessions/e2e-close`, {
+      headers: { "x-atom-admin-token": ADMIN_TOKEN },
+    });
     expect(read.status).toBe(404);
     expect(await read.json()).toEqual({ error: "Session not found" });
   });

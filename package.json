@@ -33,7 +33,7 @@
     "dev": "bun run src/main.ts --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:gateway": "bun run src/main.ts --mode core-gateway --sandbox ./sandbox --log=file --log-level=debug --log-file=/tmp/atom-log-$(date +%s).log",
     "dev:core": "bun run src/main.ts --mode core --port 3100 --sandbox ./sandbox",
-    "config": "bun run src/main.ts --config --sandbox ./sandbox",
+    "config": "bun run src/main.ts config --sandbox ./sandbox",
     "docs": "bun run docs/server.ts",
     "docs:node": "node docs/server.ts",
     "docs:check": "bun run scripts/check-docs.ts",
@@ -49,6 +49,7 @@
     "smoke:node:platform": "bun run scripts/node-smoke/run-all.ts platform",
     "smoke:node:release": "bun run scripts/node-smoke/run-all.ts release",
     "smoke:node:package": "bun run scripts/node-smoke/package.ts",
+    "gateway:release": "bun run scripts/gateway-release.ts",
     "prepack": "bun run build:node",
     "prepare": "bash scripts/setup-git-hooks.sh"
   },

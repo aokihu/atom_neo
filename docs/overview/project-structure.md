@@ -342,6 +342,13 @@ src/packages/gateway/
 │   ├── config.ts
 │   ├── auth/
 │   │   └── secret.ts
+│   ├── client-package/
+│   │   ├── README.md
+│   │   ├── manifest.ts
+│   │   ├── resolver.ts
+│   │   ├── registry.ts
+│   │   ├── archive.ts
+│   │   └── instance-config.ts
 │   └── client-manager/
 │       ├── README.md
 │       ├── index.ts
@@ -352,6 +359,7 @@ src/packages/gateway/
 │       ├── process-supervisor.ts
 │       ├── client-command.ts
 │       ├── process-termination.ts
+│       ├── diagnostics.ts
 │       └── test-helpers.ts
 ```
 

@@ -9,7 +9,7 @@ import { buildInitialState, readJsonFile } from "../wizard-logic";
 import type { WizardMode } from "../wizard-logic";
 import { WizardApp } from "./WizardApp";
 
-test("adds OpenRouter Jev during setup and can clear its Fast profile in config mode", async () => {
+test("adds OpenRouter Jev during setup and shows Fast in the config Configure preview", async () => {
   const sandbox = mkdtempSync(join(tmpdir(), "atom-jev-wizard-"));
   const reactEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
   const previous = reactEnvironment.IS_REACT_ACT_ENVIRONMENT;
@@ -24,6 +24,9 @@ test("adds OpenRouter Jev during setup and can clear its Fast profile in config 
     const root = createRoot(setup.renderer);
     try {
       await act(async () => root.render(<WizardApp sandboxPath={sandbox} mode={mode}
+        chrome={mode === "config"
+          ? { workspace: sandbox, gateway: "offline", core: "offline", onWorkspace: () => {} }
+          : undefined}
         onComplete={() => {}} onAbort={() => { throw new Error("Unexpected abort"); }} />));
       await setup.renderOnce();
       await run({
@@ -90,14 +93,14 @@ test("adds OpenRouter Jev during setup and can clear its Fast profile in config 
     expect(readJsonFile(join(sandbox, "config.json"))?.providers["openrouter-jev"].apiKey).toBeUndefined();
 
     await openWizard("config", async ({ press, frame }) => {
-      await press("ARROW_DOWN", "ARROW_DOWN", "RETURN");
+      await press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN");
       expect(frame()).toContain("openrouter-jev/typesafe/jev-1.13");
-      await press("RETURN", "ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN", "TAB", "RETURN");
-      await press("ARROW_UP", "RETURN", "RETURN");
+      await press("ESCAPE");
+      expect(frame()).toContain("ATOM NEO · Configure");
     });
     const updated = buildInitialState("config", sandbox);
-    expect(updated.profiles.fast).toBeUndefined();
-    expect(updated.decisionMode.continuation).toBe("rules");
+    expect(updated.profiles.fast).toBe("openrouter-jev/typesafe/jev-1.13");
+    expect(updated.decisionMode.continuation).toBe("jev");
     expect(updated.editedProviders["openrouter-jev"].apiKey).toBe("test-openrouter-key");
   } finally {
     reactEnvironment.IS_REACT_ACT_ENVIRONMENT = previous;

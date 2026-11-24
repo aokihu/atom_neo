@@ -47,6 +47,7 @@ Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与�
 |------|------|------|
 | `open` | `boolean` | 是否显示，`false` 时返回 `null` |
 | `title` | `string?` | 标题栏文本，省略则不渲染标题栏 |
+| `breadcrumb` | `string?` | 可选父级上下文，渲染在标题行下方；不自动读取 context，长文本单行截断 |
 | `width` | `number` | 宽度，默认 `60`，自动夹紧到 `[20, screenWidth-4]` |
 | `height` | `number?` | 高度，省略则按内容自适应 |
 | `placement` | `ModalPlacement` | 无锚点时的屏幕定位，默认 `center`（`center`/`top`/`bottom`） |
@@ -69,7 +70,8 @@ Modal 面板始终使用主题 `border.default` 的单线边框。ActionBar 与�
 | `interactive` | `boolean` | 默认 `true`；为 `false` 时忽略 Modal 键盘（表单自行处理按键） |
 | `titlePadding` | `number` | 标题内边距，默认 `1` |
 | `contentPaddingX` | `number` | 内容水平内边距，默认 `1` |
-| `hint` | `string?` | 在 ActionBar 下方渲染的灰色提示行 |
+| `hint` | `string?` | 在 ActionBar 下方渲染的灰色提示行；默认按可用宽度正常换行 |
+| `hintTruncate` | `boolean?` | 默认 `false`；为 `true` 时 hint 单行截断。MenuScreen 使用自身预截断 hint，不依赖该开关 |
 | `chrome` | `"plain" \| "bordered"` | 默认 `plain`（聊天 TUI 样式）；`bordered` 为配置向导样式。两者均使用单线边框，`bordered` 额外调整标题内边距与垂直定位 |
 
 ### `ModalAction`
@@ -160,6 +162,8 @@ Modal 有两种交互模式，由是否传入 `listLength` 决定：
 > 列表模式与 ActionBar 可同时存在：首次 `Tab`/`←`/`→` 只切换焦点，之后左右键才在 Action 之间移动，避免一次按键同时改变列表与按钮选择。
 
 **焦点模型**：Modal 通过 `@opentui/react` 的全局 `useKeyboard` 订阅按键；打开期间 App 给 `InputBar` 传入 `disabled` 并显式 `blur()` 输入框。TUI 传入 `focusRef` 时，Modal 面板本身成为 OpenTUI 的 focused renderable，列表项或 ActionBar 高亮表示 Modal 内的焦点。关闭后 App 调用输入框 `focus()`，恢复文本光标。`config-tui` 不传 `focusRef`，继续由表单自身的 `textarea` 持有焦点。
+
+**`interactive={false}`**：跳过 Modal 的键盘订阅，由 Modal 内的表单组件处理 `Enter`/`Esc`。配置向导的 `FieldInput` 与 `SecretFieldInput` 使用该模式，避免 Modal 与输入框同时消费按键。`SecretFieldInput` 只把原始值保存在组件状态，界面固定渲染 `••••••`；不得改用会回显内容的 textarea 处理 secret。
 
 **状态重置**：`open` 变为 `true`、`defaultActionKey` 变化或 Action 集合变化时，`selectedIndex` 会重置为 `findInitialIndex` 的结果；打开/关闭都会清除 ActionBar 焦点。
 

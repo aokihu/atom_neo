@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { ClientConfigSchema } from "@atom-neo/shared";
 import { loadGatewayConfig } from "./config";
+import type { ClientConfig } from "./config";
 
 const originalEnv = { GATEWAY_PORT: process.env.GATEWAY_PORT, CORE_URL: process.env.CORE_URL };
 afterEach(() => {
@@ -39,15 +40,20 @@ describe("loadGatewayConfig", () => {
   });
 
   test("validates clients with the shared client schema", () => {
-    const config = loadGatewayConfig({
-      clients: [{ id: "bot", platform: "telegram", binary: "./bot", stdio: "ignore" }],
-    });
-    expect(config.clients[0]).toEqual({ id: "bot", platform: "telegram", binary: "./bot", stdio: "ignore" });
+    const config = loadGatewayConfig({ clients: [{ id: "bot", directory: "./bot", stdio: "ignore" }] });
+    expect(config.clients[0]).toEqual({ id: "bot", directory: "./bot", stdio: "ignore" });
     expect(() => ClientConfigSchema.parse(config.clients[0]!)).not.toThrow();
   });
 
+  test("rejects legacy binary configs with a migration hint", () => {
+    const legacy = [{ id: "bot", binary: "./bot" }] as unknown as ClientConfig[];
+    expect(() => loadGatewayConfig({ clients: legacy })).toThrow(
+      /binary.*no longer supported.*package.*directory/,
+    );
+  });
+
   test("rejects duplicate client ids and invalid port ranges", () => {
-    const client = { id: "bot", platform: "telegram", binary: "./bot", stdio: "inherit" as const };
+    const client: ClientConfig = { id: "bot", directory: "./bot", stdio: "inherit" };
     expect(() => loadGatewayConfig({ clients: [client, client] })).toThrow("unique");
     expect(() => loadGatewayConfig({ clientPortRangeStart: 65535, clients: [client, { ...client, id: "bot2" }] })).toThrow("port range");
   });

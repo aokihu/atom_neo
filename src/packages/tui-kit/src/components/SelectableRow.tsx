@@ -14,6 +14,7 @@ export function SelectableRow({
   indicator = "▸",
   indicatorWidth = 2,
   trailing,
+  truncate = false,
 }: {
   selected: boolean;
   label: string;
@@ -23,21 +24,24 @@ export function SelectableRow({
   indicator?: string;
   indicatorWidth?: number;
   trailing?: ReactNode;
+  truncate?: boolean;
 }) {
   const { colors } = useTheme();
+  const singleLine = truncate ? { wrapMode: "none" as const, truncate: true } : {};
   return (
     <box flexDirection="row" backgroundColor={selected ? colors.decoration.subtle : undefined}>
       <text fg={selected ? colors.text.bright : colors.text.secondary} width={indicatorWidth}>
         {selected ? indicator : " "}
       </text>
       <text
+        {...singleLine}
         fg={selected ? colors.accent.brand : muted ? colors.text.muted : colors.text.primary}
         width={labelWidth}
       >
         {label}
       </text>
       {detail != null && (
-        <text fg={selected ? colors.text.bright : colors.text.primary}>{detail}</text>
+        <text {...singleLine} fg={selected ? colors.text.bright : colors.text.primary}>{detail}</text>
       )}
       {trailing}
     </box>

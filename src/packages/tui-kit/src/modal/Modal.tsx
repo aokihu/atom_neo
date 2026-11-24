@@ -54,6 +54,9 @@ const actionSignature = (actions: ModalAction[]) =>
 export function Modal({
   open,
   title,
+  breadcrumb,
+  headerRight,
+  titleTruncate = false,
   width = 60,
   height,
   placement = "center",
@@ -77,6 +80,7 @@ export function Modal({
   titlePadding = 1,
   contentPaddingX = 1,
   hint,
+  hintTruncate = false,
   chrome = "plain",
 }: ModalProps) {
   const { colors } = useTheme();
@@ -224,13 +228,30 @@ export function Modal({
         paddingX={1}
         backgroundColor={colors.bg.popup}
       >
-        {title && (
-          <box flexShrink={0} {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
-            <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>
-              {title}
-            </text>
+        {(title || headerRight) && (headerRight || titleTruncate ? (
+          <box
+            flexShrink={0}
+            flexDirection="row"
+            justifyContent="space-between"
+            {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}
+          >
+            <box flexShrink={1} minWidth={0} marginRight={headerRight ? 1 : 0}>
+              {title
+                ? <text fg={colors.text.bright} attributes={TextAttributes.BOLD} wrapMode="none" truncate>{title}</text>
+                : null}
+            </box>
+            {headerRight ? <box flexShrink={0}>{headerRight}</box> : null}
           </box>
-        )}
+        ) : (
+          <box flexShrink={0} {...(bordered ? { paddingY: titlePadding } : { padding: titlePadding })}>
+            <text fg={colors.text.bright} attributes={TextAttributes.BOLD}>{title}</text>
+          </box>
+        ))}
+        {breadcrumb ? (
+          <box flexShrink={0} paddingX={contentPaddingX}>
+            <text fg={colors.text.muted} wrapMode="none" truncate>{breadcrumb}</text>
+          </box>
+        ) : null}
         <box flexGrow={1} flexShrink={1} minHeight={0} flexDirection="column" paddingX={contentPaddingX}>
           {children}
         </box>
@@ -241,7 +262,7 @@ export function Modal({
         />
         {hint && (
           <box flexShrink={0} paddingTop={1}>
-            <text fg={colors.text.muted}>{hint}</text>
+            <text fg={colors.text.muted} {...(hintTruncate ? { wrapMode: "none" as const, truncate: true } : {})}>{hint}</text>
           </box>
         )}
       </box>

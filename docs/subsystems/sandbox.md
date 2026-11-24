@@ -40,7 +40,15 @@ sandbox/                          # 工作目录（--sandbox 指定或默认 CWD
 ├── .atom/                        # 【系统】Agent 运行时数据目录
 │   ├── memory/                  # 记忆服务数据
 │   │   └── memory.db            # 正文、图谱和 FTS5 索引
-│   └── compiled_prompts/        # 缓存的编译后提示词
+│   ├── compiled_prompts/        # 缓存的编译后提示词
+│   └── gateway/                 # Gateway Client 包、配置修订与实例日志
+│       ├── packages/<id>/<version>/<target>/
+│       ├── packages.json        # 包安装记录（含 target / sha256）
+│       ├── tmp/                 # pack/install 临时目录
+│       ├── state.json           # configRevision
+│       ├── config.lock          # 实例配置写入互斥锁
+│       ├── packages.lock        # registry read-modify-write 互斥锁
+│       └── logs/<instance-id>/
 └── ...                           # 用户项目文件
 ```
 
@@ -55,6 +63,13 @@ Agent **首次启动时**在 SANDBOX 下创建 `.atom/` 隐藏目录，用于存
 | `.atom/memory/memory.db` | 长期记忆数据库（SQLite + FTS5） |
 | `.atom/compiled_prompts/` | 缓存的编译后提示词 |
 | `.atom/agents_meta.json` | 编译元数据追踪 |
+| `.atom/gateway/packages/` | 已安装 Client 包（`<id>/<version>/<target>`） |
+| `.atom/gateway/packages.json` | 包安装记录、target、来源与 `sha256` 内容标识（G2） |
+| `.atom/gateway/tmp/` | pack/install 临时目录；成功或失败后清理 |
+| `.atom/gateway/state.json` | `configRevision` 等配置修订状态 |
+| `.atom/gateway/config.lock` | `config.json` / `.env` 写入互斥锁；busy 立即失败，stale lock 需确认 PID 退出后手动删除 |
+| `.atom/gateway/packages.lock` | `packages.json` read-modify-write 互斥锁（5s 有界重试/超时；stale lock 不自动回收） |
+| `.atom/gateway/logs/` | 实例级有界日志（G4） |
 
 **规则**：除 `AGENTS.md` 和 `.env` 外，所有 Agent 运行时数据文件必须存储在 `.atom/` 下。
 

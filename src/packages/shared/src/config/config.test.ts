@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ClientConfigSchema } from "./client";
+import { ClientConfigSchema, clientSource } from "./client";
 import {
   DEFAULT_PROFILES,
   PROVIDERS,
@@ -94,28 +94,86 @@ describe("provider protocol", () => {
 });
 
 describe("ClientConfigSchema", () => {
-  test("defaults stdio and requires id/platform/binary", () => {
-    expect(ClientConfigSchema.parse({ id: "bot", platform: "telegram", binary: "./bot" })).toEqual({
+  test("accepts a package source and defaults stdio", () => {
+    expect(ClientConfigSchema.parse({
       id: "bot",
-      platform: "telegram",
-      binary: "./bot",
+      package: { id: "telegram-bot", version: "0.1.0" },
+    })).toEqual({
+      id: "bot",
+      package: { id: "telegram-bot", version: "0.1.0" },
       stdio: "inherit",
     });
-    expect(() => ClientConfigSchema.parse({ id: "", platform: "telegram", binary: "./bot" })).toThrow();
-    expect(() => ClientConfigSchema.parse({ id: "bot" })).toThrow();
+  });
+
+  test("accepts a directory source with clientArgs and credentials", () => {
+    expect(ClientConfigSchema.parse({
+      id: "bot-dev",
+      directory: "./clients/telegram-bot",
+      clientArgs: { token: "x" },
+      credentials: { botToken: "ATOM_CLIENT_BOT_DEV_BOT_TOKEN" },
+      stdio: "ignore",
+    })).toEqual({
+      id: "bot-dev",
+      directory: "./clients/telegram-bot",
+      clientArgs: { token: "x" },
+      credentials: { botToken: "ATOM_CLIENT_BOT_DEV_BOT_TOKEN" },
+      stdio: "ignore",
+    });
+  });
+
+  test("requires exactly one of package or directory", () => {
+    expect(() => ClientConfigSchema.parse({ id: "bot" })).toThrow(/package.*directory/i);
+    expect(() => ClientConfigSchema.parse({
+      id: "bot",
+      package: { id: "telegram-bot", version: "0.1.0" },
+      directory: "./bot",
+    })).toThrow(/package.*directory/i);
+  });
+
+  test("rejects legacy binary with a migration hint", () => {
+    expect(() => ClientConfigSchema.parse({ id: "bot", binary: "./bot" }))
+      .toThrow(/binary.*package.*directory/i);
+  });
+
+  test("rejects platform and unknown fields", () => {
+    expect(() => ClientConfigSchema.parse({ id: "bot", directory: "./bot", platform: "telegram" }))
+      .toThrow(/platform.*manifest/i);
+    expect(() => ClientConfigSchema.parse({ id: "bot", directory: "./bot", bogus: true }))
+      .toThrow(/unknown.*bogus/i);
+    expect(ClientConfigSchema.safeParse({ id: "bot", directory: "./bot", bogus: true }).success).toBe(false);
+    expect(() => ClientConfigSchema.parse({
+      id: "bot",
+      package: { id: "telegram-bot", version: "0.1.0", binary: "./bot" },
+    })).toThrow(/package/i);
+  });
+
+  test("clientSource maps both source kinds", () => {
+    expect(clientSource(ClientConfigSchema.parse({
+      id: "bot",
+      package: { id: "telegram-bot", version: "0.1.0" },
+    }))).toEqual({ type: "package", id: "telegram-bot", version: "0.1.0" });
+    expect(clientSource(ClientConfigSchema.parse({ id: "bot", directory: "./bot" })))
+      .toEqual({ type: "directory", directory: "./bot" });
   });
 
   test("user config embeds the shared client entry schema", () => {
     const config = ConfigSchema.parse({
-      gateway: { clients: [{ id: "bot", platform: "telegram", binary: "./bot", clientArgs: { token: "x" } }] },
+      gateway: {
+        clients: [{
+          id: "bot",
+          package: { id: "telegram-bot", version: "0.1.0" },
+          credentials: { botToken: "ATOM_CLIENT_BOT_BOT_TOKEN" },
+        }],
+      },
     });
     expect(config.gateway.clients[0]).toEqual({
       id: "bot",
-      platform: "telegram",
-      binary: "./bot",
-      clientArgs: { token: "x" },
+      package: { id: "telegram-bot", version: "0.1.0" },
+      credentials: { botToken: "ATOM_CLIENT_BOT_BOT_TOKEN" },
       stdio: "inherit",
     });
+    expect(() => ConfigSchema.parse({ gateway: { clients: [{ id: "bot", binary: "./bot" }] } }))
+      .toThrow(/package.*directory/i);
   });
 });
 

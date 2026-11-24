@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@atom-neo/shared": "workspace:*",
+    "tar": "^7.5.23",
     "zod": "^4.4.3"
   },
   "devDependencies": {

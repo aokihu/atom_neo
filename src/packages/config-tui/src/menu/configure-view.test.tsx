@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildMenuItems, describeSelection, MENU_KEYS } from "./MenuModal";
+import { buildMenuItems, describeSelection, MENU_KEYS } from "./configure-view";
 import { initialState } from "../wizard-logic";
 
 function configState(overrides: Record<string, any> = {}): any {
@@ -19,7 +19,7 @@ describe("buildMenuItems", () => {
       "Model Profiles",
       "Decisions",
       "Theme (dracula)",
-      "Gateway (port 4123)",
+      "Gateway (clients · port 4123)",
       "Save & Exit",
     ]);
     expect(items.map(i => i.value)).toEqual([...MENU_KEYS]);
@@ -27,14 +27,20 @@ describe("buildMenuItems", () => {
 });
 
 describe("describeSelection", () => {
+  test("gateway points to client management instead of manual config edits", () => {
+    const lines = describeSelection("gateway", configState({ gatewayPort: 4123 }));
+    expect(lines.join(" ")).toContain("Port: 4123");
+    expect(lines.join(" ")).toContain("Manage clients");
+    expect(lines.join(" ")).not.toContain("manually");
+  });
+
   test("providers lists each provider with models and thinking", () => {
     const state = configState({
       editedProviders: {
         deepseek: { apiKeyEnv: "DEEPSEEK_API_KEY", apiKey: "", models: ["a", "b"], thinking: "enabled", contextLimit: 131072 },
       },
     });
-    const lines = describeSelection("providers", state);
-    expect(lines).toEqual([
+    expect(describeSelection("providers", state)).toEqual([
       "deepseek",
       "  models: a, b",
       "  thinking: enabled · ctx 131072",
@@ -63,10 +69,6 @@ describe("describeSelection", () => {
 
   test("theme shows the current theme", () => {
     expect(describeSelection("theme", configState({ theme: "nord" }))[0]).toBe("Current: nord");
-  });
-
-  test("gateway shows the current port", () => {
-    expect(describeSelection("gateway", configState({ gatewayPort: 8080 }))[0]).toBe("Port: 8080");
   });
 
   test("save describes the write targets", () => {

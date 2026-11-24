@@ -1,13 +1,17 @@
 import { readFileSync } from "node:fs";
 import { parseEnv } from "@atom-neo/shared";
 
-export function loadEnv(sandboxPath: string): void {
+/** Read the sandbox .env without mutating process.env; missing files yield an empty map. */
+export function readSandboxEnv(sandboxPath: string): Record<string, string> {
   try {
-    const env = parseEnv(readFileSync(`${sandboxPath}/.env`, "utf-8"));
-    for (const [key, value] of Object.entries(env)) {
-      if (!process.env[key]) process.env[key] = value;
-    }
+    return parseEnv(readFileSync(`${sandboxPath}/.env`, "utf-8"));
   } catch {
-    // .env not found, proceed without
+    return {};
+  }
+}
+
+export function loadEnv(sandboxPath: string): void {
+  for (const [key, value] of Object.entries(readSandboxEnv(sandboxPath))) {
+    if (!process.env[key]) process.env[key] = value;
   }
 }

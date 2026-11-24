@@ -1,4 +1,5 @@
 import { useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 import { Modal } from "../modal";
 import type { ModalAction } from "../modal";
 
@@ -16,10 +17,13 @@ export function WizardBackground() {
 
 export function WizardQuitConfirm({ open, onQuit, onCancel }: { open: boolean; onQuit: () => void; onCancel: () => void }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
   return (
     <Modal
       open={open}
-      title="QUIT WITHOUT SAVING?"
+      title="ATOM NEO · QUIT WITHOUT SAVING?"
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
       width={48}
       zIndex={1200}
       actions={QUIT_ACTIONS}

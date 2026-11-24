@@ -1,9 +1,9 @@
 import { describe, expect, test, afterAll, beforeAll, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeService } from "./runtime-service";
-import { ConfigSchema, loadConfig } from "../../bootstrap/config";
+import { ConfigSchema, loadConfig, saveRuntimeConfig } from "../../bootstrap/config";
 
 const TEST_KEY_ENV = "ATOM_TEST_DEEPSEEK_KEY";
 const OPENAI_KEY_ENV = "ATOM_TEST_OPENAI_KEY";
@@ -42,6 +42,67 @@ function makeRuntime(sandbox: string): RuntimeService {
 }
 
 describe("RuntimeService runtime config", () => {
+  test("reloadConfig reads config.json and keeps the runtime overlay precedence", () => {
+    const sandbox = makeSandbox();
+    const configPath = join(sandbox, "config.json");
+    const writeTheme = (theme: string) => writeFileSync(configPath, JSON.stringify(ConfigSchema.parse({
+      providers: {},
+      tui: { theme },
+    })));
+
+    writeTheme("github-dark");
+    const runtime = new RuntimeService({ mode: "core", port: 3100, host: "127.0.0.1", sandbox,
+      config: loadConfig(sandbox) });
+    expect(runtime.appConfig.tui.theme).toBe("github-dark");
+
+    writeTheme("tokyo-night");
+    expect(runtime.reloadConfig().tui.theme).toBe("tokyo-night");
+    expect(runtime.appConfig.tui.theme).toBe("tokyo-night");
+
+    runtime.updateRuntimeConfig({ tui: { theme: "dracula" } });
+    writeTheme("monokai");
+    expect(runtime.reloadConfig().tui.theme).toBe("dracula");
+    expect(existsSync(runtime.runtimeConfigPath)).toBe(true);
+  });
+
+  test("reloadConfig keeps the old effective config when config.json is corrupt", () => {
+    const sandbox = makeSandbox();
+    const configPath = join(sandbox, "config.json");
+    writeFileSync(configPath, JSON.stringify(ConfigSchema.parse({ providers: {}, tui: { theme: "github-dark" } })));
+    const runtime = new RuntimeService({ mode: "core", port: 3100, host: "127.0.0.1", sandbox,
+      config: loadConfig(sandbox) });
+
+    writeFileSync(configPath, "{broken");
+    expect(() => runtime.reloadConfig()).toThrow("Failed to parse");
+    expect(runtime.appConfig.tui.theme).toBe("github-dark");
+    expect(readFileSync(configPath, "utf8")).toBe("{broken");
+  });
+
+  test("reloadConfig does not recreate a deleted config.json", () => {
+    const sandbox = makeSandbox();
+    const configPath = join(sandbox, "config.json");
+    writeFileSync(configPath, JSON.stringify(ConfigSchema.parse({ providers: {}, tui: { theme: "github-dark" } })));
+    const runtime = new RuntimeService({ mode: "core", port: 3100, host: "127.0.0.1", sandbox,
+      config: loadConfig(sandbox) });
+
+    rmSync(configPath);
+    expect(() => runtime.reloadConfig()).toThrow("config.json not found");
+    expect(runtime.appConfig.tui.theme).toBe("github-dark");
+    expect(existsSync(configPath)).toBe(false);
+  });
+
+  test("reloadConfig rejects a corrupt runtime overlay and keeps the old config", () => {
+    const sandbox = makeSandbox();
+    writeFileSync(join(sandbox, "config.json"), JSON.stringify(ConfigSchema.parse({ providers: {}, tui: { theme: "github-dark" } })));
+    const runtime = new RuntimeService({ mode: "core", port: 3100, host: "127.0.0.1", sandbox,
+      config: loadConfig(sandbox) });
+
+    saveRuntimeConfig(sandbox, { tui: { theme: "dracula" } });
+    writeFileSync(runtime.runtimeConfigPath, "{bad-overlay");
+    expect(() => runtime.reloadConfig()).toThrow("Failed to load");
+    expect(runtime.appConfig.tui.theme).toBe("github-dark");
+  });
+
   test("thinking overlay takes effect immediately and survives reload", async () => {
     const sandbox = makeSandbox();
     const userConfig = ConfigSchema.parse({ providers: {

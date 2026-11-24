@@ -18,6 +18,8 @@
 | [startup-menu-changelog.md](./startup-menu-changelog.md) | Startup Menu 历史版本变更 |
 | [context-outcome-governance-plan.md](./context-outcome-governance-plan.md) | Tool Result / Context 治理实施阶段与完成标准 |
 | [skill-system-plan.md](./skill-system-plan.md) | Skill System 历史开发计划与测试拆分 |
+| [telegram-platform-acceptance.md](./telegram-platform-acceptance.md) | G6 真实 Telegram 平台验收清单；当前 PENDING |
+| [gateway-g6-validation.md](./gateway-g6-validation.md) | G6 本地验证矩阵、构建结果与未执行项 |
 
 ## 使用约定
 

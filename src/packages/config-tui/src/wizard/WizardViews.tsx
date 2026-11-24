@@ -1,6 +1,4 @@
 import type { Dispatch } from "react";
-import { MenuModal } from "../components/MenuModal";
-import type { MenuKey } from "../components/MenuModal";
 import { ProvidersModal } from "../components/ProvidersModal";
 import { ApiKeyModal } from "../components/ApiKeyModal";
 import { ModelsModal } from "../components/ModelsModal";
@@ -9,8 +7,10 @@ import { ProfilesModal } from "../components/ProfilesModal";
 import { DecisionsModal } from "../components/DecisionsModal";
 import { ThemeModal } from "../components/ThemeModal";
 import { GatewayModal } from "../components/GatewayModal";
+import type { GatewayInstanceActions } from "../gateway-status";
 import { ProjectModal } from "../components/ProjectModal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import type { WizardChrome } from "../components/WizardApp";
 import { collectModelIds } from "../wizard-logic";
 import type { WizardAction, WizardView } from "./wizard-reducer";
 import type { PendingEdit } from "./wizard-edit";
@@ -22,27 +22,21 @@ type CommonProps = {
   pending: PendingEdit | null;
   allowJev: boolean;
   dispatch: Dispatch<WizardAction>;
+  chrome?: WizardChrome;
 };
 
-export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch, onModelsSubmit }: CommonProps & {
+export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch, chrome, onModelsSubmit }: CommonProps & {
   onModelsSubmit: (patch: ModelEdit) => boolean;
 }) {
   const provider = pending?.id ?? wizard.provider;
 
   return (
     <>
-      {view?.kind === "menu" && (
-        <MenuModal
-          state={wizard}
-          onSelect={(key: MenuKey) => dispatch({ type: "menu-select", key })}
-          onClose={() => dispatch({ type: "quit-request" })}
-        />
-      )}
-
       {view?.kind === "providers" && (
         <ProvidersModal
-          providers={Object.keys(wizard.editedProviders)}
+          state={wizard}
           allowJev={allowJev}
+          chrome={chrome}
           onSelect={id => dispatch({ type: "providers-select", id })}
           onAdd={id => dispatch({ type: "providers-add", id })}
           onBack={() => dispatch({ type: "providers-back" })}
@@ -88,8 +82,10 @@ export function WizardProviderViews({ view, wizard, pending, allowJev, dispatch,
   );
 }
 
-export function WizardSettingsViews({ view, wizard, dispatch, onSave }: CommonProps & {
+export function WizardSettingsViews({ view, wizard, dispatch, sandboxPath, gatewayActions, chrome, onSave }: CommonProps & {
   onSave: () => void;
+  sandboxPath: string;
+  gatewayActions?: GatewayInstanceActions;
 }) {
   return (
     <>
@@ -106,6 +102,7 @@ export function WizardSettingsViews({ view, wizard, dispatch, onSave }: CommonPr
       {view?.kind === "theme" && (
         <ThemeModal
           theme={wizard.theme}
+          chrome={chrome}
           onSubmit={theme => dispatch({ type: "theme-submit", theme })}
           onBack={() => dispatch({ type: "theme-back" })}
         />
@@ -113,7 +110,10 @@ export function WizardSettingsViews({ view, wizard, dispatch, onSave }: CommonPr
 
       {view?.kind === "gateway" && (
         <GatewayModal
+          sandbox={sandboxPath}
           port={wizard.gatewayPort}
+          gatewayActions={gatewayActions}
+          breadcrumb="Home / Configure / Gateway"
           onSubmit={port => dispatch({ type: "gateway-submit", port })}
           onBack={() => dispatch({ type: "gateway-back" })}
         />

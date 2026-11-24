@@ -13,7 +13,13 @@
 | [architecture.md](./overview/architecture.md) | 系统架构总览 | 开始前必读 |
 | [project-structure.md](./overview/project-structure.md) | 完整目录树、包结构、依赖图 | 创建文件/目录 |
 | [bootstrap.md](./overview/bootstrap.md) | 启动序列、初始化顺序 | 理解启动流程 |
-| [startup-menu.md](./subsystems/startup-menu.md) | 一次性分层启动向导、参数记忆、执行交接及远程 attach | 修改 menu 子命令 |
+| [startup-menu.md](./subsystems/startup-menu.md) | OpenTUI MenuApp：Home/Session/Gateway/Configure/Backup、workspace、History/Core Server、非 TTY 拒绝 | 修改 menu/config 入口 |
+| [atom_neo_2026-11-19_menu_config_integration_plan.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_plan.md) | Menu 与 Config 整合计划（已实施 M1–M5）：OpenTUI MenuApp、Session/History/Core Server、Configure/Gateway、Backup | 追踪整合范围与验收 |
+| [atom_neo_2026-11-19_menu_config_integration_code_and_file.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_code_and_file.md) | Menu 与 Config 整合文件与代码（已实施）：路由、MenuApp、CLI、Core API、测试 | 审阅实现与文件影响面 |
+| [atom_neo_2026-11-19_menu_config_integration_graph.md](./subsystems/atom_neo_2026-11-19_menu_config_integration_graph.md) | Menu 与 Config 整合关系图（已实施）：路由状态、模块依赖、启动/History/Gateway 序列 | 理解实现关系与风险 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_plan.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_plan.md) | Menu 与 Config 视觉统一计划（已实施 M1–M5）：统一 Shell、扁平化 Configure、Providers/Theme 分栏、`atom config` 落点 | 追踪视觉统一范围与验收 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_code_and_file.md) | Menu 与 Config 视觉统一文件与代码（已实施 M1–M5）：路由、MenuScreen 分栏、ConfigureView、WizardApp embedded、测试清单 | 编码前审阅文件影响面 |
+| [atom_neo_2026-11-20_menu_config_visual_unification_graph.md](./subsystems/atom_neo_2026-11-20_menu_config_visual_unification_graph.md) | Menu 与 Config 视觉统一关系图（已实施 M1–M5）：模块依赖、路由状态、启动/保存/Theme 序列、响应式与风险 | 理解改动关系与风险 |
 | [development-setup.md](./overview/development-setup.md) | 开发环境搭建、依赖升级基线 — clone → 安装 → 升级 → 验证 | 第一天 / 升级依赖 |
 
 ## 开发规范（编码时必查）
@@ -40,7 +46,7 @@
 | [jev-decisions.md](./subsystems/jev-decisions.md) | Jev 独立调用模块、配置、回退与验收 | 接入结构化决策模型 |
 | [task-execution.md](./core/task-execution.md) | 双队列系统 + TaskEngine 状态机 (queue + runloop 合并) | 理解任务调度/生命周期 |
 | [sandbox.md](./subsystems/sandbox.md) | Sandbox 隔离规则 + 运行时目录结构 | 理解工作目录 |
-| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `--config` 配置编辑器（OpenTUI 窗口化、按 provider 循环、原子回滚） | 实现首次启动流程/配置编辑 |
+| [first-run-wizard.md](./subsystems/first-run-wizard.md) | 首次运行向导 + `atom config` Configure（embedded WizardApp）与 GatewayModal（OpenTUI、原子回滚） | 实现首次启动流程/配置编辑 |
 | [tui-interface.md](./tui-interface.md) | eDEX 风格 OpenTUI 布局、工具调用背景提示与参数摘要、ROUNDS 预算、TODO 滚动跟随与响应式约束 | 修改 TUI 界面 |
 | [tui-modal.md](./tui-modal.md) | TUI 通用 Modal 组件 — 标题/内容/ActionBar + 键盘导航 + 定位 | 实现 TUI 浮层/确认框 |
 | [future-features.md](./future-features.md) | 已设计但未实现的功能清单 | 设计时查，避免遗忘 |
@@ -62,6 +68,11 @@
 | 文档 | 说明 | 何时 |
 |------|------|------|
 | [gateway.md](./communication/gateway.md) | Gateway 平台 Client 中转层 — 子进程管理 + Secret 鉴权 + 消息路由 | 理解外部平台集成 |
+| [gateway-client-design.md](./communication/gateway-client-design.md) | Gateway 接入与发行契约：manifest.json、包/目录实例、凭据引用、官方来源索引、G6 范围冻结；真实平台/发布验收待执行 | 确认 Gateway 改进目标与契约 |
+| [gateway-development-plan.md](./communication/gateway-development-plan.md) | Gateway 更新开发计划：G0–G6 阶段、复用边界、破坏性迁移与验收矩阵；代码/文档完成，真实平台/发布待验收 | 分阶段实施与跟踪进度 |
+| [atom_neo_2026-11-14_gateway_client_packaging_plan.md](./communication/atom_neo_2026-11-14_gateway_client_packaging_plan.md) | Gateway Client 打包接入执行计划：G0 决策、G1–G6 子任务、G5 来源索引/升级/卸载、G6 范围冻结与未执行项 | 确认范围与阶段跟踪 |
+| [atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md](./communication/atom_neo_2026-11-14_gateway_client_packaging_code_and_file.md) | Gateway Client 打包接入文件与代码：M1/M2/M3a/M3b/G5/G6 实施记录、验证矩阵与待办 | 编码前审阅文件影响面 |
+| [atom_neo_2026-11-14_gateway_client_packaging_graph.md](./communication/atom_neo_2026-11-14_gateway_client_packaging_graph.md) | Gateway Client 打包接入关系图：模块依赖、数据模型、启动/安装/升级/卸载序列、G4 UI 数据流、G6 收口边界 | 理解改动关系与风险 |
 | [clients/telegram-bot.md](./clients/telegram-bot.md) | Telegram Bot Client 实现 — 长轮询/Webhook 双模式 + 消息分片 + 限流退避 | 接入 Telegram |
 | [protocol.md](./communication/protocol.md) | WebSocket 事件协议 | 通信层 |
 | [error-handling.md](./communication/error-handling.md) | 错误跨层传播模型 — Element → Pipeline → TaskEngine → Client | 写 try/catch |
@@ -90,6 +101,8 @@
 | [records/code-review-telegram-bot.md](./records/code-review-telegram-bot.md) | Telegram Bot Client 历史代码审查报告 |
 | [records/startup-implementation-notes.md](./records/startup-implementation-notes.md) | 启动实现进度、设计记录与改造前基线 |
 | [records/startup-menu-changelog.md](./records/startup-menu-changelog.md) | Startup Menu 历史版本变更 |
+| [records/telegram-platform-acceptance.md](./records/telegram-platform-acceptance.md) | G6 真实 Telegram 平台验收清单与执行记录；当前 PENDING |
+| [records/gateway-g6-validation.md](./records/gateway-g6-validation.md) | G6 本地验证矩阵、构建结果与未执行项；真实平台/发布仍 PENDING |
 | [records/context-outcome-governance-plan.md](./records/context-outcome-governance-plan.md) | Tool Result / Context 治理实施阶段与完成标准 |
 | [records/skill-system-plan.md](./records/skill-system-plan.md) | Skill System 历史开发计划与测试拆分 |
 

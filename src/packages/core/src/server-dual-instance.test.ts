@@ -146,9 +146,13 @@ test("two startCore instances stay isolated across health, attach and stop", asy
     expect(crossAttach.status).toBe(403);
 
     // Session stores are per Core: A's session is unknown to B.
-    const sessionOnA = await fetch(`${urlA}/api/sessions/${encodeURIComponent(attachA.body.sessionId)}`);
+    const sessionOnA = await fetch(`${urlA}/api/sessions/${encodeURIComponent(attachA.body.sessionId)}`, {
+      headers: { "x-atom-admin-token": ADMIN_A },
+    });
     expect(sessionOnA.status).toBe(200);
-    const sessionOnB = await fetch(`${urlB}/api/sessions/${encodeURIComponent(attachA.body.sessionId)}`);
+    const sessionOnB = await fetch(`${urlB}/api/sessions/${encodeURIComponent(attachA.body.sessionId)}`, {
+      headers: { "x-atom-admin-token": ADMIN_B },
+    });
     expect(sessionOnB.status).toBe(404);
     expect(await sessionOnB.json()).toEqual({ error: "Session not found" });
 

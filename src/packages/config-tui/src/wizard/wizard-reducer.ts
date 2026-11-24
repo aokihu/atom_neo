@@ -17,6 +17,7 @@ export type WizardViewKind =
   | "confirm";
 
 export type WizardView = { kind: WizardViewKind };
+export type WizardInitialView = "menu" | "gateway" | "providers" | "theme";
 
 export type WizardMenuKey = "providers" | "profiles" | "decisions" | "theme" | "gateway" | "save";
 
@@ -55,11 +56,18 @@ export type WizardAction =
   | { type: "quit-request" }
   | { type: "quit-cancel" };
 
-export function createWizardUiState(mode: WizardMode, sandboxPath: string): WizardUiState {
+export function createWizardUiState(
+  mode: WizardMode,
+  sandboxPath: string,
+  initialView: WizardInitialView = "menu",
+): WizardUiState {
+  const view: WizardView = mode !== "config"
+    ? { kind: "providers" }
+    : { kind: initialView === "gateway" ? "gateway" : initialView === "providers" ? "providers" : initialView === "theme" ? "theme" : "menu" };
   return {
     wizard: buildInitialState(mode, sandboxPath),
     pending: null,
-    view: { kind: mode === "config" ? "menu" : "providers" },
+    view,
     quitConfirm: false,
     providersFromDecisions: false,
   };
@@ -160,7 +168,7 @@ export function wizardReducer(state: WizardUiState, action: WizardAction): Wizar
       return modeView(state, "menu", "profiles");
 
     case "theme-submit":
-      return modeView({ ...state, wizard: { ...state.wizard, theme: action.theme } }, "menu", "project");
+      return modeView({ ...state, wizard: { ...state.wizard, theme: action.theme } }, "theme", "project");
 
     case "theme-back":
       return modeView(state, "menu", "decisions");

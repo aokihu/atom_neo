@@ -2,6 +2,8 @@
 
 > **Purpose**: Telegram Bot Client 是 Atom Neo 的第一个平台接入参考实现。它负责与 Telegram Bot API 交互，将用户消息标准化后转发到 Gateway，并将 Core 的回复发送回用户。
 
+> **2026-11-15 状态**：Telegram 已作为标准发行包/开发目录样例接入。manifest、目录/包实例、本地 pack/install、官方来源索引/下载/升级/卸载、Gateway 管理 UI、诊断与重载均已实现；真实 Telegram 平台消息验收和官方制品/生产索引发布**待执行**。旧 `binary` 配置明确拒绝；下文 CLI/二进制说明保留作开发参考。凭据必须通过实例 `.env` credential ref 注入，不作为普通 `clientArgs` 写入日志或历史。详见 [接入与发行规划](../communication/gateway-client-design.md) 与 [开发计划](../communication/gateway-development-plan.md)。
+
 ## 1. 架构位置
 
 ```
@@ -24,7 +26,9 @@ Core (127.0.0.1:3100)
 
 ## 2. 启动参数
 
-Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过 `clientArgs` 字段集中管理这些参数。
+构建：`bun run build` 输出 `./bin/telegram-bot`；根目录 `manifest.json` 的 `entry.production` 指向该文件，`entry.development` 为 `bun run src/main.ts`。发行包由 Gateway `packClient` 生成，不要求用户手写 binary 路径。
+
+Client 通过 CLI 参数接收普通配置；secret 字段由 manifest 声明 env 映射，实例只保存 `.env` 引用。Gateway 在 `config.json` 中通过 `clientArgs` 管理普通参数。下方 `--bot-token` 仅用于直接开发运行；通过 Gateway 实例启动时使用 `credentials:{"bot-token":"ATOM_CLIENT_<INSTANCE>_BOT_TOKEN"}`，实际值只写入 sandbox `.env`。
 
 ### 2.1 内部参数（Gateway 注入，用户不应手动指定）
 
@@ -49,14 +53,14 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
 
 ```bash
 # Long Polling（默认，零配置）
-./telegram-bot \
+./bin/telegram-bot \
   --secret 550e8400-e29b-41d4-a716-446655440000 \
   --port 4200 \
   --gateway-url http://127.0.0.1:3000 \
   --bot-token 123456:ABC-DEF...
 
 # Webhook（配合 Cloudflare Tunnel）
-./telegram-bot \
+./bin/telegram-bot \
   --secret 550e8400-e29b-41d4-a716-446655440000 \
   --port 4200 \
   --gateway-url http://127.0.0.1:3000 \
@@ -69,38 +73,50 @@ Client 通过 CLI 参数接收所有配置。Gateway 在 `config.json` 中通过
 
 ## 3. Gateway 配置
 
-在 `config.json` 中通过 `clientArgs` 字段透传所有用户参数：
+Client 根目录的 `manifest.json` 声明发行/开发入口、`config` 字段和凭据 env 映射。实例配置只使用 `package` / `directory` 二选一，`binary` 与实例级 `platform` 已移除：
 
 ```jsonc
 {
   "gateway": {
     "port": 3000,
     "clients": [{
-      "id": "telegram-bot",
-      "platform": "telegram",
-      "binary": "/path/to/telegram-bot",
-      "clientArgs": {
-        "bot-token": "123456:ABC-DEF...",
-        "mode": "longpoll"
-      },
-      "clientArgs": {
-        "bot-token": "123456:ABC-DEF...",
-        "mode": "longpoll"
+      "id": "telegram-main",
+      "package": { "id": "telegram-bot", "version": "0.1.0" },
+      "clientArgs": { "mode": "longpoll" },
+      "credentials": {
+        "bot-token": "ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN"
       },
       "stdio": "inherit"
+    }, {
+      "id": "telegram-dev",
+      "directory": "/absolute/path/to/clients/telegram-bot",
+      "clientArgs": { "mode": "longpoll" },
+      "credentials": {
+        "bot-token": "ATOM_CLIENT_TELEGRAM_DEV_BOT_TOKEN"
+      }
     }]
   }
 }
 ```
 
+Token 值只写 sandbox `.env`，例如 `ATOM_CLIENT_TELEGRAM_MAIN_BOT_TOKEN=123456:ABC-DEF...`；resolver 启动时注入 `TELEGRAM_BOT_TOKEN`。`webhook-secret` 使用 `TELEGRAM_WEBHOOK_SECRET`。
+
 **规则：**
 - `clientArgs` 的 key 必须与 client CLI 参数名完全一致（kebab-case）
 - Gateway 保留 `secret`、`port`、`gateway-url` 三个内部参数，不允许在 `clientArgs` 中覆盖
+- `credentials` 字段不进入普通 CLI 参数；required 字段必须在启动前提供
 - 所有值必须为字符串类型
 - `stdio`：控制 Client 子进程 stdout/stderr 输出方式
   - `"inherit"`（默认）：输出到 Gateway 终端，便于开发调试
   - `"ignore"`：丢弃输出，减少生产日志噪音
   - **注意**：`stdio` 是 Gateway 内部进程管理配置，不是 Client 的 CLI 参数
+
+## 3.1 Gateway 响应与诊断
+
+- Inbound 提交抽为 `gateway-client.ts`：2xx 成功；503/429 抛 `GatewayBusyError`，按 `Retry-After` 或默认 1s/2s 退避；其他非 2xx 抛 `GatewayRejectedError`。
+- 长轮询 `processUpdateBatch` 在 503/429 时不推进 update offset；其他错误按 3 次重试后跳过，避免永久卡住。
+- Webhook 在 Gateway busy 时返回 503 + `Retry-After`，其他错误返回 500，让 Telegram 重试。
+- 可选 `GET /diagnostics` 调用 Telegram `getMe`，返回 `telegram.getMe` 检查；Token 不进入响应；`/health` 仅表示本机 HTTP 就绪。
 
 ## 4. 两种模式对比
 

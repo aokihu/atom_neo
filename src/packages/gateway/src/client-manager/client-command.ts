@@ -1,7 +1,6 @@
 /** Client launch: argument mapping, active client, spawn options and readiness polling. */
-import { createChildProcessEnv } from "@atom-neo/shared";
 import type { Logger, ProcessHandle, SpawnProcessOptions } from "@atom-neo/shared";
-import type { ClientConfig } from "../config";
+import type { ResolvedClientConfig } from "../client-package/resolver";
 import type { HealthProbe } from "./health-probe";
 import type { RestartPolicy } from "./restart-policy";
 import type { ClientManagerRuntime } from "./runtime";
@@ -13,9 +12,9 @@ const READINESS_PROBE_TIMEOUT_MS = 500;
 
 export type ProcessSupervisorDeps = {
   id: string;
-  config: ClientConfig;
+  config: ResolvedClientConfig;
   port: number;
-  gatewayPort: number;
+  gatewayPort: number | (() => number);
   logger: Logger;
   runtime: ClientManagerRuntime;
   probe: HealthProbe;
@@ -42,10 +41,10 @@ export function buildClientArgs(clientArgs?: Record<string, string>): string[] {
   return args;
 }
 
-export function buildClientCommand(config: ClientConfig, client: ActiveClient, gatewayPort: number): string[] {
-  const { binary, clientArgs } = config;
+export function buildClientCommand(config: ResolvedClientConfig, client: ActiveClient, gatewayPort: number): string[] {
+  const { command, clientArgs } = config;
   return [
-    binary,
+    ...command,
     "--secret", client.secret,
     "--port", String(client.port),
     "--gateway-url", `http://127.0.0.1:${gatewayPort}`,
@@ -53,9 +52,15 @@ export function buildClientCommand(config: ClientConfig, client: ActiveClient, g
   ];
 }
 
-export function buildSpawnOptions(stdio: "inherit" | "ignore", onExit: NonNullable<SpawnProcessOptions["onExit"]>): SpawnProcessOptions {
+export function buildSpawnOptions(
+  stdio: "inherit" | "ignore",
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  onExit: NonNullable<SpawnProcessOptions["onExit"]>,
+): SpawnProcessOptions {
   return {
-    env: createChildProcessEnv(),
+    env,
+    cwd,
     stdin: "ignore",
     stdout: stdio,
     stderr: stdio,

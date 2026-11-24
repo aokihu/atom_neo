@@ -2,7 +2,7 @@ import { inferProviderProtocol } from "@atom-neo/shared";
 import type { ProfileLevel, ResolvedModel } from "@atom-neo/shared";
 import type { Mode } from "../base/types";
 import {
-  ConfigSchema, RuntimeConfigSchema, mergeConfig, saveRuntimeConfig, deleteRuntimeConfig,
+  ConfigSchema, RuntimeConfigSchema, loadConfig, mergeConfig, saveRuntimeConfig, deleteRuntimeConfig,
 } from "../../bootstrap/config";
 import type { AppConfig, LoadedConfig, RuntimeConfig } from "../../bootstrap/config";
 
@@ -51,6 +51,15 @@ export class RuntimeService {
   get runtimeConfig(): RuntimeConfig { return this.#runtimeConfig; }
   get maxTokens(): number {
     return this.#effective.transport?.maxOutputTokens ?? 4096;
+  }
+
+  /** Re-read config.json and the runtime overlay without clearing either source. */
+  reloadConfig(): AppConfig {
+    const loaded = loadConfig(this.#sandbox, { strict: true });
+    this.#userConfig = loaded.userConfig;
+    this.#runtimeConfig = loaded.runtimeConfig;
+    this.#effective = loaded.effective;
+    return this.#effective;
   }
 
   /** Merge a validated patch into the runtime overlay, persist it, and return the new effective config. */

@@ -2,6 +2,9 @@ const SECRET_HEADER = "X-Gateway-Secret";
 const TG_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token";
 
 import telegramify from "telegramify-markdown";
+import { readTelegramDiagnostics } from "./diagnostics";
+import { GatewayBusyError, submitInbound } from "./gateway-client";
+import { processUpdateBatch, type UpdateLoopState } from "./update-loop";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -65,7 +68,7 @@ function parseArgs(): ClientArgs {
   const webhookPort = parseInt(webhookPortStr);
   if (isNaN(webhookPort) || webhookPort < 1 || webhookPort > 65535) { console.error(`--webhook-port must be a valid port number (1-65535), got: ${webhookPortStr}`); process.exit(1); }
 
-  const webhookSecret = getArg("webhook-secret") ?? crypto.randomUUID();
+  const webhookSecret = getArg("webhook-secret") ?? Bun.env.TELEGRAM_WEBHOOK_SECRET ?? crypto.randomUUID();
 
   return {
     secret,
@@ -214,9 +217,8 @@ function fixMarkdownLineBreaks(md: string): string {
 
 // ── Update Handling ─────────────────────────────────────────────────────────
 
-let updateOffset = 0;
-// 单条 update 的重试计数，避免某条消息永久卡住轮询
-const updateRetries = new Map<string, number>();
+// 轮询 offset 与单条 update 的重试计数，避免某条消息永久卡住轮询
+const updateState: UpdateLoopState = { offset: 0, retries: new Map() };
 // 记录每个 chat 的最后一条消息 ID，用于回复时建立引用
 // 上限 1000 条，超出时删除最早条目
 const lastMessageIds = new Map<string, number>();
@@ -248,15 +250,11 @@ async function handleUpdate(update: TgUpdate): Promise<void> {
 
   console.log(`[tg] message from ${msg.chat.id}: ${msg.text.slice(0, 50)}`);
 
-  await fetch(`${args.gatewayUrl}/gateway/inbound`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", [SECRET_HEADER]: args.secret },
-    body: JSON.stringify({
-      type: "message",
-      platform: "telegram",
-      platformUserId: String(msg.chat.id),
-      data: { text: msg.text },
-    }),
+  await submitInbound({
+    gatewayUrl: args.gatewayUrl,
+    secret: args.secret,
+    platformUserId: String(msg.chat.id),
+    text: msg.text,
   });
 }
 
@@ -264,33 +262,27 @@ async function handleUpdate(update: TgUpdate): Promise<void> {
 
 async function pollOnce(): Promise<void> {
   const res = await tgCall<TgUpdate[]>("getUpdates", {
-    offset: updateOffset,
+    offset: updateState.offset,
     timeout: 30,
     allowed_updates: ["message"],
   });
 
   if (!res.ok || !res.result) return;
 
-  for (const update of res.result) {
-    // 单条 update 最多重试 3 次，之后跳过避免永久卡住
-    const retryKey = `u${update.update_id}`;
-    const attempts = (updateRetries.get(retryKey) ?? 0) + 1;
-
+  const { retryAfterMs } = await processUpdateBatch(res.result, updateState, async (update) => {
     try {
       await handleUpdate(update);
-      updateOffset = update.update_id + 1;
-      updateRetries.delete(retryKey);
     } catch (err) {
-      if (attempts >= 3) {
-        console.error(`[tg] update ${update.update_id} failed ${attempts} times, skipping:`, err);
-        updateOffset = update.update_id + 1;
-        updateRetries.delete(retryKey);
-      } else {
-        console.error(`[tg] handle update ${update.update_id} failed (attempt ${attempts}), will retry:`, err);
-        updateRetries.set(retryKey, attempts);
-        break; // 停止处理后续 update，下次轮询重试
+      if (!(err instanceof GatewayBusyError)) {
+        console.error(`[tg] handle update ${update.update_id} failed:`, err);
       }
+      throw err;
     }
+  });
+
+  if (retryAfterMs !== undefined) {
+    console.warn(`[tg] gateway busy, retry after ${retryAfterMs}ms`);
+    await sleep(retryAfterMs);
   }
 }
 
@@ -304,7 +296,7 @@ async function startLongPolling(): Promise<void> {
   while (true) {
     // 每小时输出一次心跳日志，证明 bot 仍在运行
     if (Date.now() - lastHeartbeatTime > 3_600_000) {
-      console.log(`[tg] heartbeat: alive, processed up to offset ${updateOffset}`);
+      console.log(`[tg] heartbeat: alive, processed up to offset ${updateState.offset}`);
       lastHeartbeatTime = Date.now();
     }
 
@@ -349,6 +341,10 @@ const server = Bun.serve({
 
     if (url.pathname === "/health") {
       return Response.json({ ok: true, mode: args.mode });
+    }
+
+    if (url.pathname === "/diagnostics" && req.method === "GET") {
+      return Response.json(await readTelegramDiagnostics(args.botToken));
     }
 
     if (url.pathname === "/task-result" && req.method === "POST") {
@@ -407,9 +403,23 @@ if (args.mode === "webhook") {
           return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
         }
 
-        const update = await req.json() as TgUpdate;
-        await handleUpdate(update);
-        return Response.json({ ok: true });
+        try {
+          const update = await req.json() as TgUpdate;
+          await handleUpdate(update);
+          return Response.json({ ok: true });
+        } catch (err) {
+          if (err instanceof GatewayBusyError) {
+            return Response.json(
+              { error: "Gateway busy" },
+              {
+                status: 503,
+                headers: { "Retry-After": String(Math.max(1, Math.ceil(err.retryAfterMs / 1_000))) },
+              },
+            );
+          }
+          console.error("[tg] webhook inbound failed:", err);
+          return Response.json({ error: "Internal error" }, { status: 500 });
+        }
       }
 
       return new Response("Not Found", { status: 404 });

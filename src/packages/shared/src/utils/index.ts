@@ -10,6 +10,8 @@ export { parseEnv, parseEnvEntries, parseEnvKeys, serializeEnv, upsertEnv, merge
 export type { EnvEntry } from "./env-file";
 export { writeFileAtomic } from "./fs";
 export type { WriteFileAtomicOptions } from "./fs";
+export { withFileLock } from "./file-lock";
+export type { FileLockOptions } from "./file-lock";
 export { createId } from "./id";
 export { clamp, parsePortValue } from "./number";
 export { hasBunRuntime } from "./runtime";

@@ -8,6 +8,7 @@
 - `node-smoke/tui-render.ts`: Node TUI render smoke (OpenTUI test renderer, border/text frame capture).
 - `node-smoke/run-all.ts`: `smoke:node` orchestrator (build check + platform + TUI render + release + S9 fake conversation).
 - `continuation-evidence-experiment.ts`: fixed-corpus native JEV comparisons and parameter ablation; reads credentials from environment, records bounded business evidence and native choices without credentials. Supports --replay for frozen corpora, --holdout for screening and --gate for new scenarios.
+- `gateway-release.ts`: builds/packs a Gateway client for the current host target, computes archive sha256/size, and writes a source-index v1 document; requires an explicit `--base-url`.
 - `bump-prompt-version.ts`, `pre-commit`, `setup-git-hooks.sh`: prompt version and Git hook maintenance.
 
 Experiment method and results: `docs/pipelines/progress-evidence-experiment.md`.

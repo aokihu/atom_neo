@@ -43,6 +43,7 @@ export type HttpRouterDeps = {
   getMcpServerInfos: () => McpServerInfo[];
   budgetLimits: () => BudgetLimits;
   isStopping: () => boolean;
+  requestShutdown: () => void;
 };
 
 /** Single admin gate shared by every protected route. */
@@ -124,10 +125,29 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
           return Response.json({ error: "Invalid attach JSON" }, { status: 400 });
         }
         if (!options || typeof options !== "object" || Array.isArray(options)
-          || ("continue" in options && typeof options.continue !== "boolean")) {
-          return Response.json({ error: "continue must be a boolean" }, { status: 400 });
+          || ("continue" in options && typeof options.continue !== "boolean")
+          || ("sessionId" in options && (typeof options.sessionId !== "string" || !options.sessionId.trim()))) {
+          return Response.json({ error: "continue must be a boolean and sessionId a non-empty string" }, { status: 400 });
         }
-        const session = sessionStore.attachTui("continue" in options && options.continue === true);
+        let session: NonNullable<ReturnType<SessionStore["load"]>>;
+        try {
+          if ("sessionId" in options) {
+            const loaded = sessionStore.attachSession(options.sessionId as string);
+            if (!loaded) return Response.json({ error: "Session not found" }, { status: 404 });
+            session = loaded;
+          } else {
+            session = sessionStore.attachTui("continue" in options && options.continue === true);
+          }
+        } catch {
+          return Response.json({ error: "Failed to persist TUI session" }, { status: 500 });
+        }
+        try {
+          deps.runtime.reloadConfig?.();
+        } catch (error) {
+          deps.logger.warn("tui attach config reload failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         const model = deps.runtime.getResolvedModel?.("balanced") ?? deps.fallbackModel;
         return Response.json({ sessionId: session.sessionId, serverInfo: {
           port: ctx.port, host: deps.host, sandbox: deps.sandbox, version: deps.version ?? "unknown", model: model.model,
@@ -138,6 +158,20 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
       }
       if (url.pathname === `${API_PREFIX}health`) return healthHandler(taskQueue);
       if (url.pathname === `${API_PREFIX}metrics`) return metricsHandler(taskQueue);
+
+      if (url.pathname === `${API_PREFIX}sessions` && method === "GET") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        return Response.json(sessionStore.listSessions());
+      }
+
+      if (url.pathname === `${API_PREFIX}admin/shutdown` && method === "POST") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
+        if (deps.isStopping()) return Response.json({ error: "Core is stopping" }, { status: 503 });
+        setTimeout(() => deps.requestShutdown(), 0);
+        return Response.json({ ok: true });
+      }
 
       if (url.pathname === `${API_PREFIX}schedules` && method === "GET") {
         const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
@@ -165,6 +199,8 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
       if (url.pathname === `${API_PREFIX}tasks` && method === "POST") return handleTaskSubmit(req);
 
       if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "GET") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
         const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
         if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         const session = sessionStore.load(sid);
@@ -173,10 +209,12 @@ export function createHttpRouter(deps: HttpRouterDeps): HttpRouter<{ sessionId: 
           : Response.json({ error: "Session not found" }, { status: 404 });
       }
       if (url.pathname.startsWith(SESSION_API_PREFIX) && method === "DELETE") {
+        const denied = requireAdmin(req, ctx, deps.adminToken, deps.allowRemoteAdmin);
+        if (denied) return denied;
         const sid = decodePathParam(url.pathname, SESSION_API_PREFIX);
         if (!sid) return Response.json({ error: "Invalid session ID" }, { status: 400 });
         if (!sessionStore.delete(sid)) {
-          return Response.json({ error: "Session is active" }, { status: 409 });
+          return Response.json({ error: "Session is active or attached" }, { status: 409 });
         }
         return Response.json({ ok: true, sessionId: sid });
       }

@@ -4,15 +4,25 @@ import { createRoot } from "@opentui/react";
 import React from "react";
 import { ensureBunRuntimePluginSupport } from "@atom-neo/tui-kit";
 import { WizardApp } from "./components/WizardApp";
-import type { WizardMode } from "./wizard-logic";
+import { closeRenderer, waitForRendererClosed } from "./renderer-lifecycle";
+import type { ConfigRenderer } from "./renderer-lifecycle";
+import type { GatewayInstanceActions } from "./gateway-status";
+import type { WizardInitialView } from "./wizard/wizard-reducer";
 
-/** Launch the standalone OpenTUI wizard (first-run setup or config editor). */
-export async function startWizard(sandboxPath: string, mode: WizardMode): Promise<boolean> {
+/** Launch the standalone first-run wizard; config editing is MenuApp Configure only. */
+export async function startWizard(
+  sandboxPath: string,
+  mode: "first-run",
+  options: { gatewayActions?: GatewayInstanceActions; initialView?: WizardInitialView } = {},
+): Promise<boolean> {
+  if ((mode as string) !== "first-run") {
+    throw new Error("startWizard only supports first-run; config editing uses atom config / MenuApp Configure");
+  }
   await ensureBunRuntimePluginSupport();
   return new Promise<boolean>((resolve, reject) => {
     let settled = false;
     let completed = false;
-    let renderer: Awaited<ReturnType<typeof createCliRenderer>> | undefined;
+    let renderer: ConfigRenderer | undefined;
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -22,8 +32,7 @@ export async function startWizard(sandboxPath: string, mode: WizardMode): Promis
     };
     const abort = () => {
       if (settled) return;
-      if (renderer) renderer.destroy();
-      else finish();
+      closeRenderer(renderer, finish);
     };
 
     // EOF (redirected stdin) must not leave the wizard hanging forever
@@ -33,7 +42,7 @@ export async function startWizard(sandboxPath: string, mode: WizardMode): Promis
       exitOnCtrlC: false,
       screenMode: "alternate-screen",
       backgroundColor: "#05090c",
-      onDestroy: () => finish(),
+      onDestroy: () => waitForRendererClosed(renderer, finish),
     }).then(createdRenderer => {
       renderer = createdRenderer;
       if (settled) { renderer.destroy(); return; }
@@ -46,7 +55,9 @@ export async function startWizard(sandboxPath: string, mode: WizardMode): Promis
       createRoot(renderer).render(React.createElement(WizardApp, {
         sandboxPath,
         mode,
-        onComplete: () => { completed = true; createdRenderer.destroy(); },
+        initialView: options.initialView,
+        gatewayActions: options.gatewayActions,
+        onComplete: () => { completed = true; closeRenderer(createdRenderer, finish); },
         onAbort: abort,
       }));
     }).catch(error => {

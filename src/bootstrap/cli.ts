@@ -8,7 +8,28 @@ import type { LogLevel } from "@atom-neo/shared";
 export type Mode = "core" | "tui" | "core-gateway" | "gateway" | "full";
 export type LogMode = "console" | "pipe" | "file";
 export type Command = "export" | "import";
+export type ConfigRoute = "configure" | "gateway";
 export type BackupEnvMode = "merge" | "replace";
+export type GatewayCommandAction =
+  | "install" | "load" | "reload" | "list" | "start" | "stop"
+  | "check" | "logs" | "pack" | "uninstall" | "upgrade";
+export type GatewayCommand = {
+  action: GatewayCommandAction;
+  target?: string;
+  id?: string;
+  out?: string;
+  targetPlatform?: string;
+  /** Source index location for official install/upgrade (file or http(s) URL). */
+  source?: string;
+  /** Exact target version for upgrade. */
+  version?: string;
+  force: boolean;
+  json: boolean;
+};
+
+const GATEWAY_ACTIONS: readonly GatewayCommandAction[] = [
+  "install", "load", "reload", "list", "start", "stop", "check", "logs", "pack", "uninstall", "upgrade",
+];
 
 export type BootArguments = {
   menu: boolean;
@@ -36,11 +57,16 @@ export type BootArguments = {
   corePort?: number;
   clients?: string;
   action?: "start" | "stop";
-  config: boolean;
+  configRoute?: ConfigRoute;
   continueSession: boolean;
+  sessionId?: string;
+  gatewayCommand?: GatewayCommand;
 };
 
 export function parseArguments(rawArgs: readonly string[]): BootArguments | "help" {
+  if (rawArgs[0] === "gateway") return parseGatewayArguments(rawArgs.slice(1));
+  if (rawArgs[0] === "config") return parseConfigArguments(rawArgs.slice(1));
+
   const first = rawArgs[0];
   const menu = first === "menu";
   const command: Command | undefined = first === "export" || first === "import" ? first : undefined;
@@ -58,7 +84,6 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
       "core-port": { type: "string" },
       clients: { type: "string" },
       action: { type: "string" },
-      config: { type: "boolean", default: false },
       output: { type: "string", short: "o" },
       password: { type: "boolean", default: false },
       force: { type: "boolean", default: false },
@@ -133,9 +158,130 @@ export function parseArguments(rawArgs: readonly string[]): BootArguments | "hel
     logModes: (values.log as string[]).map(validateLogMode),
     logFile: values["log-file"] as string | undefined,
     logPipePath: values["log-pipepath"] as string | undefined,
-    config: values.config as boolean,
     continueSession: values.continue as boolean,
   };
+}
+
+function parseConfigArguments(args: readonly string[]): BootArguments | "help" {
+  let parsed: ReturnType<typeof parseArgs>;
+  try {
+    parsed = parseArgs({
+      args: [...args],
+      options: {
+        sandbox: { type: "string" },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    throw new Error(`Invalid config command: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const { values, positionals } = parsed;
+  if (values.help) return "help";
+  if (positionals.length > 1) throw new Error("config accepts only an optional 'gateway' target");
+  const target = positionals[0];
+  if (target !== undefined && target !== "gateway") throw new Error(`Unknown config target: ${target}`);
+  const sandboxPath = values.sandbox as string | undefined;
+  if (sandboxPath === "") throw new Error("--sandbox cannot be empty");
+  return {
+    menu: false,
+    wizard: false,
+    password: false,
+    force: false,
+    dryRun: false,
+    envMode: "merge",
+    sandboxExplicit: sandboxPath !== undefined,
+    port: 3100,
+    host: "127.0.0.1",
+    sandbox: parseSandboxPath(sandboxPath ?? process.cwd()),
+    logLevel: "debug",
+    logIgnore: [],
+    logLevelExplicit: false,
+    logIgnoreExplicit: false,
+    logModes: [],
+    configRoute: target === "gateway" ? "gateway" : "configure",
+    continueSession: false,
+  };
+}
+
+function parseGatewayArguments(args: readonly string[]): BootArguments | "help" {
+  const { values, positionals } = parseGatewayArgs(args);
+  if (values.help) return "help";
+  if (positionals.length === 0) throw new Error(`gateway requires an action: ${GATEWAY_ACTIONS.join(" | ")}`);
+  if (positionals.length > 2) throw new Error("gateway accepts only an action and an optional target");
+
+  const action = validateEnum(positionals[0], GATEWAY_ACTIONS, "gateway action");
+  const target = positionals[1];
+  if (action === "list" && target !== undefined) throw new Error("gateway list does not accept a target");
+  if (action !== "list" && !target) throw new Error(`gateway ${action} requires a target`);
+  if (action !== "pack" && values.out !== undefined) throw new Error("--out is only valid for gateway pack");
+  if (action !== "pack" && values.target !== undefined) throw new Error("--target is only valid for gateway pack");
+  if (action !== "load" && values.id !== undefined) throw new Error("--id is only valid for gateway load");
+  if (action !== "install" && action !== "upgrade" && values.source !== undefined) {
+    throw new Error("--source is only valid for gateway install or upgrade");
+  }
+  if (action !== "upgrade" && values.version !== undefined) throw new Error("--version is only valid for gateway upgrade");
+  if (values.out === "") throw new Error("--out cannot be empty");
+  if (values.target === "") throw new Error("--target cannot be empty");
+  if (values.id === "") throw new Error("--id cannot be empty");
+  if (values.source === "") throw new Error("--source cannot be empty");
+  if (values.version === "") throw new Error("--version cannot be empty");
+
+  const sandboxPath = values.sandbox;
+  return {
+    menu: false,
+    wizard: false,
+    password: false,
+    force: values.force,
+    dryRun: false,
+    envMode: "merge",
+    sandboxExplicit: sandboxPath !== undefined,
+    port: 3100,
+    host: "127.0.0.1",
+    sandbox: parseSandboxPath(sandboxPath ?? process.cwd()),
+    logLevel: "debug",
+    logIgnore: [],
+    logLevelExplicit: false,
+    logIgnoreExplicit: false,
+    logModes: [],
+    continueSession: false,
+    gatewayCommand: {
+      action,
+      target,
+      id: values.id,
+      out: values.out,
+      targetPlatform: values.target,
+      source: values.source,
+      version: values.version,
+      force: values.force,
+      json: values.json,
+    },
+  };
+}
+
+function parseGatewayArgs(args: readonly string[]) {
+  try {
+    return parseArgs({
+      args: [...args],
+      options: {
+        sandbox: { type: "string" },
+        id: { type: "string" },
+        out: { type: "string" },
+        target: { type: "string" },
+        source: { type: "string" },
+        version: { type: "string" },
+        force: { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
+        help: { type: "boolean", short: "h", default: false },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid gateway command: ${detail}`);
+  }
 }
 
 function validateCommandArguments(command: Command, tokens: readonly { kind: string; name?: string }[], positionals: readonly string[]): void {
@@ -156,13 +302,17 @@ atom-neo — AI Agent Development Platform
 USAGE
   ${binName} [OPTIONS]
   ${binName} menu [--sandbox <path>]
+  ${binName} config [gateway] [--sandbox <path>]
   ${binName} export [--sandbox <path>] [-o|--output <file>] [--password] [--force]
   ${binName} import <archive> [--sandbox <path>] [--password] [--env merge|replace] [--dry-run] [--force]
+  ${binName} gateway <action> [target] [--sandbox <path>] [--id <instance>] [--source <file|url>] [--version <version>] [--out <file>] [--target <platform>] [--force] [--json]
 
 COMMANDS
-  menu                   一次性启动向导（参数自动回填，完成后执行）
+  menu                   打开 OpenTUI 菜单（Session / Gateway / Configure / Backup）
+  config                 打开统一 Configure 设置页；config gateway 直接打开 Gateway 配置
   export                 导出 config.json + .env 为 .atombak 归档
   import                 从 .atombak 归档导入配置
+  gateway <action>       Gateway 实例管理: install | upgrade | load | reload | list | start | stop | check | logs | pack | uninstall
 
 OPTIONS
   -m, --mode <mode>      运行模式: core | core-gateway | tui | gateway (默认: core + TUI)
@@ -175,13 +325,18 @@ OPTIONS
   --clients <id>         指定 Client；省略则操作全部
   --sandbox <path>        沙箱目录 (默认: 当前目录)
   -c, --continue         继续上次 TUI Session（默认新建；无历史时新建）
-  --config                启动配置向导 (API Key / 模型 / Provider / 主题)
   --log <mode>            日志输出模式: console | pipe | file (可叠加使用)
   --log-level <level>     日志级别: debug | info | warn | error (默认: debug)
   --log-ignore <level>    忽略的日志级别 (可多次使用)
   --log-file <path>       日志文件路径 (--log=file 时必需)
   --log-pipepath <path>   命名管道路径 (--log=pipe 时必需)
   -o, --output <file>     导出归档路径 (默认: atom-backup-<time>.atombak)
+  --id <instance>         gateway load 实例 ID（默认 manifest.id）
+  --source <file|url>     官方来源索引（install/upgrade；也可用 ATOM_GATEWAY_SOURCE_INDEX）
+  --version <version>     gateway upgrade 目标版本
+  --out <file>            gateway pack 输出路径
+  --target <platform>     gateway pack 目标平台
+  --json                  gateway 命令以 JSON 输出
   --password              提示输入密码加密/解密归档 (或使用 ATOM_BACKUP_PASSWORD)
   --env <mode>            导入 .env 策略: merge | replace (默认: merge)
   --dry-run               仅显示导入计划，不写盘
@@ -194,9 +349,13 @@ EXAMPLES
   ${binName} --continue --sandbox ./sandbox
   ${binName} --mode core --port 3100 --log=console
   ${binName} --mode core-gateway --port 3100 --log=console
-  ${binName} --config --sandbox ./sandbox
+  ${binName} config --sandbox ./sandbox
+  ${binName} config gateway --sandbox ./sandbox
   ${binName} export --sandbox ./sandbox --password -o ./backup.atombak
   ${binName} import ./backup.atombak --sandbox ./sandbox
+  ${binName} gateway list --sandbox ./sandbox
+  ${binName} gateway install telegram-bot@0.1.0 --source ./gateway-source-index.json --sandbox ./sandbox
+  ${binName} gateway upgrade telegram-main --version 0.2.0 --source ./gateway-source-index.json --sandbox ./sandbox
 `);
 }
 

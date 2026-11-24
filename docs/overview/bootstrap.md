@@ -2,7 +2,7 @@
 
 ## menu 启动向导
 
-`atom menu` 在 Core/配置服务初始化前进入普通终端向导，最后一步自动执行原有启动入口。支持回退、参数回填及失败重试，成功后不返回菜单。历史固定为 `~/.config/atom/menu_history.json`，仅在成功就绪后保存；详见 [startup-menu.md](../subsystems/startup-menu.md)。
+`atom menu` 在 Core/配置服务初始化前进入 OpenTUI MenuApp（Home / Session / Gateway / Configure / Backup / Quit）；选择启动项后关闭菜单并执行原有启动入口。`atom config` 打开 Configure，`atom config gateway` 直接进入 Gateway 配置；旧的 `--config`/`--config --gateway` flag 已移除。详见 [startup-menu.md](../subsystems/startup-menu.md)。
 
 > **Purpose**: 当前启动行为与五模式启动、TUI attach 和资源关闭契约。
 
@@ -26,11 +26,16 @@ WebSocket 重连继续订阅原 sessionId，不受启动参数影响。
 |------|------|
 | 无 mode | Core + TUI |
 | --mode core | 仅 Core，Agent 与调度持续运行 |
+| config | 打开 Configure 页面 |
+| config gateway | 直接打开 Gateway 配置（必要时先选择 workspace） |
 | --mode core-gateway | Core + Gateway，无 TUI |
 | --mode tui --core-server <host> --core-port <port> | 仅 TUI，attach 已运行 Core |
 | --mode gateway --clients <name> | 控制指定 Client；省略 clients 则全部 |
+| gateway <action> [target] [--id] [--source] [--version] | 新 CLI：install/upgrade/load/reload/list/start/stop/check/logs/pack/uninstall；`load` 可用 `--id`，`install`/`upgrade` 可用 `--source`，`upgrade` 可用 `--version` |
 
-Gateway 为短时控制进程，不是 Gateway Server 启动模式。动作使用 `--action start|stop`；`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
+Gateway 为短时控制进程，不是 Gateway Server 启动模式。旧动作使用 `--action start|stop`；`atom gateway ...` 是增量 CLI，不初始化 Core/Provider/TUI。`install/load/pack/uninstall` 与 `list` 可离线执行；在线命令通过 `.atom/gateway/runtime.json` + 管理 Token 发现服务，Gateway 离线时明确报错，不自动启动。`list` 合并 config-only 条目与 supervisor 状态，JSON 用 `configured` / `registered` / `state` / `offline` 区分。兼容说明：旧调用方若对 JSON 做完整对象比较，需要接受新增的顶层 `offline` 和每项 `configured/registered` 字段；原有 client 字段不变。`load` 的相对路径按当前 cwd 解析（与 pack/install 一致），以绝对目录写入；实例 ID 默认 manifest.id，可用 `--id <id>` 为同一目录登记不同实例，重复 ID 更新同名实例。Gateway 在线时 load 写 config 后调用 admin `register`（不自动 start）；离线时只保存，启动 Gateway 后再登记。`--id` 只对 load 有效。
+
+`install` 的 target 存在时按本地归档安装；否则按官方 `id[@version]` 从 `--source` 或 `ATOM_GATEWAY_SOURCE_INDEX` 读取索引，下载校验后复用本地安装器。远程索引/归档只允许 HTTPS；HTTP 仅 loopback 用于本地测试。`upgrade <instance>` 只更新指定实例，可带 `--version`；新版本未安装时先下载安装，在线 reload/register 失败恢复旧实例配置。`full` 保留为 `core-gateway` 兼容别名。`core-server`/`core-port` 为 attach 必填；`clients` 对应配置 ID，空值/非法值不能视为全部。
 
 ## HTTP 运行时选择
 
@@ -44,7 +49,7 @@ Core/Gateway 的业务层只依赖 `HttpServer` 契约，传输由 `ATOM_HTTP_RU
 | `ATOM_HTTP_RUNTIME=node` | 强制 Node adapter（spike 已验证 Bun 下也可运行） |
 | 其他值 | 启动失败：`Invalid ATOM_HTTP_RUNTIME "...": expected "bun" \| "node".` |
 
-入口 `src/main.ts` 在 Core/Core+Gateway/默认 TUI 启动路径中解析一次运行时并创建一个无状态 `HttpServer`，同一实例注入 `startCore` 与 `startGateway`。`--mode tui`、`--mode gateway` 控制、`--config`、`--wizard`、备份/导出/导入分支不创建适配器，也不加载 `ws`。适配器创建失败会进入既有 `shutdown()`，回滚已启动服务。
+入口 `src/main.ts` 在 Core/Core+Gateway/默认 TUI 启动路径中解析一次运行时并创建一个无状态 `HttpServer`，同一实例注入 `startCore` 与 `startGateway`。`--mode tui`、`--mode gateway` 控制、`config`、`--wizard`、备份/导出/导入分支不创建适配器，也不加载 `ws`。适配器创建失败会进入既有 `shutdown()`，回滚已启动服务。
 
 Node 当前只是可选运行时；Node 构建入口、发布包与 CI 矩阵属于 S10，S9 不承诺 Node 发布支持。
 
@@ -70,7 +75,7 @@ Fake conversation（本地 fake SSE 模型 → conversation `completed`）与 Bu
 
 保留 host、port、sandbox、config 和现有 log 参数。host/port 负责监听，core-server/core-port 负责连接。默认监听 3100；显式 `port=0` 由系统分配，连接端口必须为 1–65535；跨模式不适用参数在启动前拒绝。
 
-.env 和 config.json 只由需要它们的模式加载。Core 模式缺配置应报错提示单独 --config，不能弹交互向导；默认交互模式保留首次安装流程。日志 console 应在无 TUI 的 Core/Core+Gateway/控制模式可用，避免污染 TUI；Client 输出沿用独立 stdio 配置。
+.env 和 config.json 只由需要它们的模式加载。Core 模式缺配置应报错提示单独运行 `atom config`，不能弹交互向导；默认交互模式保留首次安装流程。日志 console 应在无 TUI 的 Core/Core+Gateway/控制模式可用，避免污染 TUI；Client 输出沿用独立 stdio 配置。
 
 ## 启动顺序
 
@@ -135,7 +140,7 @@ Core 独立拥有 ScheduleService/HookManager。global 仅表示定义跨重启�
 
 ## 首次向导子进程
 
-取消配置必须结束当前启动：首次向导收到 Ctrl+C、Ctrl+D、EOF 或取消操作时，以失败状态退出，不写入 installed 标记，不启动 Core/TUI。只有保存成功才允许继续首次启动。独立 --config 取消后正常退出配置界面，也不启动 Core。销毁界面本身不代表配置成功。
+取消配置必须结束当前启动：首次向导收到 Ctrl+C、Ctrl+D、EOF 或取消操作时，以失败状态退出，不写入 installed 标记，不启动 Core/TUI。只有保存成功才允许继续首次启动。独立 `atom config` 取消后正常退出配置界面，也不启动 Core。销毁界面本身不代表配置成功。
 
 编译后的 Bun 入口位于虚拟 `/$bunfs/` 路径，`process.argv[1]` 也指向该虚拟路径，不能作为可执行入口。`bootstrap/cli.ts` 据此区分：编译二进制以 `process.execPath + --wizard + --sandbox` 启动自身；Bun 源码用 `bun run <entrypoint>`；Node 直接运行入口脚本，不加 `run`。运行时检测不依赖 `Bun.main`。向导使用 parseArguments 已解析的 args.sandbox，兼容空格与等号参数写法。
 

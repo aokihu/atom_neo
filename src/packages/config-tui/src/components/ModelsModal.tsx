@@ -3,6 +3,7 @@ import { PROVIDER_TYPES } from "@atom-neo/shared";
 import { useKeyboard } from "@opentui/react";
 import { Modal } from "../modal";
 import { FieldInput, SelectableRow, useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 import { addModel, removeModelAt, parseContextLimit, isDecisionEndpoint } from "../wizard-logic";
 import type { ProviderEdit, ProviderType, ThinkingMode } from "../wizard-logic";
 
@@ -27,6 +28,8 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
   onCancel: () => void;
 }) {
   const { colors } = useTheme();
+  const { version } = useMenuChrome();
+  const versionRight = version ? <text fg={colors.text.muted}>v{version}</text> : undefined;
   const [phase, setPhase] = useState<Phase>("list");
   const [list, setList] = useState<string[]>(models);
   const [selected, setSelected] = useState(0);
@@ -59,11 +62,11 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
     }
   };
 
-  const title = `MODELS — ${provider.toUpperCase()}`;
+  const title = `ATOM NEO · MODELS — ${provider.toUpperCase()}`;
 
   if (phase === "add") {
     return (
-      <Modal open title={title} width={56} interactive={false} onClose={onCancel} hint="Enter add · Esc back">
+      <Modal open title={title} headerRight={versionRight} titleTruncate width={56} interactive={false} onClose={onCancel} hint="Enter add · Esc back">
         <FieldInput
           label="Model name"
           value=""
@@ -80,7 +83,7 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
 
   if (phase === "type") {
     return (
-      <Modal open title="PROVIDER TYPE" width={56} onClose={close}
+      <Modal open title="ATOM NEO · PROVIDER TYPE" headerRight={versionRight} titleTruncate width={56} onClose={close}
         listLength={PROVIDER_TYPES.length} selectedListIndex={PROVIDER_TYPES.indexOf(draftType)}
         onListNavigate={i => setDraftType(PROVIDER_TYPES[i])}
         onListActivate={() => { setError(""); setPhase("baseUrl"); }}
@@ -97,7 +100,7 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
 
   if (phase === "baseUrl") {
     return (
-      <Modal open title={title} width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc back">
+      <Modal open title={title} headerRight={versionRight} titleTruncate width={60} interactive={false} onClose={onCancel} hint="Enter continue · Esc back">
         <FieldInput
           label={draftType === "jev" ? "Decisions endpoint (full URL)" : "Base URL"}
           value={draftUrl}
@@ -121,6 +124,8 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
       <Modal
         open
         title={title}
+        headerRight={versionRight}
+        titleTruncate
         width={56}
         onClose={close}
         listLength={THINKING_LABELS.length}
@@ -140,7 +145,7 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
 
   if (phase === "contextLimit") {
     return (
-      <Modal open title={title} width={56} interactive={false} onClose={onCancel} hint="Enter finish · Esc back">
+      <Modal open title={title} headerRight={versionRight} titleTruncate width={56} interactive={false} onClose={onCancel} hint="Enter finish · Esc back">
         <FieldInput
           label="Context tokens"
           value={contextLimit ? String(contextLimit) : ""}
@@ -159,6 +164,8 @@ export function ModelsModal({ provider, models, baseUrl, thinking, contextLimit,
     <Modal
       open
       title={title}
+      headerRight={versionRight}
+      titleTruncate
       width={56}
       onClose={close}
       listLength={items.length}

@@ -88,8 +88,9 @@ async function scenario(kind: "reconcile" | "limit" | "checkpoint_failure" | "co
     },
     network: { webFetch: async () => ({ ok: true, code: "success", content: "" }) },
   };
+  const adminToken = "continuation-admin";
   const core = await startCore({ port: 0, host: "127.0.0.1", logger: new Logger("debug", entry => logs.push(entry)),
-    runtime, services });
+    runtime, services, adminToken });
   try {
     const url = `http://127.0.0.1:${core.port}`;
     const submitted: any = await (await fetch(`${url}/api/tasks`, { method: "POST", headers: { "Content-Type": "application/json" },
@@ -114,7 +115,9 @@ async function scenario(kind: "reconcile" | "limit" | "checkpoint_failure" | "co
         await new Promise(resolve => setTimeout(resolve, 5));
       }
     }
-    const messages: any = await (await fetch(`${url}/api/sessions/${sid}`)).json();
+    const messages: any = await (await fetch(`${url}/api/sessions/${sid}`, {
+      headers: { "x-atom-admin-token": adminToken },
+    })).json();
     const status: any = await (await fetch(`${url}/api/tasks/${submitted.taskId}`)).json();
     const state = kind === "checkpoint_failure" ? undefined : JSON.parse(readFileSync(join(sessionPath, "session.json"), "utf8"));
     return { requests, logs, messages, status, state, modelStep, resumed };

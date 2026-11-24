@@ -1,15 +1,20 @@
 import { Modal } from "../modal";
-import { FieldInput } from "@atom-neo/tui-kit";
+import { FieldInput, useTheme } from "@atom-neo/tui-kit";
+import { useMenuChrome } from "../menu/menu-frame";
 
 export function ProjectModal({ value, onSubmit, onBack }: {
   value: string;
   onSubmit: (description: string) => void;
   onBack: () => void;
 }) {
+  const { colors } = useTheme();
+  const { version } = useMenuChrome();
   return (
     <Modal
       open
-      title="PROJECT INFORMATION"
+      title="ATOM NEO · PROJECT INFORMATION"
+      headerRight={version ? <text fg={colors.text.muted}>v{version}</text> : undefined}
+      titleTruncate
       width={64}
       interactive={false}
       onClose={onBack}
