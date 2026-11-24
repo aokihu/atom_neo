@@ -156,10 +156,8 @@ test("lists supervisor source/state/platform and shows reload failures", async (
 
   const modal = await mountModal(dir);
   expect(modal.frame()).toContain("alpha");
-  expect(modal.frame()).toContain("package echo-bot@1.2.3");
-  expect(modal.frame()).toContain("running");
-  expect(modal.frame()).toContain("darwin-arm64");
-  expect(modal.frame()).toContain(":7001");
+  expect(modal.frame()).toContain("running · darwin-arm64 · :7001");
+  expect(modal.frame()).toContain("bot@1.2.3");
   expect(modal.frame()).toContain("check failed");
   expect(modal.frame()).not.toContain("bot-token");
 
@@ -276,7 +274,7 @@ test("install, load with an optional id, and pack hand off to the CLI actions", 
 
 test("offline load exposes a config-only instance for secret entry, register, and start", async () => {
   const { dir } = makeSandbox();
-  const clientDir = join(dir, "client");
+  const clientDir = join(dir, "clients", "very-long-directory-name-that-must-not-wrap", "client");
   mkdirSync(clientDir, { recursive: true });
   const fields: GatewayInstanceFields = {
     mode: { label: "Mode", type: "string", enum: ["longpoll", "webhook"], default: "longpoll" },
@@ -345,6 +343,9 @@ test("offline load exposes a config-only instance for secret entry, register, an
 
   expect(modal.frame()).toContain("echo-bot");
   expect(modal.frame()).toContain("configured · unregistered");
+  const configuredLines = modal.frame().split("\n").filter(line => line.includes("configured · unregistered"));
+  expect(configuredLines).toHaveLength(1);
+  expect(configuredLines[0]).not.toContain(clientDir);
 
   await modal.press("RETURN");
   expect(modal.frame()).toContain("Register with Gateway");

@@ -42,8 +42,8 @@ function clientItems(clients: GatewayInstanceStatus[]): Item[] {
     key: `${CLIENT_KEY_PREFIX}${client.id}`,
     label: client.id,
     detail: isRegistered(client)
-      ? `${sourceLabel(client)} · ${client.state} · ${client.platform} · :${client.port}${lastError(client) ? ` · ${lastError(client)}` : ""}`
-      : `${sourceLabel(client)} · configured · unregistered`,
+      ? `${client.state} · ${client.platform} · :${client.port} · ${sourceLabel(client)}${lastError(client) ? ` · ${lastError(client)}` : ""}`
+      : `configured · unregistered · ${sourceLabel(client)}`,
   }));
 }
 
@@ -426,6 +426,7 @@ export function GatewayModal({ sandbox, port, gatewayActions, breadcrumb: breadc
             label={item.label}
             labelWidth={item.detail ? 18 : undefined}
             detail={item.detail}
+            truncate
           />
         ))}
         {error ? <text fg={colors.status.error}>{error}</text> : null}

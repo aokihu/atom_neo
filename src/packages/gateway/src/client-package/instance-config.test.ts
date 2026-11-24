@@ -8,6 +8,7 @@ import { parseManifest } from "./manifest";
 import { registerPackage } from "./registry";
 
 const TARGET = `${process.platform}-${process.arch}`;
+const OTHER_TARGET = TARGET === "linux-x64" ? "darwin-arm64" : "linux-x64";
 const SHA = "a".repeat(64);
 const tempDirs: string[] = [];
 
@@ -300,12 +301,12 @@ describe("configureInstance package validation", () => {
     expectNoWrites(wrongVersion);
 
     const wrongTarget = sandbox();
-    installPackage(wrongTarget, { target: "linux-x64" });
+    installPackage(wrongTarget, { target: OTHER_TARGET });
     expect(() => configureInstance({
       sandbox: wrongTarget,
       id: "bot",
       source: { type: "package", id: "telegram-bot", version: "0.1.0" },
-    })).toThrow(`manifest target "linux-x64" does not match installed target "${TARGET}"`);
+    })).toThrow(`manifest target "${OTHER_TARGET}" does not match installed target "${TARGET}"`);
     expectNoWrites(wrongTarget);
 
     const unstamped = sandbox();

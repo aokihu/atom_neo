@@ -7,6 +7,9 @@ import { registerPackage } from "./registry";
 import { resolveClient, resolveClients, sandboxPackageRoot } from "./resolver";
 import type { ResolveOptions } from "./resolver";
 
+const TARGET = `${process.platform}-${process.arch}`;
+const OTHER_TARGET = TARGET === "linux-x64" ? "darwin-arm64" : "linux-x64";
+
 const BASE_ENV: NodeJS.ProcessEnv = {
   PATH: "/bin",
   KEEP: "kept",
@@ -376,14 +379,13 @@ describe("resolveClients", () => {
 describe("sandboxPackageRoot", () => {
   test("uses the registered package path and rejects unregistered packages", () => {
     const sandbox = join(temp, "sandbox");
-    const target = `${process.platform}-${process.arch}`;
-    const relativePath = join(".atom", "gateway", "packages", "telegram-bot", "0.1.0", target);
+    const relativePath = join(".atom", "gateway", "packages", "telegram-bot", "0.1.0", TARGET);
     const root = join(sandbox, relativePath);
     writeManifest(root);
     registerPackage(sandbox, {
       id: "telegram-bot",
       version: "0.1.0",
-      target,
+      target: TARGET,
       path: relativePath,
       source: "local:test",
       sha256: "a".repeat(64),
@@ -398,12 +400,12 @@ describe("sandboxPackageRoot", () => {
 
   test("rejects a registered package for another host target", () => {
     const sandbox = join(temp, "wrong-target-sandbox");
-    const relativePath = ".atom/gateway/packages/telegram-bot/0.1.0/linux-x64";
+    const relativePath = join(".atom", "gateway", "packages", "telegram-bot", "0.1.0", OTHER_TARGET);
     writeManifest(join(sandbox, relativePath));
     registerPackage(sandbox, {
       id: "telegram-bot",
       version: "0.1.0",
-      target: "linux-x64",
+      target: OTHER_TARGET,
       path: relativePath,
       source: "local:test",
       sha256: "a".repeat(64),
@@ -411,7 +413,7 @@ describe("sandboxPackageRoot", () => {
     });
 
     expect(() => sandboxPackageRoot(sandbox)("telegram-bot", "0.1.0")).toThrow(
-      `target "linux-x64" is not supported on ${process.platform}-${process.arch}`,
+      `target "${OTHER_TARGET}" is not supported on ${TARGET}`,
     );
   });
 });

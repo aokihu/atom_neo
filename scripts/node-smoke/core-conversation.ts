@@ -307,7 +307,9 @@ async function main(): Promise<void> {
     assert.equal(status.state, "completed", `task failed: ${status.error ?? "unknown error"}`);
     pass("task-completed");
 
-    const sessions = await fetch(`${base}/api/sessions/${encodeURIComponent(sessionId)}`);
+    const sessions = await fetch(`${base}/api/sessions/${encodeURIComponent(sessionId)}`, {
+      headers: { "x-atom-admin-token": ADMIN_TOKEN },
+    });
     assert.equal(sessions.status, 200);
     const messages = await sessions.json() as Array<{ role?: string; content?: string; visible?: boolean }>;
     const assistant = messages
